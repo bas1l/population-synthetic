@@ -1,0 +1,176 @@
+{
+  "instruction": [
+	"You are a demographic simulation engine.",
+	"I will provide a 'Current Persona Context' containing attributes generated so far, and a 'Target Schema' for {level_name}.",
+	"TASK:",
+	"Update the 'probability' fields in the Target Schema to be realistically correlated with the Current Persona Context.",
+	"RULES:",
+	"1. Do NOT change the structure, keys, or 'value' fields.",
+	"2. ONLY modify the 'probability' float values.",
+	"3. Ensure probabilities in a list sum to 1.0.",
+	"4. Return ONLY the valid JSON of the updated schema section.",
+	"No markdown."
+	],
+  "persona_schema_hierarchical": {
+    "level_1": {
+      "description": "Biological and demographic foundation: The hard-coded, innate, or physical constraints that serve as the baseline for identity.",
+      "core_demographics": {
+        "age": {
+          "type": "integer",
+          "min": 18,
+          "max": 90,
+          "distribution": "uniform"
+        },
+        "biological_sex": [
+          { "value": "Female", "probability": 0.500 },
+          { "value": "Male", "probability": 0.500 }
+        ],
+        "gender_identity": [
+          { "value": "Cisgender", "probability": 0.92 },
+          { "value": "Transgender", "probability": 0.03 },
+          { "value": "Non-binary/Genderqueer", "probability": 0.05 }
+        ],
+        "sexual_orientation": [
+          { "value": "Heterosexual", "probability": 0.89 },
+          { "value": "Homosexual", "probability": 0.04 },
+          { "value": "Bisexual", "probability": 0.05 },
+          { "value": "Other/Asexual", "probability": 0.02 }
+        ],
+        "ethnicity_broad_global_approx": [
+          { "value": "Asian (East/South/SE)", "probability": 0.5 },
+          { "value": "African Descent/Black", "probability": 0.16 },
+          { "value": "Caucasian/White", "probability": 0.15 },
+          { "value": "Hispanic/Latino", "probability": 0.1 },
+          { "value": "Middle Eastern", "probability": 0.05 },
+          { "value": "Mixed/Indigenous", "probability": 0.04 }
+        ],
+        "current_environment_type": [
+          { "value": "Urban Metropolis", "probability": 0.55 },
+          { "value": "Suburban", "probability": 0.25 },
+          { "value": "Rural/Countryside", "probability": 0.19 },
+          { "value": "Nomadic", "probability": 0.01 }
+        ]
+      },
+      "origin_geography": {
+        "birth_location": [
+          { "value": "Native (Born in current region)", "probability": 0.6 },
+          { "value": "Domestic Migrant (Same country, different region)", "probability": 0.25 },
+          { "value": "International Immigrant", "probability": 0.1 },
+          { "value": "Refugee/Displaced", "probability": 0.05 }
+        ]
+      },
+      "physical_attributes": {
+        "somatotype": [
+          { "value": "Ectomorph", "probability": 0.3 },
+          { "value": "Mesomorph", "probability": 0.3 },
+          { "value": "Endomorph", "probability": 0.4 }
+        ],
+        "disabilities_visible": [
+          { "value": "None", "probability": 0.85 },
+          { "value": "Mobility Aid User", "probability": 0.05 },
+          { "value": "Sensory Impairment", "probability": 0.06 },
+          { "value": "Other", "probability": 0.04 }
+        ]
+      }
+    },
+    "level_2": {
+      "description": "Psycho-social structure: The internal psychology, family history, and social conditioning.",
+      "family_of_origin": {
+        "parental_structure": [
+          { "value": "Two Parents (Intact)", "probability": 0.5 },
+          { "value": "Single Parent (Mother)", "probability": 0.2 },
+          { "value": "Single Parent (Father)", "probability": 0.05 },
+          { "value": "Divorced/Split Household", "probability": 0.15 },
+          { "value": "Adoptive/Foster Care", "probability": 0.05 },
+          { "value": "Orphaned/Ward of State", "probability": 0.05 }
+        ],
+        "sibling_constellation": [
+          { "value": "Only Child", "probability": 0.2 },
+          { "value": "Eldest", "probability": 0.3 },
+          { "value": "Middle", "probability": 0.2 },
+          { "value": "Youngest", "probability": 0.3 }
+        ],
+        "childhood_atmosphere": [
+          { "value": "Supportive/Secure", "probability": 0.4 },
+          { "value": "Strict/Authoritarian", "probability": 0.2 },
+          { "value": "Neglectful/Absent", "probability": 0.15 },
+          { "value": "Chaotic/Unstable", "probability": 0.15 },
+          { "value": "Enmeshed/Overprotective", "probability": 0.1 }
+        ]
+      },
+      "sociological_background": {
+        "education_level": [
+          { "value": "No Formal Education", "probability": 0.05 },
+          { "value": "High School", "probability": 0.4 },
+          { "value": "Vocational", "probability": 0.15 },
+          { "value": "University Degree", "probability": 0.4 }
+        ],
+        "socioeconomic_class": [
+          { "value": "Poverty", "probability": 0.15 },
+          { "value": "Working Class", "probability": 0.3 },
+          { "value": "Middle Class", "probability": 0.45 },
+          { "value": "Wealthy", "probability": 0.1 }
+        ],
+        "religious_alignment": [
+          { "value": "Secular", "probability": 0.3 },
+          { "value": "Practicing", "probability": 0.6 },
+          { "value": "Fundamentalist", "probability": 0.1 }
+        ]
+      },
+      "psychological_profile": {
+        "big_five_traits": {
+          "openness": { "min": 1, "max": 100 },
+          "conscientiousness": { "min": 1, "max": 100 },
+          "extraversion": { "min": 1, "max": 100 },
+          "agreeableness": { "min": 1, "max": 100 },
+          "neuroticism": { "min": 1, "max": 100 }
+        },
+        "cognitive_style": [
+          { "value": "Analytical", "probability": 0.4 },
+          { "value": "Intuitive", "probability": 0.3 },
+          { "value": "Creative", "probability": 0.2 },
+          { "value": "Pragmatic", "probability": 0.1 }
+        ]
+      }
+    },
+    "level_3": {
+      "description": "Functional application: The practical application of demographics in daily operations (Pre-Pathogenesis Baseline).",
+      "professional_functional": {
+        "employment_status": [
+          { "value": "Employed", "probability": 0.65 },
+          { "value": "Unemployed", "probability": 0.1 },
+          { "value": "Student", "probability": 0.1 },
+          { "value": "Retired", "probability": 0.15 }
+        ],
+        "financial_behavior": [
+          { "value": "Saver", "probability": 0.3 },
+          { "value": "Spender", "probability": 0.3 },
+          { "value": "Balanced", "probability": 0.4 }
+        ]
+      },
+      "lifestyle_habits": {
+        "social_media_usage": [
+          { "value": "Consumer", "probability": 0.5 },
+          { "value": "Contributor", "probability": 0.3 },
+          { "value": "Non-user", "probability": 0.2 }
+        ]
+      }
+    },
+    "level_4": {
+      "description": "Surface Expression: The immediate, observable interface used to communicate.",
+      "communication_style": {
+        "tone_baseline": [
+          { "value": "Casual", "probability": 0.4 },
+          { "value": "Formal", "probability": 0.25 },
+          { "value": "Empathetic", "probability": 0.2 },
+          { "value": "Direct", "probability": 0.15 }
+        ],
+        "speaking_pace": [
+          { "value": "Moderate", "probability": 0.6 },
+          { "value": "Fast", "probability": 0.25 },
+          { "value": "Slow", "probability": 0.15 }
+        ]
+      }
+    }
+  }
+}

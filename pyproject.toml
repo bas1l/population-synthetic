@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "population-synth"
+version = "0.1.0"
+description = "Synthetic population generation (SCB/SSB) and LLM-based identity persona creation"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "google-genai>=1.0",
+    "pydantic>=2.0",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "requests>=2.28",
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

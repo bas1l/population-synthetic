@@ -1,0 +1,607 @@
+{
+  "_comment": "Norwegian SSB PxWebApi v2 code-to-schema label mappings. Raw SSB response codes/labels are translated to the schema-normalised labels used in PopulationDistributions.",
+
+  "age_groups": {
+    "description": "Age group labels used in the output — standardised 7-bin scheme shared with SCB module",
+    "groups": [
+      {"label": "18-24", "min": 18, "max": 24},
+      {"label": "25-34", "min": 25, "max": 34},
+      {"label": "35-44", "min": 35, "max": 44},
+      {"label": "45-54", "min": 45, "max": 54},
+      {"label": "55-64", "min": 55, "max": 64},
+      {"label": "65-74", "min": 65, "max": 74},
+      {"label": "75-85", "min": 75, "max": 85}
+    ],
+    "ssb_table_07459_to_group": {
+      "comment": "Table 07459 uses single-year Alder codes (3-digit, zero-padded). Ages mapped to our bins; ages outside 18-85 are dropped.",
+      "018": "18-24", "019": "18-24", "020": "18-24", "021": "18-24", "022": "18-24", "023": "18-24", "024": "18-24",
+      "025": "25-34", "026": "25-34", "027": "25-34", "028": "25-34", "029": "25-34",
+      "030": "25-34", "031": "25-34", "032": "25-34", "033": "25-34", "034": "25-34",
+      "035": "35-44", "036": "35-44", "037": "35-44", "038": "35-44", "039": "35-44",
+      "040": "35-44", "041": "35-44", "042": "35-44", "043": "35-44", "044": "35-44",
+      "045": "45-54", "046": "45-54", "047": "45-54", "048": "45-54", "049": "45-54",
+      "050": "45-54", "051": "45-54", "052": "45-54", "053": "45-54", "054": "45-54",
+      "055": "55-64", "056": "55-64", "057": "55-64", "058": "55-64", "059": "55-64",
+      "060": "55-64", "061": "55-64", "062": "55-64", "063": "55-64", "064": "55-64",
+      "065": "65-74", "066": "65-74", "067": "65-74", "068": "65-74", "069": "65-74",
+      "070": "65-74", "071": "65-74", "072": "65-74", "073": "65-74", "074": "65-74",
+      "075": "75-85", "076": "75-85", "077": "75-85", "078": "75-85", "079": "75-85",
+      "080": "75-85", "081": "75-85", "082": "75-85", "083": "75-85", "084": "75-85", "085": "75-85"
+    },
+    "ssb_table_08921_to_group": {
+      "comment": "Table 08921 (education by age/sex) uses band codes. Bands that partly overlap our range are mapped to the nearest bin.",
+      "16-19": "18-24",
+      "20-24": "18-24",
+      "25-29": "25-34",
+      "30-39": "25-34",
+      "40-49": "35-44",
+      "50-59": "45-54",
+      "60-66": "55-64",
+      "067+": "65-74"
+    },
+    "ssb_table_03031_to_group": {
+      "comment": "Table 03031 (civil status by age/sex) uses decade bands.",
+      "0": "18-24",
+      "1": "18-24",
+      "2": "18-24",
+      "3": "25-34",
+      "4": "35-44",
+      "5": "45-54",
+      "6": "55-64",
+      "7": "65-74",
+      "8": "75-85",
+      "9": "75-85"
+    }
+  },
+
+  "education": {
+    "description": "Norwegian education level codes (NUS2000-style SSB classification) to schema labels. Used in tables 08921, 09429, 09599.",
+    "ssb_variable": "UtdanNivaa",
+    "ssb_tables": ["08921", "09429", "09599"],
+    "mappings": {
+      "no_formal": {
+        "schema_label": "No Formal Education",
+        "ssb_codes": ["00", "01", "09a", "0_9", "1-2", "Uoppgitt eller ingen fullført utdanning", "Grunnskolenivå"]
+      },
+      "high_school": {
+        "schema_label": "High School (Videregående)",
+        "ssb_codes": ["02a", "3-5", "3-5a", "Videregående skolenivå"]
+      },
+      "vocational": {
+        "schema_label": "Vocational (Fagskole)",
+        "ssb_codes": ["11", "Fagskolenivå"]
+      },
+      "university": {
+        "schema_label": "University Degree",
+        "ssb_codes": ["03a", "04a", "6", "7-8", "6-8", "Universitets- og høgskolenivå, kort", "Universitets- og høgskolenivå, lang", "Universitets- og høgskolenivå"]
+      }
+    },
+    "label_mappings": {
+      "grunnskoleniå": "No Formal Education",
+      "grunnskolenivå": "No Formal Education",
+      "uoppgitt eller ingen fullført utdanning": "No Formal Education",
+      "ingen fullført utdanning": "No Formal Education",
+      "videregående skolenivå": "High School (Videregående)",
+      "fagskolenivå": "Vocational (Fagskole)",
+      "universitets- og høgskolenivå, kort": "University Degree",
+      "universitets- og høgskolenivå, lang": "University Degree",
+      "universitets- og høgskolenivå": "University Degree"
+    }
+  },
+
+  "employment": {
+    "description": "Labour force status from table 13618 (ArbStyrkStatus). Combined with education level for employment_by_sex_education conditional distribution.",
+    "ssb_variable": "ArbStyrkStatus",
+    "ssb_tables": ["13618", "13785"],
+    "mappings": {
+      "employed": {
+        "schema_label": "Employed",
+        "ssb_codes": ["1", "Sysselsatte"]
+      },
+      "unemployed": {
+        "schema_label": "Unemployed",
+        "ssb_codes": ["2", "Arbeidsledige"]
+      },
+      "student": {
+        "schema_label": "Student",
+        "ssb_codes": ["student", "under utdanning"]
+      },
+      "retired_other": {
+        "schema_label": "Retired",
+        "ssb_codes": ["6", "Personer utenfor arbeidsstyrken"]
+      }
+    },
+    "label_mappings": {
+      "sysselsatte": "Employed",
+      "arbeidsledige": "Unemployed",
+      "personer utenfor arbeidsstyrken": "Retired",
+      "employed": "Employed",
+      "unemployed": "Unemployed",
+      "not in the labour force": "Retired",
+      "outside the labour force": "Retired"
+    },
+    "education_label_mappings": {
+      "grunnskolenivå": "No Formal Education",
+      "uoppgitt eller ingen fullført utdanning": "No Formal Education",
+      "videregående skolenivå": "High School (Videregående)",
+      "fagskolenivå": "Vocational (Fagskole)",
+      "universitets- og høgskolenivå": "University Degree",
+      "1-2": "No Formal Education",
+      "3-5": "High School (Videregående)",
+      "11": "Vocational (Fagskole)",
+      "6-8": "University Degree",
+      "0_9": "No Formal Education"
+    }
+  },
+
+  "civil_status": {
+    "description": "Civil/marital status from table 03031 (EkteskStatus). Conditional on decade age band and sex.",
+    "ssb_variable": "EkteskStatus",
+    "ssb_table": "03031",
+    "ssb_codes": {
+      "1": "Single/Never Married",
+      "2": "Married",
+      "3": "Widowed",
+      "4": "Divorced",
+      "5": "Separated",
+      "6": "Other"
+    },
+    "label_mappings": {
+      "ugift": "Single/Never Married",
+      "gift": "Married",
+      "enke/enkemann": "Widowed",
+      "skilt": "Divorced",
+      "separert": "Divorced",
+      "annen sivilstand": "Single/Never Married"
+    },
+    "output_categories": [
+      "Single/Never Married",
+      "Married",
+      "Widowed",
+      "Divorced"
+    ]
+  },
+
+  "region": {
+    "description": "Norwegian counties (Fylker) — post-2024 administrative structure (15 fylker restored from pre-2020). Population distribution from table 07459. Environment type derived from SSB urban-rural classification.",
+    "ssb_variable": "Region",
+    "ssb_table": "07459",
+    "fylke_codes": {
+      "31": "Østfold",
+      "32": "Akershus",
+      "03": "Oslo",
+      "34": "Innlandet",
+      "33": "Buskerud",
+      "39": "Vestfold",
+      "40": "Telemark",
+      "42": "Agder",
+      "11": "Rogaland",
+      "46": "Vestland",
+      "15": "Møre og Romsdal",
+      "50": "Trøndelag",
+      "18": "Nordland",
+      "55": "Troms",
+      "56": "Finnmark"
+    },
+    "label_normalisation": {
+      "Østfold": "Østfold",
+      "Akershus": "Akershus",
+      "Oslo": "Oslo",
+      "Oslo - Oslove": "Oslo",
+      "Innlandet": "Innlandet",
+      "Buskerud": "Buskerud",
+      "Vestfold": "Vestfold",
+      "Telemark": "Telemark",
+      "Agder": "Agder",
+      "Rogaland": "Rogaland",
+      "Vestland": "Vestland",
+      "Møre og Romsdal": "Møre og Romsdal",
+      "Trøndelag - Trööndelage": "Trøndelag",
+      "Trøndelag": "Trøndelag",
+      "Nordland - Nordlánnda": "Nordland",
+      "Nordland": "Nordland",
+      "Troms - Romsa - Tromssa": "Troms",
+      "Troms": "Troms",
+      "Finnmark - Finnmárku - Finmarkku": "Finnmark",
+      "Finnmark": "Finnmark"
+    },
+    "county_env_type": {
+      "Oslo": "Urban Metropolis",
+      "Akershus": "Suburban",
+      "Østfold": "Suburban",
+      "Rogaland": "Suburban",
+      "Vestland": "Suburban",
+      "Trøndelag": "Suburban",
+      "Buskerud": "Suburban",
+      "Vestfold": "Suburban",
+      "Telemark": "Suburban",
+      "Agder": "Suburban",
+      "Møre og Romsdal": "Suburban",
+      "Innlandet": "Rural/Countryside",
+      "Nordland": "Rural/Countryside",
+      "Troms": "Rural/Countryside",
+      "Finnmark": "Rural/Countryside"
+    }
+  },
+
+  "urbanization": {
+    "description": "Urban/rural classification based on SSB tettsted (urban settlement) data from table 04859. Derived from share of fylke population living in urban settlements.",
+    "ssb_variable": "TettSted",
+    "ssb_table": "04859",
+    "mappings": {
+      "urban_metropolis": {
+        "schema_label": "Urban Metropolis",
+        "description": "Oslo and larger cities — >85% of fylke population in urban settlements"
+      },
+      "suburban": {
+        "schema_label": "Suburban",
+        "description": "Mid-sized towns and densely settled areas — 60–85% urban"
+      },
+      "rural": {
+        "schema_label": "Rural/Countryside",
+        "description": "Sparsely settled areas — <60% urban"
+      }
+    },
+    "degurba_mappings": {
+      "densely populated area": "Urban Metropolis",
+      "intermediate density area": "Suburban",
+      "thinly populated area": "Rural/Countryside"
+    }
+  },
+
+  "birth_location": {
+    "description": "Country of birth region from table 09817 (InnvandrKat=B for immigrants, remainder = Norwegian-born). Maps to schema birth-location categories.",
+    "ssb_variable": "Landbakgrunn",
+    "ssb_table": "09817",
+    "mappings": {
+      "norway": {
+        "schema_label": "Norway",
+        "ssb_codes": ["0", "Norge", "abc", "Den øvrige befolkningen"]
+      },
+      "nordic": {
+        "schema_label": "Nordic Country",
+        "ssb_codes": ["VES", "00-", "Norden utenom Norge"]
+      },
+      "europe_other": {
+        "schema_label": "Europe (Other)",
+        "ssb_codes": ["EU/EFTA/Storbritannia", "Europa utenom EU/EFTA og Storbritannia", "Eu-Eos", "IkkeEu-Eos"]
+      },
+      "outside_europe": {
+        "schema_label": "Outside Europe",
+        "ssb_codes": ["IVE", "Afrika", "Asia", "Latin-Amerika og Karibia", "Nord-Amerika utenom USA og Canada"]
+      }
+    },
+    "region_label_mappings": {
+      "Norge": "Norway",
+      "Born in Norway": "Norway",
+      "Norden utenom Norge": "Nordic Country",
+      "Nordic countries except Norway": "Nordic Country",
+      "EU/EFTA/Storbritannia": "Europe (Other)",
+      "Europa utenom EU/EFTA og Storbritannia": "Europe (Other)",
+      "Europa utenom EU/EFTA/Storbritannia": "Europe (Other)",
+      "Afrika": "Outside Europe",
+      "Africa": "Outside Europe",
+      "Asia": "Outside Europe",
+      "Latin-Amerika og Karibia": "Outside Europe",
+      "Nord-Amerika utenom USA og Canada": "Outside Europe",
+      "Oseania utenom Australia og NZ, polare områder": "Outside Europe"
+    }
+  },
+
+  "ethnicity": {
+    "description": "Derived from birth_location — ethnicity label based on birth region",
+    "mappings": {
+      "Norway": "Norwegian",
+      "Nordic Country": "Nordic",
+      "Europe (Other)": "European",
+      "Outside Europe": "Non-European"
+    }
+  },
+
+  "industry_sector": {
+    "description": "Industry sector from table 09315 (NACE2007 / SN2007 classification, 88 groups). Marginal among employed. Non-employed get 'Not Applicable'.",
+    "ssb_variable": "NACE2007",
+    "ssb_table": "09315",
+    "ssb_label_mappings": {
+      "jordbruk, skogbruk og fiske": "Agriculture & Forestry",
+      "bergverksdrift og utvinning": "Manufacturing & Industry",
+      "industri": "Manufacturing & Industry",
+      "elektrisitet, vann og renovasjon": "Manufacturing & Industry",
+      "bygge- og anleggsvirksomhet": "Manufacturing & Industry",
+      "varehandel, reparasjon av motorvogner": "Retail & Service",
+      "transport og lagring": "Retail & Service",
+      "overnattings- og serveringsvirksomhet": "Retail & Service",
+      "informasjon og kommunikasjon": "IT & Technology",
+      "finansiering og forsikring": "IT & Technology",
+      "teknisk tjenesteyting, eiendomsdrift": "IT & Technology",
+      "forretningsmessig tjenesteyting": "Retail & Service",
+      "off.adm., forsvar, sosialforsikring": "Public Administration",
+      "offentlig administrasjon, forsvar, sosialforsikring": "Public Administration",
+      "undervisning": "Education",
+      "helse- og sosialtjenester": "Healthcare & Social",
+      "personlig tjenesteyting": "Other",
+      "kulturell virksomhet, underholdning og fritidsaktiviteter": "Other",
+      "annen tjenesteyting": "Other",
+      "aktiviteter i private husholdninger": "Other",
+      "ukjent": "Other"
+    },
+    "nace_section_mappings": {
+      "01-03": "Agriculture & Forestry",
+      "05-09": "Manufacturing & Industry",
+      "10-33": "Manufacturing & Industry",
+      "35-39": "Manufacturing & Industry",
+      "41-43": "Manufacturing & Industry",
+      "45-47": "Retail & Service",
+      "49-53": "Retail & Service",
+      "55-56": "Retail & Service",
+      "58-63": "IT & Technology",
+      "64-66": "IT & Technology",
+      "68-75": "IT & Technology",
+      "77-82": "Retail & Service",
+      "84": "Public Administration",
+      "85": "Education",
+      "86-88": "Healthcare & Social",
+      "90-96": "Other",
+      "97-99": "Other"
+    }
+  },
+
+  "employment_type": {
+    "description": "Employment contract type from table 13878 (Ansettelsesforhold) + working hours (ArbeidsTidRen). Non-employed get 'Not Applicable'.",
+    "ssb_variable_attachment": "Ansettelsesforhold",
+    "ssb_variable_hours": "ArbeidsTidRen",
+    "ssb_table": "13878",
+    "attachment_label_mappings": {
+      "fast stilling": "permanent",
+      "midlertidig stilling": "temporary",
+      "f": "permanent",
+      "m": "temporary"
+    },
+    "hours_label_mappings": {
+      "heltid": "full_time",
+      "deltid": "part_time",
+      "h": "full_time",
+      "d": "part_time",
+      "38+": "full_time",
+      "35-37": "full_time",
+      "30-34": "part_time",
+      "20-29": "part_time",
+      "10-19": "part_time",
+      "01-09": "part_time"
+    },
+    "output_categories": [
+      "Permanent Full-time",
+      "Permanent Part-time",
+      "Temporary Full-time",
+      "Temporary Part-time",
+      "Self-Employed",
+      "Not Applicable"
+    ],
+    "fallback_note": "Self-employed are estimated from AKU data (approx. 7-9% of employed); no dedicated per-age SSB table available in PxWebApi v2 without KLASS join."
+  },
+
+  "housing_tenure": {
+    "description": "Dwelling ownership form from table 11081 (EierStatus). Norwegian tenure categories: Selveier (owner-occupied), Andels-/aksjeeier (cooperative share ownership), Leier (renter).",
+    "ssb_variable": "EierStatus",
+    "ssb_table": "11081",
+    "ssb_codes": {
+      "2": "Selveier",
+      "3": "Andels- / aksjeeier",
+      "4": "Leier"
+    },
+    "label_mappings": {
+      "selveier": "Owner-occupied (villa/house)",
+      "andels- / aksjeeier": "Cooperative apartment (andel/aksje)",
+      "andels-/aksjeeier": "Cooperative apartment (andel/aksje)",
+      "leier": "Rental apartment"
+    },
+    "output_categories": [
+      "Owner-occupied (villa/house)",
+      "Cooperative apartment (andel/aksje)",
+      "Rental apartment",
+      "Other"
+    ]
+  },
+
+  "household_size": {
+    "description": "Number of persons in household from table 06079 (HushStr). National distribution in percent.",
+    "ssb_variable": "HushStr",
+    "ssb_table": "06079",
+    "ssb_codes": {
+      "1": "1 person",
+      "2": "2 personer",
+      "3": "3 personer",
+      "4": "4 personer",
+      "5": "5 personer +"
+    },
+    "output_categories": [
+      "1 person",
+      "2 persons",
+      "3-4 persons",
+      "5+ persons"
+    ],
+    "label_mappings": {
+      "1 person": "1 person",
+      "2 personer": "2 persons",
+      "3 personer": "3-4 persons",
+      "4 personer": "3-4 persons",
+      "5 personer +": "5+ persons"
+    }
+  },
+
+  "parental_structure": {
+    "description": "Family type from table 06083 (FamilieType). Marginal distribution at national level.",
+    "ssb_variable": "FamilieType",
+    "ssb_table": "06083",
+    "ssb_codes": {
+      "001": "Enpersonfamilie",
+      "002": "Par med små barn (yngste barn 0-5 år)",
+      "003": "Par med store barn (yngste barn 6-17 år)",
+      "004": "Mor/far med små barn (yngste barn 0-5 år)",
+      "005": "Mor/far med store barn (yngste barn 6-17 år)",
+      "006": "Par uten barn",
+      "007": "Par med voksne barn (yngste barn 18 år og over)",
+      "008": "Mor/far med voksne barn (yngste barn 18 år og over)",
+      "009": "Andre familier"
+    },
+    "label_mappings": {
+      "enpersonfamilie": "Living Alone",
+      "par med små barn (yngste barn 0-5 år)": "Nuclear Family",
+      "par med store barn (yngste barn 6-17 år)": "Nuclear Family",
+      "mor/far med små barn (yngste barn 0-5 år)": "Single Parent",
+      "mor/far med store barn (yngste barn 6-17 år)": "Single Parent",
+      "par uten barn": "Couple without Children",
+      "par med voksne barn (yngste barn 18 år og over)": "Couple without Children",
+      "mor/far med voksne barn (yngste barn 18 år og over)": "Single Parent",
+      "andre familier": "Living Alone"
+    },
+    "output_categories": [
+      "Nuclear Family",
+      "Single Parent",
+      "Couple without Children",
+      "Living Alone"
+    ]
+  },
+
+  "socioeconomic": {
+    "description": "Socioeconomic class derived from individual gross income brackets (table 06655, BruttoInn × Alder × Kjonn). Country median computed from bracket midpoints × counts; Eurostat AROP (0.60×) and OECD/Pew (1.00×, 2.00×) multipliers applied. Conditional on (age_group, sex).",
+    "ssb_variable": "BruttoInn",
+    "ssb_table": "06655",
+    "mappings": {
+      "poverty": {
+        "schema_label": "Poverty",
+        "description": "Gross individual income < 0.60 × national median (Eurostat AROP threshold)"
+      },
+      "working_class": {
+        "schema_label": "Working Class",
+        "description": "Gross individual income 0.60 – 1.00 × national median (OECD lower-middle floor)"
+      },
+      "middle_class": {
+        "schema_label": "Middle Class",
+        "description": "Gross individual income 1.00 – 2.00 × national median (OECD middle band)"
+      },
+      "wealthy": {
+        "schema_label": "Wealthy",
+        "description": "Gross individual income >= 2.00 × national median (OECD/Pew upper income)"
+      }
+    }
+  },
+
+  "income_source": {
+    "description": "Primary income source. SSB does not provide a direct income-source-by-employment-status table equivalent to SCB's HE0110F in PxWebApi v2. Approximate distributions are derived from AKU-based employment status (table 13618) and Norwegian NAV statistics on transfer payments. This is a simplified fallback with 3 broad categories.",
+    "fallback_note": "No SSB PxWebApi v2 table provides income component shares conditioned jointly on employment status and age group at national level. Fetch service uses approximate distributions.",
+    "approximate_distributions": {
+      "Employed": {
+        "Employment income": 0.85,
+        "Capital income": 0.05,
+        "Social transfers": 0.05,
+        "Pension": 0.03,
+        "Business/self-employment": 0.02
+      },
+      "Unemployed": {
+        "Social transfers": 0.75,
+        "Employment income": 0.15,
+        "Capital income": 0.05,
+        "Pension": 0.03,
+        "Business/self-employment": 0.02
+      },
+      "Student": {
+        "Social transfers": 0.70,
+        "Employment income": 0.20,
+        "Capital income": 0.05,
+        "Pension": 0.03,
+        "Business/self-employment": 0.02
+      },
+      "Retired": {
+        "Pension": 0.80,
+        "Capital income": 0.10,
+        "Social transfers": 0.07,
+        "Employment income": 0.02,
+        "Business/self-employment": 0.01
+      }
+    },
+    "output_categories": [
+      "Employment income",
+      "Business/self-employment",
+      "Pension",
+      "Social transfers",
+      "Capital income"
+    ]
+  },
+
+  "birth_country_detail": {
+    "description": "Country of birth (detailed) from table 09817. Conditional on birth_location: if Norway → always 'Norway'; if foreign-born → sample from distribution of top immigrant origin countries in Norway (2024). Country codes are 3-digit SSB Landbakgrunn codes.",
+    "ssb_variable": "Landbakgrunn",
+    "ssb_table": "09817",
+    "top_country_codes": [
+      "131", "106", "148", "136", "564", "346", "144", "534", "452", "456",
+      "444", "103", "410", "424", "575", "101", "159", "241", "684", "140"
+    ],
+    "code_to_label": {
+      "131": "Poland",
+      "106": "Sweden",
+      "148": "Ukraine",
+      "136": "Lithuania",
+      "564": "Syria",
+      "346": "Somalia",
+      "144": "Germany",
+      "534": "Pakistan",
+      "452": "Iraq",
+      "456": "Iran",
+      "444": "India",
+      "103": "Finland",
+      "410": "Bangladesh",
+      "424": "Sri Lanka",
+      "575": "Vietnam",
+      "101": "Denmark",
+      "159": "Serbia",
+      "241": "Eritrea",
+      "684": "USA",
+      "140": "Russia",
+      "105": "Iceland",
+      "112": "Belgium",
+      "117": "France",
+      "122": "Croatia",
+      "133": "Romania",
+      "139": "UK",
+      "155": "Bosnia",
+      "404": "Afghanistan",
+      "428": "Philippines",
+      "484": "China"
+    },
+    "output_categories": [
+      "Norway",
+      "Poland",
+      "Sweden",
+      "Lithuania",
+      "Syria",
+      "Somalia",
+      "Pakistan",
+      "Iraq",
+      "India",
+      "Other"
+    ],
+    "ssb_label_mappings": {
+      "131": "Poland",
+      "106": "Sweden",
+      "148": "Other",
+      "136": "Lithuania",
+      "564": "Syria",
+      "346": "Somalia",
+      "144": "Other",
+      "534": "Pakistan",
+      "452": "Iraq",
+      "456": "Other",
+      "444": "India",
+      "103": "Other",
+      "410": "Other",
+      "424": "Other",
+      "575": "Other",
+      "101": "Other",
+      "159": "Other",
+      "241": "Other",
+      "684": "Other",
+      "140": "Other"
+    }
+  }
+}

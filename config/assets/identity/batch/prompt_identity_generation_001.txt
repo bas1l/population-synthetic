@@ -1,0 +1,9 @@
+Generate a detailed persona profile for a new, original individual based on the following core concept.
+Your entire response must consist only of the populated template text. Do not include any introductory phrases, conversational text, explanations, or concluding summaries. The output must begin directly with "1. Demographic and Contextual Profile".
+1. Demographic and Contextual Profile
+•	Name: 
+•	Age: 
+•	Gender: 
+•	Occupation: 
+•	Psychosocial / Social History: (Paragraph Evaluating family, social, and environmental context. e.g., Living situation, marital status, key relationships, stressors).
+•	Relevant History: (Paragraph including psychiatric history, such as previous diagnoses or treatments, and medical history to note conditions or medications that could contribute to symptoms).

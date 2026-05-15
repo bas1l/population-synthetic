@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.meta.json
+.venv/
+venv/
+config/assets/scb_cache/*.json
+config/assets/ssb_cache/*.json
+.claude/
+.vscode/
+.ruff_cache/
+data/
