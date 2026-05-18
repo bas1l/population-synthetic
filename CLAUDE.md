@@ -27,8 +27,12 @@ python scripts/generate_scb_population.py --n 1000 --seed 42 --output scb_pop.js
 # Generate Norwegian population from live SSB data
 python scripts/generate_ssb_population.py --n 1000 --seed 42 --output ssb_pop.json
 
-# Generate a persona identity (requires GEMINI_API_KEY)
-python scripts/generate_identity.py --mode configurable \
+# Generate a persona identity via Gemini (requires GEMINI_API_KEY)
+python scripts/generate_identity.py --provider gemini --mode configurable \
+    --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json
+
+# Generate a persona identity via Claude CLI (requires claude on PATH)
+python scripts/generate_identity.py --provider claude --model sonnet --mode configurable \
     --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json
 
 # Compare two population files
@@ -89,6 +93,8 @@ All imports use the fully-qualified `population_synth.*` package namespace. Scri
 - `SCBPxWebClient` -- Statistics Sweden PxWeb API (POST requests)
 - `SSBPxWebClient` -- Statistics Norway PxWebApi v2 (GET requests, POST fallback, >=2.1s rate limiter)
 - `GeminiClient` -- Google Gemini API wrapper with metadata sidecar tracking
+- `ClaudeCodeClient` -- Claude CLI subprocess wrapper with metadata sidecar tracking
+- `llm_protocol.py` -- `LLMClient` Protocol shared by `GeminiClient` and `ClaudeCodeClient`
 
 ### Path Resolution
 
@@ -124,5 +130,6 @@ The `docs/` directory holds design and audit notes worth consulting before non-t
 
 ## Environment & Secrets
 
-- `GEMINI_API_KEY` environment variable required for identity generation (raises `ValueError` if missing)
+- `GEMINI_API_KEY` environment variable required for identity generation with `--provider gemini` (raises `ValueError` if missing)
+- `--provider claude` requires the `claude` CLI on PATH; raises `RuntimeError` at construction if not found; no extra API key needed (Claude Code manages its own auth)
 - Population generation (SCB/SSB scripts) does not require any API keys

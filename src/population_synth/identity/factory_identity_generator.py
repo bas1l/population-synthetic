@@ -1,6 +1,6 @@
 from typing import Dict, Type
 
-from population_synth.clients.gemini_client import GeminiClient
+from population_synth.clients.llm_protocol import LLMClient
 
 from .base_identity_generator import BaseIdentityGenerator
 from .identity_generator_batch import NarrativeGeneratorBatch
@@ -22,13 +22,13 @@ class FactoryIdentityGenerator:
     }
 
     @staticmethod
-    def create_generator(mode: str, client: GeminiClient) -> BaseIdentityGenerator:
+    def create_generator(mode: str, client: LLMClient) -> BaseIdentityGenerator:
         """
         Instantiates the appropriate identity generator class based on the provided mode string.
 
         Args:
             mode (str): The strategy identifier (e.g., 'batch', 'configurable').
-            client (GeminiClient): The API client dependency required by the generator constructors.
+            client (LLMClient): The API client dependency required by the generator constructors.
 
         Returns:
             BaseIdentityGenerator: An initialized instance of the requested strategy.

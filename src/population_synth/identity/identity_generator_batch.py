@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Any, Dict, Optional, Tuple
 
-from population_synth.clients.gemini_client import GeminiClient
+from population_synth.clients.llm_protocol import LLMClient
 
 from .base_identity_generator import BaseIdentityGenerator
 
@@ -14,16 +14,16 @@ class NarrativeGeneratorBatch(BaseIdentityGenerator):
     Adapts the legacy prompt-based generation to the BaseIdentityGenerator contract.
 
     Attributes:
-        client (GeminiClient): Injected client for API interaction.
+        client (LLMClient): Injected client for API interaction.
         last_identity (Optional[Dict[str, Any]]): Cache of the last generated identity.
     """
 
-    def __init__(self, client: GeminiClient):
+    def __init__(self, client: LLMClient):
         """
         Initialize the generator.
 
         Args:
-            client (GeminiClient): An initialized client for API calls.
+            client (LLMClient): An initialized client for API calls.
         """
         super().__init__(client)
         self.last_identity: Optional[Dict[str, Any]] = None

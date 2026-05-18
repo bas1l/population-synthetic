@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from population_synth.clients.gemini_client import GeminiClient
+from population_synth.clients.llm_protocol import LLMClient
 
 from .base_identity_generator import BaseIdentityGenerator
 
@@ -16,7 +16,7 @@ from .base_identity_generator import BaseIdentityGenerator
 class IdentityGeneratorConfigurable(BaseIdentityGenerator):
     """Identity generator using an explicit per-category dependency DAG."""
 
-    def __init__(self, client: GeminiClient):
+    def __init__(self, client: LLMClient):
         super().__init__(client)
 
     def _load_flat_schema(self, filepath: str) -> dict:

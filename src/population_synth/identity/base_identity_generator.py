@@ -2,21 +2,21 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Tuple
 
-from population_synth.clients.gemini_client import GeminiClient
+from population_synth.clients.llm_protocol import LLMClient
 
 
 class BaseIdentityGenerator(ABC):
     """
     Abstract Base Class defining the contract for Identity Generators.
-    Centralizes shared state (GeminiClient) and defines the contract for generation strategies.
+    Centralizes shared state (LLMClient) and defines the contract for generation strategies.
     """
 
-    def __init__(self, client: GeminiClient):
+    def __init__(self, client: LLMClient):
         """
-        Initialize with a shared GeminiClient to enforce Dependency Injection.
+        Initialize with a shared LLMClient to enforce Dependency Injection.
 
         Args:
-            client (GeminiClient): An initialized client for API calls.
+            client (LLMClient): An initialized client for API calls.
         """
         self.client = client
         logging.info(f"{self.__class__.__name__} initialized.")

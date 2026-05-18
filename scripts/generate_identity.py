@@ -10,11 +10,22 @@ Usage:
     python scripts/generate_identity.py \\
         --mode configurable \\
         --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json \\
+        --strategy config/assets/identity/configurable/strategies/compared_only_generate_evaluate_random_pick.json \\
         [--output identity.json]
+
+    python scripts/generate_identity.py \\
+        --provider claude \\
+        --mode configurable \\
+        --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json \\
+        --strategy config/assets/identity/configurable/strategies/compared_only_generate_evaluate_random_pick.json
 
 Modes:
     batch         Single-prompt narrative-style generation.
-    configurable  Configurable strategy with simulation config file.
+    configurable  Configurable strategy with simulation config file (requires --strategy).
+
+Providers:
+    gemini  Use Google Gemini via GeminiClient (default model: gemini-2.5-flash).
+    claude  Use Claude via ClaudeCodeClient subprocess wrapper (default model: sonnet).
 """
 
 import argparse
@@ -23,7 +34,6 @@ import logging
 import sys
 from pathlib import Path
 
-from population_synth.clients.gemini_client import GeminiClient
 from population_synth.identity.factory_identity_generator import FactoryIdentityGenerator
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -57,9 +67,20 @@ def main() -> None:
         help="Output file path for the generated identity (default: identity.json)",
     )
     parser.add_argument(
+        "--provider",
+        default="gemini",
+        choices=["gemini", "claude"],
+        help="LLM provider to use: gemini or claude (default: gemini)",
+    )
+    parser.add_argument(
+        "--strategy",
+        default=None,
+        help="Path to the strategy definition file (required for configurable mode)",
+    )
+    parser.add_argument(
         "--model",
-        default="gemini-2.5-flash",
-        help="Gemini model name (default: gemini-2.5-flash)",
+        default=None,
+        help="Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet",
     )
     args = parser.parse_args()
 
@@ -68,14 +89,36 @@ def main() -> None:
         logger.error("Config file not found: %s", config_path)
         sys.exit(1)
 
-    logger.info("Mode: %s", args.mode)
-    logger.info("Config: %s", config_path)
-    logger.info("Model: %s", args.model)
+    if args.mode == "configurable" and not args.strategy:
+        logger.error("--strategy is required for configurable mode")
+        sys.exit(1)
 
-    client = GeminiClient(model_name=args.model)
+    if args.strategy:
+        strategy_path = Path(args.strategy)
+        if not strategy_path.exists():
+            logger.error("Strategy file not found: %s", strategy_path)
+            sys.exit(1)
+
+    logger.info("Provider: %s | Mode: %s", args.provider, args.mode)
+    logger.info("Config: %s", config_path)
+
+    if args.provider == "gemini":
+        from population_synth.clients.gemini_client import GeminiClient
+        client = GeminiClient(model_name=args.model or "gemini-2.5-flash")
+    elif args.provider == "claude":
+        from population_synth.clients.claude_code_client import ClaudeCodeClient
+        client = ClaudeCodeClient(model_name=args.model or "sonnet")
+    else:
+        raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini' or 'claude'.")
+
+    logger.info("Model: %s", client.model_name)
     generator = FactoryIdentityGenerator.create_generator(args.mode, client)
 
-    identity_data, level_strings = generator.generate_identity(str(config_path))
+    kwargs = {}
+    if args.strategy:
+        kwargs["strategy_file"] = str(Path(args.strategy))
+
+    identity_data, level_strings = generator.generate_identity(str(config_path), **kwargs)
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
