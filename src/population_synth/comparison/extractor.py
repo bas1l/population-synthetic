@@ -1,8 +1,7 @@
 """
 extractor.py -- Extract demographic profiles from pipeline identity.json files.
 
-Supports three identity formats:
-- Sequential (nested level_1..level_4 dicts)
+Supports two identity formats:
 - Batch (single "narrative" key with free-text description)
 - Flat / configurable (top-level attribute keys)
 
@@ -742,168 +741,6 @@ def _income_source_from_context(employment_status: str, text_lower: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Sequential format extractor
-# ---------------------------------------------------------------------------
-
-def _deep_get(d: dict, *keys: str) -> Any:
-    """Traverse nested dict; return None if any key is missing."""
-    for k in keys:
-        if not isinstance(d, dict):
-            return None
-        d = d.get(k)
-    return d
-
-
-def _extract_sequential(identity: dict, persona_id: str) -> dict[str, Any] | None:
-    """Extract attributes from the sequential identity.json format (nested level_1..level_4)."""
-    unmapped: list[str] = []
-
-    raw_age = _deep_get(identity, "level_1", "core_demographics", "age")
-    if raw_age is None:
-        logger.warning("%s: missing age -- skipping persona", persona_id)
-        return None
-    try:
-        age_group = _age_to_group(int(raw_age))
-    except (ValueError, TypeError):
-        logger.warning("%s: non-integer age %r -- skipping persona", persona_id, raw_age)
-        return None
-
-    raw_sex = _deep_get(identity, "level_1", "core_demographics", "biological_sex") or ""
-    biological_sex = "Female" if "female" in raw_sex.lower() else ("Male" if "male" in raw_sex.lower() else None)
-    if biological_sex is None:
-        unmapped.append(f"biological_sex={raw_sex!r}")
-        biological_sex = "Non-standard label"
-
-    raw_edu = _deep_get(identity, "level_2", "sociological_background", "education_level") or ""
-    education_level = _normalize_education(raw_edu)
-    if education_level is None:
-        unmapped.append(f"education_level={raw_edu!r}")
-        education_level = "Non-standard label"
-
-    raw_emp = _deep_get(identity, "level_3", "professional_functional", "employment_status") or ""
-    employment_status = _normalize_employment(raw_emp)
-    if employment_status is None:
-        unmapped.append(f"employment_status={raw_emp!r}")
-        employment_status = "Non-standard label"
-
-    raw_birth = _deep_get(identity, "level_1", "origin_geography", "birth_location") or ""
-    birth_location = _normalize_birth_location(raw_birth)
-    if birth_location is None:
-        unmapped.append(f"birth_location={raw_birth!r}")
-        birth_location = "Non-standard label"
-
-    raw_eth = _deep_get(identity, "level_1", "core_demographics", "ethnicity_broad_global_approx") or ""
-    ethnicity = _normalize_ethnicity(raw_eth) if raw_eth else None
-    if ethnicity is None:
-        eth_from_birth = {
-            "Sweden": "Swedish",
-            "Nordic Country": "European",
-            "Europe (Other)": "European",
-            "Outside Europe": "Non-European",
-        }
-        ethnicity = eth_from_birth.get(birth_location)
-    if ethnicity is None:
-        unmapped.append(f"ethnicity={raw_eth!r}")
-        ethnicity = "Non-standard label"
-
-    raw_env = _deep_get(identity, "level_1", "core_demographics", "current_environment_type") or ""
-    current_environment_type = _normalize_environment(raw_env)
-    if current_environment_type is None:
-        unmapped.append(f"current_environment_type={raw_env!r}")
-        current_environment_type = "Non-standard label"
-
-    raw_sec = _deep_get(identity, "level_2", "sociological_background", "socioeconomic_class") or ""
-    socioeconomic_class = _normalize_socioeconomic(raw_sec)
-    if socioeconomic_class is None:
-        unmapped.append(f"socioeconomic_class={raw_sec!r}")
-        socioeconomic_class = "Non-standard label"
-
-    raw_par = _deep_get(identity, "level_2", "family_of_origin", "parental_structure") or ""
-    parental_structure = _normalize_parental_structure(raw_par)
-    if parental_structure is None:
-        unmapped.append(f"parental_structure={raw_par!r}")
-        parental_structure = "Non-standard label"
-
-    region = _deep_get(identity, "level_1", "origin_geography", "region") or ""
-    if not region:
-        unmapped.append("region=<not found>")
-        region = "Non-standard label"
-
-    raw_bcd = _deep_get(identity, "level_1", "origin_geography", "birth_country_detail") or ""
-    if not raw_bcd:
-        unmapped.append("birth_country_detail=<not found>")
-        birth_country_detail = "Non-standard label"
-    else:
-        birth_country_detail = _normalize_birth_country_detail(raw_bcd)
-
-    raw_cs = _deep_get(identity, "level_2", "family_of_origin", "civil_status") or ""
-    if not raw_cs:
-        unmapped.append("civil_status=<not found>")
-        civil_status = "Non-standard label"
-    else:
-        civil_status = _normalize_civil_status(raw_cs)
-
-    household_size = _deep_get(identity, "level_2", "family_of_origin", "household_size") or ""
-    if not household_size:
-        unmapped.append("household_size=<not found>")
-        household_size = "Non-standard label"
-
-    raw_ht = _deep_get(identity, "level_2", "sociological_background", "housing_tenure") or ""
-    if not raw_ht:
-        unmapped.append("housing_tenure=<not found>")
-        housing_tenure = "Non-standard label"
-    else:
-        housing_tenure = _normalize_housing_tenure(raw_ht)
-
-    raw_ind = _deep_get(identity, "level_3", "professional_functional", "industry_sector") or ""
-    if not raw_ind:
-        unmapped.append("industry_sector=<not found>")
-        industry_sector = "Non-standard label"
-    else:
-        industry_sector = _normalize_industry_sector(raw_ind)
-
-    raw_et = _deep_get(identity, "level_3", "professional_functional", "employment_type") or ""
-    if not raw_et:
-        unmapped.append("employment_type=<not found>")
-        employment_type = "Non-standard label"
-    else:
-        employment_type = _normalize_employment_type(raw_et)
-
-    raw_is = _deep_get(identity, "level_3", "professional_functional", "income_source") or ""
-    if not raw_is:
-        unmapped.append("income_source=<not found>")
-        income_source = "Non-standard label"
-    else:
-        income_source = _normalize_income_source(raw_is)
-
-    stored_age_group = _deep_get(identity, "level_1", "core_demographics", "age_group") or ""
-    age_group = stored_age_group if stored_age_group else age_group
-
-    if unmapped:
-        logger.warning("%s: unmapped values: %s", persona_id, ", ".join(unmapped))
-
-    return {
-        "age_group": age_group,
-        "biological_sex": biological_sex,
-        "education_level": education_level,
-        "employment_status": employment_status,
-        "birth_location": birth_location,
-        "ethnicity": ethnicity,
-        "current_environment_type": current_environment_type,
-        "socioeconomic_class": socioeconomic_class,
-        "parental_structure": parental_structure,
-        "region": region,
-        "birth_country_detail": birth_country_detail,
-        "civil_status": civil_status,
-        "household_size": household_size,
-        "housing_tenure": housing_tenure,
-        "industry_sector": industry_sector,
-        "employment_type": employment_type,
-        "income_source": income_source,
-    }
-
-
-# ---------------------------------------------------------------------------
 # Batch format extractor (narrative text)
 # ---------------------------------------------------------------------------
 
@@ -1631,10 +1468,6 @@ def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
 # Format detection helpers
 # ---------------------------------------------------------------------------
 
-def _is_sequential(identity: dict) -> bool:
-    return any(k.startswith("level_") for k in identity)
-
-
 def _is_flat(identity: dict) -> bool:
     return "age" in identity and not any(k.startswith("level_") for k in identity) and "narrative" not in identity
 
@@ -1655,9 +1488,7 @@ def extract_individual(identity_path: Path) -> dict[str, Any] | None:
         logger.warning("%s: could not read identity.json: %s", persona_id, exc)
         return None
 
-    if _is_sequential(identity):
-        attrs = _extract_sequential(identity, persona_id)
-    elif "narrative" in identity:
+    if "narrative" in identity:
         attrs = _extract_batch(identity, persona_id)
     elif _is_flat(identity):
         attrs = _extract_flat(identity, persona_id)

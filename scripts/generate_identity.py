@@ -3,12 +3,6 @@ generate_identity.py -- Standalone CLI entry point for generating a single perso
 
 Usage:
     python scripts/generate_identity.py \\
-        --mode sequential \\
-        --config config/assets/identity/sequential/identity_landscape.json \\
-        [--output identity.json] \\
-        [--model gemini-2.5-flash]
-
-    python scripts/generate_identity.py \\
         --mode batch \\
         --config config/assets/identity/batch/identity_landscape.json \\
         [--output identity.json]
@@ -19,7 +13,6 @@ Usage:
         [--output identity.json]
 
 Modes:
-    sequential    Hierarchical level-by-level LLM-refined generation.
     batch         Single-prompt narrative-style generation.
     configurable  Configurable strategy with simulation config file.
 """
@@ -43,9 +36,6 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  python scripts/generate_identity.py --mode sequential \\\n"
-            "      --config config/assets/identity/sequential/identity_landscape.json\n"
-            "\n"
             "  python scripts/generate_identity.py --mode configurable \\\n"
             "      --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json\n"
         ),
@@ -53,8 +43,8 @@ def main() -> None:
     parser.add_argument(
         "--mode",
         required=True,
-        choices=["sequential", "batch", "configurable"],
-        help="Identity generation strategy: sequential, batch, or configurable",
+        choices=["batch", "configurable"],
+        help="Identity generation strategy: batch or configurable",
     )
     parser.add_argument(
         "--config",

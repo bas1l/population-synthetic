@@ -5,20 +5,18 @@ from population_synth.clients.gemini_client import GeminiClient
 from .base_identity_generator import BaseIdentityGenerator
 from .identity_generator_batch import NarrativeGeneratorBatch
 from .identity_generator_configurable import IdentityGeneratorConfigurable
-from .identity_generator_sequential import IdentityGeneratorSequential
 
 
 class FactoryIdentityGenerator:
     """
     Factory architecture for instantiating concrete BaseIdentityGenerator implementations.
-    Centralizes the logic for selecting between sequential (hierarchical) and batch (narrative)
+    Centralizes the logic for selecting between batch (narrative) and configurable
     identity generation strategies.
     """
 
     # Central registry mapping identifiers to concrete class types.
     # Note: 'batch' maps to NarrativeGeneratorBatch as defined in identity_generator_batch.py
     _STRATEGY_MAP: Dict[str, Type[BaseIdentityGenerator]] = {
-        "sequential": IdentityGeneratorSequential,
         "batch": NarrativeGeneratorBatch,
         "configurable": IdentityGeneratorConfigurable
     }
@@ -29,7 +27,7 @@ class FactoryIdentityGenerator:
         Instantiates the appropriate identity generator class based on the provided mode string.
 
         Args:
-            mode (str): The strategy identifier (e.g., 'sequential', 'batch').
+            mode (str): The strategy identifier (e.g., 'batch', 'configurable').
             client (GeminiClient): The API client dependency required by the generator constructors.
 
         Returns:
