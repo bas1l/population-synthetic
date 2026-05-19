@@ -21,6 +21,7 @@ Usage:
 """
 
 import argparse
+import atexit
 import json
 import logging
 import sys
@@ -37,6 +38,22 @@ logger = logging.getLogger(__name__)
 _progress_lock = threading.Lock()
 _completed = 0
 _failed = 0
+
+_active_clients: set = set()
+_active_clients_lock = threading.Lock()
+
+
+def _atexit_cleanup() -> None:
+    with _active_clients_lock:
+        clients = list(_active_clients)
+    for client in clients:
+        try:
+            client.close()
+        except Exception:
+            pass
+
+
+atexit.register(_atexit_cleanup)
 
 
 def _generate_one(
@@ -59,6 +76,7 @@ def _generate_one(
             _completed += 1
             return index, True, "skipped (exists)"
 
+    client = None
     try:
         if provider == "gemini":
             from population_synth.clients.gemini_client import GeminiClient
@@ -66,6 +84,8 @@ def _generate_one(
         elif provider == "claude":
             from population_synth.clients.claude_code_client import ClaudeCodeClient
             client = ClaudeCodeClient(model_name=model)
+            with _active_clients_lock:
+                _active_clients.add(client)
         else:
             raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini' or 'claude'.")
         generator = FactoryIdentityGenerator.create_generator(mode, client)
@@ -87,6 +107,12 @@ def _generate_one(
             c, fa = _completed, _failed
         logger.error("[%d/%d] FAIL persona_%05d: %s  (failed: %d)", c, total, index, e, fa)
         return index, False, str(e)
+
+    finally:
+        if client is not None and hasattr(client, "close"):
+            client.close()
+            with _active_clients_lock:
+                _active_clients.discard(client)
 
 
 def main() -> None:
