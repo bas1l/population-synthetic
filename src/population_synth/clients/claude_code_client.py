@@ -1,7 +1,10 @@
 import copy
+import json
 import logging
+import random
 import shutil
 import subprocess
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -16,23 +19,23 @@ class ClaudeCodeClient:
     GeminiClient, but delegates generation to the local claude CLI process.
     """
 
-    def __init__(self, model_name: str = "sonnet", default_config: Optional[Dict[str, Any]] = None):
-        """
-        Initialize the ClaudeCodeClient.
-
-        Args:
-            model_name: Default Claude model identifier passed via --model. Defaults to 'sonnet'.
-            default_config: Initial configuration parameters (e.g., system_instruction).
-
-        Raises:
-            RuntimeError: If the `claude` CLI executable is not found on PATH.
-        """
+    def __init__(
+        self,
+        model_name: str = "sonnet",
+        default_config: Optional[Dict[str, Any]] = None,
+        max_retries: int = 3,
+        base_delay: float = 2.0,
+        max_delay: float = 30.0,
+    ):
         if shutil.which("claude") is None:
             raise RuntimeError(
                 "claude CLI not found on PATH. Install Claude Code and ensure `claude` is executable."
             )
 
         self.default_model_name = model_name
+        self._max_retries = max_retries
+        self._base_delay = base_delay
+        self._max_delay = max_delay
 
         logging.basicConfig(
             level=logging.INFO,
@@ -95,21 +98,50 @@ class ClaudeCodeClient:
         self._execution_history = []
         self._last_execution_metadata = None
 
+    def _run_cli(self, cmd: List[str], prompt: str, timeout: int) -> str:
+        result = subprocess.run(
+            cmd,
+            input=prompt,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=timeout,
+        )
+
+        stdout = (result.stdout or "").strip()
+        stderr = (result.stderr or "").strip()
+
+        # Parse JSON envelope from --output-format json
+        parsed = None
+        if stdout:
+            try:
+                parsed = json.loads(stdout)
+            except json.JSONDecodeError:
+                pass
+
+        if result.returncode != 0:
+            if parsed and isinstance(parsed, dict):
+                error_detail = parsed.get("error", {})
+                if isinstance(error_detail, dict):
+                    msg = error_detail.get("message", str(error_detail))
+                else:
+                    msg = str(error_detail)
+            elif stderr:
+                msg = stderr
+            elif stdout:
+                msg = stdout[:500]
+            else:
+                msg = "(no output)"
+            raise RuntimeError(
+                f"claude CLI failed (exit {result.returncode}): {msg}"
+            )
+
+        if parsed and isinstance(parsed, dict) and "result" in parsed:
+            return parsed["result"].strip()
+
+        return stdout
+
     def generate_content(self, prompt: str, **kwargs: Any) -> str:
-        """
-        Generate content by invoking the claude CLI as a subprocess.
-
-        Args:
-            prompt: The input text passed via stdin to the claude CLI.
-            **kwargs: Temporary configuration overrides for this specific call
-                      (e.g., system_instruction, model).
-
-        Returns:
-            str: The trimmed stdout from the claude CLI.
-
-        Raises:
-            RuntimeError: If the CLI process exits with a non-zero return code.
-        """
         effective_config = self._config_state.copy()
         effective_config.update(kwargs)
 
@@ -124,27 +156,34 @@ class ClaudeCodeClient:
         self._last_execution_metadata = metadata
         self._execution_history.append(metadata)
 
-        cmd = ["claude", "-p", "--model", target_model]
+        cmd = [
+            "claude", "-p",
+            "--model", target_model,
+            "--no-session-persistence",
+            "--output-format", "json",
+            "--tools", "",
+        ]
         if system_instruction:
-            cmd += ["--append-system-prompt", system_instruction]
+            cmd += ["--system-prompt", system_instruction]
 
         self.logger.debug("Invoking claude CLI: %s", cmd)
 
-        result = subprocess.run(
-            cmd,
-            input=prompt,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=120,
+        last_error: Exception | None = None
+        for attempt in range(self._max_retries):
+            try:
+                return self._run_cli(cmd, prompt, timeout=120)
+            except (RuntimeError, subprocess.TimeoutExpired) as e:
+                last_error = e
+                if attempt < self._max_retries - 1:
+                    delay = min(self._base_delay * (2 ** attempt), self._max_delay)
+                    delay *= random.uniform(0.75, 1.25)
+                    self.logger.warning(
+                        "CLI attempt %d/%d failed: %s — retrying in %.1fs",
+                        attempt + 1, self._max_retries, e, delay,
+                    )
+                    time.sleep(delay)
+
+        self.logger.error("CLI failed after %d attempts: %s", self._max_retries, last_error)
+        raise RuntimeError(
+            f"claude CLI failed after {self._max_retries} attempts: {last_error}"
         )
-
-        if result.returncode != 0:
-            self.logger.error(
-                "claude CLI exited with code %d: %s", result.returncode, result.stderr
-            )
-            raise RuntimeError(
-                f"claude CLI failed (exit {result.returncode}): {result.stderr.strip()}"
-            )
-
-        return result.stdout.strip()

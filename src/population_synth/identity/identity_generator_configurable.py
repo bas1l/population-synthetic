@@ -84,22 +84,51 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
         return ordered
 
+    @staticmethod
+    def _extract_json(text: str) -> dict | list:
+        text = text.strip()
+
+        # 1. Direct parse
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # 2. Extract content between markdown fences
+        fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+        if fence_match:
+            try:
+                return json.loads(fence_match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # 3. Find first JSON object or array
+        for pattern in (r"\{[^{}]*\}", r"\[.*?\]"):
+            obj_match = re.search(pattern, text, re.DOTALL)
+            if obj_match:
+                try:
+                    return json.loads(obj_match.group(0))
+                except json.JSONDecodeError:
+                    pass
+
+        raise json.JSONDecodeError("No valid JSON found in response", text, 0)
+
     def _call_llm_json(self, prompt: str, system_instruction: str) -> dict | list:
-        """Calls LLM, strips markdown fences, parses JSON. Retries up to 3 times."""
         last_error: Exception | None = None
         for attempt in range(3):
+            raw = ""
             try:
                 raw = self.client.generate_content(
                     prompt, system_instruction=system_instruction
                 )
-                text = raw.strip()
-                # Strip markdown code fences if present
-                text = re.sub(r"^```(?:json)?\s*", "", text)
-                text = re.sub(r"\s*```$", "", text)
-                return json.loads(text)
+                return self._extract_json(raw)
             except (json.JSONDecodeError, RuntimeError) as e:
                 last_error = e
-                logging.warning(f"LLM JSON parse attempt {attempt + 1}/3 failed: {e}")
+                raw_snippet = raw[:500] if raw else "(no response)"
+                logging.warning(
+                    "LLM JSON parse attempt %d/3 failed: %s\n--- RAW RESPONSE ---\n%s\n--- END ---",
+                    attempt + 1, e, raw_snippet,
+                )
         raise ValueError(f"LLM returned invalid JSON after 3 retries. Last error: {last_error}")
 
     def _build_context_block(self, resolved: dict) -> str:
