@@ -11,6 +11,7 @@ import numpy as np
 from population_synth.clients.llm_protocol import LLMClient
 
 from .base_identity_generator import BaseIdentityGenerator
+from .llm_interaction_log import LLMInteractionEntry
 
 
 class IdentityGeneratorConfigurable(BaseIdentityGenerator):
@@ -113,7 +114,15 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
         raise json.JSONDecodeError("No valid JSON found in response", text, 0)
 
-    def _call_llm_json(self, prompt: str, system_instruction: str) -> dict | list:
+    def _call_llm_json(
+        self,
+        prompt: str,
+        system_instruction: str,
+        *,
+        log_category: str = "",
+        log_method: str = "",
+        log_step: str = "",
+    ) -> dict | list:
         last_error: Exception | None = None
         for attempt in range(3):
             raw = ""
@@ -121,8 +130,29 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                 raw = self.client.generate_content(
                     prompt, system_instruction=system_instruction
                 )
-                return self._extract_json(raw)
+                parsed = self._extract_json(raw)
+                if self.interaction_collector and log_category:
+                    self.interaction_collector.record(LLMInteractionEntry(
+                        category=log_category,
+                        method=log_method,
+                        step=log_step,
+                        prompt=prompt,
+                        raw_response=raw,
+                        parsed_value=parsed,
+                        attempt=attempt + 1,
+                    ))
+                return parsed
             except (json.JSONDecodeError, RuntimeError) as e:
+                if self.interaction_collector and log_category:
+                    self.interaction_collector.record(LLMInteractionEntry(
+                        category=log_category,
+                        method=log_method,
+                        step=f"{log_step}_retry",
+                        prompt=prompt,
+                        raw_response=raw,
+                        parsed_value=None,
+                        attempt=attempt + 1,
+                    ))
                 last_error = e
                 raw_snippet = raw[:500] if raw else "(no response)"
                 logging.warning(
@@ -256,7 +286,10 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         system_instruction: str,
     ) -> Any:
         prompt = self._build_pick_prompt(category_name, category_schema, resolved, system_instruction)
-        result = self._call_llm_json(prompt, system_instruction)
+        result = self._call_llm_json(
+            prompt, system_instruction,
+            log_category=category_name, log_method="pick", log_step="pick",
+        )
         value = result["value"]
         if self._is_numeric_category(category_schema):
             value = max(category_schema["min"], min(category_schema["max"], float(value)))
@@ -272,10 +305,16 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         system_instruction: str,
     ) -> Any:
         enum_prompt = self._build_enumerate_prompt(category_name, category_schema, resolved, system_instruction)
-        candidates = self._call_llm_json(enum_prompt, system_instruction)["candidates"]
+        candidates = self._call_llm_json(
+            enum_prompt, system_instruction,
+            log_category=category_name, log_method="generate_pick", log_step="enumerate",
+        )["candidates"]
 
         sel_prompt = self._build_select_prompt(category_name, candidates, resolved, system_instruction)
-        value = self._call_llm_json(sel_prompt, system_instruction)["value"]
+        value = self._call_llm_json(
+            sel_prompt, system_instruction,
+            log_category=category_name, log_method="generate_pick", log_step="select",
+        )["value"]
 
         if self._is_numeric_category(category_schema):
             value = max(category_schema["min"], min(category_schema["max"], float(value)))
@@ -291,14 +330,20 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         system_instruction: str,
     ) -> Any:
         enum_prompt = self._build_enumerate_prompt(category_name, category_schema, resolved, system_instruction)
-        candidates = self._call_llm_json(enum_prompt, system_instruction)["candidates"]
+        candidates = self._call_llm_json(
+            enum_prompt, system_instruction,
+            log_category=category_name, log_method="generate_evaluate_pick", log_step="enumerate",
+        )["candidates"]
         if len(candidates) > 50:
             logging.warning(f"Truncating {len(candidates)} candidates to 50 for '{category_name}'.")
             candidates = candidates[:50]
 
         for attempt in range(10):
             eval_prompt = self._build_evaluate_prompt(category_name, candidates, resolved, system_instruction)
-            weights = self._call_llm_json(eval_prompt, system_instruction)["weights"]
+            weights = self._call_llm_json(
+                eval_prompt, system_instruction,
+                log_category=category_name, log_method="generate_evaluate_pick", log_step="evaluate",
+            )["weights"]
             weights = self._normalize_weights(weights, category_name)
             if len(weights) == len(candidates):
                 break
@@ -313,7 +358,10 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             )
 
         sel_prompt = self._build_select_prompt(category_name, candidates, resolved, system_instruction)
-        value = self._call_llm_json(sel_prompt, system_instruction)["value"]
+        value = self._call_llm_json(
+            sel_prompt, system_instruction,
+            log_category=category_name, log_method="generate_evaluate_pick", log_step="select",
+        )["value"]
 
         if self._is_numeric_category(category_schema):
             value = max(category_schema["min"], min(category_schema["max"], float(value)))
@@ -332,7 +380,10 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             dist_prompt = self._build_numeric_distribution_prompt(
                 category_name, category_schema, resolved, system_instruction
             )
-            spec = self._call_llm_json(dist_prompt, system_instruction)
+            spec = self._call_llm_json(
+                dist_prompt, system_instruction,
+                log_category=category_name, log_method="generate_evaluate_random_pick", log_step="distribution",
+            )
             lo, hi = category_schema["min"], category_schema["max"]
             distribution = spec.get("distribution", "uniform")
 
@@ -355,14 +406,20 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
         # Categorical path
         enum_prompt = self._build_enumerate_prompt(category_name, category_schema, resolved, system_instruction)
-        candidates = self._call_llm_json(enum_prompt, system_instruction)["candidates"]
+        candidates = self._call_llm_json(
+            enum_prompt, system_instruction,
+            log_category=category_name, log_method="generate_evaluate_random_pick", log_step="enumerate",
+        )["candidates"]
         if len(candidates) > 50:
             logging.warning(f"Truncating {len(candidates)} candidates to 50 for '{category_name}'.")
             candidates = candidates[:50]
 
         for attempt in range(10):
             eval_prompt = self._build_evaluate_prompt(category_name, candidates, resolved, system_instruction)
-            weights = self._call_llm_json(eval_prompt, system_instruction)["weights"]
+            weights = self._call_llm_json(
+                eval_prompt, system_instruction,
+                log_category=category_name, log_method="generate_evaluate_random_pick", log_step="evaluate",
+            )["weights"]
             weights = self._normalize_weights(weights, category_name)
             if len(weights) == len(candidates):
                 break

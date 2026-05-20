@@ -1,8 +1,8 @@
-name: "Claude Sonnet — all_generate_evaluate_random_pick"
+name: "Claude Opus — all_generate_evaluate_random_pick"
 
 model_config:
   provider: "claude"
-  model: "sonnet"
+  model: "opus"
   generation_config:
     temperature: null
     top_p: null
@@ -18,5 +18,5 @@ parameters:
   parallel:
     n: 100
     workers: 2
-    output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/01_Raw/seed_025_all_generate_evaluate_random_pick_sonnet"
-  comparison_output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/03_Analysis/seed_025_all_generate_evaluate_random_pick_sonnet"
+    output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/01_Raw/seed_029_all_generate_evaluate_random_pick_opus"
+  comparison_output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/03_Analysis/seed_029_all_generate_evaluate_random_pick_opus"

@@ -15,15 +15,15 @@ from population_synth.clients.llm_protocol import LLMClient  # noqa: F401  # for
 
 class ClaudeCodeClient:
     """
-    A subprocess wrapper around the `claude` CLI that satisfies the LLMClient protocol.
+    A persistent subprocess wrapper around the `claude` CLI that satisfies the LLMClient protocol.
 
-    Manages persistent configuration state and execution history identically to
-    GeminiClient, but delegates generation to a persistent claude CLI process
-    using the stream-json NDJSON protocol.
+    One `claude` process is kept alive per instance (lazily launched on first generate_content()
+    call). Prompts are written as NDJSON to stdin; a daemon reader thread drains stdout into a
+    queue.Queue; generate_content() blocks on the queue until {"type":"result"} arrives.
+
+    The process is restarted automatically when the model or system_instruction changes, or after
+    any unrecoverable error (the retry loop calls _close_process() before each retry).
     """
-
-    _INIT_TIMEOUT = 30
-    _CLOSE_TIMEOUT = 5
 
     def __init__(
         self,
@@ -56,11 +56,15 @@ class ClaudeCodeClient:
         self._last_execution_metadata: Optional[Dict[str, Any]] = None
         self._execution_history: List[Dict[str, Any]] = []
 
-        self._process: Optional[subprocess.Popen] = None
-        self._reader: Optional[threading.Thread] = None
-        self._stdout_queue: queue.Queue = queue.Queue()
-        self._current_system_instruction: Optional[str] = None
+        # Persistent process state — all None until first _launch_process()
+        self._proc: Optional[subprocess.Popen] = None
+        self._reader_thread_handle: Optional[threading.Thread] = None
+        self._stdout_queue: Optional[queue.Queue] = None
         self._current_model: Optional[str] = None
+        self._current_system_prompt: Optional[str] = None
+
+        # Timing stash: _ensure_process() sets this; generate_content() reads and resets it
+        self._last_launch_ms: float = 0.0
 
         self.logger.info(
             "ClaudeCodeClient initialized. Model: %s. Config: %s",
@@ -68,24 +72,19 @@ class ClaudeCodeClient:
             self._config_state,
         )
 
+    # ------------------------------------------------------------------
+    # Public interface (unchanged)
+    # ------------------------------------------------------------------
+
     def update_config(self, **kwargs: Any) -> None:
-        """
-        Persistently update the stored generation configuration.
-        """
         self.logger.info(f"Updating persistent config with: {kwargs}")
         self._config_state.update(kwargs)
 
     def update_default_model(self, new_model_name: str) -> None:
-        """
-        Runtime update of the default model configuration.
-        """
         self.logger.info(f"Updating default model from {self.default_model_name} to {new_model_name}")
         self.default_model_name = new_model_name
 
     def get_current_configuration(self) -> Dict[str, Any]:
-        """
-        Retrieve the full current state of the client configuration.
-        """
         return {
             "model": self.default_model_name,
             "generation_config": copy.deepcopy(self._config_state),
@@ -93,37 +92,37 @@ class ClaudeCodeClient:
 
     @property
     def last_metadata(self) -> Dict[str, Any]:
-        """
-        Returns the metadata (model, config, timestamp) used for the most recent CLI call.
-        """
         return self._last_execution_metadata or {}
 
     @property
     def history(self) -> List[Dict[str, Any]]:
-        """
-        Returns the list of metadata for all CLI calls since the last clear.
-        """
         return self._execution_history
 
     def clear_history(self) -> None:
-        """
-        Clears the execution history. Call this before starting a new logical unit of work.
-        """
         self._execution_history = []
         self._last_execution_metadata = None
+
+    def close(self) -> None:
+        self._close_process()
+
+    def __del__(self) -> None:
+        try:
+            self._close_process()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Persistent process lifecycle
+    # ------------------------------------------------------------------
 
     def _launch_process(self, model: str, system_instruction: Optional[str]) -> None:
         cmd = [
             "claude",
             "--model", model,
             "--no-session-persistence",
-            "--tools", "",
             "--input-format", "stream-json",
             "--output-format", "stream-json",
-            "--exclude-dynamic-system-prompt-sections",
-            "--strict-mcp-config",
-            "--mcp-config", "{}",
-            "--disable-slash-commands",
+            "--verbose",
             "--max-turns", "1",
         ]
         if system_instruction:
@@ -131,163 +130,135 @@ class ClaudeCodeClient:
 
         self.logger.debug("Launching persistent claude process: %s", cmd)
 
-        self._process = subprocess.Popen(
+        self._stdout_queue = queue.Queue()
+        self._proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
         )
+        self._current_model = model
+        self._current_system_prompt = system_instruction
 
-        self._stdout_queue = queue.Queue()
-        self._reader = threading.Thread(
+        self._reader_thread_handle = threading.Thread(
             target=self._reader_thread,
-            args=(self._process,),
             daemon=True,
+            name="claude-stdout-reader",
         )
-        self._reader.start()
+        self._reader_thread_handle.start()
 
-    def _reader_thread(self, process: subprocess.Popen) -> None:
+    def _reader_thread(self) -> None:
+        # Runs in a daemon thread; drains proc.stdout line-by-line into the queue.
+        # The None sentinel signals EOF to _read_until_result().
         try:
-            for raw_line in process.stdout:
-                line = raw_line.decode("utf-8", errors="replace").strip()
-                if line:
-                    self._stdout_queue.put(line)
+            for line in iter(self._proc.stdout.readline, ""):
+                self._stdout_queue.put(line)
         finally:
             self._stdout_queue.put(None)
 
-    def _read_until_result(self, timeout: int) -> Dict[str, Any]:
+    def _ensure_process(self, model: str, system_instruction: Optional[str]) -> None:
+        needs_launch = (
+            self._proc is None
+            or self._proc.poll() is not None
+            or model != self._current_model
+            or system_instruction != self._current_system_prompt
+        )
+        if needs_launch:
+            self._close_process()
+            t0 = time.perf_counter()
+            self._launch_process(model, system_instruction)
+            self._last_launch_ms = (time.perf_counter() - t0) * 1000
+        else:
+            self._last_launch_ms = 0.0
+
+    def _close_process(self) -> None:
+        if self._proc is None:
+            return
+
+        try:
+            self._proc.stdin.close()
+        except BrokenPipeError:
+            pass
+        except Exception:
+            pass
+
+        try:
+            self._proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self._proc.kill()
+            self._proc.wait()
+
+        if self._reader_thread_handle is not None:
+            self._reader_thread_handle.join(timeout=2)
+
+        self._proc = None
+        self._reader_thread_handle = None
+        self._stdout_queue = None
+        self._current_model = None
+        self._current_system_prompt = None
+
+    # ------------------------------------------------------------------
+    # Per-call I/O
+    # ------------------------------------------------------------------
+
+    def _send_prompt(self, prompt: str) -> None:
+        msg = {
+            "type": "user",
+            "session_id": "",
+            "message": {"role": "user", "content": prompt},
+            "parent_tool_use_id": None,
+        }
+        self._proc.stdin.write(json.dumps(msg) + "\n")
+        self._proc.stdin.flush()
+
+    def _read_until_result(self, timeout: float) -> str:
         deadline = time.monotonic() + timeout
-        seen: List[str] = []
+        skip_types = {"system", "rate_limit_event", "assistant", "stream_event"}
 
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise subprocess.TimeoutExpired(
-                    cmd="claude (stream-json)",
-                    timeout=timeout,
-                )
+                raise subprocess.TimeoutExpired(cmd="claude", timeout=timeout)
 
             try:
-                line = self._stdout_queue.get(timeout=min(remaining, 1.0))
+                line = self._stdout_queue.get(timeout=remaining)
             except queue.Empty:
-                if time.monotonic() >= deadline:
-                    raise subprocess.TimeoutExpired(
-                        cmd="claude (stream-json)",
-                        timeout=timeout,
-                    )
-                continue
+                raise subprocess.TimeoutExpired(cmd="claude", timeout=timeout)
 
             if line is None:
                 raise RuntimeError("claude process terminated unexpectedly")
 
-            seen.append(line)
+            line = line.strip()
+            if not line:
+                continue
 
             try:
                 msg = json.loads(line)
             except json.JSONDecodeError:
                 continue
 
-            if not isinstance(msg, dict):
+            if not isinstance(msg, dict) or "type" not in msg:
                 continue
 
-            if msg.get("type") != "result":
+            msg_type = msg["type"]
+            if msg_type in skip_types:
                 continue
 
-            if msg.get("is_error"):
-                error_detail = msg.get("result") or msg.get("error") or str(msg)
-                raise RuntimeError(f"claude CLI returned an error result: {error_detail}")
+            if msg_type == "result":
+                if msg.get("is_error"):
+                    error_detail = msg.get("result") or msg.get("error") or str(msg)
+                    raise RuntimeError(f"claude CLI returned an error result: {error_detail}")
+                result = msg.get("result", "")
+                return result.strip() if isinstance(result, str) else result
 
-            return msg
+            # Unknown type — skip rather than raise so forward-compat is preserved
+            self.logger.debug("Ignoring unknown claude message type: %s", msg_type)
 
-    def _send_prompt(self, prompt: str) -> None:
-        payload = json.dumps({
-            "type": "message",
-            "role": "user",
-            "content": [{"type": "text", "text": prompt}],
-        })
-        line = (payload + "\n").encode("utf-8")
-        self._process.stdin.write(line)
-        self._process.stdin.flush()
-
-    def _ensure_process(self, model: str, system_instruction: Optional[str]) -> None:
-        process_dead = self._process is None or self._process.poll() is not None
-        system_changed = system_instruction != self._current_system_instruction
-        model_changed = model != self._current_model
-
-        if process_dead or system_changed or model_changed:
-            self._close_process()
-            self._launch_process(model, system_instruction)
-            self._current_system_instruction = system_instruction
-            self._current_model = model
-            self._wait_for_init()
-
-    def _wait_for_init(self) -> None:
-        deadline = time.monotonic() + self._INIT_TIMEOUT
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise RuntimeError(
-                    f"claude process did not send init signal within {self._INIT_TIMEOUT}s"
-                )
-            try:
-                line = self._stdout_queue.get(timeout=min(remaining, 1.0))
-            except queue.Empty:
-                if time.monotonic() >= deadline:
-                    raise RuntimeError(
-                        f"claude process did not send init signal within {self._INIT_TIMEOUT}s"
-                    )
-                continue
-
-            if line is None:
-                raise RuntimeError("claude process terminated before sending init signal")
-
-            try:
-                msg = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            if (
-                isinstance(msg, dict)
-                and msg.get("type") == "system"
-                and msg.get("subtype") == "init"
-            ):
-                self.logger.debug("claude process ready (init received)")
-                return
-
-    def _close_process(self) -> None:
-        if self._process is not None:
-            try:
-                self._process.stdin.close()
-            except Exception:
-                pass
-
-            try:
-                self._process.wait(timeout=self._CLOSE_TIMEOUT)
-            except subprocess.TimeoutExpired:
-                self._process.kill()
-                try:
-                    self._process.wait(timeout=self._CLOSE_TIMEOUT)
-                except Exception:
-                    pass
-
-        if self._reader is not None:
-            self._reader.join(timeout=self._CLOSE_TIMEOUT)
-
-        self._process = None
-        self._reader = None
-        self._stdout_queue = queue.Queue()
-
-    def close(self) -> None:
-        """
-        Terminate the persistent claude process and clean up resources.
-        """
-        self._close_process()
-
-    def __del__(self) -> None:
-        try:
-            self.close()
-        except Exception:
-            pass
+    # ------------------------------------------------------------------
+    # generate_content (public, retry-wrapped)
+    # ------------------------------------------------------------------
 
     def generate_content(self, prompt: str, **kwargs: Any) -> str:
         effective_config = self._config_state.copy()
@@ -304,18 +275,23 @@ class ClaudeCodeClient:
         self._last_execution_metadata = metadata
         self._execution_history.append(metadata)
 
-        self.logger.debug("generate_content called. Model: %s", target_model)
-
         last_error: Exception | None = None
         for attempt in range(self._max_retries):
             try:
                 self._ensure_process(target_model, system_instruction)
+                launch_ms = self._last_launch_ms
+
+                t_inf_start = time.perf_counter()
                 self._send_prompt(prompt)
-                result_msg = self._read_until_result(timeout=self._timeout)
-                text = result_msg.get("result", "")
-                if isinstance(text, str):
-                    text = text.strip()
-                return text
+                result = self._read_until_result(self._timeout)
+                t_inference_ms = (time.perf_counter() - t_inf_start) * 1000
+
+                self.logger.info(
+                    "claude call: model=%s t_launch_ms=%.0f t_inference_ms=%.0f",
+                    target_model, launch_ms, t_inference_ms,
+                )
+                return result
+
             except (RuntimeError, subprocess.TimeoutExpired, OSError) as e:
                 last_error = e
                 self._close_process()

@@ -80,7 +80,20 @@
       "Civilekonom": "Post-Secondary 3+ yrs (ISCED 5A)",
       "Doktorsexamen": "Post-Graduate (ISCED 6)",
       "Licentiatexamen": "Post-Graduate (ISCED 6)",
-      "Forskarutbildning": "Post-Graduate (ISCED 6)"
+      "Forskarutbildning": "Post-Graduate (ISCED 6)",
+      "Realskoleexamen": "Pre-Secondary 9-10 yrs (ISCED 2)",
+      "Ingen formell utbildning": "Pre-Secondary < 9 yrs (ISCED 1)",
+      "Högskola/universitet, 3 år eller mer": "Post-Secondary 3+ yrs (ISCED 5A)",
+      "Högskola/universitet, kortare än 3 år": "Post-Secondary < 3 yrs (ISCED 4+5B)",
+      "Högskoleutbildning, 3 år eller mer": "Post-Secondary 3+ yrs (ISCED 5A)",
+      "Högskoleutbildning, kortare än 3 år": "Post-Secondary < 3 yrs (ISCED 4+5B)",
+      "Universitetsutbildning": "Post-Secondary 3+ yrs (ISCED 5A)",
+      "Eftergymnasial utbildning, 3 år eller mer": "Post-Secondary 3+ yrs (ISCED 5A)",
+      "Eftergymnasial utbildning, kortare än 3 år": "Post-Secondary < 3 yrs (ISCED 4+5B)",
+      "Gymnasial utbildning, 3 år": "Upper Secondary 3 yrs (ISCED 3A)",
+      "Gymnasial utbildning, högst 2 år": "Upper Secondary ≤ 2 yrs (ISCED 3C)",
+      "Förgymnasial utbildning, 9 (10) år": "Pre-Secondary 9-10 yrs (ISCED 2)",
+      "Förgymnasial utbildning kortare än 9 år": "Pre-Secondary < 9 yrs (ISCED 1)"
     }
   },
   "employment": {
@@ -155,7 +168,17 @@
       "Sjukpensionär": "Retired",
       "Mottagare av sjukersättning": "Retired",
       "Sjukskriven": "Unemployed",
-      "Långtidssjukskriven": "Retired"
+      "Långtidssjukskriven": "Retired",
+      "Arbetstränade": "Unemployed",
+      "Arbetsträning": "Unemployed",
+      "Förvärvsarbetande": "Employed",
+      "Sysselsatt": "Employed",
+      "Yrkesverksam": "Employed",
+      "I arbete": "Employed",
+      "Heltidsarbetande": "Employed",
+      "Deltidsarbetande": "Employed",
+      "Ej i arbetskraften": "Retired",
+      "Hemarbetande": "Retired"
     }
   },
   "urbanization": {
@@ -235,14 +258,21 @@
       "Tjänsteman": "Middle Class",
       "Mellan tjänsteman": "Middle Class",
       "Mellantjänsteman": "Middle Class",
-      "Högre tjänsteman": "Middle Class",
+      "Högre tjänsteman": "Wealthy",
       "Akademiker": "Middle Class",
       "Akademikerklass": "Middle Class",
       "Specialist": "Middle Class",
       "Företagare": "Middle Class",
       "Egenföretagare": "Middle Class",
       "Överklass": "Wealthy",
-      "Välbärgad": "Wealthy"
+      "Välbärgad": "Wealthy",
+      "Högre tjänstemän": "Wealthy",
+      "Mellanstora tjänstemän": "Middle Class",
+      "Mellan-tjänstemän": "Middle Class",
+      "Mellan tjänstemän": "Middle Class",
+      "Kvalificerad tjänsteman": "Middle Class",
+      "Nedre mellanklass": "Working Class",
+      "Låginkomsttagare": "Poverty"
     }
   },
   "birth_location": {
@@ -367,6 +397,30 @@
       "Par utan barn": "Couple without Children",
       "Living alone": "Living Alone",
       "Bor ensam": "Living Alone",
+      "Ensamhushåll": "Living Alone",
+      "Shared custody": "Single Parent",
+      "Shared residency (separated parents)": "Single Parent",
+      "Shared custody (parents living separately)": "Single Parent",
+      "Shared custody (parents live separately, child lives in two homes)": "Single Parent",
+      "Shared custody (separated parents)": "Single Parent",
+      "Separated parents (shared custody)": "Single Parent",
+      "Skilda föräldrar med växelvis boende": "Single Parent",
+      "Two heterosexual parents": "Nuclear Family",
+      "Two biological/adoptive heterosexual parents": "Nuclear Family",
+      "One biological parent": "Single Parent",
+      "Tvåföräldershushåll": "Nuclear Family",
+      "Tvåföräldersfamilj": "Nuclear Family",
+      "Tvåföräldershem": "Nuclear Family",
+      "Två föräldrar": "Nuclear Family",
+      "Gift par med barn": "Nuclear Family",
+      "Sambopar med barn": "Nuclear Family",
+      "Gifta föräldrar": "Nuclear Family",
+      "Sammanboende föräldrar": "Nuclear Family",
+      "Enföräldersfamilj": "Single Parent",
+      "Enföräldershushåll": "Single Parent",
+      "Ensamstående med barn": "Single Parent",
+      "Par utan barn": "Couple without Children",
+      "Ensamboende": "Living Alone",
       "Ensamhushåll": "Living Alone"
     }
   },
@@ -453,7 +507,11 @@
       "Frånskild": "Divorced",
       "Separerad": "Divorced",
       "Änka": "Widowed",
-      "Änkling": "Widowed"
+      "Änkling": "Widowed",
+      "Änklig": "Widowed",
+      "Änkeman": "Widowed",
+      "Registrerad partner": "Married",
+      "Ensamstående": "Single/Never Married"
     }
   },
   "industry_sector": {
@@ -588,7 +646,16 @@
       "Pensionär": "Not Applicable",
       "Retired": "Not Applicable",
       "Student": "Not Applicable",
-      "Studerande": "Not Applicable"
+      "Studerande": "Not Applicable",
+      "Aktiebolag (ägare)": "Self-Employed",
+      "Aktiebolag (AB)": "Self-Employed",
+      "Anställd i eget aktiebolag": "Self-Employed",
+      "Ägare och anställd i eget aktiebolag": "Self-Employed",
+      "Egenanställd": "Self-Employed",
+      "Vikarie": "Temporary Full-time",
+      "Volontärarbete": "Not Applicable",
+      "Arbetsträning": "Not Applicable",
+      "Anställning för viss tid då arbetstagaren uppnått pensionsåldern": "Temporary Full-time"
     }
   },
   "age_groups": {
@@ -812,6 +879,31 @@
       "50-64 years": ["55-64"],
       "65-79 years": ["65-74"],
       "80- years": ["75-85"]
+    }
+  },
+  "ethnicity": {
+    "description": "Broad ethnicity categories for comparison with SCB birth-location proxy",
+    "output_categories": ["Swedish", "Nordic", "European", "Non-European"],
+    "pipeline_label_mappings": {
+      "Svensk": "Swedish",
+      "Swedish": "Swedish",
+      "Nordisk": "Nordic",
+      "Nordic": "Nordic",
+      "Skandinavisk": "Nordic",
+      "Scandinavian": "Nordic",
+      "Svensk/Nordisk": "Nordic",
+      "Europeisk": "European",
+      "European": "European",
+      "Östeuropeisk": "European",
+      "Sydeuropeisk": "European",
+      "Västeuropeisk": "European",
+      "Utomeuropeisk": "Non-European",
+      "Non-European": "Non-European",
+      "Mellanöstern": "Non-European",
+      "Afrikansk": "Non-European",
+      "Asiatisk": "Non-European",
+      "Latinamerikansk": "Non-European",
+      "Blandad": "Non-European"
     }
   },
   "birth_country_detail": {

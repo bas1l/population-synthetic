@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 from population_synth.clients.llm_protocol import LLMClient
 
 from .base_identity_generator import BaseIdentityGenerator
+from .llm_interaction_log import LLMInteractionEntry
 
 
 class NarrativeGeneratorBatch(BaseIdentityGenerator):
@@ -58,6 +59,15 @@ class NarrativeGeneratorBatch(BaseIdentityGenerator):
             logging.info(f"Generating flat narrative from {landscape_file}...")
             # Utilizing the injected client instead of internal model instance
             response_text = self.client.generate_content(prompt_text)
+
+            if self.interaction_collector:
+                self.interaction_collector.record(LLMInteractionEntry(
+                    category="narrative",
+                    method="batch",
+                    step="narrative",
+                    prompt=prompt_text,
+                    raw_response=response_text,
+                ))
 
             # Encapsulate string response to satisfy Dict return contract
             identity_data = {"narrative": response_text}
