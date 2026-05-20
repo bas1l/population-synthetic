@@ -24,6 +24,9 @@ dependencies = [
 dev = [
     "ruff>=0.4",
 ]
+gui = [
+    "PyQt5>=5.15",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
