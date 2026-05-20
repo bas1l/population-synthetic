@@ -1,8 +1,10 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from population_synth.clients.llm_protocol import LLMClient
+
+from .llm_interaction_log import LLMInteractionCollector
 
 
 class BaseIdentityGenerator(ABC):
@@ -19,6 +21,7 @@ class BaseIdentityGenerator(ABC):
             client (LLMClient): An initialized client for API calls.
         """
         self.client = client
+        self.interaction_collector: Optional[LLMInteractionCollector] = None
         logging.info(f"{self.__class__.__name__} initialized.")
 
     @abstractmethod

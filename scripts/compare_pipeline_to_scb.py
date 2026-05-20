@@ -118,6 +118,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    m = None
     if args.manifest:
         from population_synth.identity.manifest_loader import load_manifest
         m = load_manifest(args.manifest)
@@ -132,7 +133,12 @@ def main() -> None:
         print(f"ERROR: Seed root does not exist: {seed_root}", file=sys.stderr)
         sys.exit(1)
 
-    output_path = Path(args.output) if args.output else PROJECT_ROOT / "data" / "analysis" / "compare_with_scb02" / f"{seed_root.name}.json"
+    if args.output:
+        output_path = Path(args.output)
+    elif m is not None and m.comparison_output_dir is not None:
+        output_path = m.comparison_output_dir / f"{seed_root.name}.json"
+    else:
+        output_path = PROJECT_ROOT / "data" / "analysis" / "compare_with_scb02" / f"{seed_root.name}.json"
 
     reference_path = Path(args.reference)
     if not reference_path.exists():

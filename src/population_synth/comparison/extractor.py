@@ -39,6 +39,7 @@ def _load_pipeline_mappings() -> dict[str, dict[str, str]]:
         "education", "employment", "civil_status", "industry_sector",
         "employment_type", "income_source", "housing_tenure",
         "parental_structure", "socioeconomic", "region", "birth_country_detail",
+        "ethnicity",
     ):
         section = m.get(key, {}) or {}
         plm = section.get("pipeline_label_mappings", {}) or {}
@@ -337,7 +338,8 @@ def _normalize_education(raw: str) -> str | None:
     if any(k in raw_lower for k in _POSTGRAD):
         return "Post-Graduate (ISCED 6)"
     _POSTSEC3 = ("post-secondary 3", "isced 5a", "isced97 5a", "university", "degree", "bachelor",
-                  "master", "kandidat", "magister", "högskolex", "högskole", "hogskola", "akademisk")
+                  "master", "kandidat", "magister", "högskolex", "högskole", "hogskola", "akademisk",
+                  "universitet")
     if any(k in raw_lower for k in _POSTSEC3):
         return "Post-Secondary 3+ yrs (ISCED 5A)"
     _POSTSEC_LT3 = ("post-secondary <", "isced 4", "isced 5b", "isced97 4", "isced97 5b",
@@ -352,11 +354,11 @@ def _normalize_education(raw: str) -> str | None:
     if any(k in raw_lower for k in ("upper secondary", "isced 3c", "isced97 3c")):
         return "Upper Secondary ≤ 2 yrs (ISCED 3C)"
     _PRESEC9 = ("pre-secondary 9", "isced 2", "isced97 2", "grundskola", "compulsory",
-                 "elementary", "primary school", "folkskola")
+                 "elementary", "primary school", "folkskola", "realskoleexamen")
     if any(k in raw_lower for k in _PRESEC9):
         return "Pre-Secondary 9-10 yrs (ISCED 2)"
     _PRESEC_LT9 = ("pre-secondary <", "isced 1", "isced97 1", "no formal", "primary",
-                    "ingen utbildning", "lägre grundskola")
+                    "ingen utbildning", "ingen formell", "lägre grundskola")
     if any(k in raw_lower for k in _PRESEC_LT9):
         return "Pre-Secondary < 9 yrs (ISCED 1)"
     if any(k in raw_lower for k in ("unknown", "not reported", "uppgift saknas")):
@@ -378,11 +380,12 @@ def _normalize_employment(raw: str) -> str | None:
     if any(k in raw_lower for k in ("military", "värnplikt", "armed forces")):
         return "Employed"
     _EMPLOYED = ("employ", "working", "worker", "job", "anställd", "heltid",
-                  "deltid", "tillsvidare")
+                  "deltid", "tillsvidare", "sysselsatt", "förvärvsarbetande",
+                  "yrkesverksam")
     if any(k in raw_lower for k in _EMPLOYED):
         return "Employed"
     _UNEMPLOYED = ("unemploy", "jobless", "seeking", "arbetssökande", "arbetslos",
-                    "arbetslös")
+                    "arbetslös", "arbetsträning", "arbetstränade")
     if any(k in raw_lower for k in _UNEMPLOYED):
         return "Unemployed"
     if any(k in raw_lower for k in ("student", "study", "school", "studying", "studerande")):
@@ -407,14 +410,18 @@ def _normalize_birth_location(raw: str) -> str | None:
 
 def _normalize_ethnicity(raw: str) -> str | None:
     raw_lower = raw.lower()
-    if any(k in raw_lower for k in ("caucasian", "white", "swedish")):
+    js = _json_lookup("ethnicity", raw)
+    if js is not None:
+        return js
+    if any(k in raw_lower for k in ("caucasian", "white", "swedish", "svensk")):
         return "Swedish"
-    if any(k in raw_lower for k in ("nordic", "scandina", "finnish", "finsk", "dansk", "norsk", "isländsk")):
-        return "European"
-    if any(k in raw_lower for k in ("european", "southern european", "eastern european", "östeuropeisk")):
+    if any(k in raw_lower for k in ("nordic", "scandina", "finnish", "finsk", "dansk", "norsk", "isländsk", "nordisk", "skandinavisk")):
+        return "Nordic"
+    if any(k in raw_lower for k in ("european", "southern european", "eastern european", "östeuropeisk", "europeisk")):
         return "European"
     _NON_EU = ("middle eastern", "african", "asian", "hispanic", "latino",
-                "non-european", "mixed", "indigenous", "chaldean", "assyrisk", "syriansk")
+                "non-european", "mixed", "indigenous", "chaldean", "assyrisk", "syriansk",
+                "utomeuropeisk", "mellanöstern", "afrikansk", "asiatisk")
     if any(k in raw_lower for k in _NON_EU):
         return "Non-European"
     return _fuzzy_match(raw, ETHNICITY_LABELS)
@@ -445,17 +452,20 @@ def _normalize_socioeconomic(raw: str) -> str | None:
     js = _json_lookup("socioeconomic", raw)
     if js is not None:
         return js
-    if any(k in raw_lower for k in ("poverty", "poor", "destitute", "fattigdom")):
+    if any(k in raw_lower for k in ("poverty", "poor", "destitute", "fattigdom", "låginkomsttagare")):
         return "Poverty"
     _WORKING = ("working class", "lower class", "blue collar", "arbetarklass",
-                 "lägre medelklass")
+                 "lägre medelklass", "nedre mellanklass")
     if any(k in raw_lower for k in _WORKING):
         return "Working Class"
     _MIDDLE = ("middle class", "middle-class", "medelklass", "övre medelklass",
-                "högre medelklass", "akademiker", "god ekonomi", "pensionär")
+                "högre medelklass", "akademiker", "god ekonomi", "pensionär",
+                "mellanstora tjänstemän", "mellan-tjänstemän", "kvalificerad tjänsteman")
     if any(k in raw_lower for k in _MIDDLE):
         return "Middle Class"
-    if any(k in raw_lower for k in ("wealthy", "rich", "affluent", "upper class", "välbärgad", "överklass")):
+    _WEALTHY = ("wealthy", "rich", "affluent", "upper class", "välbärgad",
+                 "överklass", "högre tjänstemän")
+    if any(k in raw_lower for k in _WEALTHY):
         return "Wealthy"
     return _fuzzy_match(raw, SOCIOECONOMIC_LABELS)
 
@@ -467,11 +477,11 @@ def _normalize_civil_status(raw: str) -> str:
         return js
     if any(k in raw_lower for k in ("skild", "frånskild", "separated", "divorced")):
         return "Divorced"
-    if any(k in raw_lower for k in ("singel", "ogift", "single", "never married")):
+    if any(k in raw_lower for k in ("singel", "ogift", "single", "never married", "ensamstående")):
         return "Single/Never Married"
-    if any(k in raw_lower for k in ("gift", "cohabiting", "sambo", "married")):
+    if any(k in raw_lower for k in ("gift", "cohabiting", "sambo", "married", "registrerad partner")):
         return "Married"
-    if any(k in raw_lower for k in ("änka", "änkling", "widow")):
+    if any(k in raw_lower for k in ("änka", "änkling", "änklig", "änkeman", "widow")):
         return "Widowed"
     return raw
 
@@ -546,7 +556,8 @@ def _normalize_employment_type(raw: str) -> str:
     is_temp = any(k in raw_lower for k in ("temp", "fixed", "visstid", "project", "probation", "allmän visstid"))
     is_full = any(k in raw_lower for k in ("full", "heltid", "100%"))
     is_part = any(k in raw_lower for k in ("part", "deltid", "50%", "75%"))
-    if any(k in raw_lower for k in ("self-employ", "self employ", "freelan", "egenföretagare", "konsult")):
+    if any(k in raw_lower for k in ("self-employ", "self employ", "freelan", "egenföretagare", "konsult",
+                                    "egenanställd", "aktiebolag")):
         return "Self-Employed"
     if is_temp and is_full:
         return "Temporary Full-time"
@@ -558,6 +569,12 @@ def _normalize_employment_type(raw: str) -> str:
         return "Permanent Part-time"
     if any(k in raw_lower for k in ("permanent", "tillsvidare", "fast", "open-ended")):
         return "Permanent Full-time"
+    if "vikarie" in raw_lower:
+        return "Temporary Full-time"
+    if any(k in raw_lower for k in ("volontär", "arbetsträning")):
+        return "Not Applicable"
+    if "pensionsåldern" in raw_lower:
+        return "Temporary Full-time"
     return raw
 
 
@@ -614,6 +631,8 @@ def _normalize_parental_structure(raw: str) -> str | None:
         "mother only", "father only", "biological mother only",
         "biological father only", "grandparent", "farfar", "farmor",
         "morfar", "mormor", "other relative", "residential care", "guardian",
+        "shared custody", "shared residency", "separated parents",
+        "skilda föräldrar", "växelvis boende", "one biological parent",
     )
     if any(k in raw_lower for k in _SINGLE_PARENT):
         return "Single Parent"
@@ -621,7 +640,8 @@ def _normalize_parental_structure(raw: str) -> str | None:
         "two parents", "two-parent", "intact", "nuclear", "biological parents",
         "biological mother", "biological father", "mother and father", "blended",
         "stepparent", "stepfamily", "stepmother", "stepfather", "step-parent",
-        "two mothers", "two fathers", "same-sex parent",
+        "two mothers", "two fathers", "same-sex parent", "heterosexual parents",
+        "tvåförälder", "två föräldrar",
     )
     if any(k in raw_lower for k in _NUCLEAR):
         return "Nuclear Family"
@@ -1403,11 +1423,11 @@ def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
     else:
         et_lower = raw_et.lower()
         _NA = ("not applicable", "n/a", "ej tillämpligt",
-               "ej relevant", "ingen anställning")
+               "ej relevant", "ingen anställning", "volontär", "arbetsträning")
         _SELF = ("self-employed", "freelance", "egenföretagare",
-                 "enskild firma", "konsultanställning")
+                 "enskild firma", "konsultanställning", "egenanställd", "aktiebolag")
         _TEMP_MISC = ("projektanställning", "visstidsanställning",
-                      "provanställning", "praktik")
+                      "provanställning", "praktik", "vikarie", "pensionsåldern")
         _PERM = ("permanent", "tillsvidare")
         _TEMP = ("temporary", "tillfällig", "visstid")
         if any(k in et_lower for k in _NA):

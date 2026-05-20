@@ -13,3 +13,4 @@ config/assets/ssb_cache/*.json
 .vscode/
 .ruff_cache/
 data/
+*.layout.json

@@ -1,8 +1,8 @@
-name: "Claude Sonnet — all_generate_pick"
+name: "Claude Opus — all_generate_pick"
 
 model_config:
   provider: "claude"
-  model: "sonnet"
+  model: "opus"
   generation_config:
     temperature: null
     top_p: null
@@ -17,6 +17,6 @@ parameters:
   output: "identity.json"
   parallel:
     n: 100
-    workers: 8
-    output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/01_Raw/seed_023_all_generate_pick_sonnet"
-  comparison_output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/03_Analysis/seed_023_all_generate_pick_sonnet"
+    workers: 2
+    output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/01_Raw/seed_027_all_generate_pick_opus"
+  comparison_output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/03_Analysis/seed_027_all_generate_pick_opus"
