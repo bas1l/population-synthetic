@@ -1,8 +1,7 @@
 """
 extractor.py -- Extract demographic profiles from pipeline identity.json files.
 
-Supports three identity formats:
-- Sequential (nested level_1..level_4 dicts)
+Supports two identity formats:
 - Batch (single "narrative" key with free-text description)
 - Flat / configurable (top-level attribute keys)
 
@@ -40,6 +39,7 @@ def _load_pipeline_mappings() -> dict[str, dict[str, str]]:
         "education", "employment", "civil_status", "industry_sector",
         "employment_type", "income_source", "housing_tenure",
         "parental_structure", "socioeconomic", "region", "birth_country_detail",
+        "ethnicity",
     ):
         section = m.get(key, {}) or {}
         plm = section.get("pipeline_label_mappings", {}) or {}
@@ -338,7 +338,8 @@ def _normalize_education(raw: str) -> str | None:
     if any(k in raw_lower for k in _POSTGRAD):
         return "Post-Graduate (ISCED 6)"
     _POSTSEC3 = ("post-secondary 3", "isced 5a", "isced97 5a", "university", "degree", "bachelor",
-                  "master", "kandidat", "magister", "högskolex", "högskole", "hogskola", "akademisk")
+                  "master", "kandidat", "magister", "högskolex", "högskole", "hogskola", "akademisk",
+                  "universitet")
     if any(k in raw_lower for k in _POSTSEC3):
         return "Post-Secondary 3+ yrs (ISCED 5A)"
     _POSTSEC_LT3 = ("post-secondary <", "isced 4", "isced 5b", "isced97 4", "isced97 5b",
@@ -353,11 +354,11 @@ def _normalize_education(raw: str) -> str | None:
     if any(k in raw_lower for k in ("upper secondary", "isced 3c", "isced97 3c")):
         return "Upper Secondary ≤ 2 yrs (ISCED 3C)"
     _PRESEC9 = ("pre-secondary 9", "isced 2", "isced97 2", "grundskola", "compulsory",
-                 "elementary", "primary school", "folkskola")
+                 "elementary", "primary school", "folkskola", "realskoleexamen")
     if any(k in raw_lower for k in _PRESEC9):
         return "Pre-Secondary 9-10 yrs (ISCED 2)"
     _PRESEC_LT9 = ("pre-secondary <", "isced 1", "isced97 1", "no formal", "primary",
-                    "ingen utbildning", "lägre grundskola")
+                    "ingen utbildning", "ingen formell", "lägre grundskola")
     if any(k in raw_lower for k in _PRESEC_LT9):
         return "Pre-Secondary < 9 yrs (ISCED 1)"
     if any(k in raw_lower for k in ("unknown", "not reported", "uppgift saknas")):
@@ -379,11 +380,12 @@ def _normalize_employment(raw: str) -> str | None:
     if any(k in raw_lower for k in ("military", "värnplikt", "armed forces")):
         return "Employed"
     _EMPLOYED = ("employ", "working", "worker", "job", "anställd", "heltid",
-                  "deltid", "tillsvidare")
+                  "deltid", "tillsvidare", "sysselsatt", "förvärvsarbetande",
+                  "yrkesverksam")
     if any(k in raw_lower for k in _EMPLOYED):
         return "Employed"
     _UNEMPLOYED = ("unemploy", "jobless", "seeking", "arbetssökande", "arbetslos",
-                    "arbetslös")
+                    "arbetslös", "arbetsträning", "arbetstränade")
     if any(k in raw_lower for k in _UNEMPLOYED):
         return "Unemployed"
     if any(k in raw_lower for k in ("student", "study", "school", "studying", "studerande")):
@@ -408,14 +410,18 @@ def _normalize_birth_location(raw: str) -> str | None:
 
 def _normalize_ethnicity(raw: str) -> str | None:
     raw_lower = raw.lower()
-    if any(k in raw_lower for k in ("caucasian", "white", "swedish")):
+    js = _json_lookup("ethnicity", raw)
+    if js is not None:
+        return js
+    if any(k in raw_lower for k in ("caucasian", "white", "swedish", "svensk")):
         return "Swedish"
-    if any(k in raw_lower for k in ("nordic", "scandina", "finnish", "finsk", "dansk", "norsk", "isländsk")):
-        return "European"
-    if any(k in raw_lower for k in ("european", "southern european", "eastern european", "östeuropeisk")):
+    if any(k in raw_lower for k in ("nordic", "scandina", "finnish", "finsk", "dansk", "norsk", "isländsk", "nordisk", "skandinavisk")):
+        return "Nordic"
+    if any(k in raw_lower for k in ("european", "southern european", "eastern european", "östeuropeisk", "europeisk")):
         return "European"
     _NON_EU = ("middle eastern", "african", "asian", "hispanic", "latino",
-                "non-european", "mixed", "indigenous", "chaldean", "assyrisk", "syriansk")
+                "non-european", "mixed", "indigenous", "chaldean", "assyrisk", "syriansk",
+                "utomeuropeisk", "mellanöstern", "afrikansk", "asiatisk")
     if any(k in raw_lower for k in _NON_EU):
         return "Non-European"
     return _fuzzy_match(raw, ETHNICITY_LABELS)
@@ -446,17 +452,20 @@ def _normalize_socioeconomic(raw: str) -> str | None:
     js = _json_lookup("socioeconomic", raw)
     if js is not None:
         return js
-    if any(k in raw_lower for k in ("poverty", "poor", "destitute", "fattigdom")):
+    if any(k in raw_lower for k in ("poverty", "poor", "destitute", "fattigdom", "låginkomsttagare")):
         return "Poverty"
     _WORKING = ("working class", "lower class", "blue collar", "arbetarklass",
-                 "lägre medelklass")
+                 "lägre medelklass", "nedre mellanklass")
     if any(k in raw_lower for k in _WORKING):
         return "Working Class"
     _MIDDLE = ("middle class", "middle-class", "medelklass", "övre medelklass",
-                "högre medelklass", "akademiker", "god ekonomi", "pensionär")
+                "högre medelklass", "akademiker", "god ekonomi", "pensionär",
+                "mellanstora tjänstemän", "mellan-tjänstemän", "kvalificerad tjänsteman")
     if any(k in raw_lower for k in _MIDDLE):
         return "Middle Class"
-    if any(k in raw_lower for k in ("wealthy", "rich", "affluent", "upper class", "välbärgad", "överklass")):
+    _WEALTHY = ("wealthy", "rich", "affluent", "upper class", "välbärgad",
+                 "överklass", "högre tjänstemän")
+    if any(k in raw_lower for k in _WEALTHY):
         return "Wealthy"
     return _fuzzy_match(raw, SOCIOECONOMIC_LABELS)
 
@@ -468,11 +477,11 @@ def _normalize_civil_status(raw: str) -> str:
         return js
     if any(k in raw_lower for k in ("skild", "frånskild", "separated", "divorced")):
         return "Divorced"
-    if any(k in raw_lower for k in ("singel", "ogift", "single", "never married")):
+    if any(k in raw_lower for k in ("singel", "ogift", "single", "never married", "ensamstående")):
         return "Single/Never Married"
-    if any(k in raw_lower for k in ("gift", "cohabiting", "sambo", "married")):
+    if any(k in raw_lower for k in ("gift", "cohabiting", "sambo", "married", "registrerad partner")):
         return "Married"
-    if any(k in raw_lower for k in ("änka", "änkling", "widow")):
+    if any(k in raw_lower for k in ("änka", "änkling", "änklig", "änkeman", "widow")):
         return "Widowed"
     return raw
 
@@ -547,7 +556,8 @@ def _normalize_employment_type(raw: str) -> str:
     is_temp = any(k in raw_lower for k in ("temp", "fixed", "visstid", "project", "probation", "allmän visstid"))
     is_full = any(k in raw_lower for k in ("full", "heltid", "100%"))
     is_part = any(k in raw_lower for k in ("part", "deltid", "50%", "75%"))
-    if any(k in raw_lower for k in ("self-employ", "self employ", "freelan", "egenföretagare", "konsult")):
+    if any(k in raw_lower for k in ("self-employ", "self employ", "freelan", "egenföretagare", "konsult",
+                                    "egenanställd", "aktiebolag")):
         return "Self-Employed"
     if is_temp and is_full:
         return "Temporary Full-time"
@@ -559,6 +569,12 @@ def _normalize_employment_type(raw: str) -> str:
         return "Permanent Part-time"
     if any(k in raw_lower for k in ("permanent", "tillsvidare", "fast", "open-ended")):
         return "Permanent Full-time"
+    if "vikarie" in raw_lower:
+        return "Temporary Full-time"
+    if any(k in raw_lower for k in ("volontär", "arbetsträning")):
+        return "Not Applicable"
+    if "pensionsåldern" in raw_lower:
+        return "Temporary Full-time"
     return raw
 
 
@@ -615,6 +631,8 @@ def _normalize_parental_structure(raw: str) -> str | None:
         "mother only", "father only", "biological mother only",
         "biological father only", "grandparent", "farfar", "farmor",
         "morfar", "mormor", "other relative", "residential care", "guardian",
+        "shared custody", "shared residency", "separated parents",
+        "skilda föräldrar", "växelvis boende", "one biological parent",
     )
     if any(k in raw_lower for k in _SINGLE_PARENT):
         return "Single Parent"
@@ -622,7 +640,8 @@ def _normalize_parental_structure(raw: str) -> str | None:
         "two parents", "two-parent", "intact", "nuclear", "biological parents",
         "biological mother", "biological father", "mother and father", "blended",
         "stepparent", "stepfamily", "stepmother", "stepfather", "step-parent",
-        "two mothers", "two fathers", "same-sex parent",
+        "two mothers", "two fathers", "same-sex parent", "heterosexual parents",
+        "tvåförälder", "två föräldrar",
     )
     if any(k in raw_lower for k in _NUCLEAR):
         return "Nuclear Family"
@@ -739,168 +758,6 @@ def _income_source_from_context(employment_status: str, text_lower: str) -> str:
     if any(k in text_lower for k in ("egenföretagare", "self-employed", "egen firma", "freelance", "frilans")):
         return "Wage / Business"
     return "Wage / Business"
-
-
-# ---------------------------------------------------------------------------
-# Sequential format extractor
-# ---------------------------------------------------------------------------
-
-def _deep_get(d: dict, *keys: str) -> Any:
-    """Traverse nested dict; return None if any key is missing."""
-    for k in keys:
-        if not isinstance(d, dict):
-            return None
-        d = d.get(k)
-    return d
-
-
-def _extract_sequential(identity: dict, persona_id: str) -> dict[str, Any] | None:
-    """Extract attributes from the sequential identity.json format (nested level_1..level_4)."""
-    unmapped: list[str] = []
-
-    raw_age = _deep_get(identity, "level_1", "core_demographics", "age")
-    if raw_age is None:
-        logger.warning("%s: missing age -- skipping persona", persona_id)
-        return None
-    try:
-        age_group = _age_to_group(int(raw_age))
-    except (ValueError, TypeError):
-        logger.warning("%s: non-integer age %r -- skipping persona", persona_id, raw_age)
-        return None
-
-    raw_sex = _deep_get(identity, "level_1", "core_demographics", "biological_sex") or ""
-    biological_sex = "Female" if "female" in raw_sex.lower() else ("Male" if "male" in raw_sex.lower() else None)
-    if biological_sex is None:
-        unmapped.append(f"biological_sex={raw_sex!r}")
-        biological_sex = "Non-standard label"
-
-    raw_edu = _deep_get(identity, "level_2", "sociological_background", "education_level") or ""
-    education_level = _normalize_education(raw_edu)
-    if education_level is None:
-        unmapped.append(f"education_level={raw_edu!r}")
-        education_level = "Non-standard label"
-
-    raw_emp = _deep_get(identity, "level_3", "professional_functional", "employment_status") or ""
-    employment_status = _normalize_employment(raw_emp)
-    if employment_status is None:
-        unmapped.append(f"employment_status={raw_emp!r}")
-        employment_status = "Non-standard label"
-
-    raw_birth = _deep_get(identity, "level_1", "origin_geography", "birth_location") or ""
-    birth_location = _normalize_birth_location(raw_birth)
-    if birth_location is None:
-        unmapped.append(f"birth_location={raw_birth!r}")
-        birth_location = "Non-standard label"
-
-    raw_eth = _deep_get(identity, "level_1", "core_demographics", "ethnicity_broad_global_approx") or ""
-    ethnicity = _normalize_ethnicity(raw_eth) if raw_eth else None
-    if ethnicity is None:
-        eth_from_birth = {
-            "Sweden": "Swedish",
-            "Nordic Country": "European",
-            "Europe (Other)": "European",
-            "Outside Europe": "Non-European",
-        }
-        ethnicity = eth_from_birth.get(birth_location)
-    if ethnicity is None:
-        unmapped.append(f"ethnicity={raw_eth!r}")
-        ethnicity = "Non-standard label"
-
-    raw_env = _deep_get(identity, "level_1", "core_demographics", "current_environment_type") or ""
-    current_environment_type = _normalize_environment(raw_env)
-    if current_environment_type is None:
-        unmapped.append(f"current_environment_type={raw_env!r}")
-        current_environment_type = "Non-standard label"
-
-    raw_sec = _deep_get(identity, "level_2", "sociological_background", "socioeconomic_class") or ""
-    socioeconomic_class = _normalize_socioeconomic(raw_sec)
-    if socioeconomic_class is None:
-        unmapped.append(f"socioeconomic_class={raw_sec!r}")
-        socioeconomic_class = "Non-standard label"
-
-    raw_par = _deep_get(identity, "level_2", "family_of_origin", "parental_structure") or ""
-    parental_structure = _normalize_parental_structure(raw_par)
-    if parental_structure is None:
-        unmapped.append(f"parental_structure={raw_par!r}")
-        parental_structure = "Non-standard label"
-
-    region = _deep_get(identity, "level_1", "origin_geography", "region") or ""
-    if not region:
-        unmapped.append("region=<not found>")
-        region = "Non-standard label"
-
-    raw_bcd = _deep_get(identity, "level_1", "origin_geography", "birth_country_detail") or ""
-    if not raw_bcd:
-        unmapped.append("birth_country_detail=<not found>")
-        birth_country_detail = "Non-standard label"
-    else:
-        birth_country_detail = _normalize_birth_country_detail(raw_bcd)
-
-    raw_cs = _deep_get(identity, "level_2", "family_of_origin", "civil_status") or ""
-    if not raw_cs:
-        unmapped.append("civil_status=<not found>")
-        civil_status = "Non-standard label"
-    else:
-        civil_status = _normalize_civil_status(raw_cs)
-
-    household_size = _deep_get(identity, "level_2", "family_of_origin", "household_size") or ""
-    if not household_size:
-        unmapped.append("household_size=<not found>")
-        household_size = "Non-standard label"
-
-    raw_ht = _deep_get(identity, "level_2", "sociological_background", "housing_tenure") or ""
-    if not raw_ht:
-        unmapped.append("housing_tenure=<not found>")
-        housing_tenure = "Non-standard label"
-    else:
-        housing_tenure = _normalize_housing_tenure(raw_ht)
-
-    raw_ind = _deep_get(identity, "level_3", "professional_functional", "industry_sector") or ""
-    if not raw_ind:
-        unmapped.append("industry_sector=<not found>")
-        industry_sector = "Non-standard label"
-    else:
-        industry_sector = _normalize_industry_sector(raw_ind)
-
-    raw_et = _deep_get(identity, "level_3", "professional_functional", "employment_type") or ""
-    if not raw_et:
-        unmapped.append("employment_type=<not found>")
-        employment_type = "Non-standard label"
-    else:
-        employment_type = _normalize_employment_type(raw_et)
-
-    raw_is = _deep_get(identity, "level_3", "professional_functional", "income_source") or ""
-    if not raw_is:
-        unmapped.append("income_source=<not found>")
-        income_source = "Non-standard label"
-    else:
-        income_source = _normalize_income_source(raw_is)
-
-    stored_age_group = _deep_get(identity, "level_1", "core_demographics", "age_group") or ""
-    age_group = stored_age_group if stored_age_group else age_group
-
-    if unmapped:
-        logger.warning("%s: unmapped values: %s", persona_id, ", ".join(unmapped))
-
-    return {
-        "age_group": age_group,
-        "biological_sex": biological_sex,
-        "education_level": education_level,
-        "employment_status": employment_status,
-        "birth_location": birth_location,
-        "ethnicity": ethnicity,
-        "current_environment_type": current_environment_type,
-        "socioeconomic_class": socioeconomic_class,
-        "parental_structure": parental_structure,
-        "region": region,
-        "birth_country_detail": birth_country_detail,
-        "civil_status": civil_status,
-        "household_size": household_size,
-        "housing_tenure": housing_tenure,
-        "industry_sector": industry_sector,
-        "employment_type": employment_type,
-        "income_source": income_source,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -1566,11 +1423,11 @@ def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
     else:
         et_lower = raw_et.lower()
         _NA = ("not applicable", "n/a", "ej tillämpligt",
-               "ej relevant", "ingen anställning")
+               "ej relevant", "ingen anställning", "volontär", "arbetsträning")
         _SELF = ("self-employed", "freelance", "egenföretagare",
-                 "enskild firma", "konsultanställning")
+                 "enskild firma", "konsultanställning", "egenanställd", "aktiebolag")
         _TEMP_MISC = ("projektanställning", "visstidsanställning",
-                      "provanställning", "praktik")
+                      "provanställning", "praktik", "vikarie", "pensionsåldern")
         _PERM = ("permanent", "tillsvidare")
         _TEMP = ("temporary", "tillfällig", "visstid")
         if any(k in et_lower for k in _NA):
@@ -1631,10 +1488,6 @@ def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
 # Format detection helpers
 # ---------------------------------------------------------------------------
 
-def _is_sequential(identity: dict) -> bool:
-    return any(k.startswith("level_") for k in identity)
-
-
 def _is_flat(identity: dict) -> bool:
     return "age" in identity and not any(k.startswith("level_") for k in identity) and "narrative" not in identity
 
@@ -1655,9 +1508,7 @@ def extract_individual(identity_path: Path) -> dict[str, Any] | None:
         logger.warning("%s: could not read identity.json: %s", persona_id, exc)
         return None
 
-    if _is_sequential(identity):
-        attrs = _extract_sequential(identity, persona_id)
-    elif "narrative" in identity:
+    if "narrative" in identity:
         attrs = _extract_batch(identity, persona_id)
     elif _is_flat(identity):
         attrs = _extract_flat(identity, persona_id)

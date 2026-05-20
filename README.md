@@ -6,7 +6,7 @@ Standalone toolkit for generating synthetic population profiles from real Nordic
 
 - **SCB Population Generation** -- Fetch real Swedish demographic distributions from Statistics Sweden (SCB PxWeb API) and sample statistically realistic population profiles via conditional chained sampling across 15+ demographic tables
 - **SSB Population Generation** -- Fetch real Norwegian demographic distributions from Statistics Norway (SSB PxWebApi v2) and sample statistically realistic population profiles via conditional chained sampling across 14+ demographic tables
-- **Identity Generation** -- LLM-based persona identity creation using Gemini models, with sequential, batch, and configurable strategy modes
+- **Identity Generation** -- LLM-based persona identity creation using Gemini models, with batch and configurable strategy modes
 - **Population Comparison** -- Statistical evaluation (chi-squared, total variation distance) and visual comparison (bar charts, radar plots) between any two population files
 
 ## Installation
@@ -53,7 +53,6 @@ python scripts/generate_identity.py \
 ```
 
 Modes:
-- `sequential` -- Hierarchical level-by-level LLM-refined probability weights with weighted-random selection
 - `batch` -- Single-prompt narrative-style generation
 - `configurable` -- Strategy-driven generation controlled by a simulation config file
 
@@ -107,7 +106,6 @@ src/population_synth/
 
     identity/             LLM-based persona identity generation
         base_identity_generator.py      Abstract base class
-        identity_generator_sequential.py
         identity_generator_batch.py
         identity_generator_configurable.py
         factory_identity_generator.py   Factory for selecting strategy at runtime

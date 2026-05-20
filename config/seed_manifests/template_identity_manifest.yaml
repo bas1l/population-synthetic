@@ -1,0 +1,66 @@
+# ==============================================================================
+# IDENTITY GENERATION MANIFEST — TEMPLATE
+# ==============================================================================
+# Copy this file and fill in the values to create a new manifest.
+# Run with:
+#   python scripts/generate_identity.py --manifest config/seed_manifests/<your_manifest>.yaml
+#   python scripts/generate_identities_parallel.py --manifest config/seed_manifests/<your_manifest>.yaml
+# ==============================================================================
+
+# [MANDATORY] Human-readable name for this manifest.
+name: "<Provider> <Model> — <strategy_shorthand>"
+
+# ==============================================================================
+# SECTION 1: MODEL CONFIGURATION
+# ==============================================================================
+model_config:
+  # [MANDATORY] LLM provider. Valid: "gemini", "claude"
+  provider: "claude"
+
+  # [MANDATORY] Model name.
+  #   gemini defaults: "gemini-2.5-flash", "gemini-2.5-pro"
+  #   claude defaults: "sonnet", "haiku"
+  model: "haiku"
+
+  # [OPTIONAL] Generation parameters passed to the LLM client.
+  # For gemini: maps to GenerateContentConfig kwargs (temperature, top_p, etc.)
+  # For claude: currently unused (ClaudeCodeClient does not expose gen params).
+  # Keys set to null are filtered out, allowing API defaults to apply.
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+
+# ==============================================================================
+# SECTION 2: GENERATION PARAMETERS
+# ==============================================================================
+parameters:
+  # [MANDATORY] Generation mode. Valid: "batch", "configurable"
+  mode: "configurable"
+
+  # [MANDATORY] Path to the simulation config (configurable mode) or
+  # prompt file (batch mode). Relative to project root.
+  config: "config/assets/identity/configurable/simulation_config_004_swedish_generative.json"
+
+  # [CONDITIONAL] Path to the strategy definition file.
+  # Required when mode is "configurable". Ignored for "batch".
+  strategy: "config/assets/identity/configurable/strategies/all_pick.json"
+
+  # [OPTIONAL] Log raw LLM interactions alongside output. Default: true
+  log_llm: true
+
+  # [OPTIONAL] Output filename for single-identity generation. Default: "identity.json"
+  output: "identity.json"
+
+  # [OPTIONAL] Parallel generation settings (used by generate_identities_parallel.py).
+  # Ignored by generate_identity.py.
+  parallel:
+    n: 100
+    workers: 8
+    output_dir: "data/identity/manifest_XXX"
+
+  # [OPTIONAL] Output directory for comparison results (compare_pipeline_to_scb.py).
+  # When set, comparison JSON/CSV/charts are written here instead of the default
+  # data/analysis/compare_with_scb02/ path. Can be overridden by --output at runtime.
+  comparison_output_dir: null

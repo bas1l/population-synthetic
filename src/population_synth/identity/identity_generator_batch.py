@@ -3,9 +3,10 @@ import logging
 import os
 from typing import Any, Dict, Optional, Tuple
 
-from population_synth.clients.gemini_client import GeminiClient
+from population_synth.clients.llm_protocol import LLMClient
 
 from .base_identity_generator import BaseIdentityGenerator
+from .llm_interaction_log import LLMInteractionEntry
 
 
 class NarrativeGeneratorBatch(BaseIdentityGenerator):
@@ -14,16 +15,16 @@ class NarrativeGeneratorBatch(BaseIdentityGenerator):
     Adapts the legacy prompt-based generation to the BaseIdentityGenerator contract.
 
     Attributes:
-        client (GeminiClient): Injected client for API interaction.
+        client (LLMClient): Injected client for API interaction.
         last_identity (Optional[Dict[str, Any]]): Cache of the last generated identity.
     """
 
-    def __init__(self, client: GeminiClient):
+    def __init__(self, client: LLMClient):
         """
         Initialize the generator.
 
         Args:
-            client (GeminiClient): An initialized client for API calls.
+            client (LLMClient): An initialized client for API calls.
         """
         super().__init__(client)
         self.last_identity: Optional[Dict[str, Any]] = None
@@ -58,6 +59,15 @@ class NarrativeGeneratorBatch(BaseIdentityGenerator):
             logging.info(f"Generating flat narrative from {landscape_file}...")
             # Utilizing the injected client instead of internal model instance
             response_text = self.client.generate_content(prompt_text)
+
+            if self.interaction_collector:
+                self.interaction_collector.record(LLMInteractionEntry(
+                    category="narrative",
+                    method="batch",
+                    step="narrative",
+                    prompt=prompt_text,
+                    raw_response=response_text,
+                ))
 
             # Encapsulate string response to satisfy Dict return contract
             identity_data = {"narrative": response_text}

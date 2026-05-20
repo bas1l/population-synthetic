@@ -1,0 +1,291 @@
+"""
+generate_identities_parallel.py -- Generate N persona identities in parallel.
+
+Usage:
+    # Via manifest (recommended):
+    python scripts/generate_identities_parallel.py \
+        --manifest config/seed_manifests/identity_manifest_014_claude_haiku.yaml
+
+    # Via manifest with CLI overrides:
+    python scripts/generate_identities_parallel.py \
+        --manifest config/seed_manifests/identity_manifest_014_claude_haiku.yaml \
+        --n 10 --workers 4
+
+    # Via explicit CLI args:
+    python scripts/generate_identities_parallel.py \
+        --mode configurable \
+        --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json \
+        --strategy config/assets/identity/configurable/strategies/compared_only_generate_evaluate_random_pick.json \
+        --n 100 \
+        --workers 8 \
+        --output-dir data/identity/config_004_n100
+
+    python scripts/generate_identities_parallel.py \
+        --provider claude \
+        --mode configurable \
+        --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json \
+        --strategy config/assets/identity/configurable/strategies/compared_only_generate_evaluate_random_pick.json \
+        --n 100 \
+        --workers 8 \
+        --output-dir data/identity/config_004_n100_claude
+"""
+
+import argparse
+import atexit
+import json
+import logging
+import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+from population_synth.identity.factory_identity_generator import FactoryIdentityGenerator
+from population_synth.identity.llm_interaction_log import LLMInteractionCollector
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+logger = logging.getLogger(__name__)
+
+_progress_lock = threading.Lock()
+_completed = 0
+_failed = 0
+
+_active_clients: set = set()
+_active_clients_lock = threading.Lock()
+
+
+def _atexit_cleanup() -> None:
+    with _active_clients_lock:
+        clients = list(_active_clients)
+    for client in clients:
+        try:
+            client.close()
+        except Exception:
+            pass
+
+
+atexit.register(_atexit_cleanup)
+
+
+def _generate_one(
+    index: int,
+    total: int,
+    mode: str,
+    provider: str,
+    model: str,
+    config_path: str,
+    output_dir: Path,
+    kwargs: dict,
+    log_llm: bool = False,
+) -> tuple[int, bool, str]:
+    global _completed, _failed
+
+    persona_dir = output_dir / f"persona_{index:05d}"
+    out_file = persona_dir / "identity.json"
+
+    if out_file.exists():
+        with _progress_lock:
+            _completed += 1
+            return index, True, "skipped (exists)"
+
+    client = None
+    try:
+        if provider == "gemini":
+            from population_synth.clients.gemini_client import GeminiClient
+            client = GeminiClient(model_name=model)
+        elif provider == "claude":
+            from population_synth.clients.claude_code_client import ClaudeCodeClient
+            client = ClaudeCodeClient(model_name=model)
+            with _active_clients_lock:
+                _active_clients.add(client)
+        else:
+            raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini' or 'claude'.")
+        generator = FactoryIdentityGenerator.create_generator(mode, client)
+        if log_llm:
+            generator.interaction_collector = LLMInteractionCollector()
+
+        identity_data, _ = generator.generate_identity(config_path, **kwargs)
+
+        persona_dir.mkdir(parents=True, exist_ok=True)
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(identity_data, f, indent=2, ensure_ascii=False)
+
+        if generator.interaction_collector:
+            generator.interaction_collector.flush(persona_dir / "llm_interactions.json")
+
+        with _progress_lock:
+            _completed += 1
+            c, fa = _completed, _failed
+        logger.info("[%d/%d] OK  persona_%05d  (failed: %d)", c, total, index, fa)
+        return index, True, "ok"
+
+    except Exception as e:
+        with _progress_lock:
+            _failed += 1
+            c, fa = _completed, _failed
+        logger.error("[%d/%d] FAIL persona_%05d: %s  (failed: %d)", c, total, index, e, fa)
+        return index, False, str(e)
+
+    finally:
+        if client is not None and hasattr(client, "close"):
+            client.close()
+            with _active_clients_lock:
+                _active_clients.discard(client)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate N persona identities in parallel")
+    parser.add_argument("--manifest", default=None, help="Path to a YAML manifest file (replaces all other arguments)")
+    parser.add_argument("--mode", default=None, choices=["batch", "configurable"])
+    parser.add_argument("--config", default=None, help="Flat schema / prompt config file")
+    parser.add_argument("--strategy", default=None, help="Strategy definition file (required for configurable)")
+    parser.add_argument("--n", type=int, default=None, help="Number of identities to generate")
+    parser.add_argument("--workers", type=int, default=None, help="Max parallel workers (default: 8)")
+    parser.add_argument(
+        "--provider",
+        default=None,
+        choices=["gemini", "claude"],
+        help="LLM provider to use: gemini or claude (default: gemini)",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet",
+    )
+    parser.add_argument("--output-dir", default=None, help="Output directory for persona_XXXXX/ folders")
+    parser.add_argument(
+        "--log-llm",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Log all raw LLM interactions (prompt + response) to llm_interactions.json per persona (default: on)",
+    )
+    args = parser.parse_args()
+
+    if args.manifest:
+        from population_synth.identity.manifest_loader import load_manifest
+        m = load_manifest(args.manifest)
+        logger.info("Loaded manifest: %s", m.name)
+        if args.provider is None:
+            args.provider = m.provider
+        if args.model is None:
+            args.model = m.model
+        if args.mode is None:
+            args.mode = m.mode
+        if args.config is None:
+            args.config = str(m.config_path)
+        if args.strategy is None and m.strategy_path:
+            args.strategy = str(m.strategy_path)
+        if args.log_llm is None:
+            args.log_llm = m.log_llm
+        if args.n is None and m.parallel_n is not None:
+            args.n = m.parallel_n
+        if args.workers is None and m.parallel_workers is not None:
+            args.workers = m.parallel_workers
+        if args.output_dir is None and m.parallel_output_dir is not None:
+            args.output_dir = str(m.parallel_output_dir)
+
+    if args.provider is None:
+        args.provider = "gemini"
+    if args.log_llm is None:
+        args.log_llm = True
+    if args.workers is None:
+        args.workers = 8
+
+    if not args.mode or not args.config:
+        parser.error("Either --manifest or both --mode and --config are required")
+    if not args.n:
+        parser.error("Either --manifest (with parallel.n) or --n is required")
+    if not args.output_dir:
+        parser.error("Either --manifest (with parallel.output_dir) or --output-dir is required")
+
+    if args.mode == "configurable" and not args.strategy:
+        logger.error("--strategy is required for configurable mode")
+        sys.exit(1)
+
+    config_path = Path(args.config)
+    if not config_path.exists():
+        logger.error("Config file not found: %s", config_path)
+        sys.exit(1)
+
+    if args.strategy:
+        strategy_path = Path(args.strategy)
+        if not strategy_path.exists():
+            logger.error("Strategy file not found: %s", strategy_path)
+            sys.exit(1)
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    log_dir = output_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"run_{time.strftime('%Y%m%d_%H%M%S')}.log"
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    logging.getLogger().addHandler(file_handler)
+    logger.info("Log file: %s", log_file)
+
+    model = args.model or ("gemini-2.5-flash" if args.provider == "gemini" else "sonnet")
+
+    kwargs = {}
+    if args.strategy:
+        kwargs["strategy_file"] = str(Path(args.strategy))
+
+    run_metadata = {
+        "name": getattr(m, "name", None) if args.manifest else None,
+        "manifest": args.manifest,
+        "model_config": {
+            "provider": args.provider,
+            "model": model,
+        },
+        "parameters": {
+            "mode": args.mode,
+            "config": args.config,
+            "strategy": args.strategy,
+            "log_llm": args.log_llm,
+            "n": args.n,
+            "workers": args.workers,
+            "output_dir": args.output_dir,
+        },
+        "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    metadata_path = output_dir / "run_metadata.json"
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+    logger.info("Run metadata written to %s", metadata_path)
+
+    logger.info("Provider: %s | Mode: %s | Config: %s | Strategy: %s", args.provider, args.mode, args.config, args.strategy)
+    logger.info("Model: %s | Generating %d identities with %d workers -> %s", model, args.n, args.workers, output_dir)
+
+    t0 = time.perf_counter()
+
+    futures = []
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        for i in range(args.n):
+            fut = executor.submit(
+                _generate_one,
+                index=i,
+                total=args.n,
+                mode=args.mode,
+                provider=args.provider,
+                model=model,
+                config_path=str(config_path),
+                output_dir=output_dir,
+                kwargs=kwargs,
+                log_llm=args.log_llm,
+            )
+            futures.append(fut)
+
+        results = []
+        for fut in as_completed(futures):
+            results.append(fut.result())
+
+    elapsed = time.perf_counter() - t0
+    ok_count = sum(1 for _, ok, _ in results if ok)
+    fail_count = sum(1 for _, ok, _ in results if not ok)
+
+    logger.info("Done in %.1fs. Success: %d, Failed: %d, Output: %s", elapsed, ok_count, fail_count, output_dir)
+
+
+if __name__ == "__main__":
+    main()

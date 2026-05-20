@@ -2,12 +2,11 @@
 generate_identity.py -- Standalone CLI entry point for generating a single persona identity.
 
 Usage:
+    # Via manifest (recommended):
     python scripts/generate_identity.py \\
-        --mode sequential \\
-        --config config/assets/identity/sequential/identity_landscape.json \\
-        [--output identity.json] \\
-        [--model gemini-2.5-flash]
+        --manifest config/seed_manifests/identity_manifest_014_claude_haiku.yaml
 
+    # Via explicit CLI args:
     python scripts/generate_identity.py \\
         --mode batch \\
         --config config/assets/identity/batch/identity_landscape.json \\
@@ -16,22 +15,33 @@ Usage:
     python scripts/generate_identity.py \\
         --mode configurable \\
         --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json \\
+        --strategy config/assets/identity/configurable/strategies/compared_only_generate_evaluate_random_pick.json \\
         [--output identity.json]
 
+    python scripts/generate_identity.py \\
+        --provider claude \\
+        --mode configurable \\
+        --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json \\
+        --strategy config/assets/identity/configurable/strategies/compared_only_generate_evaluate_random_pick.json
+
 Modes:
-    sequential    Hierarchical level-by-level LLM-refined generation.
     batch         Single-prompt narrative-style generation.
-    configurable  Configurable strategy with simulation config file.
+    configurable  Configurable strategy with simulation config file (requires --strategy).
+
+Providers:
+    gemini  Use Google Gemini via GeminiClient (default model: gemini-2.5-flash).
+    claude  Use Claude via ClaudeCodeClient subprocess wrapper (default model: sonnet).
 """
 
 import argparse
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 
-from population_synth.clients.gemini_client import GeminiClient
 from population_synth.identity.factory_identity_generator import FactoryIdentityGenerator
+from population_synth.identity.llm_interaction_log import LLMInteractionCollector
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -43,56 +53,164 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  python scripts/generate_identity.py --mode sequential \\\n"
-            "      --config config/assets/identity/sequential/identity_landscape.json\n"
-            "\n"
             "  python scripts/generate_identity.py --mode configurable \\\n"
             "      --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json\n"
         ),
     )
     parser.add_argument(
+        "--manifest",
+        default=None,
+        help="Path to a YAML manifest file (replaces all other arguments)",
+    )
+    parser.add_argument(
         "--mode",
-        required=True,
-        choices=["sequential", "batch", "configurable"],
-        help="Identity generation strategy: sequential, batch, or configurable",
+        default=None,
+        choices=["batch", "configurable"],
+        help="Identity generation strategy: batch or configurable",
     )
     parser.add_argument(
         "--config",
-        required=True,
+        default=None,
         help="Path to the prompt/schema/simulation config file",
     )
     parser.add_argument(
         "--output",
-        default="identity.json",
+        default=None,
         help="Output file path for the generated identity (default: identity.json)",
     )
     parser.add_argument(
+        "--provider",
+        default=None,
+        choices=["gemini", "claude"],
+        help="LLM provider to use: gemini or claude (default: gemini)",
+    )
+    parser.add_argument(
+        "--strategy",
+        default=None,
+        help="Path to the strategy definition file (required for configurable mode)",
+    )
+    parser.add_argument(
         "--model",
-        default="gemini-2.5-flash",
-        help="Gemini model name (default: gemini-2.5-flash)",
+        default=None,
+        help="Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet",
+    )
+    parser.add_argument(
+        "--log-llm",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Log all raw LLM interactions (prompt + response) to llm_interactions.json alongside the output (default: on)",
     )
     args = parser.parse_args()
+
+    if args.manifest:
+        from population_synth.identity.manifest_loader import load_manifest
+        m = load_manifest(args.manifest)
+        logger.info("Loaded manifest: %s", m.name)
+        if args.provider is None:
+            args.provider = m.provider
+        if args.model is None:
+            args.model = m.model
+        if args.mode is None:
+            args.mode = m.mode
+        if args.config is None:
+            args.config = str(m.config_path)
+        if args.strategy is None and m.strategy_path:
+            args.strategy = str(m.strategy_path)
+        if args.log_llm is None:
+            args.log_llm = m.log_llm
+        if args.output is None:
+            args.output = m.output
+
+    if args.provider is None:
+        args.provider = "gemini"
+    if args.log_llm is None:
+        args.log_llm = True
+    if args.output is None:
+        args.output = "identity.json"
+
+    if not args.mode or not args.config:
+        parser.error("Either --manifest or both --mode and --config are required")
 
     config_path = Path(args.config)
     if not config_path.exists():
         logger.error("Config file not found: %s", config_path)
         sys.exit(1)
 
-    logger.info("Mode: %s", args.mode)
-    logger.info("Config: %s", config_path)
-    logger.info("Model: %s", args.model)
+    if args.mode == "configurable" and not args.strategy:
+        logger.error("--strategy is required for configurable mode")
+        sys.exit(1)
 
-    client = GeminiClient(model_name=args.model)
-    generator = FactoryIdentityGenerator.create_generator(args.mode, client)
-
-    identity_data, level_strings = generator.generate_identity(str(config_path))
+    if args.strategy:
+        strategy_path = Path(args.strategy)
+        if not strategy_path.exists():
+            logger.error("Strategy file not found: %s", strategy_path)
+            sys.exit(1)
 
     output_path = Path(args.output)
+    log_dir = output_path.parent / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"run_{time.strftime('%Y%m%d_%H%M%S')}.log"
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    logging.getLogger().addHandler(file_handler)
+    logger.info("Log file: %s", log_file)
+
+    logger.info("Provider: %s | Mode: %s", args.provider, args.mode)
+    logger.info("Config: %s", config_path)
+
+    if args.provider == "gemini":
+        from population_synth.clients.gemini_client import GeminiClient
+        client = GeminiClient(model_name=args.model or "gemini-2.5-flash")
+    elif args.provider == "claude":
+        from population_synth.clients.claude_code_client import ClaudeCodeClient
+        client = ClaudeCodeClient(model_name=args.model or "sonnet")
+    else:
+        raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini' or 'claude'.")
+
+    logger.info("Model: %s", client.model_name)
+    generator = FactoryIdentityGenerator.create_generator(args.mode, client)
+
+    if args.log_llm:
+        generator.interaction_collector = LLMInteractionCollector()
+
+    kwargs = {}
+    if args.strategy:
+        kwargs["strategy_file"] = str(Path(args.strategy))
+
+    identity_data, level_strings = generator.generate_identity(str(config_path), **kwargs)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(identity_data, f, indent=2, ensure_ascii=False)
 
     logger.info("Identity written to %s", output_path)
+
+    run_metadata = {
+        "name": getattr(m, "name", None) if args.manifest else None,
+        "manifest": args.manifest,
+        "model_config": {
+            "provider": args.provider,
+            "model": client.model_name,
+        },
+        "parameters": {
+            "mode": args.mode,
+            "config": args.config,
+            "strategy": args.strategy,
+            "log_llm": args.log_llm,
+            "output": args.output,
+        },
+        "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    metadata_path = output_path.parent / "run_metadata.json"
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+    logger.info("Run metadata written to %s", metadata_path)
+
+    if generator.interaction_collector:
+        log_path = output_path.parent / "llm_interactions.json"
+        generator.interaction_collector.flush(log_path)
+        logger.info("LLM interactions logged to %s", log_path)
 
     if level_strings:
         logger.info("Level summaries:")

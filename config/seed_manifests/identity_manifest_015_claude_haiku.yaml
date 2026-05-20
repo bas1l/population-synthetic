@@ -1,0 +1,22 @@
+name: "Claude Haiku — all_generate_pick"
+
+model_config:
+  provider: "claude"
+  model: "haiku"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+
+parameters:
+  mode: "configurable"
+  config: "config/assets/identity/configurable/simulation_config_004_swedish_generative.json"
+  strategy: "config/assets/identity/configurable/strategies/all_generate_pick.json"
+  log_llm: true
+  output: "identity.json"
+  parallel:
+    n: 100
+    workers: 2
+    output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/01_Raw/seed_015_all_generate_pick_haiku"
+  comparison_output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/03_Analysis/seed_015_all_generate_pick_haiku"
