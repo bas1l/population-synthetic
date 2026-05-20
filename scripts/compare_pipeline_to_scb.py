@@ -4,6 +4,15 @@ an SCB reference population in a single step.
 
 Usage:
     python scripts/compare_pipeline_to_scb.py \\
+        --manifest config/seed_manifests/identity_manifest_022_claude_sonnet.yaml \\
+        [--reference <scb_population.json>] \\
+        [--output comparison_report.json] \\
+        [--save-extracted pipeline_population.json] \\
+        [--charts-dir <dir>] \\
+        [--no-charts] \\
+        [--radar-tv-only]
+
+    python scripts/compare_pipeline_to_scb.py \\
         --seed-root <path> \\
         [--reference <scb_population.json>] \\
         [--output comparison_report.json] \\
@@ -12,6 +21,7 @@ Usage:
         [--no-charts] \\
         [--radar-tv-only]
 
+--manifest       Seed manifest YAML; derives --seed-root from parallel.output_dir.
 --seed-root      Directory containing persona_XXXXX/identity.json files (pipeline output).
 --reference      SCB reference population file (default: data/scb_api/scb_population_pop-10000_02.json).
 --output         Path for the JSON comparison report (default: data/comparison_report.json).
@@ -78,7 +88,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Extract pipeline identities and compare against an SCB reference population"
     )
-    parser.add_argument("--seed-root", required=True, help="Pipeline seed output directory")
+    parser.add_argument("--manifest", default=None, help="Seed manifest YAML; derives --seed-root from parallel.output_dir")
+    parser.add_argument("--seed-root", default=None, help="Pipeline seed output directory")
     parser.add_argument(
         "--reference",
         default=str(_DEFAULT_REFERENCE),
@@ -107,12 +118,27 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    m = None
+    if args.manifest:
+        from population_synth.identity.manifest_loader import load_manifest
+        m = load_manifest(args.manifest)
+        if args.seed_root is None and m.parallel_output_dir is not None:
+            args.seed_root = str(m.parallel_output_dir)
+
+    if not args.seed_root:
+        parser.error("Either --manifest (with parallel.output_dir) or --seed-root is required")
+
     seed_root = Path(args.seed_root)
     if not seed_root.exists():
         print(f"ERROR: Seed root does not exist: {seed_root}", file=sys.stderr)
         sys.exit(1)
 
-    output_path = Path(args.output) if args.output else PROJECT_ROOT / "data" / "analysis" / "compare_with_scb02" / f"{seed_root.name}.json"
+    if args.output:
+        output_path = Path(args.output)
+    elif m is not None and m.comparison_output_dir is not None:
+        output_path = m.comparison_output_dir / f"{seed_root.name}.json"
+    else:
+        output_path = PROJECT_ROOT / "data" / "analysis" / "compare_with_scb02" / f"{seed_root.name}.json"
 
     reference_path = Path(args.reference)
     if not reference_path.exists():

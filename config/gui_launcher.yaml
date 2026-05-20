@@ -1,0 +1,102 @@
+actions:
+  - id: generate_one
+    label: "Generate Single Identity"
+    script: scripts/generate_identity.py
+    requires_manifest: true
+    parameters: []
+
+  - id: generate_parallel
+    label: "Generate N Identities"
+    script: scripts/generate_identities_parallel.py
+    requires_manifest: true
+    parameters:
+      - key: n
+        label: "Number of identities"
+        type: int
+        default: null
+        default_from_manifest: parallel_n
+        help: "How many identities to generate"
+      - key: workers
+        label: "Parallel workers"
+        type: int
+        default: null
+        default_from_manifest: parallel_workers
+        help: "Number of parallel worker processes"
+
+  - id: compare_scb
+    label: "Compare Pipeline vs SCB"
+    script: scripts/compare_pipeline_to_scb.py
+    requires_manifest: true
+    parameters: []
+
+  - id: gen_scb_pop
+    label: "Generate SCB Population"
+    script: scripts/generate_scb_population.py
+    requires_manifest: false
+    parameters:
+      - key: n
+        label: "Population size"
+        type: int
+        default: 1000
+        default_from_manifest: null
+        help: "Number of individuals to sample"
+      - key: seed
+        label: "Random seed"
+        type: int
+        default: 42
+        default_from_manifest: null
+        help: "RNG seed for reproducibility"
+      - key: output
+        label: "Output file"
+        type: str
+        default: scb_population.json
+        default_from_manifest: null
+        help: "Output JSON file path"
+
+  - id: gen_ssb_pop
+    label: "Generate SSB Population"
+    script: scripts/generate_ssb_population.py
+    requires_manifest: false
+    parameters:
+      - key: n
+        label: "Population size"
+        type: int
+        default: 1000
+        default_from_manifest: null
+        help: "Number of individuals to sample"
+      - key: seed
+        label: "Random seed"
+        type: int
+        default: 42
+        default_from_manifest: null
+        help: "RNG seed for reproducibility"
+      - key: output
+        label: "Output file"
+        type: str
+        default: ssb_population.json
+        default_from_manifest: null
+        help: "Output JSON file path"
+
+  - id: compare_pops
+    label: "Compare Two Populations"
+    script: scripts/compare_populations.py
+    requires_manifest: false
+    parameters:
+      - key: pop_a
+        label: "Population A"
+        type: file
+        default: null
+        default_from_manifest: null
+        help: "First population file"
+      - key: pop_b
+        label: "Population B"
+        type: file
+        default: null
+        default_from_manifest: null
+        help: "Second population file"
+      - key: output
+        label: "Output file"
+        type: str
+        default: null
+        default_from_manifest: null
+        help: "Output comparison report path"
