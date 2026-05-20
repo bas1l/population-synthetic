@@ -68,6 +68,12 @@
     "housing_tenure": {
       "description": "The type of housing the persona lives in."
     },
+    "current_environment_type": {
+      "description": "The type of environment where the persona currently lives (urban metropolis, suburban, or rural/countryside)."
+    },
+    "ethnicity_broad_global_approx": {
+      "description": "The broad global ethnicity category of the persona (e.g. Swedish, Nordic, European, Non-European)."
+    },
     "openness": {
       "type": "integer",
       "min": 1,

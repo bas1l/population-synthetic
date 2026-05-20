@@ -14,26 +14,9 @@
     "industry_sector":                { "method": "pick", "depends_on": [] },
     "socioeconomic_class":            { "method": "pick", "depends_on": [] },
     "income_source":                  { "method": "pick", "depends_on": [] },
-    "financial_behavior":             { "method": "pick", "depends_on": [] },
     "housing_tenure":                 { "method": "pick", "depends_on": [] },
-    "current_environment_type":       { "method": "pick", "depends_on": [] },
-    "ethnicity_broad_global_approx":  { "method": "pick", "depends_on": [] },
-    "gender_identity":                { "method": "pick", "depends_on": [] },
-    "sexual_orientation":             { "method": "pick", "depends_on": [] },
-    "somatotype":                     { "method": "pick", "depends_on": [] },
-    "disabilities_visible":           { "method": "pick", "depends_on": [] },
     "parental_structure":             { "method": "pick", "depends_on": [] },
-    "sibling_constellation":          { "method": "pick", "depends_on": [] },
-    "childhood_atmosphere":           { "method": "pick", "depends_on": [] },
-    "religious_alignment":            { "method": "pick", "depends_on": [] },
-    "openness":                       { "method": "pick", "depends_on": [] },
-    "conscientiousness":              { "method": "pick", "depends_on": [] },
-    "extraversion":                   { "method": "pick", "depends_on": [] },
-    "agreeableness":                  { "method": "pick", "depends_on": [] },
-    "neuroticism":                    { "method": "pick", "depends_on": [] },
-    "cognitive_style":                { "method": "pick", "depends_on": [] },
-    "tone_baseline":                  { "method": "pick", "depends_on": [] },
-    "speaking_pace":                  { "method": "pick", "depends_on": [] },
-    "social_media_usage":             { "method": "pick", "depends_on": [] }
+    "current_environment_type":       { "method": "pick", "depends_on": [] },
+    "ethnicity_broad_global_approx":  { "method": "pick", "depends_on": [] }
   }
 }
