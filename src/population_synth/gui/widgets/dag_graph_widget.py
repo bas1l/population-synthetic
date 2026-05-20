@@ -2,93 +2,135 @@ import json
 import math
 from pathlib import Path
 
-from PyQt5.QtCore import Qt, QPointF
-from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QPolygonF
-from PyQt5.QtWidgets import (
-    QGraphicsLineItem,
-    QGraphicsPolygonItem,
-    QGraphicsRectItem,
-    QGraphicsScene,
-    QGraphicsTextItem,
-    QGraphicsView,
-)
+from PyQt5.QtCore import QObject, QPointF, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QPainter
+from PyQt5.QtWidgets import QGraphicsScene, QGraphicsTextItem, QGraphicsView, QShortcut
+from PyQt5.QtGui import QKeySequence
+
+from grandalf.graphs import Edge as GEdge, Graph, Vertex
+from grandalf.layouts import SugiyamaLayout
+
+from population_synth.gui.widgets.dag_graph_items import DagCategoryNode, DagEdge
+
+_SPACING_FACTOR = 1.4
 
 
-NODE_W, NODE_H = 140, 40
-LAYER_SPACING = 100
-NODE_SPACING = 160
-
-METHOD_COLORS = {
-    "pick": "#d0e8ff",
-    "generate_pick": "#d0ffd0",
-    "generate_evaluate_pick": "#ffe0b0",
-    "generate_evaluate_random_pick": "#ffd0d0",
-}
+class _VertexView:
+    def __init__(self, w: float, h: float):
+        self.w = w
+        self.h = h
+        self.xy = (0.0, 0.0)
 
 
-def _topo_layers(categories: dict) -> list[list[str]]:
-    in_degree: dict[str, int] = {name: 0 for name in categories}
-    adjacency: dict[str, list[str]] = {name: [] for name in categories}
+class DagGraphView(QGraphicsView):
+    node_clicked = pyqtSignal(str)
 
-    for name, cfg in categories.items():
-        for dep in cfg.get("depends_on", []):
-            if dep in categories:
-                adjacency[dep].append(name)
-                in_degree[name] += 1
-
-    layers: list[list[str]] = []
-    queue = [name for name, deg in in_degree.items() if deg == 0]
-
-    while queue:
-        layers.append(sorted(queue))
-        next_queue: list[str] = []
-        for node in queue:
-            for child in adjacency[node]:
-                in_degree[child] -= 1
-                if in_degree[child] == 0:
-                    next_queue.append(child)
-        queue = next_queue
-
-    return layers
-
-
-def _layout_positions(layers: list[list[str]]) -> dict[str, tuple[float, float]]:
-    positions: dict[str, tuple[float, float]] = {}
-    for layer_idx, layer in enumerate(layers):
-        y = layer_idx * LAYER_SPACING
-        size = len(layer)
-        for node_idx, name in enumerate(layer):
-            x = (node_idx - (size - 1) / 2.0) * NODE_SPACING
-            positions[name] = (x, y)
-    return positions
-
-
-class DagGraphWidget(QGraphicsView):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
-        self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setRenderHint(QPainter.Antialiasing)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setDragMode(QGraphicsView.NoDrag)
+
+        self._nodes: dict[str, DagCategoryNode] = {}
+        self._edges: list[DagEdge] = []
+        self._strategy_path: Path | None = None
+        self._pan_last = None
+
+        self._debounce_timer = QTimer(self)
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.setInterval(800)
+        self._debounce_timer.timeout.connect(self._save_layout)
+
+        fit_shortcut = QShortcut(QKeySequence("Ctrl+0"), self)
+        fit_shortcut.activated.connect(self.fit_all)
 
     def populate(self, strategy_path: Path | None) -> None:
         self._scene.clear()
+        self._nodes = {}
+        self._edges = []
+        self._strategy_path = strategy_path
+
         if strategy_path is None or not strategy_path.exists():
-            text = QGraphicsTextItem("No strategy file")
-            self._scene.addItem(text)
+            self._scene.addItem(QGraphicsTextItem("No strategy file"))
             return
+
         try:
             data = json.loads(strategy_path.read_text(encoding="utf-8"))
         except Exception:
-            text = QGraphicsTextItem("Invalid strategy file")
-            self._scene.addItem(text)
+            self._scene.addItem(QGraphicsTextItem("Invalid strategy file"))
             return
+
         categories = data.get("categories")
         if not isinstance(categories, dict) or not categories:
-            text = QGraphicsTextItem("No categories found in strategy file")
-            self._scene.addItem(text)
+            self._scene.addItem(QGraphicsTextItem("No categories found in strategy file"))
             return
-        self._render(categories)
+
+        # --- Build nodes ---
+        for name, cfg in categories.items():
+            method = cfg.get("method", "")
+            depends_on = cfg.get("depends_on", [])
+            node = DagCategoryNode(name, method, depends_on)
+            node.signals.node_clicked.connect(self.node_clicked)
+            node.signals.position_changed.connect(self._on_node_moved)
+            self._scene.addItem(node)
+            self._nodes[name] = node
+
+        # --- Build grandalf graph ---
+        vertices: dict[str, Vertex] = {}
+        for name, node in self._nodes.items():
+            v = Vertex(name)
+            r = node.rect()
+            v.view = _VertexView(r.width(), r.height())
+            vertices[name] = v
+
+        g_edges = []
+        for name, cfg in categories.items():
+            for dep in cfg.get("depends_on", []):
+                if dep in vertices and name in vertices:
+                    g_edges.append(GEdge(vertices[dep], vertices[name]))
+
+        graph = Graph(list(vertices.values()), g_edges)
+
+        # --- Layout each connected component side-by-side ---
+        x_offset = 0.0
+        for component in graph.C:
+            layout = SugiyamaLayout(component)
+            layout.init_all(optimize=True)
+            layout.draw()
+
+            comp_max_x = 0.0
+            comp_max_w = 0.0
+            for v in component.sV:
+                vx, vy = v.view.xy
+                nx = vx * _SPACING_FACTOR + x_offset
+                ny = vy * _SPACING_FACTOR
+                node = self._nodes.get(v.data)
+                if node is not None:
+                    node.setPos(nx, ny)
+                    comp_max_x = max(comp_max_x, nx)
+                    comp_max_w = max(comp_max_w, node.rect().width())
+
+            x_offset = comp_max_x + comp_max_w * 1.4 * 1.5
+
+        # --- Build edges ---
+        for name, cfg in categories.items():
+            for dep in cfg.get("depends_on", []):
+                if dep in self._nodes and name in self._nodes:
+                    edge = DagEdge(self._nodes[dep], self._nodes[name])
+                    self._scene.addItem(edge)
+                    self._edges.append(edge)
+
+        # --- Load or fit ---
+        if not self._load_layout():
+            self.fit_all()
+
+    def fit_all(self) -> None:
+        bounding = self._scene.itemsBoundingRect()
+        if not bounding.isNull():
+            bounding.adjust(-20, -20, 20, 20)
+            self.fitInView(bounding, Qt.KeepAspectRatio)
 
     def wheelEvent(self, event) -> None:
         if event.angleDelta().y() > 0:
@@ -96,79 +138,62 @@ class DagGraphWidget(QGraphicsView):
         else:
             self.scale(1 / 1.15, 1 / 1.15)
 
-    def _render(self, categories: dict) -> None:
-        layers = _topo_layers(categories)
-        positions = _layout_positions(layers)
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MiddleButton:
+            self._pan_last = event.pos()
+            self.setCursor(Qt.ClosedHandCursor)
+        else:
+            super().mousePressEvent(event)
 
-        node_centers: dict[str, tuple[float, float]] = {}
+    def mouseMoveEvent(self, event) -> None:
+        if event.buttons() & Qt.MiddleButton and self._pan_last is not None:
+            delta = event.pos() - self._pan_last
+            self._pan_last = event.pos()
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+        else:
+            super().mouseMoveEvent(event)
 
-        for name, (x, y) in positions.items():
-            cfg = categories[name]
-            method = cfg.get("method", "")
-            depends_on = cfg.get("depends_on", [])
-            color_hex = METHOD_COLORS.get(method, "#e0e0e0")
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MiddleButton:
+            self.setCursor(Qt.ArrowCursor)
+        else:
+            super().mouseReleaseEvent(event)
 
-            rect_x = x - NODE_W / 2
-            rect_y = y - NODE_H / 2
+    def _on_node_moved(self, name: str, x: float, y: float) -> None:
+        for edge in self._edges:
+            edge.update_path()
+        self._debounce_timer.start()
 
-            rect_item = QGraphicsRectItem(rect_x, rect_y, NODE_W, NODE_H)
-            rect_item.setBrush(QBrush(QColor(color_hex)))
-            rect_item.setPen(QPen(Qt.black, 1))
-            rect_item.setToolTip(
-                f"{name}\nMethod: {method}\nDeps: {', '.join(depends_on) or 'none'}"
-            )
-            self._scene.addItem(rect_item)
+    def _save_layout(self) -> None:
+        if self._strategy_path is None:
+            return
+        layout_path = self._strategy_path.with_suffix(".layout.json")
+        positions = {name: [node.pos().x(), node.pos().y()] for name, node in self._nodes.items()}
+        try:
+            layout_path.write_text(json.dumps(positions, indent=2), encoding="utf-8")
+        except OSError:
+            pass
 
-            label = QGraphicsTextItem(name)
-            label.setTextWidth(NODE_W - 4)
-            label_rect = label.boundingRect()
-            label.setPos(
-                rect_x + (NODE_W - label_rect.width()) / 2,
-                rect_y + (NODE_H - label_rect.height()) / 2,
-            )
-            self._scene.addItem(label)
+    def _load_layout(self) -> bool:
+        if self._strategy_path is None:
+            return False
+        layout_path = self._strategy_path.with_suffix(".layout.json")
+        if not layout_path.exists():
+            return False
+        try:
+            saved = json.loads(layout_path.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        loaded_any = False
+        for name, xy in saved.items():
+            if name in self._nodes and isinstance(xy, list) and len(xy) == 2:
+                self._nodes[name].setPos(xy[0], xy[1])
+                loaded_any = True
+        if loaded_any:
+            for edge in self._edges:
+                edge.update_path()
+        return loaded_any
 
-            node_centers[name] = (x, y)
 
-        for target_name, cfg in categories.items():
-            for source_name in cfg.get("depends_on", []):
-                if source_name not in node_centers or target_name not in node_centers:
-                    continue
-                sx, sy = node_centers[source_name]
-                tx, ty = node_centers[target_name]
-
-                src_bottom = QPointF(sx, sy + NODE_H / 2)
-                tgt_top = QPointF(tx, ty - NODE_H / 2)
-
-                edge_pen = QPen(QColor("#888888"), 1.5)
-                line = QGraphicsLineItem(
-                    src_bottom.x(), src_bottom.y(), tgt_top.x(), tgt_top.y()
-                )
-                line.setPen(edge_pen)
-                self._scene.addItem(line)
-
-                dx = tgt_top.x() - src_bottom.x()
-                dy = tgt_top.y() - src_bottom.y()
-                angle = math.atan2(dy, dx)
-
-                tip = tgt_top
-                arrow_len = 10.0
-                arrow_half_w = 6.0
-                base_x = tip.x() - arrow_len * math.cos(angle)
-                base_y = tip.y() - arrow_len * math.sin(angle)
-                perp_x = -math.sin(angle)
-                perp_y = math.cos(angle)
-
-                p0 = QPointF(tip.x(), tip.y())
-                p1 = QPointF(base_x + arrow_half_w * perp_x, base_y + arrow_half_w * perp_y)
-                p2 = QPointF(base_x - arrow_half_w * perp_x, base_y - arrow_half_w * perp_y)
-
-                arrow = QGraphicsPolygonItem(QPolygonF([p0, p1, p2]))
-                arrow.setBrush(QBrush(QColor("#888888")))
-                arrow.setPen(QPen(Qt.NoPen))
-                self._scene.addItem(arrow)
-
-        bounding = self._scene.itemsBoundingRect()
-        if not bounding.isNull():
-            bounding.adjust(-20, -20, 20, 20)
-            self.fitInView(bounding, Qt.KeepAspectRatio)
+DagGraphWidget = DagGraphView

@@ -26,6 +26,7 @@ dev = [
 ]
 gui = [
     "PyQt5>=5.15",
+    "grandalf>=0.8",
 ]
 
 [tool.setuptools.packages.find]

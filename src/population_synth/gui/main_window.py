@@ -93,6 +93,9 @@ class LauncherWindow(QMainWindow):
         if initial_action is not None:
             self._on_action_changed(initial_action)
         self._dag_widget.populate(initial_manifest.strategy_path if initial_manifest else None)
+        self._dag_widget.node_clicked.connect(
+            lambda name: self.statusBar().showMessage(f"Category: {name}")
+        )
 
     def _on_manifest_changed(self, info: ManifestDisplayInfo | None) -> None:
         self._overview.populate(info)
