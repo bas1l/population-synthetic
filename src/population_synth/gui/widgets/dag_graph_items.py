@@ -66,7 +66,7 @@ class DagCategoryNode(QGraphicsRectItem):
 
         proxy = QGraphicsProxyWidget(self)
         proxy.setWidget(label)
-        proxy.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        proxy.setAcceptedMouseButtons(Qt.NoButton)
         label_w = min(node_w - 8, fm.horizontalAdvance(name) + 20)
         label_h = fm.height() + 4
         proxy.setPos(

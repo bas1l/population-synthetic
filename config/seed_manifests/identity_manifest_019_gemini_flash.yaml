@@ -1,8 +1,8 @@
-name: "Claude Sonnet — all_generate_pick"
+name: "Gemini Flash — all_generate_pick"
 
 model_config:
-  provider: "claude"
-  model: "sonnet"
+  provider: "gemini"
+  model: "gemini-2.5-flash"
   generation_config:
     temperature: null
     top_p: null
@@ -17,6 +17,6 @@ parameters:
   output: "identity.json"
   parallel:
     n: 100
-    workers: 8
-    output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/01_Raw/seed_023_all_generate_pick_sonnet"
-  comparison_output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/03_Analysis/seed_023_all_generate_pick_sonnet"
+    workers: 2
+    output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/01_Raw/seed_019_all_generate_pick_flash"
+  comparison_output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/03_Analysis/seed_019_all_generate_pick_flash"
