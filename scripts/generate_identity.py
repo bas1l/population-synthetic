@@ -81,8 +81,13 @@ def main() -> None:
     parser.add_argument(
         "--provider",
         default=None,
-        choices=["gemini", "claude"],
-        help="LLM provider to use: gemini or claude (default: gemini)",
+        choices=["gemini", "claude", "ollama"],
+        help="LLM provider to use: gemini, claude, or ollama (default: gemini)",
+    )
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help="Ollama server base URL (overrides manifest and OLLAMA_BASE_URL env var)",
     )
     parser.add_argument(
         "--strategy",
@@ -120,6 +125,8 @@ def main() -> None:
             args.log_llm = m.log_llm
         if args.output is None:
             args.output = m.output
+        if args.base_url is None and m.base_url is not None:
+            args.base_url = m.base_url
 
     if args.provider is None:
         args.provider = "gemini"
@@ -165,8 +172,11 @@ def main() -> None:
     elif args.provider == "claude":
         from population_synth.clients.claude_code_client import ClaudeCodeClient
         client = ClaudeCodeClient(model_name=args.model or "sonnet")
+    elif args.provider == "ollama":
+        from population_synth.clients.ollama_client import OllamaClient
+        client = OllamaClient(model_name=args.model or "llama3.2", base_url=args.base_url)
     else:
-        raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini' or 'claude'.")
+        raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini', 'claude', or 'ollama'.")
 
     logger.info("Model: %s", client.model_name)
     generator = FactoryIdentityGenerator.create_generator(args.mode, client)

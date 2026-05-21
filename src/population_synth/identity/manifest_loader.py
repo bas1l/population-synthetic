@@ -10,7 +10,7 @@ import yaml
 
 from population_synth._paths import PROJECT_ROOT
 
-VALID_PROVIDERS = {"gemini", "claude"}
+VALID_PROVIDERS = {"gemini", "claude", "ollama"}
 VALID_MODES = {"batch", "configurable"}
 
 
@@ -31,6 +31,7 @@ class ManifestConfig:
     parallel_workers: int | None
     parallel_output_dir: Path | None
     comparison_output_dir: Path | None
+    base_url: str | None = None
 
 
 def load_manifest(manifest_path: Union[str, Path]) -> ManifestConfig:
@@ -55,6 +56,8 @@ def load_manifest(manifest_path: Union[str, Path]) -> ManifestConfig:
     model = model_cfg.get("model")
     if not model:
         raise ValueError("model_config.model is required")
+
+    base_url = model_cfg.get("base_url") or None
 
     raw_gen_config = model_cfg.get("generation_config", {}) or {}
     generation_config = {k: v for k, v in raw_gen_config.items() if v is not None}
@@ -104,6 +107,7 @@ def load_manifest(manifest_path: Union[str, Path]) -> ManifestConfig:
         parallel_workers=parallel_workers,
         parallel_output_dir=parallel_output_dir,
         comparison_output_dir=comparison_output_dir,
+        base_url=base_url,
     )
 
 

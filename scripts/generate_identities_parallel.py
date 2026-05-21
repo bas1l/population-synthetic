@@ -77,6 +77,7 @@ def _generate_one(
     output_dir: Path,
     kwargs: dict,
     log_llm: bool = False,
+    base_url: str | None = None,
 ) -> tuple[int, bool, str]:
     global _completed, _failed
 
@@ -98,8 +99,13 @@ def _generate_one(
             client = ClaudeCodeClient(model_name=model)
             with _active_clients_lock:
                 _active_clients.add(client)
+        elif provider == "ollama":
+            from population_synth.clients.ollama_client import OllamaClient
+            client = OllamaClient(model_name=model, base_url=base_url)
+            with _active_clients_lock:
+                _active_clients.add(client)
         else:
-            raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini' or 'claude'.")
+            raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini', 'claude', or 'ollama'.")
         generator = FactoryIdentityGenerator.create_generator(mode, client)
         if log_llm:
             generator.interaction_collector = LLMInteractionCollector()
@@ -144,13 +150,18 @@ def main() -> None:
     parser.add_argument(
         "--provider",
         default=None,
-        choices=["gemini", "claude"],
-        help="LLM provider to use: gemini or claude (default: gemini)",
+        choices=["gemini", "claude", "ollama"],
+        help="LLM provider to use: gemini, claude, or ollama (default: gemini)",
     )
     parser.add_argument(
         "--model",
         default=None,
-        help="Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet",
+        help="Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet, ollama -> llama3.2",
+    )
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help="Ollama server base URL (overrides manifest and OLLAMA_BASE_URL env var)",
     )
     parser.add_argument("--output-dir", default=None, help="Output directory for persona_XXXXX/ folders")
     parser.add_argument(
@@ -183,6 +194,8 @@ def main() -> None:
             args.workers = m.parallel_workers
         if args.output_dir is None and m.parallel_output_dir is not None:
             args.output_dir = str(m.parallel_output_dir)
+        if args.base_url is None and m.base_url is not None:
+            args.base_url = m.base_url
 
     if args.provider is None:
         args.provider = "gemini"
@@ -225,7 +238,14 @@ def main() -> None:
     logging.getLogger().addHandler(file_handler)
     logger.info("Log file: %s", log_file)
 
-    model = args.model or ("gemini-2.5-flash" if args.provider == "gemini" else "sonnet")
+    if args.model:
+        model = args.model
+    elif args.provider == "gemini":
+        model = "gemini-2.5-flash"
+    elif args.provider == "ollama":
+        model = "llama3.2"
+    else:
+        model = "sonnet"
 
     kwargs = {}
     if args.strategy:
@@ -273,6 +293,7 @@ def main() -> None:
                 output_dir=output_dir,
                 kwargs=kwargs,
                 log_llm=args.log_llm,
+                base_url=args.base_url,
             )
             futures.append(fut)
 
