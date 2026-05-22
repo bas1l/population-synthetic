@@ -1,0 +1,13 @@
+id: "claude_haiku"
+label: "Claude Haiku"
+model_config:
+  provider: "claude"
+  model: "haiku"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+parameters:
+  parallel:
+    workers: 2

@@ -1,0 +1,13 @@
+id: "claude_opus"
+label: "Claude Opus"
+model_config:
+  provider: "claude"
+  model: "opus"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+parameters:
+  parallel:
+    workers: 2

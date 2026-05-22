@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import subprocess
 import sys
 
@@ -19,12 +21,12 @@ from population_synth.gui.widgets.action_selector import ActionSelector
 from population_synth.gui.widgets.console_widget import ConsoleWidget, ProcessOutputReader
 from population_synth.gui.widgets.dag_graph_widget import DagGraphWidget
 from population_synth.gui.widgets.manifest_overview import ManifestOverview
-from population_synth.gui.widgets.manifest_selector import ManifestSelector
+from population_synth.gui.widgets.manifest_selector import ExperimentSelector
 from population_synth.gui.widgets.parameter_panel import ParameterPanel
 
 
 class LauncherWindow(QMainWindow):
-    def __init__(self, actions: list[ActionEntry], manifests_dir, parent=None):
+    def __init__(self, actions: list[ActionEntry], parent=None):
         super().__init__(parent)
         self._actions = actions
         self._process: subprocess.Popen | None = None
@@ -48,8 +50,8 @@ class LauncherWindow(QMainWindow):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._manifest_selector = ManifestSelector(manifests_dir)
-        left_layout.addWidget(self._manifest_selector)
+        self._experiment_selector = ExperimentSelector()
+        left_layout.addWidget(self._experiment_selector)
 
         self._action_selector = ActionSelector(actions)
         left_layout.addWidget(self._action_selector)
@@ -82,12 +84,12 @@ class LauncherWindow(QMainWindow):
         v_splitter.addWidget(self._console)
         v_splitter.setSizes([550, 200])
 
-        self._manifest_selector.manifest_changed.connect(self._on_manifest_changed)
+        self._experiment_selector.manifest_changed.connect(self._on_manifest_changed)
         self._action_selector.action_changed.connect(self._on_action_changed)
         self._run_btn.clicked.connect(self._run)
         self._abort_btn.clicked.connect(self._abort)
 
-        initial_manifest = self._manifest_selector.current_manifest()
+        initial_manifest = self._experiment_selector.current_manifest()
         self._on_manifest_changed(initial_manifest)
         initial_action = self._action_selector.current_action()
         if initial_action is not None:
@@ -105,9 +107,9 @@ class LauncherWindow(QMainWindow):
             self._params.populate(action.parameters, info)
 
     def _on_action_changed(self, action: ActionEntry) -> None:
-        manifest = self._manifest_selector.current_manifest()
+        manifest = self._experiment_selector.current_manifest()
         self._params.populate(action.parameters, manifest)
-        self._manifest_selector.setEnabled(action.requires_manifest)
+        self._experiment_selector.setEnabled(action.requires_manifest)
 
     def _build_command(
         self,
@@ -117,7 +119,14 @@ class LauncherWindow(QMainWindow):
     ) -> list[str]:
         cmd = [sys.executable, str(action.script)]
         if action.requires_manifest and manifest:
-            cmd += ["--manifest", str(manifest.path)]
+            if manifest.model_id is not None:
+                cmd += ["--model-id", manifest.model_id]
+                cmd += ["--strategy-id", manifest.strategy_id]
+                cmd += ["--country-id", manifest.country_id]
+                if self._experiment_selector.force:
+                    cmd.append("--force")
+            elif manifest.path is not None:
+                cmd += ["--manifest", str(manifest.path)]
         for key, value in overrides.items():
             if isinstance(value, bool):
                 if value:
@@ -130,7 +139,7 @@ class LauncherWindow(QMainWindow):
         action = self._action_selector.current_action()
         if action is None:
             return
-        manifest = self._manifest_selector.current_manifest()
+        manifest = self._experiment_selector.current_manifest()
         if action.requires_manifest and manifest is None:
             QMessageBox.warning(self, "No Manifest", "Please select a manifest before running.")
             return

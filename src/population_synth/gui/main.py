@@ -13,9 +13,8 @@ def main():
 
     launcher_yaml = PROJECT_ROOT / "config" / "gui_launcher.yaml"
     actions = parse_launcher_config(launcher_yaml)
-    manifests_dir = PROJECT_ROOT / "config" / "seed_manifests"
 
-    window = LauncherWindow(actions=actions, manifests_dir=manifests_dir)
+    window = LauncherWindow(actions=actions)
     window.setWindowTitle("Population Synth Launcher")
     window.resize(1100, 750)
     window.show()

@@ -1,0 +1,13 @@
+id: "gemini_flash"
+label: "Gemini Flash"
+model_config:
+  provider: "gemini"
+  model: "gemini-2.5-flash"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+parameters:
+  parallel:
+    workers: 2
