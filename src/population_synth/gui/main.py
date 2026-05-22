@@ -12,11 +12,11 @@ def main():
     app.setApplicationName("Population Synth Launcher")
 
     launcher_yaml = PROJECT_ROOT / "config" / "gui_launcher.yaml"
-    actions = parse_launcher_config(launcher_yaml)
+    config = parse_launcher_config(launcher_yaml)
 
-    window = LauncherWindow(actions=actions)
+    window = LauncherWindow(config=config)
     window.setWindowTitle("Population Synth Launcher")
-    window.resize(1100, 750)
+    window.resize(1300, 750)
     window.show()
 
     sys.exit(app.exec_())

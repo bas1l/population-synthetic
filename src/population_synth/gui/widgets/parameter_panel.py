@@ -2,6 +2,7 @@ from typing import Any
 
 from PyQt5.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -65,6 +66,17 @@ class ParameterPanel(QWidget):
                 box.setChecked(bool(default))
             return box
 
+        if param.type == "choice":
+            combo = QComboBox()
+            if param.choices:
+                for choice in param.choices:
+                    combo.addItem(choice)
+                if default is not None:
+                    idx = combo.findText(str(default))
+                    if idx >= 0:
+                        combo.setCurrentIndex(idx)
+            return combo
+
         if param.type == "file":
             container = QWidget()
             h = QHBoxLayout(container)
@@ -99,6 +111,8 @@ class ParameterPanel(QWidget):
         for key, widget in self._widgets.items():
             if isinstance(widget, QSpinBox):
                 result[key] = widget.value()
+            elif isinstance(widget, QComboBox):
+                result[key] = widget.currentText()
             elif isinstance(widget, QCheckBox):
                 result[key] = widget.isChecked()
             elif isinstance(widget, QLineEdit):

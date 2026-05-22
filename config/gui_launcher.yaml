@@ -1,12 +1,20 @@
+groups:
+  - id: generate
+    label: "Generate Population"
+  - id: compare
+    label: "Compare Population"
+
 actions:
   - id: generate_one
-    label: "Generate Single Identity"
+    label: "LLM Single Identity"
+    group: generate
     script: scripts/generate_identity.py
     requires_manifest: true
     parameters: []
 
   - id: generate_parallel
-    label: "Generate N Identities"
+    label: "LLM Synthetic Population"
+    group: generate
     script: scripts/generate_identities_parallel.py
     requires_manifest: true
     parameters:
@@ -23,62 +31,67 @@ actions:
         default_from_manifest: parallel_workers
         help: "Number of parallel worker processes"
 
+  - id: gen_db_pop
+    label: "Database Population"
+    group: generate
+    script: scripts/generate_db_population.py
+    requires_manifest: false
+    parameters:
+      - key: source
+        label: "Data source"
+        type: choice
+        choices: ["scb", "ssb"]
+        default: scb
+        default_from_manifest: null
+        help: "Statistical database to sample from (SCB = Sweden, SSB = Norway)"
+      - key: n
+        label: "Population size"
+        type: int
+        default: 1000
+        default_from_manifest: null
+        help: "Number of individuals to sample"
+      - key: seed
+        label: "Random seed"
+        type: int
+        default: 42
+        default_from_manifest: null
+        help: "RNG seed for reproducibility"
+      - key: output
+        label: "Output file"
+        type: str
+        default: population.json
+        default_from_manifest: null
+        help: "Output JSON file path"
+
+  - id: extract_pop
+    label: "Extract Population"
+    group: generate
+    script: scripts/extract_population_from_pipeline.py
+    requires_manifest: true
+    parameters:
+      - key: seed-root
+        label: "Seed root directory"
+        type: str
+        default: null
+        default_from_manifest: null
+        help: "Path to the seed output directory"
+      - key: output
+        label: "Output file"
+        type: str
+        default: pipeline_population.json
+        default_from_manifest: null
+        help: "Output JSON file path"
+
   - id: compare_scb
-    label: "Compare Pipeline vs SCB"
+    label: "Pipeline vs Reference"
+    group: compare
     script: scripts/compare_pipeline_to_scb.py
     requires_manifest: true
     parameters: []
 
-  - id: gen_scb_pop
-    label: "Generate SCB Population"
-    script: scripts/generate_scb_population.py
-    requires_manifest: false
-    parameters:
-      - key: n
-        label: "Population size"
-        type: int
-        default: 1000
-        default_from_manifest: null
-        help: "Number of individuals to sample"
-      - key: seed
-        label: "Random seed"
-        type: int
-        default: 42
-        default_from_manifest: null
-        help: "RNG seed for reproducibility"
-      - key: output
-        label: "Output file"
-        type: str
-        default: scb_population.json
-        default_from_manifest: null
-        help: "Output JSON file path"
-
-  - id: gen_ssb_pop
-    label: "Generate SSB Population"
-    script: scripts/generate_ssb_population.py
-    requires_manifest: false
-    parameters:
-      - key: n
-        label: "Population size"
-        type: int
-        default: 1000
-        default_from_manifest: null
-        help: "Number of individuals to sample"
-      - key: seed
-        label: "Random seed"
-        type: int
-        default: 42
-        default_from_manifest: null
-        help: "RNG seed for reproducibility"
-      - key: output
-        label: "Output file"
-        type: str
-        default: ssb_population.json
-        default_from_manifest: null
-        help: "Output JSON file path"
-
   - id: compare_pops
     label: "Compare Two Populations"
+    group: compare
     script: scripts/compare_populations.py
     requires_manifest: false
     parameters:
