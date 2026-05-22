@@ -39,9 +39,6 @@ class ExperimentSelector(QWidget):
         axis_form.addRow("Country:", self._country_combo)
         layout.addWidget(axis_box)
 
-        self._persona_count_label = QLabel("")
-        layout.addWidget(self._persona_count_label)
-
         self._force_checkbox = QCheckBox("Force reprocessing")
         layout.addWidget(self._force_checkbox)
 
@@ -52,8 +49,6 @@ class ExperimentSelector(QWidget):
         self._model_combo.currentIndexChanged.connect(self._on_selection_changed)
         self._strategy_combo.currentIndexChanged.connect(self._on_selection_changed)
         self._country_combo.currentIndexChanged.connect(self._on_selection_changed)
-        self._force_checkbox.stateChanged.connect(self._on_force_changed)
-
         self._populate()
 
     @property
@@ -68,7 +63,8 @@ class ExperimentSelector(QWidget):
             return None
         try:
             return ManifestDisplayInfo.from_axis(model_id, strategy_id, country_id)
-        except Exception:
+        except Exception as e:
+            print(f"[ExperimentSelector] compose_manifest failed: {e}", flush=True)
             return None
 
     def refresh(self) -> None:
@@ -107,20 +103,4 @@ class ExperimentSelector(QWidget):
         self._on_selection_changed()
 
     def _on_selection_changed(self) -> None:
-        self._update_persona_count()
         self.manifest_changed.emit(self.current_manifest())
-
-    def _on_force_changed(self) -> None:
-        self._update_persona_count()
-
-    def _update_persona_count(self) -> None:
-        info = self.current_manifest()
-        if info is None:
-            self._persona_count_label.setText("")
-            return
-        n = info.config.parallel_n or 0
-        existing = info.existing_persona_count or 0
-        text = f"{existing} / {n} personas"
-        if self.force and existing > 0:
-            text += " (will be overwritten)"
-        self._persona_count_label.setText(text)
