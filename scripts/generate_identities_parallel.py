@@ -57,6 +57,7 @@ from pathlib import Path
 
 from population_synth.identity.factory_identity_generator import FactoryIdentityGenerator
 from population_synth.identity.llm_interaction_log import LLMInteractionCollector
+from population_synth.utils import should_process_task
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)
@@ -101,10 +102,10 @@ def _generate_one(
     persona_dir = output_dir / f"persona_{index:05d}"
     out_file = persona_dir / "identity.json"
 
-    if out_file.exists() and not force:
+    if not should_process_task(input_paths=config_path, output_paths=out_file, force=force):
         with _progress_lock:
             _completed += 1
-            return index, True, "skipped (exists)"
+            return index, True, "skipped (up-to-date)"
 
     cfg = generation_config or {}
 
@@ -198,6 +199,18 @@ def main() -> None:
         default=False,
         help="Overwrite existing personas instead of skipping",
     )
+    parser.add_argument(
+        "--ensure-n",
+        action="store_true",
+        default=False,
+        help="Retry failed persona slots until all N succeed (default: disabled)",
+    )
+    parser.add_argument(
+        "--max-retries-per-slot",
+        type=int,
+        default=None,
+        help="Cap retries per slot; exhausted slots are skipped with a warning (default: no cap)",
+    )
     args = parser.parse_args()
 
     axis_ids = [args.model_id, args.strategy_id, args.country_id]
@@ -231,6 +244,10 @@ def main() -> None:
             args.output_dir = str(m.parallel_output_dir)
         if args.base_url is None and m.base_url is not None:
             args.base_url = m.base_url
+        if not args.ensure_n and m.ensure_n:
+            args.ensure_n = m.ensure_n
+        if args.max_retries_per_slot is None and m.max_retries_per_slot is not None:
+            args.max_retries_per_slot = m.max_retries_per_slot
     elif args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
@@ -258,6 +275,10 @@ def main() -> None:
             args.output_dir = str(m.parallel_output_dir)
         if args.base_url is None and m.base_url is not None:
             args.base_url = m.base_url
+        if not args.ensure_n and m.ensure_n:
+            args.ensure_n = m.ensure_n
+        if args.max_retries_per_slot is None and m.max_retries_per_slot is not None:
+            args.max_retries_per_slot = m.max_retries_per_slot
 
     generation_config = m.generation_config if m is not None else {}
 
@@ -339,6 +360,8 @@ def main() -> None:
             "workers": args.workers,
             "output_dir": args.output_dir,
             "force": args.force,
+            "ensure_n": args.ensure_n,
+            "max_retries_per_slot": args.max_retries_per_slot,
         },
         "started_at": started_at,
     }
@@ -358,35 +381,88 @@ def main() -> None:
 
     t0 = time.perf_counter()
 
-    futures = []
-    with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        for i in range(args.n):
-            fut = executor.submit(
-                _generate_one,
-                index=i,
-                total=args.n,
-                mode=args.mode,
-                provider=args.provider,
-                model=model,
-                config_path=str(config_path),
-                output_dir=output_dir,
-                kwargs=kwargs,
-                log_llm=args.log_llm,
-                base_url=args.base_url,
-                generation_config=generation_config,
-                force=args.force,
-            )
-            futures.append(fut)
+    slot_attempts: dict[int, int] = {}
+    pending_indices = list(range(args.n))
+    all_results: dict[int, tuple[int, bool, str]] = {}
+    round_num = 0
 
-        results = []
-        for fut in as_completed(futures):
-            results.append(fut.result())
+    while pending_indices:
+        round_num += 1
+        is_retry = round_num > 1
+
+        if is_retry:
+            logger.info("--- Retry round %d: %d slot(s) remaining ---", round_num, len(pending_indices))
+
+        round_futures = []
+        with ThreadPoolExecutor(max_workers=args.workers) as executor:
+            for i in pending_indices:
+                slot_attempts[i] = slot_attempts.get(i, 0) + 1
+                fut = executor.submit(
+                    _generate_one,
+                    index=i,
+                    total=args.n,
+                    mode=args.mode,
+                    provider=args.provider,
+                    model=model,
+                    config_path=str(config_path),
+                    output_dir=output_dir,
+                    kwargs=kwargs,
+                    log_llm=args.log_llm,
+                    base_url=args.base_url,
+                    generation_config=generation_config,
+                    force=True if is_retry else args.force,
+                )
+                round_futures.append(fut)
+
+            for fut in as_completed(round_futures):
+                idx, ok, msg = fut.result()
+                all_results[idx] = (idx, ok, msg)
+
+        if not args.ensure_n:
+            break
+
+        failed_indices = [idx for idx in pending_indices if not all_results[idx][1]]
+        if not failed_indices:
+            break
+
+        next_pending = []
+        for idx in failed_indices:
+            if args.max_retries_per_slot is not None and slot_attempts[idx] >= args.max_retries_per_slot:
+                logger.warning(
+                    "EXHAUSTED persona_%05d after %d attempt(s) — skipping",
+                    idx, slot_attempts[idx],
+                )
+            else:
+                next_pending.append(idx)
+
+        if not next_pending:
+            logger.warning(
+                "All remaining failed slots exhausted max retries (%d). Stopping.", args.max_retries_per_slot
+            )
+            break
+
+        pending_indices = next_pending
+
+    results = list(all_results.values())
 
     elapsed = time.perf_counter() - t0
     ok_count = sum(1 for _, ok, _ in results if ok)
     fail_count = sum(1 for _, ok, _ in results if not ok)
 
+    exhausted_count = sum(
+        1 for idx, ok, _ in results
+        if not ok
+        and args.max_retries_per_slot is not None
+        and slot_attempts.get(idx, 0) >= args.max_retries_per_slot
+    )
+
     run_metadata["completed_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    run_metadata["retry_stats"] = {
+        "ensure_n": args.ensure_n,
+        "rounds": round_num,
+        "exhausted_slots": exhausted_count,
+        "max_retries_per_slot": args.max_retries_per_slot,
+    }
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(run_metadata, f, indent=2, ensure_ascii=False)
 

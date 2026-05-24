@@ -30,6 +30,18 @@ actions:
         default: null
         default_from_manifest: parallel_workers
         help: "Number of parallel worker processes"
+      - key: ensure-n
+        label: "Ensure N generated"
+        type: bool
+        default: false
+        default_from_manifest: ensure_n
+        help: "Retry failed slots until all N succeed"
+      - key: max-retries-per-slot
+        label: "Max retries per slot"
+        type: int
+        default: null
+        default_from_manifest: max_retries_per_slot
+        help: "Cap retries per slot; null = no cap"
 
   - id: gen_db_pop
     label: "Database Population"
