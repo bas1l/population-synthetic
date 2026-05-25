@@ -27,6 +27,9 @@ python scripts/generate_scb_population.py --n 1000 --seed 42 --output scb_pop.js
 # Generate Norwegian population from live SSB data
 python scripts/generate_ssb_population.py --n 1000 --seed 42 --output ssb_pop.json
 
+# Generate Italian population from live ISTAT/Eurostat data
+python scripts/generate_istat_population.py --n 1000 --seed 42 --output istat_pop.json
+
 # Generate a persona identity via manifest (recommended)
 python scripts/generate_identity.py --manifest config/seed_manifests/identity_manifest_014_claude_haiku.yaml
 
@@ -86,6 +89,7 @@ All imports use the fully-qualified `population_synth.*` package namespace. Scri
 - `income_class.py` -- Income bracket classification using Eurostat AROP (0.60x median) and OECD/Pew (1.00x, 2.00x) thresholds
 - `sweden/` -- SCB-specific: constants (table IDs, label maps), fetch service, parsers, sample service
 - `norway/` -- SSB-specific: constants (table IDs, label maps), fetch service, parsers, sample service
+- `italy/` -- ISTAT/Eurostat-specific: constants (dataflow IDs, NUTS2 codes, label maps), parsers (SDMX + JSON-stat), fetch service (dual-client `load_all`), sample service
 
 **`identity/`** -- LLM-based persona identity generation:
 - Factory + Strategy pattern: `FactoryIdentityGenerator` selects batch or configurable strategy at runtime
@@ -107,6 +111,8 @@ All imports use the fully-qualified `population_synth.*` package namespace. Scri
 - `GeminiClient` -- Google Gemini API wrapper with metadata sidecar tracking
 - `ClaudeCodeClient` -- Claude CLI subprocess wrapper with metadata sidecar tracking
 - `llm_protocol.py` -- `LLMClient` Protocol shared by `GeminiClient` and `ClaudeCodeClient`
+- `EurostatClient` -- Eurostat JSON-stat 2.0 API wrapper with local JSON caching (90-day TTL)
+- `ISTATSDMXClient` -- ISTAT SDMX REST API wrapper with 12-second rate limiting and caching
 
 ### Path Resolution
 
@@ -130,6 +136,8 @@ All cache and config paths derive from this.
 - **Identity prompts and simulation configs:** `config/assets/identity/` (batch and configurable sub-directories)
 - **SCB API cache:** `config/assets/scb_cache/` (git-ignored)
 - **SSB API cache:** `config/assets/ssb_cache/` (git-ignored)
+- **Eurostat API cache:** `config/assets/eurostat_cache/` (git-ignored)
+- **ISTAT API cache:** `config/assets/istat_cache/` (git-ignored)
 - **Category label mappings:** `config/assets/scb_reference/category_mappings.json` and `config/assets/ssb_reference/category_mappings.json`
 
 ## Reference Documentation
