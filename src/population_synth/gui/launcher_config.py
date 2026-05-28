@@ -38,6 +38,7 @@ class ActionGroup:
 class LauncherConfig:
     groups: list[ActionGroup]
     actions: list[ActionEntry]
+    default_action_id: str | None = None
 
     def actions_by_group(self) -> dict[str, list[ActionEntry]]:
         """Return actions keyed by group id, in group definition order."""
@@ -93,4 +94,6 @@ def parse_launcher_config(yaml_path: Path) -> LauncherConfig:
             )
         )
 
-    return LauncherConfig(groups=groups, actions=entries)
+    default_action = raw.get("default_action")
+
+    return LauncherConfig(groups=groups, actions=entries, default_action_id=default_action)

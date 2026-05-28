@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 import json
 import logging
@@ -8,7 +10,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from population_synth.clients.llm_protocol import LLMClient  # noqa: F401  # for type-checking
 
@@ -28,7 +30,7 @@ class ClaudeCodeClient:
     def __init__(
         self,
         model_name: str = "sonnet",
-        default_config: Optional[Dict[str, Any]] = None,
+        default_config: dict[str, Any] | None = None,
         max_retries: int = 3,
         base_delay: float = 2.0,
         max_delay: float = 30.0,
@@ -51,17 +53,17 @@ class ClaudeCodeClient:
         )
         self.logger = logging.getLogger(__name__)
 
-        self._config_state: Dict[str, Any] = default_config if default_config else {}
+        self._config_state: dict[str, Any] = default_config if default_config else {}
 
-        self._last_execution_metadata: Optional[Dict[str, Any]] = None
-        self._execution_history: List[Dict[str, Any]] = []
+        self._last_execution_metadata: dict[str, Any] | None = None
+        self._execution_history: list[dict[str, Any]] = []
 
         # Persistent process state — all None until first _launch_process()
-        self._proc: Optional[subprocess.Popen] = None
-        self._reader_thread_handle: Optional[threading.Thread] = None
-        self._stdout_queue: Optional[queue.Queue] = None
-        self._current_model: Optional[str] = None
-        self._current_system_prompt: Optional[str] = None
+        self._proc: subprocess.Popen | None = None
+        self._reader_thread_handle: threading.Thread | None = None
+        self._stdout_queue: queue.Queue | None = None
+        self._current_model: str | None = None
+        self._current_system_prompt: str | None = None
 
         # Timing stash: _ensure_process() sets this; generate_content() reads and resets it
         self._last_launch_ms: float = 0.0
@@ -84,18 +86,18 @@ class ClaudeCodeClient:
         self.logger.info(f"Updating default model from {self.default_model_name} to {new_model_name}")
         self.default_model_name = new_model_name
 
-    def get_current_configuration(self) -> Dict[str, Any]:
+    def get_current_configuration(self) -> dict[str, Any]:
         return {
             "model": self.default_model_name,
             "generation_config": copy.deepcopy(self._config_state),
         }
 
     @property
-    def last_metadata(self) -> Dict[str, Any]:
+    def last_metadata(self) -> dict[str, Any]:
         return self._last_execution_metadata or {}
 
     @property
-    def history(self) -> List[Dict[str, Any]]:
+    def history(self) -> list[dict[str, Any]]:
         return self._execution_history
 
     def clear_history(self) -> None:
@@ -115,7 +117,7 @@ class ClaudeCodeClient:
     # Persistent process lifecycle
     # ------------------------------------------------------------------
 
-    def _launch_process(self, model: str, system_instruction: Optional[str]) -> None:
+    def _launch_process(self, model: str, system_instruction: str | None) -> None:
         cmd = [
             "claude",
             "--model", model,
@@ -158,7 +160,7 @@ class ClaudeCodeClient:
         finally:
             self._stdout_queue.put(None)
 
-    def _ensure_process(self, model: str, system_instruction: Optional[str]) -> None:
+    def _ensure_process(self, model: str, system_instruction: str | None) -> None:
         needs_launch = (
             self._proc is None
             or self._proc.poll() is not None

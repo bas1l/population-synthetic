@@ -34,8 +34,7 @@ class ManifestConfig:
     parallel_output_dir: Path | None
     comparison_output_dir: Path | None
     base_url: str | None = None
-    ensure_n: bool = False
-    max_retries_per_slot: int | None = None
+    retry_until_success: bool = False
 
 
 def load_manifest(manifest_path: str | Path) -> ManifestConfig:
@@ -93,8 +92,7 @@ def load_manifest(manifest_path: str | Path) -> ManifestConfig:
     parallel_workers = parallel.get("workers")
     parallel_output_dir_rel = parallel.get("output_dir")
     parallel_output_dir = _resolve_path(parallel_output_dir_rel) if parallel_output_dir_rel else None
-    ensure_n = bool(parallel.get("ensure_n", False))
-    max_retries_per_slot = parallel.get("max_retries_per_slot")
+    retry_until_success = bool(parallel.get("retry_until_success", False))
 
     comparison_output_dir_rel = params.get("comparison_output_dir")
     comparison_output_dir = _resolve_path(comparison_output_dir_rel) if comparison_output_dir_rel else None
@@ -114,8 +112,7 @@ def load_manifest(manifest_path: str | Path) -> ManifestConfig:
         parallel_output_dir=parallel_output_dir,
         comparison_output_dir=comparison_output_dir,
         base_url=base_url,
-        ensure_n=ensure_n,
-        max_retries_per_slot=max_retries_per_slot,
+        retry_until_success=retry_until_success,
     )
 
 
@@ -184,8 +181,7 @@ def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> Manife
     output = defaults_params["output"]
     output_base = defaults_params["output_base"]
     parallel_n = defaults_params["parallel"]["n"]
-    ensure_n = bool(defaults_params["parallel"].get("ensure_n", False))
-    max_retries_per_slot = defaults_params["parallel"].get("max_retries_per_slot")
+    retry_until_success = bool(defaults_params["parallel"].get("retry_until_success", False))
 
     parallel_workers = model_data["parameters"]["parallel"]["workers"]
 
@@ -211,8 +207,7 @@ def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> Manife
         parallel_output_dir=parallel_output_dir,
         comparison_output_dir=comparison_output_dir,
         base_url=base_url,
-        ensure_n=ensure_n,
-        max_retries_per_slot=max_retries_per_slot,
+        retry_until_success=retry_until_success,
     )
 
 
@@ -235,10 +230,8 @@ def serialize_manifest(config: ManifestConfig) -> str:
         parallel["workers"] = config.parallel_workers
     if config.parallel_output_dir is not None:
         parallel["output_dir"] = _path_str(config.parallel_output_dir)
-    if config.ensure_n:
-        parallel["ensure_n"] = config.ensure_n
-    if config.max_retries_per_slot is not None:
-        parallel["max_retries_per_slot"] = config.max_retries_per_slot
+    if config.retry_until_success:
+        parallel["retry_until_success"] = config.retry_until_success
 
     model_cfg: dict[str, Any] = {
         "provider": config.provider,

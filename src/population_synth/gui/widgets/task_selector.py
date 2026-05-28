@@ -24,6 +24,7 @@ class TaskSelector(QWidget):
     def __init__(self, config: LauncherConfig, parent: QWidget | None = None):
         super().__init__(parent)
         self._actions = config.actions
+        default_id = config.default_action_id or config.actions[0].id
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -49,7 +50,7 @@ class TaskSelector(QWidget):
                 radio = QRadioButton(action.label)
                 self._button_group.addButton(radio, button_index)
                 layout.addWidget(radio)
-                if button_index == 0:
+                if action.id == default_id:
                     radio.setChecked(True)
                 button_index += 1
 

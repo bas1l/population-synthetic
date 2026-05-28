@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from population_synth.clients.llm_protocol import LLMClient
 
@@ -27,7 +29,7 @@ class NarrativeGeneratorBatch(BaseIdentityGenerator):
             client (LLMClient): An initialized client for API calls.
         """
         super().__init__(client)
-        self.last_identity: Optional[Dict[str, Any]] = None
+        self.last_identity: dict[str, Any] | None = None
 
     def _load_prompt_content(self, filepath: str) -> str:
         """Internal helper to read the prompt file."""
@@ -41,7 +43,7 @@ class NarrativeGeneratorBatch(BaseIdentityGenerator):
             raise ValueError(f"Prompt file is empty: {filepath}")
         return content
 
-    def generate_identity(self, landscape_file: str) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    def generate_identity(self, landscape_file: str) -> tuple[dict[str, Any], dict[str, str]]:
         """
         Generates a monolithic identity narrative based on a text prompt file.
 
@@ -82,7 +84,7 @@ class NarrativeGeneratorBatch(BaseIdentityGenerator):
             logging.error(f"Error during narrative generation: {e}")
             raise
 
-    def load_identity(self, filepath: str) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    def load_identity(self, filepath: str) -> tuple[dict[str, Any], dict[str, str]]:
         """
         Loads a previously generated narrative identity from a JSON file.
 
