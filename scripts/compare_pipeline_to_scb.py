@@ -31,53 +31,15 @@ Usage:
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 from population_synth._paths import PROJECT_ROOT
-from population_synth.comparison.extractor import extract_individual
+from population_synth.comparison.extractor import extract_population
 from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
 from population_synth.comparison.normalizer import load_mappings, normalize_if_raw
 from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
 
 _DEFAULT_REFERENCE = PROJECT_ROOT / "data" / "scb_api" / "scb_population_pop-10000_02.json"
-
-
-# ---------------------------------------------------------------------------
-# Extraction step
-# ---------------------------------------------------------------------------
-
-def extract_population(seed_root: Path) -> dict[str, Any]:
-    identity_files = sorted(seed_root.glob("persona_*/identity.json"))
-    if not identity_files:
-        print(f"ERROR: No persona_*/identity.json files found under {seed_root}", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"Found {len(identity_files)} identity files under {seed_root}")
-
-    individuals: list[dict[str, Any]] = []
-    skipped = 0
-    for path in identity_files:
-        result = extract_individual(path)
-        if result is None:
-            skipped += 1
-        else:
-            individuals.append(result)
-
-    if skipped:
-        print(f"WARNING: Skipped {skipped} persona(s) due to errors or missing data", file=sys.stderr)
-
-    return {
-        "metadata": {
-            "source": "pipeline",
-            "seed_root": str(seed_root.resolve()),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "n": len(individuals),
-            "skipped": skipped,
-        },
-        "individuals": individuals,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +51,9 @@ def main() -> None:
         description="Extract pipeline identities and compare against an SCB reference population"
     )
     parser.add_argument("--manifest", default=None, help="Seed manifest YAML; derives --seed-root from parallel.output_dir")
+    parser.add_argument("--model-id", default=None, help="Axis model ID (e.g., 'claude_haiku') — mutually exclusive with --manifest")
+    parser.add_argument("--strategy-id", default=None, help="Axis strategy ID (e.g., 'all_pick') — mutually exclusive with --manifest")
+    parser.add_argument("--country-id", default=None, help="Axis country ID (e.g., 'swedish') — mutually exclusive with --manifest")
     parser.add_argument("--seed-root", default=None, help="Pipeline seed output directory")
     parser.add_argument(
         "--reference",
@@ -118,10 +83,21 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    axis_ids = [args.model_id, args.strategy_id, args.country_id]
+    if args.manifest and any(x is not None for x in axis_ids):
+        parser.error("--manifest is mutually exclusive with --model-id, --strategy-id, and --country-id")
+
     m = None
     if args.manifest:
         from population_synth.identity.manifest_loader import load_manifest
         m = load_manifest(args.manifest)
+        if args.seed_root is None and m.parallel_output_dir is not None:
+            args.seed_root = str(m.parallel_output_dir)
+    elif args.model_id is not None:
+        if args.strategy_id is None or args.country_id is None:
+            parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
+        from population_synth.identity.manifest_loader import compose_manifest
+        m = compose_manifest(args.model_id, args.strategy_id, args.country_id)
         if args.seed_root is None and m.parallel_output_dir is not None:
             args.seed_root = str(m.parallel_output_dir)
 
@@ -145,7 +121,11 @@ def main() -> None:
         print(f"ERROR: Reference file not found: {reference_path}", file=sys.stderr)
         sys.exit(1)
 
-    pipeline_pop = extract_population(seed_root)
+    try:
+        pipeline_pop = extract_population(seed_root)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     if args.save_extracted:
         save_path = Path(args.save_extracted)

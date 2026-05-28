@@ -13,6 +13,8 @@ from population_synth.clients.llm_protocol import LLMClient
 from .base_identity_generator import BaseIdentityGenerator
 from .llm_interaction_log import LLMInteractionEntry
 
+_WEIGHT_COUNT_TOLERANCE_RATIO = 0.1
+
 
 class IdentityGeneratorConfigurable(BaseIdentityGenerator):
     """Identity generator using an explicit per-category dependency DAG."""
@@ -163,7 +165,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
     def _build_context_block(self, resolved: dict) -> str:
         if not resolved:
-            return "No prior context."
+            return "This is the first category. Use the system instruction as context."
         return "\n".join(f"{k}: {v}" for k, v in resolved.items())
 
     def _is_numeric_category(self, category_schema: dict) -> bool:
@@ -213,9 +215,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             )
         return (
             f"Context:\n{context}\n\n"
-            f"Given the context above, list an exhaustive set of all plausible candidate values "
+            f"Given the context above, list up to 20 of the most plausible candidate values "
             f"for '{category_name}' given the context. "
-            f"Include every realistic option — do not limit or truncate the list. "
+            f"Prioritize the most realistic and likely options. "
             f"{description} "
             f'Return JSON: {{"candidates": ["value1", ...]}}. No duplicates.'
         )
@@ -228,10 +230,12 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         system_instruction: str,
     ) -> str:
         context = self._build_context_block(resolved)
+        n = len(candidates)
         return (
             f"Context:\n{context}\n\n"
-            f"Assign probability weights to these candidates for '{category_name}' given the context. "
+            f"Assign probability weights to these {n} candidates for '{category_name}' given the context. "
             f"Weights must sum to 1.0. "
+            f"You MUST return exactly {n} weights. "
             f"Return JSON: {{\"weights\": [0.x, 0.y, ...]}} in the same order as candidates: {candidates}."
         )
 
@@ -271,12 +275,51 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
     def _normalize_weights(self, weights: list[float], category_name: str) -> list[float]:
         total = sum(weights)
+        if abs(total) < 1e-9:
+            logging.warning(
+                f"Weights for '{category_name}' sum to zero — will retry."
+            )
+            return weights
         if abs(total - 1.0) > 1e-6:
             logging.warning(
                 f"Weights for '{category_name}' sum to {total:.4f}, not 1.0 — normalizing."
             )
             weights = [w / total for w in weights]
         return weights
+
+    def _reconcile_weight_count(
+        self,
+        weights: list[float],
+        candidates: list,
+        category_name: str,
+    ) -> list[float] | None:
+        n_weights, n_candidates = len(weights), len(candidates)
+        if n_weights == n_candidates:
+            return weights
+
+        if not weights or any(w < 0 for w in weights) or all(w == 0 for w in weights):
+            return None
+
+        tolerance = int(n_candidates * _WEIGHT_COUNT_TOLERANCE_RATIO)
+        diff = abs(n_weights - n_candidates)
+        if diff > tolerance:
+            return None
+
+        if n_weights < n_candidates:
+            pad_value = min(weights)
+            weights = weights + [pad_value] * (n_candidates - n_weights)
+            logging.warning(
+                f"Padded {diff} missing weight(s) for '{category_name}' "
+                f"({n_weights} -> {n_candidates}) with min-weight {pad_value:.4f}."
+            )
+        else:
+            weights = weights[:n_candidates]
+            logging.warning(
+                f"Truncated {diff} excess weight(s) for '{category_name}' "
+                f"({n_weights} -> {n_candidates})."
+            )
+
+        return self._normalize_weights(weights, category_name)
 
     def _process_pick(
         self,
@@ -334,27 +377,33 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             enum_prompt, system_instruction,
             log_category=category_name, log_method="generate_evaluate_pick", log_step="enumerate",
         )["candidates"]
-        if len(candidates) > 50:
-            logging.warning(f"Truncating {len(candidates)} candidates to 50 for '{category_name}'.")
-            candidates = candidates[:50]
+        if len(candidates) > 25:
+            logging.warning(f"Truncating {len(candidates)} candidates to 25 for '{category_name}'.")
+            candidates = candidates[:25]
 
-        for attempt in range(10):
+        attempt = 0
+        while True:
+            attempt += 1
             eval_prompt = self._build_evaluate_prompt(category_name, candidates, resolved, system_instruction)
             weights = self._call_llm_json(
                 eval_prompt, system_instruction,
                 log_category=category_name, log_method="generate_evaluate_pick", log_step="evaluate",
             )["weights"]
             weights = self._normalize_weights(weights, category_name)
-            if len(weights) == len(candidates):
+            reconciled = self._reconcile_weight_count(weights, candidates, category_name)
+            if reconciled is not None:
+                weights = reconciled
                 break
+            tolerance = int(len(candidates) * _WEIGHT_COUNT_TOLERANCE_RATIO)
+            if not self.retry_until_success and attempt >= 3:
+                raise ValueError(
+                    f"Weight/candidate count mismatch for '{category_name}' after {attempt} attempts: "
+                    f"{len(weights)} weights for {len(candidates)} candidates."
+                )
             logging.warning(
                 f"Weight/candidate mismatch for '{category_name}' "
-                f"(attempt {attempt + 1}/10): {len(weights)} weights for {len(candidates)} candidates. Retrying."
-            )
-        else:
-            raise ValueError(
-                f"Weight/candidate count mismatch for '{category_name}' after 10 attempts: "
-                f"{len(weights)} weights for {len(candidates)} candidates."
+                f"(attempt {attempt}): {len(weights)} weights for {len(candidates)} candidates "
+                f"(exceeds tolerance of {tolerance}). Retrying."
             )
 
         sel_prompt = self._build_select_prompt(category_name, candidates, resolved, system_instruction)
@@ -410,27 +459,33 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             enum_prompt, system_instruction,
             log_category=category_name, log_method="generate_evaluate_random_pick", log_step="enumerate",
         )["candidates"]
-        if len(candidates) > 50:
-            logging.warning(f"Truncating {len(candidates)} candidates to 50 for '{category_name}'.")
-            candidates = candidates[:50]
+        if len(candidates) > 25:
+            logging.warning(f"Truncating {len(candidates)} candidates to 25 for '{category_name}'.")
+            candidates = candidates[:25]
 
-        for attempt in range(10):
+        attempt = 0
+        while True:
+            attempt += 1
             eval_prompt = self._build_evaluate_prompt(category_name, candidates, resolved, system_instruction)
             weights = self._call_llm_json(
                 eval_prompt, system_instruction,
                 log_category=category_name, log_method="generate_evaluate_random_pick", log_step="evaluate",
             )["weights"]
             weights = self._normalize_weights(weights, category_name)
-            if len(weights) == len(candidates):
+            reconciled = self._reconcile_weight_count(weights, candidates, category_name)
+            if reconciled is not None:
+                weights = reconciled
                 break
+            tolerance = int(len(candidates) * _WEIGHT_COUNT_TOLERANCE_RATIO)
+            if not self.retry_until_success and attempt >= 3:
+                raise ValueError(
+                    f"Weight/candidate count mismatch for '{category_name}' after {attempt} attempts: "
+                    f"{len(weights)} weights for {len(candidates)} candidates."
+                )
             logging.warning(
                 f"Weight/candidate mismatch for '{category_name}' "
-                f"(attempt {attempt + 1}/10): {len(weights)} weights for {len(candidates)} candidates. Retrying."
-            )
-        else:
-            raise ValueError(
-                f"Weight/candidate count mismatch for '{category_name}' after 10 attempts: "
-                f"{len(weights)} weights for {len(candidates)} candidates."
+                f"(attempt {attempt}): {len(weights)} weights for {len(candidates)} candidates "
+                f"(exceeds tolerance of {tolerance}). Retrying."
             )
 
         return random.choices(candidates, weights=weights, k=1)[0]

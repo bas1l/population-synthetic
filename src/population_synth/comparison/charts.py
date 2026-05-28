@@ -33,8 +33,17 @@ _ATTR_COLORS = (
     "#D65F5F",
 )
 
+_ATTR_COLORS_3WAY = (
+    "#4878CF",  # blue  (Sweden)
+    "#D65F5F",  # red   (Norway)
+    "#6AB187",  # green (Italy)
+)
+
 _RADAR_TV_COLOR = "#2A9D8F"
 _RADAR_CHI_COLOR = "#E9C46A"
+
+_RADAR_3WAY_COLORS = ("#4878CF", "#D65F5F", "#6AB187")
+_RADAR_3WAY_STYLES = ("solid", "dashed", "dotted")
 
 
 # ------------------------------------------------------------------
@@ -237,6 +246,164 @@ def plot_radar_comparison(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / "radar.png"
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
+# ------------------------------------------------------------------
+# 3-way bar-chart comparison
+# ------------------------------------------------------------------
+
+_SUBPLOT_THRESHOLD = 30
+
+
+def plot_3way_comparison_charts(
+    pop_a: dict,
+    pop_b: dict,
+    pop_c: dict,
+    labels: tuple[str, str, str],
+    output_dir: Path,
+) -> None:
+    """Generate grouped bar charts comparing three populations per attribute."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    inds_a: list[dict] = pop_a.get("individuals", [])
+    inds_b: list[dict] = pop_b.get("individuals", [])
+    inds_c: list[dict] = pop_c.get("individuals", [])
+    all_inds = (inds_a, inds_b, inds_c)
+
+    for attr in DEMOGRAPHIC_ATTRIBUTES:
+        props = [_compute_proportions(ind, attr) for ind in all_inds]
+        all_categories = sorted((set().union(*[set(p) for p in props])) - {None})
+        if not all_categories:
+            continue
+
+        vals = [[p.get(cat, 0.0) for cat in all_categories] for p in props]
+        n_cats = len(all_categories)
+        use_subplots = n_cats > _SUBPLOT_THRESHOLD
+
+        if use_subplots:
+            fig, axes = plt.subplots(1, 3, figsize=(18, max(4, n_cats * 0.35 + 2)), sharey=True)
+            for idx, (ax, label) in enumerate(zip(axes, labels)):
+                y_pos = np.arange(n_cats)
+                ax.barh(y_pos, vals[idx], color=_ATTR_COLORS_3WAY[idx], edgecolor="white", linewidth=0.3)
+                ax.set_yticks(y_pos)
+                if idx == 0:
+                    ax.set_yticklabels(all_categories, fontsize=6)
+                else:
+                    ax.set_yticklabels([])
+                ax.set_xlabel("Proportion", fontsize=7)
+                ax.set_xlim(0, max(max(v) for v in vals) * 1.15 or 1.0)
+                ax.set_title(label, fontsize=9, fontweight="bold")
+                ax.tick_params(axis="both", labelsize=6)
+            fig.suptitle(f"{attr} distribution", fontsize=11, fontweight="bold")
+        elif attr in _HIGH_CARDINALITY_FIELDS:
+            fig_height = max(4, min(n_cats * 0.6 + 2, 16))
+            fig, ax = plt.subplots(figsize=(10, fig_height))
+            bar_h = 0.25
+            y_pos = np.arange(n_cats)
+            for idx, label in enumerate(labels):
+                ax.barh(y_pos + (idx - 1) * bar_h, vals[idx], height=bar_h,
+                        color=_ATTR_COLORS_3WAY[idx], label=label, edgecolor="white", linewidth=0.3)
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(all_categories, fontsize=7)
+            ax.set_xlabel("Proportion", fontsize=8)
+            ax.set_xlim(0, 1.0)
+            ax.set_title(f"{attr} distribution", fontsize=10, fontweight="bold")
+            ax.legend(fontsize=8)
+            ax.tick_params(axis="both", labelsize=7)
+        else:
+            fig, ax = plt.subplots(figsize=(max(8, n_cats * 1.2 + 2), 5))
+            bar_w = 0.25
+            x_pos = np.arange(n_cats)
+            for idx, label in enumerate(labels):
+                ax.bar(x_pos + (idx - 1) * bar_w, vals[idx], width=bar_w,
+                       color=_ATTR_COLORS_3WAY[idx], label=label, edgecolor="white", linewidth=0.3)
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels(all_categories, rotation=30, ha="right", fontsize=7)
+            ax.set_ylabel("Proportion", fontsize=8)
+            ax.set_ylim(0, 1.0)
+            ax.set_title(f"{attr} distribution", fontsize=10, fontweight="bold")
+            ax.legend(fontsize=8)
+            ax.tick_params(axis="both", labelsize=7)
+
+        plt.tight_layout()
+        fig.savefig(output_dir / f"{attr}.png", dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+
+# ------------------------------------------------------------------
+# 3-way radar chart
+# ------------------------------------------------------------------
+
+def plot_3way_radar(
+    pairwise: dict[str, dict],
+    labels: tuple[str, ...],
+    output_dir: Path,
+) -> Path | None:
+    """Generate a radar chart with overlaid TV-similarity polygons for each pair."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    pair_names = list(pairwise.keys())
+    if not pair_names:
+        return None
+
+    first_metrics = pairwise[pair_names[0]]
+    attrs = [a for a in DEMOGRAPHIC_ATTRIBUTES if a in first_metrics]
+    if len(attrs) < 3:
+        print(f"Skipping 3-way radar: needs >=3 attributes (got {len(attrs)})", file=sys.stderr)
+        return None
+
+    n = len(attrs)
+    angles = [2 * np.pi * i / n for i in range(n)]
+    closed_angles = _close_polygon(angles)
+
+    fig, ax = plt.subplots(figsize=(9, 9), subplot_kw={"projection": "polar"})
+    ax.set_theta_offset(np.pi / 2)
+    ax.set_theta_direction(-1)
+
+    for idx, pn in enumerate(pair_names):
+        metrics = pairwise[pn]
+        tv_sim = []
+        for a in attrs:
+            tv = metrics.get(a, {}).get("tv_distance", 0.0)
+            if tv != tv:  # NaN
+                tv = 0.0
+            tv_sim.append(1.0 - tv)
+
+        color = _RADAR_3WAY_COLORS[idx % len(_RADAR_3WAY_COLORS)]
+        style = _RADAR_3WAY_STYLES[idx % len(_RADAR_3WAY_STYLES)]
+        lbl = labels[idx] if idx < len(labels) else pn
+
+        closed_tv = _close_polygon(tv_sim)
+        ax.plot(closed_angles, closed_tv, color=color, linewidth=2, linestyle=style, label=lbl)
+        ax.fill(closed_angles, closed_tv, color=color, alpha=0.08)
+
+    ax.set_xticks(angles)
+    ax.set_xticklabels([])
+    for i, (ang, label_text) in enumerate(zip(angles, attrs)):
+        rotation = np.degrees(ang) - 90 if ang <= np.pi else np.degrees(ang) + 90
+        ax.text(ang, 1.18, label_text, ha="center", va="center", fontsize=7,
+                rotation=rotation, rotation_mode="anchor")
+
+    ax.set_title("Per-dimension TV-similarity\n(3-way pairwise)", fontsize=11, fontweight="bold", pad=24)
+    ax.set_ylim(0, 1)
+    ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+    ax.yaxis.grid(True, color="lightgray")
+    ax.spines["polar"].set_linewidth(1.2)
+    ax.legend(loc="lower left", bbox_to_anchor=(-0.15, -0.08), fontsize=8)
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / "radar_3way.png"
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return out_path

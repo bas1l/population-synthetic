@@ -6,6 +6,12 @@ Usage:
     python scripts/generate_identity.py \\
         --manifest config/seed_manifests/identity_manifest_014_claude_haiku.yaml
 
+    # Via axis IDs (composable experiment config):
+    python scripts/generate_identity.py \\
+        --model-id claude_haiku \\
+        --strategy-id all_pick \\
+        --country-id swedish
+
     # Via explicit CLI args:
     python scripts/generate_identity.py \\
         --mode batch \\
@@ -62,6 +68,9 @@ def main() -> None:
         default=None,
         help="Path to a YAML manifest file (replaces all other arguments)",
     )
+    parser.add_argument("--model-id", default=None, help="Axis model ID (e.g., 'claude_haiku') — mutually exclusive with --manifest")
+    parser.add_argument("--strategy-id", default=None, help="Axis strategy ID (e.g., 'all_pick') — mutually exclusive with --manifest")
+    parser.add_argument("--country-id", default=None, help="Axis country ID (e.g., 'swedish') — mutually exclusive with --manifest")
     parser.add_argument(
         "--mode",
         default=None,
@@ -105,12 +114,54 @@ def main() -> None:
         default=None,
         help="Log all raw LLM interactions (prompt + response) to llm_interactions.json alongside the output (default: on)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Overwrite the output file if it already exists",
+    )
+    parser.add_argument(
+        "--retry-until-success",
+        action="store_true",
+        default=False,
+        help="Retry LLM evaluation calls indefinitely until correct (default: cap at 3)",
+    )
     args = parser.parse_args()
+
+    axis_ids = [args.model_id, args.strategy_id, args.country_id]
+    if args.manifest and any(x is not None for x in axis_ids):
+        parser.error("--manifest is mutually exclusive with --model-id, --strategy-id, and --country-id")
+
+    m = None
+    _composed_manifest = None
 
     if args.manifest:
         from population_synth.identity.manifest_loader import load_manifest
         m = load_manifest(args.manifest)
         logger.info("Loaded manifest: %s", m.name)
+        if args.provider is None:
+            args.provider = m.provider
+        if args.model is None:
+            args.model = m.model
+        if args.mode is None:
+            args.mode = m.mode
+        if args.config is None:
+            args.config = str(m.config_path)
+        if args.strategy is None and m.strategy_path:
+            args.strategy = str(m.strategy_path)
+        if args.log_llm is None:
+            args.log_llm = m.log_llm
+        if args.output is None:
+            args.output = m.output
+        if args.base_url is None and m.base_url is not None:
+            args.base_url = m.base_url
+    elif args.model_id is not None:
+        if args.strategy_id is None or args.country_id is None:
+            parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
+        from population_synth.identity.manifest_loader import compose_manifest
+        m = compose_manifest(args.model_id, args.strategy_id, args.country_id)
+        _composed_manifest = m
+        logger.info("Composed manifest: %s", m.name)
         if args.provider is None:
             args.provider = m.provider
         if args.model is None:
@@ -166,20 +217,30 @@ def main() -> None:
     logger.info("Provider: %s | Mode: %s", args.provider, args.mode)
     logger.info("Config: %s", config_path)
 
+    if _composed_manifest is not None:
+        from population_synth.identity.manifest_loader import serialize_manifest
+        snapshot_path = output_path.parent / "manifest_snapshot.yaml"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_path.write_text(serialize_manifest(_composed_manifest), encoding="utf-8")
+        logger.info("Manifest snapshot written to %s", snapshot_path)
+
+    generation_config = m.generation_config if m is not None else {}
+
     if args.provider == "gemini":
         from population_synth.clients.gemini_client import GeminiClient
-        client = GeminiClient(model_name=args.model or "gemini-2.5-flash")
+        client = GeminiClient(model_name=args.model or "gemini-2.5-flash", default_config=generation_config)
     elif args.provider == "claude":
         from population_synth.clients.claude_code_client import ClaudeCodeClient
-        client = ClaudeCodeClient(model_name=args.model or "sonnet")
+        client = ClaudeCodeClient(model_name=args.model or "sonnet", default_config=generation_config)
     elif args.provider == "ollama":
         from population_synth.clients.ollama_client import OllamaClient
-        client = OllamaClient(model_name=args.model or "llama3.2", base_url=args.base_url)
+        client = OllamaClient(model_name=args.model or "llama3.2", base_url=args.base_url, default_config=generation_config)
     else:
         raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini', 'claude', or 'ollama'.")
 
     logger.info("Model: %s", client.model_name)
     generator = FactoryIdentityGenerator.create_generator(args.mode, client)
+    generator.retry_until_success = args.retry_until_success
 
     if args.log_llm:
         generator.interaction_collector = LLMInteractionCollector()
@@ -188,7 +249,9 @@ def main() -> None:
     if args.strategy:
         kwargs["strategy_file"] = str(Path(args.strategy))
 
+    started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     identity_data, level_strings = generator.generate_identity(str(config_path), **kwargs)
+    completed_at = time.strftime("%Y-%m-%dT%H:%M:%S")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
@@ -197,11 +260,12 @@ def main() -> None:
     logger.info("Identity written to %s", output_path)
 
     run_metadata = {
-        "name": getattr(m, "name", None) if args.manifest else None,
+        "name": m.name if m is not None else None,
         "manifest": args.manifest,
         "model_config": {
             "provider": args.provider,
             "model": client.model_name,
+            "base_url": getattr(client, "base_url", None),
         },
         "parameters": {
             "mode": args.mode,
@@ -209,9 +273,17 @@ def main() -> None:
             "strategy": args.strategy,
             "log_llm": args.log_llm,
             "output": args.output,
+            "force": args.force,
         },
-        "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "started_at": started_at,
+        "completed_at": completed_at,
     }
+    if _composed_manifest is not None:
+        run_metadata["axis_ids"] = {
+            "model_id": args.model_id,
+            "strategy_id": args.strategy_id,
+            "country_id": args.country_id,
+        }
     metadata_path = output_path.parent / "run_metadata.json"
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(run_metadata, f, indent=2, ensure_ascii=False)

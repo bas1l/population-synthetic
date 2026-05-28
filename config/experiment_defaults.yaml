@@ -1,0 +1,8 @@
+parameters:
+  mode: "configurable"
+  log_llm: true
+  output: "identity.json"
+  output_base: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data"
+  parallel:
+    n: 100
+    retry_until_success: false
