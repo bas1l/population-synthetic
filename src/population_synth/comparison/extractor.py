@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -1520,3 +1522,34 @@ def extract_individual(identity_path: Path) -> dict[str, Any] | None:
         return None
 
     return {"id": persona_id, **attrs}
+
+
+def extract_population(seed_root: Path) -> dict[str, Any]:
+    identity_files = sorted(seed_root.glob("persona_*/identity.json"))
+    if not identity_files:
+        raise ValueError(f"No persona_*/identity.json files found under {seed_root}")
+
+    print(f"Found {len(identity_files)} identity files under {seed_root}")
+
+    individuals: list[dict[str, Any]] = []
+    skipped = 0
+    for path in identity_files:
+        result = extract_individual(path)
+        if result is None:
+            skipped += 1
+        else:
+            individuals.append(result)
+
+    if skipped:
+        print(f"WARNING: Skipped {skipped} persona(s) due to errors or missing data", file=sys.stderr)
+
+    return {
+        "metadata": {
+            "source": "pipeline",
+            "seed_root": str(seed_root.resolve()),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "n": len(individuals),
+            "skipped": skipped,
+        },
+        "individuals": individuals,
+    }

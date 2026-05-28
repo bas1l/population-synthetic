@@ -1,32 +1,31 @@
+from __future__ import annotations
+
 import subprocess
 import sys
 
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
-    QHBoxLayout,
     QMainWindow,
     QMessageBox,
-    QPushButton,
     QSplitter,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from population_synth.gui.launcher_config import ActionEntry
+from population_synth.gui.launcher_config import ActionEntry, LauncherConfig
 from population_synth.gui.manifest_model import ManifestDisplayInfo
-from population_synth.gui.widgets.action_selector import ActionSelector
+from population_synth.gui.widgets.configuration_panel import ConfigurationPanel
 from population_synth.gui.widgets.console_widget import ConsoleWidget, ProcessOutputReader
 from population_synth.gui.widgets.dag_graph_widget import DagGraphWidget
 from population_synth.gui.widgets.manifest_overview import ManifestOverview
-from population_synth.gui.widgets.manifest_selector import ManifestSelector
-from population_synth.gui.widgets.parameter_panel import ParameterPanel
+from population_synth.gui.widgets.task_selector import TaskSelector
 
 
 class LauncherWindow(QMainWindow):
-    def __init__(self, actions: list[ActionEntry], manifests_dir, parent=None):
+    def __init__(self, config: LauncherConfig, parent=None):
         super().__init__(parent)
-        self._actions = actions
+        self._config = config
         self._process: subprocess.Popen | None = None
         self._reader: ProcessOutputReader | None = None
         self._poll_timer = QTimer(self)
@@ -43,32 +42,12 @@ class LauncherWindow(QMainWindow):
         h_splitter = QSplitter(Qt.Horizontal)
         v_splitter.addWidget(h_splitter)
 
-        left_widget = QWidget()
-        left_widget.setFixedWidth(280)
-        left_layout = QVBoxLayout(left_widget)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        self._task_selector = TaskSelector(config)
+        self._task_selector.setFixedWidth(200)
+        h_splitter.addWidget(self._task_selector)
 
-        self._manifest_selector = ManifestSelector(manifests_dir)
-        left_layout.addWidget(self._manifest_selector)
-
-        self._action_selector = ActionSelector(actions)
-        left_layout.addWidget(self._action_selector)
-
-        self._params = ParameterPanel()
-        left_layout.addWidget(self._params)
-
-        left_layout.addStretch()
-
-        btn_layout = QHBoxLayout()
-        self._run_btn = QPushButton("Run")
-        self._run_btn.setEnabled(bool(actions))
-        self._abort_btn = QPushButton("Abort")
-        self._abort_btn.setEnabled(False)
-        btn_layout.addWidget(self._run_btn)
-        btn_layout.addWidget(self._abort_btn)
-        left_layout.addLayout(btn_layout)
-
-        h_splitter.addWidget(left_widget)
+        self._config_panel = ConfigurationPanel()
+        h_splitter.addWidget(self._config_panel)
 
         right_tabs = QTabWidget()
         self._overview = ManifestOverview()
@@ -76,20 +55,23 @@ class LauncherWindow(QMainWindow):
         self._dag_widget = DagGraphWidget()
         right_tabs.addTab(self._dag_widget, "DAG View")
         h_splitter.addWidget(right_tabs)
+
+        h_splitter.setStretchFactor(0, 0)
         h_splitter.setStretchFactor(1, 1)
+        h_splitter.setStretchFactor(2, 3)
 
         self._console = ConsoleWidget()
         v_splitter.addWidget(self._console)
         v_splitter.setSizes([550, 200])
 
-        self._manifest_selector.manifest_changed.connect(self._on_manifest_changed)
-        self._action_selector.action_changed.connect(self._on_action_changed)
-        self._run_btn.clicked.connect(self._run)
-        self._abort_btn.clicked.connect(self._abort)
+        self._task_selector.action_changed.connect(self._on_action_changed)
+        self._task_selector.run_clicked.connect(self._run)
+        self._task_selector.abort_clicked.connect(self._abort)
+        self._config_panel.manifest_changed.connect(self._on_manifest_changed)
 
-        initial_manifest = self._manifest_selector.current_manifest()
+        initial_manifest = self._config_panel.current_manifest()
         self._on_manifest_changed(initial_manifest)
-        initial_action = self._action_selector.current_action()
+        initial_action = self._task_selector.current_action()
         if initial_action is not None:
             self._on_action_changed(initial_action)
         self._dag_widget.populate(initial_manifest.strategy_path if initial_manifest else None)
@@ -100,14 +82,9 @@ class LauncherWindow(QMainWindow):
     def _on_manifest_changed(self, info: ManifestDisplayInfo | None) -> None:
         self._overview.populate(info)
         self._dag_widget.populate(info.strategy_path if info else None)
-        action = self._action_selector.current_action()
-        if action is not None:
-            self._params.populate(action.parameters, info)
 
     def _on_action_changed(self, action: ActionEntry) -> None:
-        manifest = self._manifest_selector.current_manifest()
-        self._params.populate(action.parameters, manifest)
-        self._manifest_selector.setEnabled(action.requires_manifest)
+        self._config_panel.update_for_action(action)
 
     def _build_command(
         self,
@@ -117,7 +94,14 @@ class LauncherWindow(QMainWindow):
     ) -> list[str]:
         cmd = [sys.executable, str(action.script)]
         if action.requires_manifest and manifest:
-            cmd += ["--manifest", str(manifest.path)]
+            if manifest.model_id is not None:
+                cmd += ["--model-id", manifest.model_id]
+                cmd += ["--strategy-id", manifest.strategy_id]
+                cmd += ["--country-id", manifest.country_id]
+                if self._config_panel.force:
+                    cmd.append("--force")
+            elif manifest.path is not None:
+                cmd += ["--manifest", str(manifest.path)]
         for key, value in overrides.items():
             if isinstance(value, bool):
                 if value:
@@ -127,14 +111,14 @@ class LauncherWindow(QMainWindow):
         return cmd
 
     def _run(self) -> None:
-        action = self._action_selector.current_action()
+        action = self._task_selector.current_action()
         if action is None:
             return
-        manifest = self._manifest_selector.current_manifest()
+        manifest = self._config_panel.current_manifest()
         if action.requires_manifest and manifest is None:
             QMessageBox.warning(self, "No Manifest", "Please select a manifest before running.")
             return
-        overrides = self._params.get_overrides()
+        overrides = self._config_panel.get_overrides()
         cmd = self._build_command(action, manifest, overrides)
 
         self._process = subprocess.Popen(
@@ -149,8 +133,8 @@ class LauncherWindow(QMainWindow):
         self._reader.cr_line_received.connect(self._console.append_cr_line)
         self._reader.start()
 
-        self._run_btn.setEnabled(False)
-        self._abort_btn.setEnabled(True)
+        self._task_selector.set_run_enabled(False)
+        self._task_selector.set_abort_enabled(True)
         self.statusBar().showMessage(f"Running: {action.script.name}...")
         self._poll_timer.start(500)
 
@@ -165,8 +149,8 @@ class LauncherWindow(QMainWindow):
                 self.statusBar().showMessage("Finished (exit 0)")
             else:
                 self.statusBar().showMessage(f"Failed (exit {code})")
-            self._run_btn.setEnabled(True)
-            self._abort_btn.setEnabled(False)
+            self._task_selector.set_run_enabled(True)
+            self._task_selector.set_abort_enabled(False)
             self._process = None
 
     def _abort(self) -> None:

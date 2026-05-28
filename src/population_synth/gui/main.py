@@ -1,5 +1,6 @@
 import sys
 
+from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QApplication
 
 from population_synth._paths import PROJECT_ROOT
@@ -10,14 +11,14 @@ from population_synth.gui.main_window import LauncherWindow
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Population Synth Launcher")
+    app.setFont(QFont(app.font().family(), 12))
 
     launcher_yaml = PROJECT_ROOT / "config" / "gui_launcher.yaml"
-    actions = parse_launcher_config(launcher_yaml)
-    manifests_dir = PROJECT_ROOT / "config" / "seed_manifests"
+    config = parse_launcher_config(launcher_yaml)
 
-    window = LauncherWindow(actions=actions, manifests_dir=manifests_dir)
+    window = LauncherWindow(config=config)
     window.setWindowTitle("Population Synth Launcher")
-    window.resize(1100, 750)
+    window.resize(1300, 750)
     window.show()
 
     sys.exit(app.exec_())

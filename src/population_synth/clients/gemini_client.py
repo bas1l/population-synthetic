@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import copy
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from google import genai
 from google.genai import types
@@ -17,7 +19,7 @@ class GeminiClient:
     It now tracks the history of executions to allow for full provenance of multi-step generations.
     """
 
-    def __init__(self, model_name: str = 'gemini-2.5-flash', default_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, model_name: str = 'gemini-2.5-flash', default_config: dict[str, Any] | None = None):
         """
         Initialize the Gemini Gateway with a specific model and initial configuration.
 
@@ -47,11 +49,11 @@ class GeminiClient:
             self.logger = logging.getLogger(__name__)
 
             # Initialize persistent configuration state
-            self._config_state: Dict[str, Any] = default_config if default_config else {}
+            self._config_state: dict[str, Any] = default_config if default_config else {}
 
             # Metadata tracking for the sidecar pattern
-            self._last_execution_metadata: Optional[Dict[str, Any]] = None
-            self._execution_history: List[Dict[str, Any]] = []
+            self._last_execution_metadata: dict[str, Any] | None = None
+            self._execution_history: list[dict[str, Any]] = []
 
             self.logger.info(
                 "GeminiClient initialized. Model: %s. Config: %s",
@@ -63,7 +65,7 @@ class GeminiClient:
             logging.error(f"Failed to configure Gemini API client: {e}")
             raise RuntimeError(f"Gemini Client Initialization Failed: {e}") from e
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """
         Retrieves a list of available Gemini model names that support content generation.
 
@@ -98,7 +100,7 @@ class GeminiClient:
         self.logger.info(f"Updating default model from {self.default_model_name} to {new_model_name}")
         self.default_model_name = new_model_name
 
-    def get_current_configuration(self) -> Dict[str, Any]:
+    def get_current_configuration(self) -> dict[str, Any]:
         """
         Retrieve the full current state of the client configuration.
         """
@@ -109,14 +111,14 @@ class GeminiClient:
         return state
 
     @property
-    def last_metadata(self) -> Dict[str, Any]:
+    def last_metadata(self) -> dict[str, Any]:
         """
         Returns the metadata (model, config, timestamp) used for the most recent API call.
         """
         return self._last_execution_metadata or {}
 
     @property
-    def history(self) -> List[Dict[str, Any]]:
+    def history(self) -> list[dict[str, Any]]:
         """
         Returns the list of metadata for all API calls since the last clear.
         Useful for saving complete audit trails of multi-step generations.
@@ -134,7 +136,7 @@ class GeminiClient:
         self,
         prompt: str,
         *,
-        model: Optional[str] = None,
+        model: str | None = None,
         **kwargs: Any
     ) -> str:
         """

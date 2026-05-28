@@ -14,17 +14,23 @@ name: "<Provider> <Model> — <strategy_shorthand>"
 # SECTION 1: MODEL CONFIGURATION
 # ==============================================================================
 model_config:
-  # [MANDATORY] LLM provider. Valid: "gemini", "claude"
+  # [MANDATORY] LLM provider. Valid: "gemini", "claude", "ollama"
   provider: "claude"
 
   # [MANDATORY] Model name.
   #   gemini defaults: "gemini-2.5-flash", "gemini-2.5-pro"
   #   claude defaults: "sonnet", "haiku"
+  #   ollama examples: "llama3.1", "mistral", "qwen2.5"
   model: "haiku"
+
+  # [OPTIONAL] Base URL for the Ollama server. Only used when provider is "ollama".
+  # Falls back to OLLAMA_BASE_URL env var, then http://192.168.0.19:11434 if not set.
+  # base_url: "http://192.168.0.19:11434"
 
   # [OPTIONAL] Generation parameters passed to the LLM client.
   # For gemini: maps to GenerateContentConfig kwargs (temperature, top_p, etc.)
   # For claude: currently unused (ClaudeCodeClient does not expose gen params).
+  # For ollama: maps to Ollama options (max_output_tokens -> num_predict).
   # Keys set to null are filtered out, allowing API defaults to apply.
   generation_config:
     temperature: null
