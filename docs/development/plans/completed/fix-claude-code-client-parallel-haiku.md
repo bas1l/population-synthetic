@@ -1,5 +1,8 @@
 # Fix ClaudeCodeClient for parallel Haiku identity generation
 
+**Status:** Completed
+**Completed:** 2026-05-28 07:28
+
 ## Problem
 
 `generate_identities_parallel.py --provider claude --model haiku --workers 4 --n 10` fails most runs. Original: 2/10 success (silent exit-code-1, empty stderr). After 4 rounds of fixes: awaiting test of latest round.
