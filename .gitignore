@@ -9,6 +9,8 @@ build/
 venv/
 config/assets/scb_cache/*.json
 config/assets/ssb_cache/*.json
+config/assets/eurostat_cache/*.json
+config/assets/istat_cache/*.json
 .claude/
 .vscode/
 .ruff_cache/

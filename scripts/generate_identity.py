@@ -120,6 +120,12 @@ def main() -> None:
         default=False,
         help="Overwrite the output file if it already exists",
     )
+    parser.add_argument(
+        "--retry-until-success",
+        action="store_true",
+        default=False,
+        help="Retry LLM evaluation calls indefinitely until correct (default: cap at 3)",
+    )
     args = parser.parse_args()
 
     axis_ids = [args.model_id, args.strategy_id, args.country_id]
@@ -234,6 +240,7 @@ def main() -> None:
 
     logger.info("Model: %s", client.model_name)
     generator = FactoryIdentityGenerator.create_generator(args.mode, client)
+    generator.retry_until_success = args.retry_until_success
 
     if args.log_llm:
         generator.interaction_collector = LLMInteractionCollector()

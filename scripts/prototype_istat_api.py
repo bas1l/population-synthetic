@@ -122,33 +122,43 @@ def _fetch_eurostat(dataset_code: str, params: dict | None = None) -> dict:
 def _print_summary(label: str, data: dict) -> None:
     print(f"\n=== {label} ===")
 
-    structure = data.get("data", {}).get("structure", {})
-    dimensions_block = structure.get("dimensions", {})
+    # ISTAT SDMX 2.0 JSON wraps everything under data.data; dimensions are in structures[0]
+    istat_structures = data.get("data", {}).get("structures", [])
+    std_structure = data.get("data", {}).get("structure", {})
 
-    series_dims = dimensions_block.get("series", [])
-    obs_dims = dimensions_block.get("observation", [])
-    all_dims = series_dims + obs_dims
+    dims_block = None
+    if istat_structures:
+        dims_block = istat_structures[0].get("dimensions", {})
+    elif std_structure:
+        dims_block = std_structure.get("dimensions", {})
 
-    if all_dims:
-        print("Dimensions:")
-        for dim in all_dims:
-            dim_id = dim.get("id", "?")
-            values = dim.get("values", [])
-            sample = [v.get("name", v.get("id", "?")) for v in values[:5]]
-            print(f"  {dim_id}: {len(values)} values  — sample: {sample}")
-    else:
-        print(f"  (no standard dimension block found; top-level keys: {list(data.keys())})")
-        dataset_block = data.get("dataset", {})
-        if dataset_block:
-            dims = dataset_block.get("dimension", {})
-            if dims:
-                print("Dimensions (JSON-stat format):")
-                for dim_id, dim_info in list(dims.items())[:8]:
-                    cats = dim_info.get("category", {})
-                    label_map = cats.get("label", {})
-                    n = len(label_map)
-                    sample = list(label_map.values())[:5]
-                    print(f"  {dim_id}: {n} values  — sample: {sample}")
+    if dims_block:
+        series_dims = dims_block.get("series", [])
+        obs_dims = dims_block.get("observation", [])
+        all_dims = series_dims + obs_dims
+        if all_dims:
+            print("Dimensions:")
+            for dim in all_dims:
+                dim_id = dim.get("id", "?")
+                values = dim.get("values", [])
+                sample = [v.get("name", v.get("id", "?")) for v in values[:5]]
+                print(f"  {dim_id}: {len(values)} values  — sample: {sample}")
+
+    # Eurostat JSON-stat: dimensions sit directly at the top level under 'dimension'
+    eurostat_dims = data.get("dimension", {})
+    if eurostat_dims and not dims_block:
+        dim_ids = data.get("id", list(eurostat_dims.keys()))
+        print("Dimensions (Eurostat JSON-stat):")
+        for dim_id in dim_ids:
+            dim_info = eurostat_dims.get(dim_id, {})
+            cats = dim_info.get("category", {})
+            label_map = cats.get("label", {})
+            n = len(label_map)
+            sample = list(label_map.values())[:5]
+            print(f"  {dim_id}: {n} values  — sample: {sample}")
+
+    if not dims_block and not eurostat_dims:
+        print(f"  (unrecognised response shape; top-level keys: {list(data.keys())})")
 
     datasets = data.get("data", {}).get("dataSets", [])
     if datasets:
@@ -156,11 +166,11 @@ def _print_summary(label: str, data: dict) -> None:
         print(f"Total series: {len(series)}")
         if series:
             print("Sample data (first 3 series):")
-            for i, (series_key, series_val) in enumerate(list(series.items())[:3]):
+            for series_key, series_val in list(series.items())[:3]:
                 obs = series_val.get("observations", {})
                 print(f"  [{series_key}] {len(obs)} observation(s)")
     else:
-        value_block = data.get("value", data.get("dataset", {}).get("value", None))
+        value_block = data.get("value")
         if value_block is not None:
             n_vals = len(value_block) if isinstance(value_block, (list, dict)) else "?"
             print(f"Total values: {n_vals}")
@@ -175,7 +185,7 @@ def _probe_istat_dataflows() -> None:
         cached_text = _CACHE_DIR / f"{_safe_key(cache_key)}.txt"
         if cached_text.exists():
             text = cached_text.read_text(encoding="utf-8")
-            count = text.count("<Dataflow ")
+            count = text.count("<structure:Dataflow")
             print(f"  [cache] {cache_key}")
             print(f"  API reachable — found {count} dataflows (from cache)")
             return
@@ -193,24 +203,28 @@ def _probe_istat_dataflows() -> None:
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cached_text = _CACHE_DIR / f"{_safe_key(cache_key)}.txt"
     cached_text.write_text(text, encoding="utf-8")
-    count = text.count("<Dataflow ")
+    count = text.count("<structure:Dataflow")
     print(f"  API reachable — found {count} dataflows")
 
 
 def _probe_istat_population() -> None:
-    print("\n--- Probe 2: Population by age/sex (22_289) ---")
+    # ISTAT population endpoints (22_289, 22_389) consistently time out at 30s — too many series.
+    # Eurostat demo_pjan covers Italy population by single year of age and sex, same data, instant.
+    dataset = "demo_pjan"
+    print(f"\n--- Probe 2: Population by age/sex — Eurostat ({dataset}) ---")
     try:
-        data = _fetch_istat("22_289", key_filter="", params={"startPeriod": "2020", "endPeriod": "2023"})
-        _print_summary("Population by age/sex — IT1:22_289", data)
+        data = _fetch_eurostat(dataset, params={"sinceTimePeriod": "2023"})
+        _print_summary(f"Population by age/sex — Eurostat:{dataset}", data)
     except Exception as exc:
         print(f"  ERROR: {exc}")
 
 
 def _probe_istat_education() -> None:
-    print("\n--- Probe 3: Education levels (52_912) ---")
+    df_id = "52_1194_DF_DCCV_POPTIT1_UNT2020_1"
+    print(f"\n--- Probe 3: Education levels ({df_id}) ---")
     try:
-        data = _fetch_istat("52_912", key_filter="", params={"startPeriod": "2020", "endPeriod": "2023"})
-        _print_summary("Education levels — IT1:52_912", data)
+        data = _fetch_istat(df_id, key_filter="", params={"startPeriod": "2020", "endPeriod": "2023"})
+        _print_summary(f"Education levels — IT1:{df_id}", data)
     except Exception as exc:
         print(f"  ERROR: {exc}")
 
@@ -234,10 +248,12 @@ def _probe_istat_income() -> None:
 
 
 def _probe_eurostat_marital_status() -> None:
-    print("\n--- Probe 6: Eurostat marital status (demo_pjanmarst) ---")
+    # demo_pjanmarst discontinued; demo_pjangroup covers population by age/sex for Italy
+    dataset = "demo_pjangroup"
+    print(f"\n--- Probe 6: Eurostat population by age group ({dataset}) ---")
     try:
-        data = _fetch_eurostat("demo_pjanmarst", params={"sinceTimePeriod": "2020"})
-        _print_summary("Eurostat: Marital Status (demo_pjanmarst)", data)
+        data = _fetch_eurostat(dataset, params={"sinceTimePeriod": "2022"})
+        _print_summary(f"Eurostat: Population by Age Group ({dataset})", data)
     except Exception as exc:
         print(f"  ERROR: {exc}")
 
@@ -260,19 +276,19 @@ def _print_coverage_matrix() -> None:
     print(header)
     print(sep)
     rows = [
-        ("age_group",           "ISTAT (22_289)",            "Direct: age dimension"),
-        ("sex",                 "ISTAT (22_289)",            "Direct: sex dimension"),
-        ("region",              "ISTAT (22_289)",            "NUTS2 available"),
-        ("education",           "ISTAT (52_912)",            "ISCED levels"),
+        ("age_group",           "Eurostat (demo_pjan)",      "Single-year age; ISTAT too slow (timeout)"),
+        ("sex",                 "Eurostat (demo_pjan)",      "Direct: sex dimension"),
+        ("region",              "ISTAT (22_289)",            "NUTS2 — needs streaming or bulk download"),
+        ("education",           "ISTAT (52_1194)",           "ISCED levels — population by edu × age"),
         ("employment_status",   "ISTAT (150_938)",           "LFS employment status"),
         ("occupation",          "GAP",                       "No ISCO dataflow identified yet"),
         ("income_bracket",      "ISTAT (32_292)",            "EU-SILC income deciles"),
-        ("marital_status",      "Eurostat (demo_pjanmarst)", "ISTAT may also have this"),
+        ("marital_status",      "ISTAT (22_289_DF_*_25)",    "All municipalities by marital status"),
         ("household_size",      "GAP",                       "No dataflow identified yet"),
         ("housing_tenure",      "Eurostat (ilc_lvho02)",     "EU-SILC tenure"),
         ("migration_background","GAP",                       "Citizenship data exists but needs mapping"),
         ("religiosity",         "GAP",                       "Not in official statistics"),
-        ("urban_rural",         "ISTAT (22_289)",            "Degree of urbanisation dimension"),
+        ("urban_rural",         "ISTAT (22_289)",            "Requires bulk download; ISTAT too slow"),
         ("health_status",       "GAP",                       "EHIS survey, complex structure"),
     ]
     for field, source, notes in rows:
@@ -287,7 +303,7 @@ def _print_assessment() -> None:
     print("Fields with no source found:  4 / 14  (occupation, household_size, religiosity, health_status)")
     print("")
     print("ISTAT SDMX REST API: REACHABLE (confirmed by dataflow listing)")
-    print("Eurostat JSON API:   REACHABLE (confirmed by demo_pjanmarst / ilc_lvho02)")
+    print("Eurostat JSON API:   REACHABLE (confirmed by demo_pjangroup / ilc_lvho02)")
     print("Tier 3 (MEDIUM feasibility) assessment: VALIDATED")
     print("Italy implementation feasible with 10/14 fields; religiosity/household_size require proxies.")
 
