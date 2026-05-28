@@ -116,15 +116,34 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
         raise json.JSONDecodeError("No valid JSON found in response", text, 0)
 
+    @staticmethod
+    def _extract_expected_key(parsed: dict | list, expected_key: str) -> Any:
+        """
+        Return parsed[expected_key], tolerating whitespace-corrupted keys
+        (e.g. ' value' instead of 'value') that some models emit under Ollama's
+        JSON-constrained decoding. Raises KeyError when the key is absent so the
+        caller's retry loop treats it as a retriable parse failure.
+        """
+        if not isinstance(parsed, dict):
+            raise KeyError(expected_key)
+        if expected_key in parsed:
+            return parsed[expected_key]
+        target = expected_key.strip()
+        for key, value in parsed.items():
+            if isinstance(key, str) and key.strip() == target:
+                return value
+        raise KeyError(expected_key)
+
     def _call_llm_json(
         self,
         prompt: str,
         system_instruction: str,
         *,
+        expected_key: str | None = None,
         log_category: str = "",
         log_method: str = "",
         log_step: str = "",
-    ) -> dict | list:
+    ) -> Any:
         last_error: Exception | None = None
         for attempt in range(3):
             raw = ""
@@ -133,6 +152,11 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                     prompt, system_instruction=system_instruction
                 )
                 parsed = self._extract_json(raw)
+                value = (
+                    self._extract_expected_key(parsed, expected_key)
+                    if expected_key is not None
+                    else parsed
+                )
                 if self.interaction_collector and log_category:
                     self.interaction_collector.record(LLMInteractionEntry(
                         category=log_category,
@@ -143,8 +167,8 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                         parsed_value=parsed,
                         attempt=attempt + 1,
                     ))
-                return parsed
-            except (json.JSONDecodeError, RuntimeError) as e:
+                return value
+            except (json.JSONDecodeError, KeyError, RuntimeError) as e:
                 if self.interaction_collector and log_category:
                     self.interaction_collector.record(LLMInteractionEntry(
                         category=log_category,
@@ -153,15 +177,16 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                         prompt=prompt,
                         raw_response=raw,
                         parsed_value=None,
+                        error=f"{type(e).__name__}: {e}",
                         attempt=attempt + 1,
                     ))
                 last_error = e
                 raw_snippet = raw[:500] if raw else "(no response)"
                 logging.warning(
-                    "LLM JSON parse attempt %d/3 failed: %s\n--- RAW RESPONSE ---\n%s\n--- END ---",
-                    attempt + 1, e, raw_snippet,
+                    "LLM JSON parse attempt %d/3 failed (%s): %s\n--- RAW RESPONSE ---\n%s\n--- END ---",
+                    attempt + 1, type(e).__name__, e, raw_snippet,
                 )
-        raise ValueError(f"LLM returned invalid JSON after 3 retries. Last error: {last_error}")
+        raise ValueError(f"LLM returned invalid or incomplete JSON after 3 retries. Last error: {last_error}")
 
     def _build_context_block(self, resolved: dict) -> str:
         if not resolved:
@@ -329,11 +354,11 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         system_instruction: str,
     ) -> Any:
         prompt = self._build_pick_prompt(category_name, category_schema, resolved, system_instruction)
-        result = self._call_llm_json(
+        value = self._call_llm_json(
             prompt, system_instruction,
+            expected_key="value",
             log_category=category_name, log_method="pick", log_step="pick",
         )
-        value = result["value"]
         if self._is_numeric_category(category_schema):
             value = max(category_schema["min"], min(category_schema["max"], float(value)))
             if category_schema.get("type") == "integer":
@@ -350,14 +375,16 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         enum_prompt = self._build_enumerate_prompt(category_name, category_schema, resolved, system_instruction)
         candidates = self._call_llm_json(
             enum_prompt, system_instruction,
+            expected_key="candidates",
             log_category=category_name, log_method="generate_pick", log_step="enumerate",
-        )["candidates"]
+        )
 
         sel_prompt = self._build_select_prompt(category_name, candidates, resolved, system_instruction)
         value = self._call_llm_json(
             sel_prompt, system_instruction,
+            expected_key="value",
             log_category=category_name, log_method="generate_pick", log_step="select",
-        )["value"]
+        )
 
         if self._is_numeric_category(category_schema):
             value = max(category_schema["min"], min(category_schema["max"], float(value)))
@@ -375,8 +402,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         enum_prompt = self._build_enumerate_prompt(category_name, category_schema, resolved, system_instruction)
         candidates = self._call_llm_json(
             enum_prompt, system_instruction,
+            expected_key="candidates",
             log_category=category_name, log_method="generate_evaluate_pick", log_step="enumerate",
-        )["candidates"]
+        )
         if len(candidates) > 25:
             logging.warning(f"Truncating {len(candidates)} candidates to 25 for '{category_name}'.")
             candidates = candidates[:25]
@@ -387,8 +415,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             eval_prompt = self._build_evaluate_prompt(category_name, candidates, resolved, system_instruction)
             weights = self._call_llm_json(
                 eval_prompt, system_instruction,
+                expected_key="weights",
                 log_category=category_name, log_method="generate_evaluate_pick", log_step="evaluate",
-            )["weights"]
+            )
             weights = self._normalize_weights(weights, category_name)
             reconciled = self._reconcile_weight_count(weights, candidates, category_name)
             if reconciled is not None:
@@ -409,8 +438,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         sel_prompt = self._build_select_prompt(category_name, candidates, resolved, system_instruction)
         value = self._call_llm_json(
             sel_prompt, system_instruction,
+            expected_key="value",
             log_category=category_name, log_method="generate_evaluate_pick", log_step="select",
-        )["value"]
+        )
 
         if self._is_numeric_category(category_schema):
             value = max(category_schema["min"], min(category_schema["max"], float(value)))
@@ -457,8 +487,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         enum_prompt = self._build_enumerate_prompt(category_name, category_schema, resolved, system_instruction)
         candidates = self._call_llm_json(
             enum_prompt, system_instruction,
+            expected_key="candidates",
             log_category=category_name, log_method="generate_evaluate_random_pick", log_step="enumerate",
-        )["candidates"]
+        )
         if len(candidates) > 25:
             logging.warning(f"Truncating {len(candidates)} candidates to 25 for '{category_name}'.")
             candidates = candidates[:25]
@@ -469,8 +500,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             eval_prompt = self._build_evaluate_prompt(category_name, candidates, resolved, system_instruction)
             weights = self._call_llm_json(
                 eval_prompt, system_instruction,
+                expected_key="weights",
                 log_category=category_name, log_method="generate_evaluate_random_pick", log_step="evaluate",
-            )["weights"]
+            )
             weights = self._normalize_weights(weights, category_name)
             reconciled = self._reconcile_weight_count(weights, candidates, category_name)
             if reconciled is not None:
@@ -532,27 +564,34 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             method: str = cfg.get("method", "")
             category_schema = schema_categories[category_name]
 
-            if method == "pick":
-                value = self._process_pick(
-                    category_name, category_schema, resolved, system_instruction
+            try:
+                if method == "pick":
+                    value = self._process_pick(
+                        category_name, category_schema, resolved, system_instruction
+                    )
+                elif method == "generate_pick":
+                    value = self._process_generate_pick(
+                        category_name, category_schema, resolved, system_instruction
+                    )
+                elif method == "generate_evaluate_pick":
+                    value = self._process_generate_evaluate_pick(
+                        category_name, category_schema, resolved, system_instruction
+                    )
+                elif method == "generate_evaluate_random_pick":
+                    value = self._process_generate_evaluate_random_pick(
+                        category_name, category_schema, resolved, system_instruction
+                    )
+                else:
+                    raise ValueError(
+                        f"Unknown method '{method}' for category '{category_name}'. "
+                        f"Valid: pick, generate_pick, generate_evaluate_pick, generate_evaluate_random_pick."
+                    )
+            except Exception as e:
+                logging.error(
+                    "Category '%s' (method=%s) failed after resolving %d/%d categories: %s",
+                    category_name, method, len(resolved), len(ordered_categories), e,
                 )
-            elif method == "generate_pick":
-                value = self._process_generate_pick(
-                    category_name, category_schema, resolved, system_instruction
-                )
-            elif method == "generate_evaluate_pick":
-                value = self._process_generate_evaluate_pick(
-                    category_name, category_schema, resolved, system_instruction
-                )
-            elif method == "generate_evaluate_random_pick":
-                value = self._process_generate_evaluate_random_pick(
-                    category_name, category_schema, resolved, system_instruction
-                )
-            else:
-                raise ValueError(
-                    f"Unknown method '{method}' for category '{category_name}'. "
-                    f"Valid: pick, generate_pick, generate_evaluate_pick, generate_evaluate_random_pick."
-                )
+                raise
 
             resolved[category_name] = value
             logging.debug(f"{category_name} ({method}) -> {value}")

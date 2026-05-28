@@ -243,14 +243,19 @@ def main() -> None:
     generator.retry_until_success = args.retry_until_success
 
     if args.log_llm:
-        generator.interaction_collector = LLMInteractionCollector()
+        llm_log_path = output_path.parent / "llm_interactions.jsonl"
+        generator.interaction_collector = LLMInteractionCollector(llm_log_path)
 
     kwargs = {}
     if args.strategy:
         kwargs["strategy_file"] = str(Path(args.strategy))
 
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
-    identity_data, level_strings = generator.generate_identity(str(config_path), **kwargs)
+    try:
+        identity_data, level_strings = generator.generate_identity(str(config_path), **kwargs)
+    finally:
+        if generator.interaction_collector:
+            generator.interaction_collector.close()
     completed_at = time.strftime("%Y-%m-%dT%H:%M:%S")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -288,11 +293,6 @@ def main() -> None:
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(run_metadata, f, indent=2, ensure_ascii=False)
     logger.info("Run metadata written to %s", metadata_path)
-
-    if generator.interaction_collector:
-        log_path = output_path.parent / "llm_interactions.json"
-        generator.interaction_collector.flush(log_path)
-        logger.info("LLM interactions logged to %s", log_path)
 
     if level_strings:
         logger.info("Level summaries:")

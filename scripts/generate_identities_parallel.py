@@ -112,6 +112,7 @@ def _generate_one(
     cfg = generation_config or {}
 
     client = None
+    generator = None
     try:
         if provider == "gemini":
             from population_synth.clients.gemini_client import GeminiClient
@@ -131,16 +132,15 @@ def _generate_one(
         generator = FactoryIdentityGenerator.create_generator(mode, client)
         generator.retry_until_success = retry_until_success
         if log_llm:
-            generator.interaction_collector = LLMInteractionCollector()
+            generator.interaction_collector = LLMInteractionCollector(
+                persona_dir / "llm_interactions.jsonl"
+            )
 
         identity_data, _ = generator.generate_identity(config_path, **kwargs)
 
         persona_dir.mkdir(parents=True, exist_ok=True)
         with open(out_file, "w", encoding="utf-8") as f:
             json.dump(identity_data, f, indent=2, ensure_ascii=False)
-
-        if generator.interaction_collector:
-            generator.interaction_collector.flush(persona_dir / "llm_interactions.json")
 
         with _progress_lock:
             _completed += 1
@@ -156,6 +156,8 @@ def _generate_one(
         return index, False, str(e)
 
     finally:
+        if generator is not None and generator.interaction_collector:
+            generator.interaction_collector.close()
         if client is not None and hasattr(client, "close"):
             client.close()
             with _active_clients_lock:
