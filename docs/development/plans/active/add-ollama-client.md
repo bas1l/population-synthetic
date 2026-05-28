@@ -37,7 +37,7 @@ The project currently supports two LLM providers — Google Gemini (cloud API) a
 - [ ] `OllamaClient` satisfies `LLMClient` Protocol (`isinstance` check passes)
 - [ ] `--provider ollama` works in both `generate_identity.py` and `generate_identities_parallel.py`
 - [ ] Manifest with `provider: "ollama"` and `base_url` loads and validates correctly
-- [ ] `system_instruction` kwarg maps correctly to Ollama's `system` field
+- [ ] `system_instruction` kwarg maps correctly to a `{"role": "system"}` message in the `/api/chat` messages array
 - [ ] Generation config params (`temperature`, `top_p`, `top_k`, `max_output_tokens`) pass through correctly
 - [ ] Unreachable server raises `ConnectionError` at construction (fail-fast)
 - [ ] Non-existent model returns a clear error message suggesting `ollama pull`

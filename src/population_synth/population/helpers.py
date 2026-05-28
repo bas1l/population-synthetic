@@ -35,11 +35,6 @@ def resolve_age_group(label: str, mapping: dict[str, str]) -> str | None:
     return None
 
 
-def normalize(dist: dict) -> dict:
-    total = sum(dist.values()) or 1.0
-    return {k: v / total for k, v in dist.items()}
-
-
 def sample_from(rng: np.random.Generator, dist: dict) -> str:
     keys = list(dist.keys())
     probs = np.array([dist[k] for k in keys], dtype=float)
