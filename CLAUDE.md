@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **population-synth** is a standalone extraction from the `anxiety-synthetic` monorepo. It provides three capabilities:
 
-1. **Population Generation** -- Fetch real Nordic demographic distributions (SCB for Sweden, SSB for Norway) and sample statistically realistic population profiles via conditional chained sampling
+1. **Population Generation** -- Fetch real demographic distributions from national statistical APIs (SCB for Sweden, SSB for Norway, ISTAT/Eurostat for Italy) and sample statistically realistic population profiles via conditional chained sampling
 2. **Identity Generation** -- LLM-based persona identity creation using Gemini models with strategy modes (batch, configurable)
 3. **Population Comparison** -- Statistical evaluation and visual comparison between any two population files
 
@@ -26,6 +26,9 @@ python scripts/generate_scb_population.py --n 1000 --seed 42 --output scb_pop.js
 
 # Generate Norwegian population from live SSB data
 python scripts/generate_ssb_population.py --n 1000 --seed 42 --output ssb_pop.json
+
+# Generate Italian population from live ISTAT/Eurostat data
+python scripts/generate_istat_population.py --n 1000 --seed 42 --output istat_pop.json
 
 # Generate a persona identity via manifest (recommended)
 python scripts/generate_identity.py --manifest config/seed_manifests/identity_manifest_014_claude_haiku.yaml
@@ -86,6 +89,7 @@ All imports use the fully-qualified `population_synth.*` package namespace. Scri
 - `income_class.py` -- Income bracket classification using Eurostat AROP (0.60x median) and OECD/Pew (1.00x, 2.00x) thresholds
 - `sweden/` -- SCB-specific: constants (table IDs, label maps), fetch service, parsers, sample service
 - `norway/` -- SSB-specific: constants (table IDs, label maps), fetch service, parsers, sample service
+- `italy/` -- ISTAT/Eurostat-specific: constants (dataflow IDs, NUTS2 codes, label maps), parsers (SDMX + JSON-stat), fetch service (dual-client `load_all`), sample service
 
 **`identity/`** -- LLM-based persona identity generation:
 - Factory + Strategy pattern: `FactoryIdentityGenerator` selects batch or configurable strategy at runtime
@@ -107,6 +111,8 @@ All imports use the fully-qualified `population_synth.*` package namespace. Scri
 - `GeminiClient` -- Google Gemini API wrapper with metadata sidecar tracking
 - `ClaudeCodeClient` -- Claude CLI subprocess wrapper with metadata sidecar tracking
 - `llm_protocol.py` -- `LLMClient` Protocol shared by `GeminiClient` and `ClaudeCodeClient`
+- `EurostatClient` -- Eurostat JSON-stat 2.0 API wrapper with local JSON caching (90-day TTL)
+- `ISTATSDMXClient` -- ISTAT SDMX REST API wrapper with 12-second rate limiting and caching
 
 ### Path Resolution
 
@@ -121,7 +127,7 @@ All cache and config paths derive from this.
 - **Shared population layer** -- Breaks the SCB<->SSB cross-dependency. Both `sweden/` and `norway/` import from the shared `population/` parent, never from each other
 - **Factory + Strategy** -- `FactoryIdentityGenerator` selects generation strategy at runtime based on mode string
 - **Conditional chained sampling** -- Population sampling conditions each attribute on prior draws (e.g., education given age/sex, employment given education)
-- **Live API data only** -- All distributions come from live API calls; no static data is ever substituted. If no table exists for a field, the field is dropped
+- **No synthetic distributions** -- Every probability distribution used in population generation must come from a real statistical API response. Hardcoded probability tables, fallback distributions, parametric approximations (e.g. lognormal models), and manually estimated rates are prohibited as primary data sources. If no API provides data for a demographic field, that field must be dropped from the output -- never filled with invented values. Code-level constants for structural purposes (API dataset IDs, code-to-label maps, query parameters) are acceptable; constants that define *what probability a person has of being in a given category* are not
 - **Local file caching** -- PxWeb clients cache API responses as JSON files in `config/assets/{scb,ssb}_cache/` to avoid redundant API calls
 
 ## Configuration
@@ -130,6 +136,8 @@ All cache and config paths derive from this.
 - **Identity prompts and simulation configs:** `config/assets/identity/` (batch and configurable sub-directories)
 - **SCB API cache:** `config/assets/scb_cache/` (git-ignored)
 - **SSB API cache:** `config/assets/ssb_cache/` (git-ignored)
+- **Eurostat API cache:** `config/assets/eurostat_cache/` (git-ignored)
+- **ISTAT API cache:** `config/assets/istat_cache/` (git-ignored)
 - **Category label mappings:** `config/assets/scb_reference/category_mappings.json` and `config/assets/ssb_reference/category_mappings.json`
 
 ## Reference Documentation
@@ -139,6 +147,7 @@ The `docs/` directory holds design and audit notes worth consulting before non-t
 - `scb_population_distribution_analysis.md` (+ `_verification.md`) -- per-field distribution analysis
 - `audit_scb_comparison_api_rooting_2026-05-11.md` -- audit of comparison-vs-API field routing
 - `scb02_comparison_category_mapping_2026-05-11.md` -- category-mapping rationale
+- `istat_population_data_sources.md` -- Italy field-by-field API source matrix, protocol details, sampling chain, known limitations
 - `docs/development/` -- in-progress development notes
 
 ## Environment & Secrets

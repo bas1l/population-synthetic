@@ -1,3 +1,5 @@
+default_action: generate_parallel
+
 groups:
   - id: generate
     label: "Generate Population"
@@ -27,9 +29,20 @@ actions:
       - key: workers
         label: "Parallel workers"
         type: int
-        default: null
+        default: 1
         default_from_manifest: parallel_workers
         help: "Number of parallel worker processes"
+      - key: retry-until-success
+        label: "Retry until success"
+        type: bool
+        default: false
+        default_from_manifest: retry_until_success
+        help: "Retry failed slots and LLM calls until all N succeed"
+      - key: generate-all-strategies
+        label: "Generate all strategies"
+        type: bool
+        default: false
+        help: "Run all strategies sequentially for the selected model and country"
 
   - id: gen_db_pop
     label: "Database Population"
@@ -88,6 +101,42 @@ actions:
     script: scripts/compare_pipeline_to_scb.py
     requires_manifest: true
     parameters: []
+
+  - id: compare_all
+    label: "All Pipelines vs Reference"
+    group: compare
+    script: scripts/compare_all_pipelines.py
+    requires_manifest: false
+    parameters:
+      - key: country
+        label: "Country"
+        type: choice
+        choices: ["swedish"]
+        default: swedish
+        help: "Country axis ID to compare"
+      - key: model
+        label: "Model filter"
+        type: str
+        default: null
+        help: "Comma-separated model IDs (blank = all)"
+      - key: strategy
+        label: "Strategy filter"
+        type: str
+        default: null
+        help: "Comma-separated strategy IDs (blank = all)"
+      - key: reference
+        label: "Reference file"
+        type: file
+        default: null
+        help: "SCB reference population JSON (blank = built-in default)"
+      - key: no-charts
+        label: "Skip charts"
+        type: bool
+        default: false
+      - key: radar-tv-only
+        label: "Radar: TV only"
+        type: bool
+        default: false
 
   - id: compare_pops
     label: "Compare Two Populations"

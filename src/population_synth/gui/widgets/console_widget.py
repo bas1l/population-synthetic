@@ -80,9 +80,14 @@ class ConsoleWidget(QWidget):
         layout.addLayout(bottom_bar)
 
     def append_line(self, text: str) -> None:
-        self._text.appendPlainText(text)
         if self._autoscroll.isChecked():
+            self._text.appendPlainText(text)
             self._text.verticalScrollBar().setValue(self._text.verticalScrollBar().maximum())
+        else:
+            scrollbar = self._text.verticalScrollBar()
+            pos = scrollbar.value()
+            self._text.appendPlainText(text)
+            scrollbar.setValue(pos)
 
     def append_cr_line(self, text: str) -> None:
         cursor = self._text.textCursor()
@@ -90,8 +95,8 @@ class ConsoleWidget(QWidget):
         cursor.select(cursor.LineUnderCursor)
         cursor.removeSelectedText()
         cursor.insertText(text)
-        self._text.setTextCursor(cursor)
         if self._autoscroll.isChecked():
+            self._text.setTextCursor(cursor)
             self._text.verticalScrollBar().setValue(self._text.verticalScrollBar().maximum())
 
     def clear_console(self) -> None:
