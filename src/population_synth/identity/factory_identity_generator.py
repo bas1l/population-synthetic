@@ -1,4 +1,4 @@
-from typing import Dict, Type
+from __future__ import annotations
 
 from population_synth.clients.llm_protocol import LLMClient
 
@@ -16,7 +16,7 @@ class FactoryIdentityGenerator:
 
     # Central registry mapping identifiers to concrete class types.
     # Note: 'batch' maps to NarrativeGeneratorBatch as defined in identity_generator_batch.py
-    _STRATEGY_MAP: Dict[str, Type[BaseIdentityGenerator]] = {
+    _STRATEGY_MAP: dict[str, type[BaseIdentityGenerator]] = {
         "batch": NarrativeGeneratorBatch,
         "configurable": IdentityGeneratorConfigurable
     }

@@ -1,0 +1,14 @@
+id: "ollama_gemma4_e4b"
+label: "Ollama Gemma4 E4B"
+model_config:
+  provider: "ollama"
+  model: "gemma4:e4b"
+  base_url: "http://192.168.0.19:11434"
+  generation_config:
+    temperature: 0.7
+    top_p: null
+    top_k: null
+    max_output_tokens: 2048
+parameters:
+  parallel:
+    workers: 1

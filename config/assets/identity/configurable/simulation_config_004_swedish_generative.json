@@ -27,7 +27,7 @@
       "description": "The sexual orientation of the persona."
     },
     "birth_location": {
-      "description": "The immigration or migration status of the persona."
+      "description": "Whether the persona was born domestically or abroad"
     },
     "region": {
       "description": "The administrative region where the persona currently resides."
@@ -72,7 +72,7 @@
       "description": "The type of environment where the persona currently lives (urban metropolis, suburban, or rural/countryside)."
     },
     "ethnicity_broad_global_approx": {
-      "description": "The broad global ethnicity category of the persona (e.g. Swedish, Nordic, European, Non-European)."
+      "description": "The broad global ethnicity category of the persona."
     },
     "openness": {
       "type": "integer",

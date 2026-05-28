@@ -30,7 +30,7 @@
       { "value": "Other/Asexual", "probability": 0.02 }
     ],
     "birth_location": [
-      { "value": "Native (Born in Sweden)", "probability": 0.75 },
+      { "value": "Native", "probability": 0.75 },
       { "value": "International Immigrant", "probability": 0.15 },
       { "value": "Domestic Migrant (Same country, different region)", "probability": 0.05 },
       { "value": "Refugee/Displaced", "probability": 0.05 }

@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QFormLayout,
     QGroupBox,
-    QLabel,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -24,9 +23,7 @@ class ExperimentSelector(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        layout.addWidget(QLabel("Experiment"))
-
-        axis_box = QGroupBox("Axes")
+        axis_box = QGroupBox("Model Selection")
         axis_form = QFormLayout(axis_box)
         axis_form.setContentsMargins(4, 4, 4, 4)
 

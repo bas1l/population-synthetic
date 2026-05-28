@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import copy
 import logging
 import os
 import random
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
@@ -25,12 +27,12 @@ class OllamaClient:
     def __init__(
         self,
         model_name: str = "llama3.1",
-        base_url: Optional[str] = None,
-        default_config: Optional[Dict[str, Any]] = None,
+        base_url: str | None = None,
+        default_config: dict[str, Any] | None = None,
         max_retries: int = 3,
         base_delay: float = 2.0,
         max_delay: float = 30.0,
-        timeout: int = 120,
+        timeout: int | None = None,
     ):
         self.default_model_name = model_name
         self.base_url = (
@@ -49,9 +51,9 @@ class OllamaClient:
         )
         self.logger = logging.getLogger(__name__)
 
-        self._config_state: Dict[str, Any] = default_config if default_config else {}
-        self._last_execution_metadata: Optional[Dict[str, Any]] = None
-        self._execution_history: List[Dict[str, Any]] = []
+        self._config_state: dict[str, Any] = default_config if default_config else {}
+        self._last_execution_metadata: dict[str, Any] | None = None
+        self._execution_history: list[dict[str, Any]] = []
 
         self._session = requests.Session()
 
@@ -100,7 +102,7 @@ class OllamaClient:
         )
         self.default_model_name = new_model_name
 
-    def get_current_configuration(self) -> Dict[str, Any]:
+    def get_current_configuration(self) -> dict[str, Any]:
         return {
             "model": self.default_model_name,
             "base_url": self.base_url,
@@ -108,11 +110,11 @@ class OllamaClient:
         }
 
     @property
-    def last_metadata(self) -> Dict[str, Any]:
+    def last_metadata(self) -> dict[str, Any]:
         return self._last_execution_metadata or {}
 
     @property
-    def history(self) -> List[Dict[str, Any]]:
+    def history(self) -> list[dict[str, Any]]:
         return self._execution_history
 
     def clear_history(self) -> None:
@@ -151,7 +153,7 @@ class OllamaClient:
         target_model = effective_config.pop("model", self.default_model_name)
         system_instruction = effective_config.pop("system_instruction", None)
 
-        options: Dict[str, Any] = {}
+        options: dict[str, Any] = {}
         for src_key, ollama_key in (
             ("temperature", "temperature"),
             ("top_p", "top_p"),
@@ -161,17 +163,21 @@ class OllamaClient:
             if src_key in effective_config:
                 options[ollama_key] = effective_config.pop(src_key)
 
-        payload: Dict[str, Any] = {
-            "model": target_model,
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
-        }
+        messages: list[dict[str, Any]] = []
         if system_instruction:
-            payload["system"] = system_instruction
+            messages.append({"role": "system", "content": system_instruction})
+        messages.append({"role": "user", "content": prompt})
+
+        payload: dict[str, Any] = {
+            "model": target_model,
+            "messages": messages,
+            "stream": False,
+            "format": "json",
+        }
         if options:
             payload["options"] = options
 
-        metadata: Dict[str, Any] = {
+        metadata: dict[str, Any] = {
             "provider": "ollama",
             "model": target_model,
             "base_url": self.base_url,
