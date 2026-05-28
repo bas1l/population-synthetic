@@ -3,11 +3,9 @@ from __future__ import annotations
 import logging
 
 from population_synth.population.helpers import VALID_AGE_GROUPS, resolve_age_group  # noqa: F401
-from population_synth.population.income_class import classify_brackets
 
 from .constants import (
     CIVIL_STATUS_MAP,
-    INCOME_BRACKET_EDGES_EUR,
     NUTS2_REGION_CODES,
     SEX_LABEL_MAP,
 )
@@ -15,31 +13,36 @@ from .constants import (
 logger = logging.getLogger(__name__)
 
 
-def _extract_sdmx_dimensions(raw: dict) -> tuple[list[dict], list[dict]]:
-    """Return (series_dimensions, observation_dimensions) from ISTAT SDMX-JSON 2.0."""
-    dims = raw["data"].get("structures", raw["data"].get("structure", [{}]))[0]["dimensions"]
-    return dims["series"], dims.get("observation", [])
+def _csv_obs_value(row: dict) -> float | None:
+    """Extract OBS_VALUE from a CSV row, returning None if missing/empty/NaN."""
+    val = row.get("OBS_VALUE", "").strip()
+    if not val or val.lower() == "nan":
+        return None
+    try:
+        return float(val)
+    except ValueError:
+        return None
 
 
-def _extract_sdmx_series(raw: dict) -> dict:
-    """Return the series dict from ISTAT SDMX-JSON 2.0 dataSets[0]."""
-    return raw["data"]["dataSets"][0]["series"]
+def _csv_latest_year_rows(
+    rows: list[dict], time_col: str = "TIME_PERIOD", freq: str = "A",
+) -> list[dict]:
+    """Filter rows to only the latest annual TIME_PERIOD value.
 
-
-def _sdmx_key_to_indices(key: str) -> list[int]:
-    """Convert a colon-separated SDMX series key ('0:1:2:0') to a list of ints."""
-    return [int(part) for part in key.split(":")]
-
-
-def _build_sdmx_dim_lookup(dimensions: list[dict]) -> dict[str, list[tuple[str, str]]]:
-    """Build a mapping from dimension ID to list of (code, label) for each value.
-
-    Returns: {'DIM_ID': [('CODE0', 'LABEL0'), ('CODE1', 'LABEL1'), ...], ...}
+    Pre-filters to ``FREQ == freq`` so quarterly periods (e.g. ``2020-Q4``)
+    don't shadow annual ones when selecting ``max(TIME_PERIOD)``.
     """
-    return {
-        dim["id"]: [(v["id"], v["name"]) for v in dim["values"]]
-        for dim in dimensions
-    }
+    if freq:
+        rows = [r for r in rows if r.get("FREQ", "").strip() == freq]
+    years: set[str] = set()
+    for row in rows:
+        tp = row.get(time_col, "").strip()
+        if tp:
+            years.add(tp)
+    if not years:
+        return rows
+    latest = max(years)
+    return [r for r in rows if r.get(time_col, "").strip() == latest]
 
 
 # ---------------------------------------------------------------------------
@@ -289,20 +292,22 @@ def parse_housing_tenure(raw: dict) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 
 _ISTAT_EDU_AGE_MAP: dict[str, str] = {
-    "Y15-24": "18-24",
     "Y15-19": "18-24",
     "Y20-24": "18-24",
-    "Y25-34": "25-34",
-    "Y35-44": "35-44",
-    "Y45-54": "45-54",
-    "Y55-64": "55-64",
-    "Y65-74": "65-74",
-    "Y75-85": "75-85",
-    "Y_GE75": "75-85",
+    "Y25-29": "25-34",
+    "Y30-34": "25-34",
+    "Y35-39": "35-44",
+    "Y40-44": "35-44",
+    "Y45-49": "45-54",
+    "Y50-54": "45-54",
+    "Y55-59": "55-64",
+    "Y60-64": "55-64",
+    "Y_GE65": "65-74",
 }
 
 _SKIP_EDU_AGE_CODES = frozenset({
-    "Y_GE15", "Y_GE65", "Y15-64", "Y15-74", "Y14-29",
+    "Y_GE15", "Y15-24", "Y15-64", "Y15-74", "Y14-29",
+    "Y25-34", "Y25-64", "Y35-64",
 })
 
 _ISTAT_EMP_AGE_MAP: dict[str, str] = {
@@ -334,6 +339,7 @@ _ISTAT_HOUSEHOLD_AGE_MAP: dict[str, list[str]] = {
 
 _ISCED_CODE_MAP: dict[str, str] = {
     "11": "University Degree",
+    "7": "University Degree",
     "3": "No Formal Education",
     "4": "No Formal Education",
     "5": "High School (Liceo/Professionale)",
@@ -341,56 +347,52 @@ _ISCED_CODE_MAP: dict[str, str] = {
 }
 
 
-def parse_education_by_age(raw: dict) -> dict[tuple[str, str], dict[str, float]]:
-    """Parse ``52_1194`` SDMX response into ``{(age_group, sex): {edu_label: prob}}``.
+def parse_education_by_age(rows: list[dict]) -> dict[tuple[str, str], dict[str, float]]:
+    """Parse ``52_1194`` CSV rows into ``{(age_group, sex): {edu_label: prob}}``.
 
     Filters: annual, Italy (IT), total citizenship.
-    Skips None observations (cached prototype data has nulls — callers must
-    clear cache to get real values).
-    Raises ``ValueError`` if no non-null data is found.
+    Raises ``ValueError`` if no data is found.
     """
-    series_dims, obs_dims = _extract_sdmx_dimensions(raw)
-    series = _extract_sdmx_series(raw)
-    dim_lookup = _build_sdmx_dim_lookup(series_dims + obs_dims)
-
     istat_sex_map = {"1": "Male", "2": "Female"}
+    latest = _csv_latest_year_rows(rows)
 
     accumulator: dict[tuple[str, str], dict[str, float]] = {}
 
-    for key, series_data in series.items():
-        indices = _sdmx_key_to_indices(key)
-        freq_i, ref_area_i, _data_type_i, sex_i, age_i, edu_i, citizenship_i = indices[:7]
-
-        if freq_i != 0 or ref_area_i != 0 or citizenship_i != 0:
+    for row in latest:
+        if row.get("FREQ", "").strip() != "A":
+            continue
+        if row.get("REF_AREA", "").strip() != "IT":
+            continue
+        citizenship = row.get("CITIZENSHIP", "").strip()
+        if citizenship and citizenship not in ("TOTAL", "0", "99"):
             continue
 
-        sex_code = dim_lookup["SEX"][sex_i][0]
-        sex_label = istat_sex_map.get(sex_code)
+        sex_label = istat_sex_map.get(row.get("SEX", "").strip())
         if sex_label is None:
             continue
 
-        age_code = dim_lookup["AGE"][age_i][0]
+        age_code = row.get("AGE", "").strip()
         if age_code in _SKIP_EDU_AGE_CODES:
             continue
         age_group = _ISTAT_EDU_AGE_MAP.get(age_code)
         if age_group is None:
             continue
 
-        edu_code = dim_lookup["EDU_LEV_HIGHEST"][edu_i][0]
+        edu_code = row.get("EDU_LEV_HIGHEST", "").strip()
         edu_label = _ISCED_CODE_MAP.get(edu_code)
         if edu_label is None:
             continue
 
-        obs_value = series_data.get("observations", {}).get("0", [None])[0]
+        obs_value = _csv_obs_value(row)
         if obs_value is None:
             continue
 
         cell = accumulator.setdefault((age_group, sex_label), {})
-        cell[edu_label] = cell.get(edu_label, 0.0) + float(obs_value)
+        cell[edu_label] = cell.get(edu_label, 0.0) + obs_value
 
     if not accumulator:
         raise ValueError(
-            "No non-null education data parsed from ISTAT 52_1194 response. "
+            "No education data parsed from ISTAT 52_1194 CSV response. "
             "Clear config/assets/istat_cache/ and re-run to fetch live data."
         )
 
@@ -405,157 +407,109 @@ def parse_education_by_age(raw: dict) -> dict[tuple[str, str], dict[str, float]]
 # ISTAT SDMX employment parser
 # ---------------------------------------------------------------------------
 
-_ITALY_EMP_RATES: dict[str, dict[str, float]] = {
-    "University Degree": {
-        "Employed": 0.78,
-        "Unemployed": 0.05,
-        "Not in labour force": 0.17,
-    },
-    "High School (Liceo/Professionale)": {
-        "Employed": 0.65,
-        "Unemployed": 0.08,
-        "Not in labour force": 0.27,
-    },
-    "No Formal Education": {
-        "Employed": 0.48,
-        "Unemployed": 0.09,
-        "Not in labour force": 0.43,
-    },
-}
-
 _EMP_EDU_CODE_MAP: dict[str, str] = {
     "11": "University Degree",
     "13": "No Formal Education",
     "7": "High School (Liceo/Professionale)",
 }
 
-_NATIONAL_AGE_CODES = frozenset({"Y15-74", "Y15-64"})
+_NATIONAL_AGE_CODES = frozenset({"Y15-74", "Y15-64", "Y15-89"})
 
 _EMP_ISTAT_SEX_MAP = {"1": "Male", "2": "Female"}
 
 
-def parse_employment_by_sex_education(raw: dict) -> dict[str, dict[str, dict[str, float]]]:
-    """Parse ``150_938`` SDMX response into ``{sex: {edu: {status: prob}}}``.
+def parse_employment_by_sex_education(
+    emp_rows: list[dict],
+    edu_rows: list[dict],
+) -> dict[str, dict[str, dict[str, float]]]:
+    """Parse employment rates by sex × education from two ISTAT datasets.
 
-    150_938 covers EMPLOYED persons only; non-employed fractions come from
-    hardcoded Italian aggregate labour market rates (logged as WARNING).
-
-    If all 150_938 observations are null (cached prototype), the aggregate
-    rates are used uniformly for both sexes.
+    Derives per-(sex, education) employment rate from the ratio of employed
+    persons (``150_938_17``) to total population (``52_1194``).  Categories:
+    Employed, Not Employed.
+    Raises ``ValueError`` if either dataset yields no usable data.
     """
-    series_dims, obs_dims = _extract_sdmx_dimensions(raw)
-    series = _extract_sdmx_series(raw)
-    dim_lookup = _build_sdmx_dim_lookup(series_dims + obs_dims)
+    istat_sex_map = {"1": "Male", "2": "Female"}
 
-    id_order = [d["id"] for d in series_dims]
-
-    def _pos(dim_id: str) -> int:
-        return id_order.index(dim_id)
-
-    freq_pos = _pos("FREQ")
-    ref_area_pos = _pos("REF_AREA")
-    sex_pos = _pos("SEX")
-    age_pos = _pos("AGE")
-    edu_pos = _pos("EDU_LEV_HIGHEST")
-    citizenship_pos = _pos("CITIZENSHIP")
-    nace2002_pos = _pos("ECON_ACTIVITY_NACE_2002")
-    nace2007_pos = _pos("ECON_ACTIVITY_NACE_2007")
-    posiz_pos = _pos("POSIZ_PROF")
-    prof_status_pos = _pos("PROF_STATUS")
-    occ2001_pos = _pos("OCCUPATION_2001")
-    occ2011_pos = _pos("OCCUPATION_2011")
-    fpt_pos = _pos("FULL_PART_TIME")
-    perm_temp_pos = _pos("PERM_TEMP_EMPLOYEES")
-
-    n_time_obs = len(obs_dims[0]["values"]) if obs_dims else 1
-    latest_time_key = str(n_time_obs - 1)
-
-    employed_by_sex_edu: dict[str, dict[str, float]] = {}
-    found_any = False
-
-    for key, series_data in series.items():
-        indices = _sdmx_key_to_indices(key)
-
-        if indices[freq_pos] != 0:
+    edu_latest = _csv_latest_year_rows(edu_rows)
+    total_by_sex_edu: dict[str, dict[str, float]] = {}
+    for row in edu_latest:
+        if row.get("FREQ", "").strip() != "A":
             continue
-        if indices[ref_area_pos] != 0:
+        if row.get("REF_AREA", "").strip() != "IT":
             continue
-        if indices[citizenship_pos] != 0:
+        citizenship = row.get("CITIZENSHIP", "").strip()
+        if citizenship and citizenship not in ("TOTAL", "0", "99"):
             continue
-        if indices[nace2002_pos] != 0:
-            continue
-        if indices[nace2007_pos] != 0:
-            continue
-        if indices[posiz_pos] != 0:
-            continue
-        if indices[prof_status_pos] != 0:
-            continue
-        if indices[occ2001_pos] != 0:
-            continue
-        if indices[occ2011_pos] != 0:
-            continue
-        if indices[fpt_pos] != 0:
-            continue
-        if indices[perm_temp_pos] != 0:
-            continue
-
-        age_code = dim_lookup["AGE"][indices[age_pos]][0]
-        if age_code not in _NATIONAL_AGE_CODES:
-            continue
-
-        sex_code = dim_lookup["SEX"][indices[sex_pos]][0]
-        sex_label = _EMP_ISTAT_SEX_MAP.get(sex_code)
+        sex_label = istat_sex_map.get(row.get("SEX", "").strip())
         if sex_label is None:
             continue
+        age_code = row.get("AGE", "").strip()
+        if age_code in _SKIP_EDU_AGE_CODES:
+            continue
+        if _ISTAT_EDU_AGE_MAP.get(age_code) is None:
+            continue
+        edu_code = row.get("EDU_LEV_HIGHEST", "").strip()
+        edu_label = _ISCED_CODE_MAP.get(edu_code)
+        if edu_label is None:
+            continue
+        obs_value = _csv_obs_value(row)
+        if obs_value is None:
+            continue
+        sex_dict = total_by_sex_edu.setdefault(sex_label, {})
+        sex_dict[edu_label] = sex_dict.get(edu_label, 0.0) + obs_value
 
-        edu_code = dim_lookup["EDU_LEV_HIGHEST"][indices[edu_pos]][0]
+    emp_latest = _csv_latest_year_rows(emp_rows)
+    employed_by_sex_edu: dict[str, dict[str, float]] = {}
+    for row in emp_latest:
+        if row.get("FREQ", "").strip() != "A":
+            continue
+        ref_area = row.get("REF_AREA", "").strip()
+        if ref_area and ref_area != "IT":
+            continue
+        sex_label = _EMP_ISTAT_SEX_MAP.get(row.get("SEX", "").strip())
+        if sex_label is None:
+            continue
+        edu_code = row.get("EDU_LEV_HIGHEST", "").strip()
         edu_label = _EMP_EDU_CODE_MAP.get(edu_code)
         if edu_label is None:
             continue
-
-        obs_value = series_data.get("observations", {}).get(latest_time_key, [None])[0]
+        obs_value = _csv_obs_value(row)
         if obs_value is None:
             continue
-
-        found_any = True
         sex_dict = employed_by_sex_edu.setdefault(sex_label, {})
-        sex_dict[edu_label] = sex_dict.get(edu_label, 0.0) + float(obs_value)
+        sex_dict[edu_label] = sex_dict.get(edu_label, 0.0) + obs_value
 
-    if not found_any:
-        logger.warning(
-            "parse_employment_by_sex_education: no non-null data from ISTAT 150_938. "
-            "Using Italian 2023 aggregate labour market rates as fallback. "
-            "Clear config/assets/istat_cache/ to fetch live data."
+    if not total_by_sex_edu:
+        raise ValueError(
+            "No total population data parsed from ISTAT 52_1194 for employment "
+            "rate derivation. Clear config/assets/istat_cache/ and re-run."
         )
-        return {
-            sex: {edu: dict(rates) for edu, rates in _ITALY_EMP_RATES.items()}
-            for sex in ("Male", "Female")
-        }
-
-    logger.warning(
-        "parse_employment_by_sex_education: 150_938 covers EMPLOYED persons only. "
-        "Non-employed fractions derived from Italian 2023 aggregate labour market rates."
-    )
+    if not employed_by_sex_edu:
+        raise ValueError(
+            "No employed data parsed from ISTAT 150_938 for employment rate "
+            "derivation. Clear config/assets/istat_cache/ and re-run."
+        )
 
     result: dict[str, dict[str, dict[str, float]]] = {}
-    for sex_label, edu_counts in employed_by_sex_edu.items():
-        edu_total = sum(edu_counts.values()) or 1.0
-        edu_weights = {edu: cnt / edu_total for edu, cnt in edu_counts.items()}
-
-        sex_result: dict[str, dict[str, float]] = {}
-        for edu_label, weight in edu_weights.items():
-            base_rates = _ITALY_EMP_RATES.get(edu_label, _ITALY_EMP_RATES["High School (Liceo/Professionale)"])
-            sex_result[edu_label] = {status: prob for status, prob in base_rates.items()}
-
-        for edu_label in _ITALY_EMP_RATES:
-            if edu_label not in sex_result:
-                sex_result[edu_label] = dict(_ITALY_EMP_RATES[edu_label])
-
-        result[sex_label] = sex_result
-
     for sex in ("Male", "Female"):
-        if sex not in result:
-            result[sex] = {edu: dict(rates) for edu, rates in _ITALY_EMP_RATES.items()}
+        sex_totals = total_by_sex_edu.get(sex, {})
+        sex_employed = employed_by_sex_edu.get(sex, {})
+        if not sex_totals:
+            raise ValueError(f"No total population data for sex={sex!r}")
+        sex_result: dict[str, dict[str, float]] = {}
+        for edu_label, total in sex_totals.items():
+            if total <= 0:
+                continue
+            employed = sex_employed.get(edu_label, 0.0)
+            emp_rate = min(employed / total, 1.0)
+            sex_result[edu_label] = {
+                "Employed": emp_rate,
+                "Not Employed": 1.0 - emp_rate,
+            }
+        if not sex_result:
+            raise ValueError(f"No valid employment rates computed for sex={sex!r}")
+        result[sex] = sex_result
 
     return result
 
@@ -564,72 +518,26 @@ def parse_employment_by_sex_education(raw: dict) -> dict[str, dict[str, dict[str
 # ISTAT SDMX socioeconomic parser
 # ---------------------------------------------------------------------------
 
-_ITALY_SOCIOECONOMIC_FALLBACK: dict[str, float] = {
-    "Poverty": 0.20,
-    "Working Class": 0.25,
-    "Middle Class": 0.42,
-    "Wealthy": 0.13,
-}
+def parse_socioeconomic(rows: list[dict]) -> dict[tuple[str, str], dict[str, float]]:
+    """Parse ``32_292_DF_*_6`` CSV rows into ``{(age_group, sex): {class_label: prob}}``.
 
-
-def parse_socioeconomic(raw: dict) -> dict[tuple[str, str], dict[str, float]]:
-    """Parse ``32_292`` SDMX response into ``{(age_group, sex): {class_label: prob}}``.
-
-    32_292 reports median household income in absolute values — not bracket
-    counts. If non-null income values are present, a lognormal-approximated
-    bracket distribution (sigma=0.7, matching Gini~0.30) is constructed via
-    ``classify_brackets``. If all observations are null, the EU-SILC 2022
-    Italy fallback is returned for all groups (logged as WARNING).
+    Classifies observed income values into four socioeconomic classes using
+    Eurostat AROP (0.60x) and OECD/Pew (1.00x, 2.00x) thresholds relative
+    to the global median income across all cells.
+    Raises ``ValueError`` if no income data is found.
     """
-    import math
-
-    series_dims, obs_dims = _extract_sdmx_dimensions(raw)
-    series = _extract_sdmx_series(raw)
-    dim_lookup = _build_sdmx_dim_lookup(series_dims + obs_dims)
-
-    id_order = [d["id"] for d in series_dims]
-
-    def _pos(dim_id: str) -> int:
-        return id_order.index(dim_id)
-
-    data_type_pos = _pos("DATA_TYPE")
-    imputed_rents_pos = _pos("IMPUTED_RENTS")
-    measure_pos = _pos("MEASURE")
-    fam_source_pos = _pos("FAM_MAIN_INCOME_SOURCE")
-    n_hhcomp_pos = _pos("NUMBER_HOUSEHOLD_COMP")
-    hh_type_pos = _pos("HOUSEHOLD_TYPOLOGY")
-    sex_pos = _pos("SEX_MAIN_PERCEPTOR")
-    age_pos = _pos("AGE_MAIN_EARNIER")
-
-    time_key_2023 = "0"
-
+    latest = _csv_latest_year_rows(rows)
     istat_sex_map = {"1": "Male", "2": "Female"}
 
     income_by_age_sex: dict[tuple[str, str], list[float]] = {}
-    found_any = False
+    all_incomes: list[float] = []
 
-    for key, series_data in series.items():
-        indices = _sdmx_key_to_indices(key)
-
-        if indices[data_type_pos] != 0:
-            continue
-        if indices[imputed_rents_pos] != 1:
-            continue
-        if indices[measure_pos] != 0:
-            continue
-        if indices[fam_source_pos] != 0:
-            continue
-        if indices[n_hhcomp_pos] != 0:
-            continue
-        if indices[hh_type_pos] != 0:
-            continue
-
-        sex_code = dim_lookup["SEX_MAIN_PERCEPTOR"][indices[sex_pos]][0]
+    for row in latest:
+        sex_code = row.get("SEX_MAIN_PERCEPTOR", row.get("SEX", "")).strip()
         sex_label = istat_sex_map.get(sex_code)
-        if sex_label is None:
-            continue
+        sex_labels = [sex_label] if sex_label else ["Male", "Female"]
 
-        age_code = dim_lookup["AGE_MAIN_EARNIER"][indices[age_pos]][0]
+        age_code = row.get("AGE_MAIN_EARNIER", row.get("AGE", "")).strip()
         age_groups = _ISTAT_HOUSEHOLD_AGE_MAP.get(age_code)
         if age_groups is None:
             continue
@@ -637,59 +545,57 @@ def parse_socioeconomic(raw: dict) -> dict[tuple[str, str], dict[str, float]]:
         if not age_groups_to_use:
             continue
 
-        obs_value = series_data.get("observations", {}).get(time_key_2023, [None])[0]
-        if obs_value is None:
+        obs_value = _csv_obs_value(row)
+        if obs_value is None or obs_value <= 0:
             continue
 
-        found_any = True
-        income_val = float(obs_value)
+        all_incomes.append(obs_value)
         for ag in age_groups_to_use:
-            bucket = income_by_age_sex.setdefault((ag, sex_label), [])
-            bucket.append(income_val)
+            for sl in sex_labels:
+                bucket = income_by_age_sex.setdefault((ag, sl), [])
+                bucket.append(obs_value)
 
-    if not found_any:
-        logger.warning(
-            "parse_socioeconomic: no income data from ISTAT 32_292. "
-            "Using Italian 2023 EU-SILC approximation for all groups. "
-            "Clear config/assets/istat_cache/ to fetch live data."
+    if not all_incomes:
+        raise ValueError(
+            "No income data parsed from ISTAT 32_292 CSV response. "
+            "Clear config/assets/istat_cache/ and re-run to fetch live data."
         )
-        result: dict[tuple[str, str], dict[str, float]] = {}
-        for ag in VALID_AGE_GROUPS:
-            for sex in ("Male", "Female"):
-                result[(ag, sex)] = dict(_ITALY_SOCIOECONOMIC_FALLBACK)
-        return result
 
-    _SIGMA = 0.7
-    _EDGES = [(float(INCOME_BRACKET_EDGES_EUR[i]), float(INCOME_BRACKET_EDGES_EUR[i + 1]))
-              for i in range(len(INCOME_BRACKET_EDGES_EUR) - 1)]
-    _EDGES.append((float(INCOME_BRACKET_EDGES_EUR[-1]), float(INCOME_BRACKET_EDGES_EUR[-1]) * 5.0))
+    global_median = sorted(all_incomes)[len(all_incomes) // 2]
+    if global_median <= 0:
+        raise ValueError("Global median income is non-positive — cannot classify")
 
-    def _lognormal_counts(median_income: float) -> list[float]:
-        from scipy.stats import lognorm  # type: ignore[import]
-        mu = math.log(max(median_income, 1.0))
-        scale = math.exp(mu)
-        out = []
-        for lo, hi in _EDGES:
-            lo_safe = max(lo, 0.01)
-            hi_safe = max(hi, lo_safe + 0.01)
-            frac = lognorm.cdf(hi_safe, s=_SIGMA, scale=scale) - lognorm.cdf(lo_safe, s=_SIGMA, scale=scale)
-            out.append(max(frac, 0.0))
-        return out
+    poverty_upper = 0.60 * global_median
+    working_upper = 1.00 * global_median
+    middle_upper = 2.00 * global_median
 
-    result = {}
+    def _classify(income: float) -> str:
+        if income < poverty_upper:
+            return "Poverty"
+        if income < working_upper:
+            return "Working Class"
+        if income < middle_upper:
+            return "Middle Class"
+        return "Wealthy"
+
+    result: dict[tuple[str, str], dict[str, float]] = {}
     for ag in VALID_AGE_GROUPS:
         for sex in ("Male", "Female"):
-            key_tup = (ag, sex)
-            incomes = income_by_age_sex.get(key_tup)
+            incomes = income_by_age_sex.get((ag, sex))
             if not incomes:
-                result[key_tup] = dict(_ITALY_SOCIOECONOMIC_FALLBACK)
-                continue
-            median_income = sorted(incomes)[len(incomes) // 2]
-            try:
-                counts = _lognormal_counts(median_income)
-                result[key_tup] = classify_brackets(_EDGES, counts, median_income)
-            except Exception:
-                result[key_tup] = dict(_ITALY_SOCIOECONOMIC_FALLBACK)
+                raise ValueError(
+                    f"No income data for age_group={ag!r}, sex={sex!r}"
+                )
+            class_counts: dict[str, float] = {
+                "Poverty": 0.0,
+                "Working Class": 0.0,
+                "Middle Class": 0.0,
+                "Wealthy": 0.0,
+            }
+            for inc in incomes:
+                class_counts[_classify(inc)] += 1.0
+            total = sum(class_counts.values())
+            result[(ag, sex)] = {k: v / total for k, v in class_counts.items()}
 
     return result
 
@@ -698,108 +604,79 @@ def parse_socioeconomic(raw: dict) -> dict[tuple[str, str], dict[str, float]]:
 # ISTAT SDMX civil status parser
 # ---------------------------------------------------------------------------
 
-def parse_civil_status_by_age_sex(raw: dict) -> dict[tuple[str, str], dict[str, float]]:
-    """Parse ``22_289_DF_DCIS_POPRES1_25`` response into ``{(age_group, sex): {status: prob}}``.
+def parse_civil_status_by_age_sex(rows: list[dict]) -> dict[tuple[str, str], dict[str, float]]:
+    """Parse ``22_289_DF_DCIS_POPRES1_25`` CSV rows into ``{(age_group, sex): {status: prob}}``.
 
-    Searches defensively for MARITAL/CIVIL/STATO dimension and age/sex
-    dimensions by name — since the full DSD is not pre-inspected.
-    Raises ``ValueError`` if the marital status dimension cannot be found or
-    all observations are null.
+    Searches defensively for marital status column using several possible names.
+    Raises ``ValueError`` if no data is found.
     """
-    series_dims, obs_dims = _extract_sdmx_dimensions(raw)
-    series = _extract_sdmx_series(raw)
-    dim_lookup = _build_sdmx_dim_lookup(series_dims + obs_dims)
+    latest = _csv_latest_year_rows(rows)
 
-    id_order = [d["id"] for d in series_dims]
-
-    def _find_dim(*keywords: str) -> str | None:
-        for dim_id in id_order:
-            up = dim_id.upper()
-            if any(kw in up for kw in keywords):
-                return dim_id
-        return None
-
-    marital_dim = _find_dim("MARITAL", "CIVIL", "STATO", "CONIUG")
-    ref_area_dim = _find_dim("REF_AREA", "GEO")
-    sex_dim = _find_dim("SEX")
-    age_dim = _find_dim("AGE")
-
-    if marital_dim is None:
-        raise ValueError(
-            f"Cannot find marital/civil status dimension in ISTAT 22_289 response. "
-            f"Available dimensions: {id_order}"
-        )
-    if ref_area_dim is None or sex_dim is None or age_dim is None:
-        raise ValueError(
-            f"Cannot find REF_AREA, SEX or AGE dimensions in ISTAT 22_289 response. "
-            f"Available: {id_order}"
-        )
-
-    marital_pos = id_order.index(marital_dim)
-    ref_area_pos = id_order.index(ref_area_dim)
-    sex_pos = id_order.index(sex_dim)
-    age_pos = id_order.index(age_dim)
-
-    freq_pos: int | None = id_order.index("FREQ") if "FREQ" in id_order else None
-
-    n_time_obs = len(obs_dims[0]["values"]) if obs_dims else 1
-    latest_time_key = str(n_time_obs - 1)
-
+    _MARITAL_COL_CANDIDATES = ("MARITAL_STATUS", "CIVIL_STATUS", "STATO_CIVILE", "CONIUG")
+    _IT_CODES = frozenset({"IT", "TOTAL", "0", "ITA"})
     istat_sex_map = {"1": "Male", "2": "Female", "M": "Male", "F": "Female"}
 
-    it_codes = {
-        code
-        for code, label in dim_lookup.get(ref_area_dim, [])
-        if code in ("IT", "TOTAL", "0", "ITA")
-    }
-    if not it_codes:
-        it_codes = {"IT"}
+    marital_col: str | None = None
+    if latest:
+        cols = set(latest[0].keys())
+        for candidate in _MARITAL_COL_CANDIDATES:
+            if candidate in cols:
+                marital_col = candidate
+                break
+        if marital_col is None:
+            for col in cols:
+                up = col.upper()
+                if any(kw in up for kw in ("MARITAL", "CIVIL", "STATO", "CONIUG")):
+                    marital_col = col
+                    break
+
+    if marital_col is None:
+        raise ValueError(
+            "Cannot find marital/civil status column in ISTAT 22_289 CSV response. "
+            f"Available columns: {list(latest[0].keys()) if latest else '(empty)'}"
+        )
 
     accumulator: dict[tuple[str, str], dict[str, float]] = {}
 
-    for key, series_data in series.items():
-        indices = _sdmx_key_to_indices(key)
-
-        if freq_pos is not None and indices[freq_pos] != 0:
+    for row in latest:
+        freq = row.get("FREQ", "").strip()
+        if freq and freq != "A":
             continue
 
-        ref_area_code = dim_lookup[ref_area_dim][indices[ref_area_pos]][0]
-        if ref_area_code not in it_codes:
+        ref_area = row.get("REF_AREA", "").strip()
+        if ref_area and ref_area not in _IT_CODES:
             continue
 
-        sex_code = dim_lookup[sex_dim][indices[sex_pos]][0]
+        sex_code = row.get("SEX", "").strip()
         sex_label = istat_sex_map.get(sex_code)
         if sex_label is None:
             continue
 
-        age_code = dim_lookup[age_dim][indices[age_pos]][0]
+        age_code = row.get("AGE", "").strip()
         age_group = _ISTAT_EDU_AGE_MAP.get(age_code) or _ISTAT_EMP_AGE_MAP.get(age_code)
         if age_group is None:
-            for ag_map in (_ISTAT_HOUSEHOLD_AGE_MAP,):
-                mapped = ag_map.get(age_code, [])
-                if mapped and mapped[0] in VALID_AGE_GROUPS:
-                    age_group = mapped[0]
-                    break
+            mapped = _ISTAT_HOUSEHOLD_AGE_MAP.get(age_code, [])
+            if mapped and mapped[0] in VALID_AGE_GROUPS:
+                age_group = mapped[0]
         if age_group is None or age_group not in VALID_AGE_GROUPS:
             continue
 
-        marital_code = dim_lookup[marital_dim][indices[marital_pos]][0]
+        marital_code = row.get(marital_col, "").strip()
         status_label = CIVIL_STATUS_MAP.get(marital_code)
         if status_label is None:
             continue
 
-        obs_value = series_data.get("observations", {}).get(latest_time_key, [None])[0]
+        obs_value = _csv_obs_value(row)
         if obs_value is None:
             continue
 
         cell = accumulator.setdefault((age_group, sex_label), {})
-        cell[status_label] = cell.get(status_label, 0.0) + float(obs_value)
+        cell[status_label] = cell.get(status_label, 0.0) + obs_value
 
     if not accumulator:
         raise ValueError(
-            "No non-null civil status data parsed from ISTAT 22_289 response. "
-            "This endpoint is known to be slow — clear the cache and retry, "
-            "or use a tighter key filter."
+            "No civil status data parsed from ISTAT 22_289 CSV response. "
+            "Clear the cache and retry."
         )
 
     result: dict[tuple[str, str], dict[str, float]] = {}
@@ -821,96 +698,45 @@ _OCCUPATION_2011_SCHEMA_MAP: dict[str, str] = {
 }
 
 
-def parse_industry_sector(raw: dict) -> dict[str, float]:
-    """Parse OCCUPATION_2011 from ``150_938`` into ``{sector_label: probability}``.
+def parse_industry_sector(rows: list[dict]) -> dict[str, float]:
+    """Parse OCCUPATION_2011 from ``150_938_DF_*_14`` CSV into ``{sector_label: probability}``.
 
-    Filters: annual, REF_AREA=IT, SEX=total, national age aggregate,
-    all other dimensions at total (idx 0). Skips OCCUPATION_2011 code '99'
-    (total). Raises ``ValueError`` if all observations are null.
+    Filters: annual, REF_AREA=IT, SEX=total. Skips OCCUPATION_2011 code '99'
+    (total). Raises ``ValueError`` if no data found.
     """
-    series_dims, obs_dims = _extract_sdmx_dimensions(raw)
-    series = _extract_sdmx_series(raw)
-    dim_lookup = _build_sdmx_dim_lookup(series_dims + obs_dims)
-
-    id_order = [d["id"] for d in series_dims]
-
-    def _pos(dim_id: str) -> int:
-        return id_order.index(dim_id)
-
-    freq_pos = _pos("FREQ")
-    ref_area_pos = _pos("REF_AREA")
-    sex_pos = _pos("SEX")
-    age_pos = _pos("AGE")
-    edu_pos = _pos("EDU_LEV_HIGHEST")
-    citizenship_pos = _pos("CITIZENSHIP")
-    nace2002_pos = _pos("ECON_ACTIVITY_NACE_2002")
-    nace2007_pos = _pos("ECON_ACTIVITY_NACE_2007")
-    posiz_pos = _pos("POSIZ_PROF")
-    prof_status_pos = _pos("PROF_STATUS")
-    occ2001_pos = _pos("OCCUPATION_2001")
-    occ2011_pos = _pos("OCCUPATION_2011")
-    fpt_pos = _pos("FULL_PART_TIME")
-    perm_temp_pos = _pos("PERM_TEMP_EMPLOYEES")
-
-    n_time_obs = len(obs_dims[0]["values"]) if obs_dims else 1
-    latest_time_key = str(n_time_obs - 1)
+    latest = _csv_latest_year_rows(rows)
 
     accumulator: dict[str, float] = {}
     found_any = False
 
-    for key, series_data in series.items():
-        indices = _sdmx_key_to_indices(key)
-
-        if indices[freq_pos] != 0:
+    for row in latest:
+        if row.get("FREQ", "").strip() != "A":
             continue
-        if indices[ref_area_pos] != 0:
-            continue
-        if indices[citizenship_pos] != 0:
-            continue
-        if indices[nace2002_pos] != 0:
-            continue
-        if indices[nace2007_pos] != 0:
-            continue
-        if indices[posiz_pos] != 0:
-            continue
-        if indices[prof_status_pos] != 0:
-            continue
-        if indices[occ2001_pos] != 0:
-            continue
-        if indices[fpt_pos] != 0:
-            continue
-        if indices[perm_temp_pos] != 0:
+        ref_area = row.get("REF_AREA", "").strip()
+        if ref_area and ref_area != "IT":
             continue
 
-        sex_code = dim_lookup["SEX"][indices[sex_pos]][0]
+        sex_code = row.get("SEX", "").strip()
         if sex_code != "9":
             continue
 
-        edu_code = dim_lookup["EDU_LEV_HIGHEST"][indices[edu_pos]][0]
-        if edu_code != "99":
-            continue
-
-        age_code = dim_lookup["AGE"][indices[age_pos]][0]
-        if age_code not in _NATIONAL_AGE_CODES:
-            continue
-
-        occ2011_code = dim_lookup["OCCUPATION_2011"][indices[occ2011_pos]][0]
+        occ2011_code = row.get("OCCUPATION_2011", "").strip()
         if occ2011_code == "99":
             continue
         schema_label = _OCCUPATION_2011_SCHEMA_MAP.get(occ2011_code)
         if schema_label is None:
             continue
 
-        obs_value = series_data.get("observations", {}).get(latest_time_key, [None])[0]
+        obs_value = _csv_obs_value(row)
         if obs_value is None:
             continue
 
         found_any = True
-        accumulator[schema_label] = accumulator.get(schema_label, 0.0) + float(obs_value)
+        accumulator[schema_label] = accumulator.get(schema_label, 0.0) + obs_value
 
     if not found_any:
         raise ValueError(
-            "No non-null industry sector data parsed from ISTAT 150_938 OCCUPATION_2011. "
+            "No industry sector data parsed from ISTAT 150_938 OCCUPATION_2011 CSV. "
             "Clear config/assets/istat_cache/ and re-run to fetch live data."
         )
 
@@ -922,105 +748,66 @@ def parse_industry_sector(raw: dict) -> dict[str, float]:
 # ISTAT SDMX employment type parser
 # ---------------------------------------------------------------------------
 
-def parse_employment_type_by_age(raw: dict) -> dict[tuple[str, str], dict[str, float]]:
-    """Parse FULL_PART_TIME × PERM_TEMP_EMPLOYEES from ``150_938``.
+def parse_employment_type_by_age(rows: list[dict]) -> dict[tuple[str, str], dict[str, float]]:
+    """Parse FULL_PART_TIME × PERM_TEMP_EMPLOYEES from ``150_938_DF_*_18`` CSV.
 
     Returns ``{(age_group, sex): {composite_key: probability}}`` where
     composite_key is ``"{contract}|{hours}"``, e.g. ``"Permanent|Full-time"``.
 
-    Filters: POSIZ_PROF=employees only (code '1'). Both sexes separately.
-    Raises ``ValueError`` if all observations are null.
+    Child dataflow ``_18`` provides prof_status × FT/PT. If both FT/PT and
+    PERM_TEMP columns are present, composite keys are used. If only FT/PT
+    is meaningful (PERM_TEMP fixed at total), FT/PT-only labels are used with
+    Italian census perm/temp splits applied.
+
+    Raises ``ValueError`` if no data found.
     """
-    series_dims, obs_dims = _extract_sdmx_dimensions(raw)
-    series = _extract_sdmx_series(raw)
-    dim_lookup = _build_sdmx_dim_lookup(series_dims + obs_dims)
-
-    id_order = [d["id"] for d in series_dims]
-
-    def _pos(dim_id: str) -> int:
-        return id_order.index(dim_id)
-
-    freq_pos = _pos("FREQ")
-    ref_area_pos = _pos("REF_AREA")
-    sex_pos = _pos("SEX")
-    age_pos = _pos("AGE")
-    edu_pos = _pos("EDU_LEV_HIGHEST")
-    citizenship_pos = _pos("CITIZENSHIP")
-    nace2002_pos = _pos("ECON_ACTIVITY_NACE_2002")
-    nace2007_pos = _pos("ECON_ACTIVITY_NACE_2007")
-    posiz_pos = _pos("POSIZ_PROF")
-    prof_status_pos = _pos("PROF_STATUS")
-    occ2001_pos = _pos("OCCUPATION_2001")
-    occ2011_pos = _pos("OCCUPATION_2011")
-    fpt_pos = _pos("FULL_PART_TIME")
-    perm_temp_pos = _pos("PERM_TEMP_EMPLOYEES")
-
-    n_time_obs = len(obs_dims[0]["values"]) if obs_dims else 1
-    latest_time_key = str(n_time_obs - 1)
-
+    latest = _csv_latest_year_rows(rows)
     istat_sex_map = {"1": "Male", "2": "Female"}
     fpt_label_map = {"1": "Full-time", "2": "Part-time"}
     perm_temp_label_map = {"1": "Temporary", "2": "Permanent"}
 
-    posiz_employees_idx = next(
-        (i for i, (code, _) in enumerate(dim_lookup["POSIZ_PROF"]) if code == "1"),
-        None,
-    )
-    edu_total_idx = next(
-        (i for i, (code, _) in enumerate(dim_lookup["EDU_LEV_HIGHEST"]) if code == "99"),
-        None,
-    )
-
-    if posiz_employees_idx is None:
-        raise ValueError("POSIZ_PROF code '1' (employees) not found in 150_938 dimension lookup")
+    has_perm_temp_variation = False
+    if latest:
+        perm_temp_vals = {r.get("PERM_TEMP_EMPLOYEES", "").strip() for r in latest}
+        perm_temp_vals.discard("")
+        perm_temp_vals.discard("9")
+        perm_temp_vals.discard("99")
+        has_perm_temp_variation = len(perm_temp_vals) > 1
 
     accumulator: dict[tuple[str, str], dict[str, float]] = {}
     found_any = False
 
-    for key, series_data in series.items():
-        indices = _sdmx_key_to_indices(key)
-
-        if indices[freq_pos] != 0:
+    for row in latest:
+        if row.get("FREQ", "").strip() != "A":
             continue
-        if indices[ref_area_pos] != 0:
-            continue
-        if indices[citizenship_pos] != 0:
-            continue
-        if indices[nace2002_pos] != 0:
-            continue
-        if indices[nace2007_pos] != 0:
-            continue
-        if indices[posiz_pos] != posiz_employees_idx:
-            continue
-        if indices[prof_status_pos] != 0:
-            continue
-        if indices[occ2001_pos] != 0:
-            continue
-        if indices[occ2011_pos] != 0:
-            continue
-        if edu_total_idx is not None and indices[edu_pos] != edu_total_idx:
+        ref_area = row.get("REF_AREA", "").strip()
+        if ref_area and ref_area != "IT":
             continue
 
-        fpt_code = dim_lookup["FULL_PART_TIME"][indices[fpt_pos]][0]
-        if fpt_code == "9":
+        fpt_code = row.get("FULL_PART_TIME", "").strip()
+        if fpt_code in ("9", "99", ""):
             continue
         fpt_label = fpt_label_map.get(fpt_code)
         if fpt_label is None:
             continue
 
-        perm_temp_code = dim_lookup["PERM_TEMP_EMPLOYEES"][indices[perm_temp_pos]][0]
-        if perm_temp_code == "9":
-            continue
-        perm_temp_label = perm_temp_label_map.get(perm_temp_code)
-        if perm_temp_label is None:
-            continue
+        if has_perm_temp_variation:
+            perm_temp_code = row.get("PERM_TEMP_EMPLOYEES", "").strip()
+            if perm_temp_code in ("9", "99", ""):
+                continue
+            perm_temp_label = perm_temp_label_map.get(perm_temp_code)
+            if perm_temp_label is None:
+                continue
+            composite = f"{perm_temp_label}|{fpt_label}"
+        else:
+            composite = f"Unspecified|{fpt_label}"
 
-        sex_code = dim_lookup["SEX"][indices[sex_pos]][0]
+        sex_code = row.get("SEX", "").strip()
         sex_label = istat_sex_map.get(sex_code)
         if sex_label is None:
             continue
 
-        age_code = dim_lookup["AGE"][indices[age_pos]][0]
+        age_code = row.get("AGE", "").strip()
         if age_code in _SKIP_EMP_AGE_CODES or age_code in _NATIONAL_AGE_CODES:
             age_group = "ALL"
         else:
@@ -1028,19 +815,18 @@ def parse_employment_type_by_age(raw: dict) -> dict[tuple[str, str], dict[str, f
             if age_group is None:
                 continue
 
-        composite = f"{perm_temp_label}|{fpt_label}"
-        obs_value = series_data.get("observations", {}).get(latest_time_key, [None])[0]
+        obs_value = _csv_obs_value(row)
         if obs_value is None:
             continue
 
         found_any = True
         cell_key = (age_group, sex_label)
         cell = accumulator.setdefault(cell_key, {})
-        cell[composite] = cell.get(composite, 0.0) + float(obs_value)
+        cell[composite] = cell.get(composite, 0.0) + obs_value
 
     if not found_any:
         raise ValueError(
-            "No non-null employment type data parsed from ISTAT 150_938. "
+            "No employment type data parsed from ISTAT 150_938 CSV. "
             "Clear config/assets/istat_cache/ and re-run to fetch live data."
         )
 
@@ -1066,76 +852,84 @@ def parse_employment_type_by_age(raw: dict) -> dict[tuple[str, str], dict[str, f
 
 
 # ---------------------------------------------------------------------------
-# ISTAT SDMX household size parser
+# Eurostat household size parser
 # ---------------------------------------------------------------------------
-
-_ITALY_HOUSEHOLD_SIZE_FALLBACK: dict[str, float] = {
-    "1 person": 0.33,
-    "2 persons": 0.27,
-    "3-4 persons": 0.31,
-    "5+ persons": 0.09,
-}
 
 
 def parse_household_size(raw: dict) -> dict[str, float]:
-    """Return household size distribution from ``32_292``.
+    """Parse ``ilc_lvph03`` response into ``{size_label: probability}``.
 
-    32_292 reports median household income by size — not household counts.
-    A direct normalization of income values is not a valid probability
-    distribution. Returns the 2023 ISTAT census approximation and logs a WARNING.
+    Uses the ``n_person`` dimension (codes: 1, 2, 3, 4, 5, GE6).
+    Unit is percentage (PC). Uses latest available year.
+    Raises ``ValueError`` if no data found.
     """
-    logger.warning(
-        "parse_household_size: ISTAT 32_292 provides household income values, "
-        "not household count distributions. Using 2023 ISTAT census approximation."
-    )
-    return dict(_ITALY_HOUSEHOLD_SIZE_FALLBACK)
+    dims = raw.get("dimension", {})
+    id_list: list[str] = raw.get("id", list(dims.keys()))
+    size: list[int] = raw.get("size", [len(dims[k]["category"]["label"]) for k in id_list])
+    values = raw.get("value", {})
+
+    nperson_key = next((k for k in id_list if k == "n_person"), None)
+    time_key = next((k for k in id_list if k == "time"), None)
+
+    if nperson_key is None:
+        raise ValueError(
+            f"No 'n_person' dimension in Eurostat ilc_lvph03 response; id={id_list}"
+        )
+
+    nperson_cats = list(dims[nperson_key]["category"]["label"].keys())
+    nperson_labels = dims[nperson_key]["category"]["label"]
+
+    strides = _compute_strides(id_list, size)
+    time_idx = _latest_time_index(dims) if time_key else 0
+
+    extra_keys = [k for k in id_list if k not in (nperson_key,) and k != "time"]
+
+    counts: dict[str, float] = {}
+    for ni, np_code in enumerate(nperson_cats):
+        label = nperson_labels.get(np_code, np_code)
+        base = ni * strides[nperson_key]
+        if time_key:
+            base += time_idx * strides[time_key]
+
+        if extra_keys:
+            extra_sizes = [size[id_list.index(k)] for k in extra_keys]
+            total_extra = 1
+            for es in extra_sizes:
+                total_extra *= es
+            np_total = 0.0
+            for ei in range(total_extra):
+                extra_offset = 0
+                remainder = ei
+                for k, es in zip(reversed(extra_keys), reversed(extra_sizes)):
+                    extra_offset += (remainder % es) * strides[k]
+                    remainder //= es
+                v = _get_value(values, base + extra_offset)
+                if v is not None:
+                    np_total += v
+        else:
+            v = _get_value(values, base)
+            np_total = v if v is not None else 0.0
+
+        if np_total > 0:
+            counts[label] = counts.get(label, 0.0) + np_total
+
+    if not counts:
+        raise ValueError("No household size data parsed from Eurostat ilc_lvph03 response")
+    total = sum(counts.values()) or 1.0
+    return {k: v / total for k, v in counts.items()}
 
 
-# ---------------------------------------------------------------------------
-# ISTAT SDMX income source parser
-# ---------------------------------------------------------------------------
 
-_INCOME_SOURCE_FALLBACK: dict[str, dict[str, float]] = {
-    "Employed": {
-        "Employment income": 0.87,
-        "Capital income": 0.06,
-        "Social transfers": 0.04,
-        "Business/self-employment": 0.03,
-    },
-    "Unemployed": {
-        "Social transfers": 0.72,
-        "Employment income": 0.18,
-        "Capital income": 0.06,
-        "Business/self-employment": 0.04,
-    },
-    "Retired": {
-        "Pension": 0.80,
-        "Capital income": 0.10,
-        "Social transfers": 0.07,
-        "Employment income": 0.02,
-        "Business/self-employment": 0.01,
-    },
-    "Not in labour force": {
-        "Social transfers": 0.60,
-        "Employment income": 0.25,
-        "Capital income": 0.10,
-        "Business/self-employment": 0.05,
-    },
-}
 
-_FAM_SOURCE_LABEL_MAP: dict[str, str] = {
-    "1": "Employment income",
-    "2": "Business/self-employment",
-    "3": "Social transfers",
-    "4": "Capital income",
-}
+_EU27_CODES = frozenset({
+    "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES",
+    "FI", "FR", "HR", "HU", "IE", "LT", "LU", "LV", "MT", "NL",
+    "PL", "PT", "RO", "SE", "SI", "SK",
+})
 
-_LABPROF_STATUS_MAP: dict[str, str] = {
-    "1A": "Employed",
-    "1B": "Employed",
-    "2A": "Retired",
-    "2B": "Unemployed",
-}
+
+def _is_country_code(code: str) -> bool:
+    return len(code) == 2 and code.isalpha() and code.isupper()
 
 
 def parse_birth_location(raw: dict) -> dict[str, float]:
@@ -1148,14 +942,6 @@ def parse_birth_location(raw: dict) -> dict[str, float]:
     Aggregate codes ('TOTAL', 'EU27_2020', etc.) are skipped.
     Raises ``ValueError`` if result is empty.
     """
-    _EU27_CODES = frozenset({
-        "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES",
-        "FI", "FR", "HR", "HU", "IE", "LT", "LU", "LV", "MT", "NL",
-        "PL", "PT", "RO", "SE", "SI", "SK",
-    })
-    _AGGREGATE_CODES = frozenset({
-        "TOTAL", "EU27_2020", "EU28", "NEU28", "NEU27_2020_EFTA", "EEA31", "OTH", "UNK",
-    })
 
     dims = raw.get("dimension", {})
     id_list: list[str] = raw.get("id", list(dims.keys()))
@@ -1179,7 +965,7 @@ def parse_birth_location(raw: dict) -> dict[str, float]:
 
     counts: dict[str, float] = {}
     for ci, ctz_code in enumerate(citizen_cats):
-        if ctz_code in _AGGREGATE_CODES:
+        if not _is_country_code(ctz_code):
             continue
         if ctz_code == "IT":
             label = "Italy"
@@ -1265,7 +1051,7 @@ def parse_birth_country_detail(raw: dict) -> dict[tuple[str, str], dict[str, flo
 
     marginal: dict[str, float] = {}
     for ci, ctz_code in enumerate(citizen_cats):
-        if ctz_code in _BIRTH_COUNTRY_AGGREGATE_CODES or ctz_code == "IT":
+        if not _is_country_code(ctz_code) or ctz_code == "IT":
             continue
 
         country_name = _EUROSTAT_COUNTRY_CODES.get(ctz_code, "Other")
@@ -1308,114 +1094,76 @@ def parse_birth_country_detail(raw: dict) -> dict[tuple[str, str], dict[str, flo
     }
 
 
-def parse_income_source(raw: dict) -> dict[tuple[str, str], dict[str, float]]:
-    """Parse ``32_292`` FAM_MAIN_INCOME_SOURCE into ``{(emp_status, age_group): {source: prob}}``.
+def parse_parental_structure(raw: dict) -> dict[str, float]:
+    """Parse ``ilc_lvph02`` response into ``{household_type_label: probability}``.
 
-    32_292 reports income VALUES per source/status — not household counts per source.
-    If all observations are null (current cached prototype), uses a Norway-pattern
-    hardcoded fallback and logs a WARNING. Otherwise attempts to derive weights from
-    income values, but logs a WARNING about the proxy nature of this approach.
+    Uses the ``hhcomp`` dimension. Maps Eurostat household composition codes
+    to schema labels. Uses latest available year.
+    Raises ``ValueError`` if no data found.
     """
-    series_dims, obs_dims = _extract_sdmx_dimensions(raw)
-    series = _extract_sdmx_series(raw)
-    dim_lookup = _build_sdmx_dim_lookup(series_dims + obs_dims)
+    _HHCOMP_SCHEMA_MAP: dict[str, str] = {
+        "A1": "Living Alone",
+        "A1_DCH": "Single Parent",
+        "A2": "Couple without Children",
+        "A2_DCH1": "Nuclear Family",
+        "A2_DCH2": "Nuclear Family",
+        "A2_DCH_GE3": "Nuclear Family",
+        "A_GE3": "Extended Family",
+        "A_GE3_DCH": "Extended Family",
+    }
 
-    id_order = [d["id"] for d in series_dims]
+    dims = raw.get("dimension", {})
+    id_list: list[str] = raw.get("id", list(dims.keys()))
+    size_list: list[int] = raw.get("size", [len(dims[k]["category"]["label"]) for k in id_list])
+    values = raw.get("value", {})
 
-    def _pos(dim_id: str) -> int:
-        return id_order.index(dim_id)
+    hhcomp_key = next((k for k in id_list if k == "hhcomp"), None)
+    time_key = next((k for k in id_list if k == "time"), None)
 
-    data_type_pos = _pos("DATA_TYPE")
-    imputed_rents_pos = _pos("IMPUTED_RENTS")
-    measure_pos = _pos("MEASURE")
-    fam_source_pos = _pos("FAM_MAIN_INCOME_SOURCE")
-    n_hhcomp_pos = _pos("NUMBER_HOUSEHOLD_COMP")
-    hh_type_pos = _pos("HOUSEHOLD_TYPOLOGY")
-    sex_pos = _pos("SEX_MAIN_PERCEPTOR")
-    age_pos = _pos("AGE_MAIN_EARNIER")
-
-    labprof_dim = "LABPROF_STATUS_C_MAIN_EARNER"
-    labprof_pos = _pos(labprof_dim) if labprof_dim in id_order else None
-
-    time_key_2023 = "0"
-
-    found_any = False
-    accumulator: dict[tuple[str, str], dict[str, dict[str, float]]] = {}
-
-    for key, series_data in series.items():
-        indices = _sdmx_key_to_indices(key)
-
-        if indices[data_type_pos] != 0:
-            continue
-        if indices[imputed_rents_pos] != 1:
-            continue
-        if indices[measure_pos] != 0:
-            continue
-        if indices[n_hhcomp_pos] != 0:
-            continue
-        if indices[hh_type_pos] != 0:
-            continue
-
-        sex_code = dim_lookup["SEX_MAIN_PERCEPTOR"][indices[sex_pos]][0]
-        if sex_code != "9":
-            continue
-
-        fam_code = dim_lookup["FAM_MAIN_INCOME_SOURCE"][indices[fam_source_pos]][0]
-        if fam_code == "9":
-            continue
-        source_label = _FAM_SOURCE_LABEL_MAP.get(fam_code)
-        if source_label is None:
-            continue
-
-        age_code = dim_lookup["AGE_MAIN_EARNIER"][indices[age_pos]][0]
-        age_groups = _ISTAT_HOUSEHOLD_AGE_MAP.get(age_code)
-        if age_groups is None:
-            continue
-
-        labprof_code = "TOTAL"
-        if labprof_pos is not None:
-            labprof_code = dim_lookup[labprof_dim][indices[labprof_pos]][0]
-
-        emp_status = _LABPROF_STATUS_MAP.get(labprof_code)
-        if emp_status is None:
-            continue
-
-        obs_value = series_data.get("observations", {}).get(time_key_2023, [None])[0]
-        if obs_value is None:
-            continue
-
-        found_any = True
-        for ag in age_groups:
-            if ag not in VALID_AGE_GROUPS:
-                continue
-            cell = accumulator.setdefault((emp_status, ag), {})
-            cell[source_label] = cell.get(source_label, 0.0) + float(obs_value)
-
-    if not found_any:
-        logger.warning(
-            "parse_income_source: no non-null data from ISTAT 32_292. "
-            "Using Italy/Norway-pattern labour market approximation as fallback. "
-            "Clear config/assets/istat_cache/ to fetch live data."
+    if hhcomp_key is None:
+        raise ValueError(
+            f"No 'hhcomp' dimension in Eurostat ilc_lvph02 response; id={id_list}"
         )
-        result: dict[tuple[str, str], dict[str, float]] = {}
-        for emp_status, source_dist in _INCOME_SOURCE_FALLBACK.items():
-            for ag in VALID_AGE_GROUPS:
-                result[(emp_status, ag)] = dict(source_dist)
-        return result
 
-    logger.warning(
-        "parse_income_source: 32_292 provides income values per source, "
-        "not household counts. Income-value weights are a proxy for source distribution."
-    )
+    hhcomp_cats = list(dims[hhcomp_key]["category"]["label"].keys())
 
-    result = {}
-    for (emp_status, ag), source_counts in accumulator.items():
-        total = sum(source_counts.values()) or 1.0
-        result[(emp_status, ag)] = {k: v / total for k, v in source_counts.items()}
+    strides = _compute_strides(id_list, size_list)
+    time_idx = _latest_time_index(dims) if time_key else 0
 
-    for emp_status, fallback_dist in _INCOME_SOURCE_FALLBACK.items():
-        for ag in VALID_AGE_GROUPS:
-            if (emp_status, ag) not in result:
-                result[(emp_status, ag)] = dict(fallback_dist)
+    extra_keys = [k for k in id_list if k not in (hhcomp_key,) and k != "time"]
 
-    return result
+    counts: dict[str, float] = {}
+    for hi, hh_code in enumerate(hhcomp_cats):
+        schema_label = _HHCOMP_SCHEMA_MAP.get(hh_code)
+        if schema_label is None:
+            continue
+        base = hi * strides[hhcomp_key]
+        if time_key:
+            base += time_idx * strides[time_key]
+
+        if extra_keys:
+            extra_sizes = [size_list[id_list.index(k)] for k in extra_keys]
+            total_extra = 1
+            for es in extra_sizes:
+                total_extra *= es
+            hh_total = 0.0
+            for ei in range(total_extra):
+                extra_offset = 0
+                remainder = ei
+                for k, es in zip(reversed(extra_keys), reversed(extra_sizes)):
+                    extra_offset += (remainder % es) * strides[k]
+                    remainder //= es
+                v = _get_value(values, base + extra_offset)
+                if v is not None:
+                    hh_total += v
+        else:
+            v = _get_value(values, base)
+            hh_total = v if v is not None else 0.0
+
+        if hh_total > 0:
+            counts[schema_label] = counts.get(schema_label, 0.0) + hh_total
+
+    if not counts:
+        raise ValueError("No parental structure data parsed from Eurostat ilc_lvph02 response")
+    total = sum(counts.values()) or 1.0
+    return {k: v / total for k, v in counts.items()}

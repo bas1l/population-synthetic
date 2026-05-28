@@ -2,7 +2,7 @@
 ISTATSampleService — conditionally samples one individual from Italian
 ``PopulationDistributions`` produced by ``ISTATFetchService``.
 
-Sampling chain (11 steps, deterministic given ``rng``):
+Sampling chain (10 steps, deterministic given ``rng``):
   1. Joint (age, sex)                       — from age_sex
   2. Education | (age_group, sex)           — from education_by_age
   3. Employment | (sex, education)          — from employment_by_sex_education
@@ -13,8 +13,7 @@ Sampling chain (11 steps, deterministic given ``rng``):
   7. Employment type | (age_group, sex)     — from employment_type_by_age (employed only)
   8. Housing tenure                         — marginal
   9. Household size                         — marginal
- 10. Income source | (employment, age)      — from income_source_by_employment_age
- 11. Birth country detail | (age, sex)      — from birth_country_detail (non-Italy only)
+ 10. Birth country detail | (age, sex)      — from birth_country_detail (non-Italy only)
 """
 
 from __future__ import annotations
@@ -39,17 +38,6 @@ _ISTAT_EDU_TO_EMP_EDU: dict[str, str] = {
     "No Formal Education": "No Formal Education",
     "High School (Liceo/Professionale)": "High School (Liceo/Professionale)",
     "University Degree": "University Degree",
-}
-
-# ---------------------------------------------------------------------------
-# Employment-to-income-source key map:
-# ISTAT employment labels → keys in income_source_by_employment_age
-# ---------------------------------------------------------------------------
-_ISTAT_EMP_TO_INCOME_EMP: dict[str, str] = {
-    "Employed": "Employed",
-    "Unemployed": "Unemployed",
-    "Not in labour force": "Not in labour force",
-    "Retired": "Retired",
 }
 
 # Employment statuses that are considered "in employment" for ISTAT data
@@ -80,15 +68,6 @@ def _resolve_edu_key(education_level: str, sex_dists: dict) -> str | None:
     for key in sex_dists:
         if key.lower() == edu_lower:
             return key
-    return None
-
-
-def _resolve_inc_age_key(age_group: str, emp_dist: dict) -> str | None:
-    """Return the income-source age key present in ``emp_dist`` matching
-    ``age_group``.  Falls back to the first available key if no exact match.
-    """
-    if age_group in emp_dist:
-        return age_group
     return None
 
 
@@ -255,35 +234,7 @@ class ISTATSampleService:
         household_size_label = sample_from(rng, distributions.household_size)
 
         # ------------------------------------------------------------------
-        # Step 10: income source | (employment_status, age_group)
-        # ------------------------------------------------------------------
-        inc_emp_key = _ISTAT_EMP_TO_INCOME_EMP.get(employment_status_label)
-        if inc_emp_key is None:
-            raise ValueError(
-                f"No income_source employment mapping for: {employment_status_label!r}"
-            )
-        inc_emp_dist = distributions.income_source_by_employment_age
-        matched_emp_dist = {
-            age_k: d for (emp_k, age_k), d in inc_emp_dist.items()
-            if emp_k == inc_emp_key
-        }
-        if not matched_emp_dist:
-            for (emp_k, age_k), d in inc_emp_dist.items():
-                if d:
-                    matched_emp_dist = {age_k: d}
-                    break
-        if not matched_emp_dist:
-            raise ValueError(
-                f"No income_source distribution for employment={inc_emp_key!r}"
-            )
-        inc_age_key = _resolve_inc_age_key(age_group, matched_emp_dist)
-        if inc_age_key is None:
-            inc_age_key = next(iter(matched_emp_dist))
-        inc_src_dist = matched_emp_dist[inc_age_key]
-        income_source_label = sample_from(rng, inc_src_dist)
-
-        # ------------------------------------------------------------------
-        # Step 11: birth country detail | (age_group, sex)
+        # Step 10: birth country detail | (age_group, sex)
         #          Only sampled for non-Italy-born individuals.
         # ------------------------------------------------------------------
         birth_country_raw: dict
@@ -333,7 +284,6 @@ class ISTATSampleService:
             "employment_type": employment_type_raw,
             "housing_tenure": {"label": housing_tenure_label},
             "household_size": {"label": household_size_label},
-            "income_source": {"label": income_source_label},
             "birth_country_detail": birth_country_raw,
             "parental_structure": {"label": parental_structure_label},
         }

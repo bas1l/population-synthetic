@@ -1,4 +1,6 @@
-from typing import Any, Dict, List, Protocol, runtime_checkable
+from __future__ import annotations
+
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -14,16 +16,16 @@ class LLMClient(Protocol):
     def update_default_model(self, new_model_name: str) -> None:
         ...
 
-    def get_current_configuration(self) -> Dict[str, Any]:
+    def get_current_configuration(self) -> dict[str, Any]:
         ...
 
     def clear_history(self) -> None:
         ...
 
     @property
-    def last_metadata(self) -> Dict[str, Any]:
+    def last_metadata(self) -> dict[str, Any]:
         ...
 
     @property
-    def history(self) -> List[Dict[str, Any]]:
+    def history(self) -> list[dict[str, Any]]:
         ...

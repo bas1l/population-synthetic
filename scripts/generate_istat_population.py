@@ -51,6 +51,8 @@ def main() -> None:
         "demo_r_pjangrp3": "Population by NUTS2 region (Eurostat demo_r_pjangrp3)",
         "demo_r_d2jan": "Population by NUTS2 region fallback (Eurostat demo_r_d2jan)",
         "ilc_lvho02": "Housing tenure by income group (Eurostat EU-SILC ilc_lvho02)",
+        "ilc_lvph02": "Household composition / parental structure (Eurostat ilc_lvph02)",
+        "ilc_lvph03": "Household size distribution (Eurostat ilc_lvph03)",
         "migr_pop1ctz": "Population by citizenship / birth location (Eurostat migr_pop1ctz)",
         "migr_pop1ctz#detail": "Birth country detail — top origin countries (Eurostat migr_pop1ctz)",
         "52_1194_DF_DCCV_POPTIT1_UNT2020_1": "Population by education level, age, sex (ISTAT 52_1194)",
@@ -58,13 +60,7 @@ def main() -> None:
         "150_938#industry": "Industry sector from ISTAT 150_938 OCCUPATION_2011 dimension",
         "150_938#employment_type": "Employment type (FT/PT x perm/temp) from ISTAT 150_938",
         "32_292": "Household income and structure by type (ISTAT 32_292 / EU-SILC)",
-        "32_292#household_size": "Household size distribution (ISTAT 32_292 proxy)",
-        "32_292#income_source": "Income source by employment status (ISTAT 32_292 proxy)",
         "22_289_DF_DCIS_POPRES1_25": "Civil status by age and sex (ISTAT 22_289)",
-        "istat_parental_structure#approximate": (
-            "Family/parental structure — approximate Italian 2023 census distribution "
-            "(no ISTAT dataflow provides household counts by family type at national level)"
-        ),
     }
 
     tables_used = [

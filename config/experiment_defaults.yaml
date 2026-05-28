@@ -5,4 +5,4 @@ parameters:
   output_base: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data"
   parallel:
     n: 100
-    ensure_n: false
+    retry_until_success: false

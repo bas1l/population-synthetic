@@ -29,7 +29,7 @@ actions:
       - key: workers
         label: "Parallel workers"
         type: int
-        default: null
+        default: 1
         default_from_manifest: parallel_workers
         help: "Number of parallel worker processes"
       - key: retry-until-success

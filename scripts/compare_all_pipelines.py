@@ -21,7 +21,6 @@ Usage:
 
 import argparse
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -101,12 +100,18 @@ def _mean_tv_distance(report: dict) -> float:
     return sum(tv_values) / len(tv_values)
 
 
+def _split_csv(values: list[str] | None) -> list[str] | None:
+    if values is None:
+        return None
+    return [v.strip() for item in values for v in item.split(",") if v.strip()] or None
+
+
 def main() -> None:
     args = _parse_args()
 
-    country_filter = args.countries or ["swedish"]
-    model_filter = args.models
-    strategy_filter = args.strategies
+    country_filter = _split_csv(args.countries) or ["swedish"]
+    model_filter = _split_csv(args.models)
+    strategy_filter = _split_csv(args.strategies)
 
     all_models = discover_axis_values("models")
     all_strategies = discover_axis_values("strategies")
@@ -211,8 +216,6 @@ def main() -> None:
 
         if not args.no_charts:
             charts_dir = comparison_output_dir / slug
-            if charts_dir.exists():
-                shutil.rmtree(charts_dir)
             plot_comparison_charts(
                 reference_pop,
                 pipeline_pop,

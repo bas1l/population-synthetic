@@ -145,14 +145,14 @@ def _generate_one(
         with _progress_lock:
             _completed += 1
             c, fa = _completed, _failed
-        logger.info("[%d/%d] OK  persona_%05d  (failed: %d)", c, total, index, fa)
+        logger.info("──── ✓ [%d/%d] persona_%05d OK ──── (failed so far: %d)", c, total, index, fa)
         return index, True, "ok"
 
     except Exception as e:
         with _progress_lock:
             _failed += 1
             c, fa = _completed, _failed
-        logger.error("[%d/%d] FAIL persona_%05d: %s  (failed: %d)", c, total, index, e, fa)
+        logger.error("──── ✗ [%d/%d] persona_%05d FAIL ──── %s  (failed so far: %d)", c, total, index, e, fa)
         return index, False, str(e)
 
     finally:
@@ -316,7 +316,7 @@ def main() -> None:
     if args.log_llm is None:
         args.log_llm = True
     if args.workers is None:
-        args.workers = 8
+        args.workers = 1
 
     if not args.mode or not args.config:
         parser.error("Either --manifest or both --mode and --config are required")

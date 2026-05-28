@@ -86,20 +86,20 @@ config/assets/
 
 | # | Field | Source | Dataset/Dataflow ID | Status |
 |---|-------|--------|---------------------|--------|
-| 1 | `age_sex` | Eurostat | `demo_pjan` | Clean |
-| 2 | `education_by_age` | ISTAT | `52_1194_DF_DCCV_POPTIT1_UNT2020_1` | Clean |
-| 3 | `employment_by_sex_education` | ISTAT | `150_938` | Clean |
-| 4 | `birth_location` | Eurostat | `migr_pop1ctz` (derived) | Derived |
-| 5 | `region` | Eurostat | `demo_r_pjangrp3` | Needs validation in Phase 3 |
-| 6 | `socioeconomic` | ISTAT | `32_292` | Clean (household-level proxy) |
-| 7 | `parental_structure` | ISTAT | Investigate during Phase 5 | Raise if no clean source |
-| 8 | `civil_status_by_age_sex` | ISTAT | `22_289_DF_DCIS_POPRES1_25` | Attempt with minimal key filter; raise on timeout |
-| 9 | `industry_sector` | ISTAT | `150_938` (OCCUPATION_2011 dim) | Embedded in employment |
-| 10 | `employment_type_by_age` | ISTAT | `150_938` (FT/PT + perm/temp dims) | Embedded in employment |
-| 11 | `housing_tenure` | Eurostat | `ilc_lvho02` | Clean |
-| 12 | `household_size` | ISTAT | `32_292` (NUMBER_HOUSEHOLD_COMP) | Proxy |
-| 13 | `income_source_by_employment_age` | ISTAT | `32_292` (FAM_MAIN_INCOME_SOURCE) | Approximate; raise if data unavailable |
-| 14 | `birth_country_detail` | Eurostat/ISTAT | `migr_pop1ctz` or `29_348` | Needs investigation in Phase 5 |
+| 1 | `age_sex` | Eurostat | `demo_pjan` | **Working** (JSON-stat) |
+| 2 | `education_by_age` | ISTAT | `52_1194_DF_DCCV_POPTIT1_UNT2020_1` | **Working** (CSV, Phase 8 fix) |
+| 3 | `employment_by_sex_education` | ISTAT | `150_938_DF_DCCV_OCCUPATIT1_17` | **Working** (CSV, Phase 8 fix) |
+| 4 | `birth_location` | Eurostat | `migr_pop1ctz` (derived) | **Working** (JSON-stat) |
+| 5 | `region` | Eurostat | `demo_r_pjangrp3` | **Working** (JSON-stat) |
+| 6 | `socioeconomic` | ISTAT | `32_292_DF_DCCV_REDNETFAMFONTERED_6` | **Working** (CSV, Phase 8 fix) |
+| 7 | `parental_structure` | Eurostat | `ilc_lvph02` | **Working** (JSON-stat, 5 categories) |
+| 8 | `civil_status_by_age_sex` | ISTAT | `22_289_DF_DCIS_POPRES1_25` | **Working** (CSV, timeout fallback) |
+| 9 | `industry_sector` | ISTAT | `150_938_DF_DCCV_OCCUPATIT1_14` | **Working** (CSV, Phase 8 fix) |
+| 10 | `employment_type_by_age` | ISTAT | `150_938_DF_DCCV_OCCUPATIT1_18` | **Working** (CSV, Phase 8 fix) |
+| 11 | `housing_tenure` | Eurostat | `ilc_lvho02` | **Working** (JSON-stat) |
+| 12 | `household_size` | Eurostat | `ilc_lvph03` | **Working** (JSON-stat, 6 categories) |
+| 13 | `income_source_by_employment_age` | — | — | **Dropped** — no API provides cross-tabulation |
+| 14 | `birth_country_detail` | Eurostat | `migr_pop1ctz` | **Working** (JSON-stat) |
 | 15 | `ethnicity_map` | — | — | Empty dict (same as SCB/SSB) |
 
 ### SDMX-JSON 2.0 Response Format (from prototype)
@@ -238,6 +238,66 @@ This is the most complex phase — SDMX-JSON 2.0 parsing is fundamentally differ
 - `CLAUDE.md` — Add Italy documentation
 
 **Dependencies:** Phase 6
+
+---
+
+## Post-Implementation Issue: ISTAT SDMX Data Layer is Non-Functional
+
+**Discovered:** 2026-05-25 during first run of `python scripts/generate_istat_population.py --n 10 --seed 42`
+
+### Root Cause
+
+The ISTAT SDMX REST API at `esploradati.istat.it` returns valid structural metadata (dataset dimensions, codes, labels) but **all observation values are `null`** for every dataset queried. This is a systemic failure of the ISTAT SDMX data layer, not a parameter or key-filter issue. The following dataflows all exhibit the same behaviour:
+
+| Dataflow | ID | Expected content | Actual |
+|---|---|---|---|
+| Education by age/sex | `52_1194_DF_DCCV_POPTIT1_UNT2020_1` | ISCED11 education level by age/sex | All observations null |
+| Employment/occupation | `150_938` | ILO employment status, ISCO-08 occupation | All observations null |
+| Household income | `32_292` | Household size, income source, socioeconomic proxy | All observations null |
+
+The error manifested as `ValueError: No non-null education data parsed from ISTAT 52_1194 response` on first run after deleting stale null-value cache files left over from the prototype phase.
+
+Additionally, `demo_pjanmarst` (Eurostat marital status for Italy) returns 404, and `lfsa_etpga` (employment contract type) returns 404.
+
+### Impact
+
+5 out of 15 fields fail at runtime (fields 2, 3, 6, 9, 10 and their sub-parsers). Fields 12 and 13 (household_size, income_source) also fail via the broken `32_292` dataflow. Field 8 (civil_status) has not been attempted — it uses a different ISTAT dataflow and may also be null.
+
+The script raises immediately on the first ISTAT call and produces no output.
+
+### Investigated Replacement Strategy
+
+Confirmed working Eurostat datasets that can replace the broken ISTAT sources (probed live, 2026-05-25):
+
+| Field | Broken ISTAT source | Eurostat replacement | Dataset | Non-null values | Notes |
+|---|---|---|---|---|---|
+| `education_by_age` | `52_1194` | `edat_lfs_9911` | Educ. attainment 15–74 by age/sex/ISCED11/citizenship, Italy | 6,092 | Dims: freq/unit/sex/isced11/citizen/age/geo/time. ISCED11 codes: ED0-2, ED3_4, ED5-8. Ages: Y15-24 through Y65-74. Years 2022–2025. |
+| `employment_by_sex_education` | `150_938` | `lfsa_pganws` + `lfsa_urgaed` | Population by sex/age/citizenship/labour status | 9,986 + 2,047 | wstatus: EMP, UNE, INAC, ACT, POP. No education dimension in `lfsa_pganws` — use `lfsa_urgaed` (unemployment by ISCED11) to derive education-conditional rates. |
+| `industry_sector` | `150_938` (OCCUPATION_2011) | `lfsa_egised` | Employment by sex/age/ISCED11/ISCO-08, Italy | 1,312 | ISCO-08 codes: OC1 Managers, OC2 Professionals, OC3 Technicians, OC4 Clerical, OC5 Service/sales, OC6 Agricultural, OC7 Craft. Requires code translation to existing `ATECO_SECTOR_MAP`. |
+| `employment_type_by_age` | `150_938` (FT/PT+perm/temp) | **No Eurostat equivalent** — `lfsa_etpga` returns 404 | — | — | Fallback: hardcode from 2021 Italian Permanent Census (~75% permanent / 25% temporary, split by age band). |
+| `socioeconomic` + `household_size` + `income_source` | `32_292` | `ilc_di01` / `ilc_di03` (income); no API for household size | EU-SILC income distribution | 672 / 1,584 | `ilc_di01`: income share by quintile/quartile. `ilc_di03`: mean income by age/sex. Household size: hardcode from 2021 census (average 2.3 persons/household). |
+| `civil_status_by_age_sex` | `22_289` (untested) | **No Eurostat equivalent** — `demo_pjanmarst` returns 404 | — | — | Source: 2021 Italian Permanent Census (ISTAT published tables, not API). Hardcode distribution by age band. |
+
+### ~~Recommended Fix Plan (Phase 8) — SUPERSEDED~~
+
+The original Phase 8 plan proposed wholesale Eurostat replacement. This has been **superseded** by the CSV fix below, which was informed by the discovery investigation (`docs/development/debug/istat-sdmx-api-null-observations-discovery-2026-05-26.md`).
+
+### Phase 8 (Implemented): Switch ISTAT Client from JSON to CSV Format
+
+**Root cause:** The ISTAT SDMX JSON serializer (`format=jsondata`) is broken — all observations null. The CSV serializer (`format=csv`) returns correct data.
+
+**Changes implemented (2026-05-26):**
+
+1. **Client** (`istat_client.py`): `fetch_data()` switched from `format=jsondata` to `format=csv`; response parsed via `csv.DictReader` into `list[dict]`; return type changed from `dict` to `list[dict]`
+2. **Constants** (`constants.py`): Replaced broad parent dataflow IDs (`150_938`, `32_292`) with targeted child dataflows; added date range constants per family (education requires `startPeriod=2020` for UNT2020 dataflows)
+3. **Parsers** (`parsers.py`): Removed 4 dead SDMX-JSON helpers; rewrote all 8 ISTAT parsers for flat CSV row format; added `_csv_obs_value()` and `_csv_latest_year_rows()` helpers; Eurostat parsers unchanged
+4. **Fetch service** (`fetch_service.py`): Updated imports, dataflow IDs, date ranges; removed SDMX key_filter from civil status fetch
+
+**Advantages over Eurostat replacement:**
+- Keeps Italy-specific data granularity (ISTAT has finer demographic breakdowns)
+- Preserves marital status data (no Eurostat equivalent)
+- CSV parsers are simpler than the nested SDMX-JSON 2.0 navigation they replaced
+- Maintains live API data principle (no hardcoded census values needed for most fields)
 
 ---
 
