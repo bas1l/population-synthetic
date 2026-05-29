@@ -12,7 +12,7 @@ from population_synth._paths import PROJECT_ROOT
 
 VALID_AXES = {"models", "strategies", "countries"}
 
-VALID_PROVIDERS = {"gemini", "claude", "ollama"}
+VALID_PROVIDERS = {"gemini", "claude", "ollama", "openai_compat"}
 VALID_MODES = {"batch", "configurable"}
 
 
@@ -34,6 +34,7 @@ class ManifestConfig:
     parallel_output_dir: Path | None
     comparison_output_dir: Path | None
     base_url: str | None = None
+    api_key_env_var: str | None = None
     retry_until_success: bool = False
     structured_output: bool = False
 
@@ -62,6 +63,7 @@ def load_manifest(manifest_path: str | Path) -> ManifestConfig:
         raise ValueError("model_config.model is required")
 
     base_url = model_cfg.get("base_url") or None
+    api_key_env_var = model_cfg.get("api_key_env_var") or None
 
     raw_gen_config = model_cfg.get("generation_config", {}) or {}
     generation_config = {k: v for k, v in raw_gen_config.items() if v is not None}
@@ -114,6 +116,7 @@ def load_manifest(manifest_path: str | Path) -> ManifestConfig:
         parallel_output_dir=parallel_output_dir,
         comparison_output_dir=comparison_output_dir,
         base_url=base_url,
+        api_key_env_var=api_key_env_var,
         retry_until_success=retry_until_success,
         structured_output=structured_output,
     )
@@ -174,6 +177,7 @@ def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> Manife
     provider = model_cfg["provider"]
     model = model_cfg["model"]
     base_url = model_cfg.get("base_url") or None
+    api_key_env_var = model_cfg.get("api_key_env_var") or None
 
     raw_gen_config = model_cfg.get("generation_config", {}) or {}
     generation_config = {k: v for k, v in raw_gen_config.items() if v is not None}
@@ -214,6 +218,7 @@ def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> Manife
         parallel_output_dir=parallel_output_dir,
         comparison_output_dir=comparison_output_dir,
         base_url=base_url,
+        api_key_env_var=api_key_env_var,
         retry_until_success=retry_until_success,
         structured_output=structured_output,
     )
@@ -247,6 +252,8 @@ def serialize_manifest(config: ManifestConfig) -> str:
     }
     if config.base_url is not None:
         model_cfg["base_url"] = config.base_url
+    if config.api_key_env_var is not None:
+        model_cfg["api_key_env_var"] = config.api_key_env_var
     model_cfg["generation_config"] = gen_config_full
 
     parameters: dict[str, Any] = {

@@ -95,6 +95,7 @@ def _generate_one(
     kwargs: dict,
     log_llm: bool = False,
     base_url: str | None = None,
+    api_key_env_var: str | None = None,
     generation_config: dict | None = None,
     force: bool = False,
     retry_until_success: bool = False,
@@ -128,8 +129,20 @@ def _generate_one(
             client = OllamaClient(model_name=model, base_url=base_url, default_config=cfg)
             with _active_clients_lock:
                 _active_clients.add(client)
+        elif provider == "openai_compat":
+            from population_synth.clients.openai_compat_client import OpenAICompatClient
+            if not base_url:
+                raise ValueError("base_url is required for provider 'openai_compat'")
+            client = OpenAICompatClient(
+                model_name=model,
+                base_url=base_url,
+                api_key_env_var=api_key_env_var or "OPENAI_API_KEY",
+                default_config=cfg,
+            )
+            with _active_clients_lock:
+                _active_clients.add(client)
         else:
-            raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini', 'claude', or 'ollama'.")
+            raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini', 'claude', 'ollama', or 'openai_compat'.")
         generator = FactoryIdentityGenerator.create_generator(mode, client)
         generator.retry_until_success = retry_until_success
         generator.use_structured_output = structured_output
@@ -180,18 +193,23 @@ def main() -> None:
     parser.add_argument(
         "--provider",
         default=None,
-        choices=["gemini", "claude", "ollama"],
-        help="LLM provider to use: gemini, claude, or ollama (default: gemini)",
+        choices=["gemini", "claude", "ollama", "openai_compat"],
+        help="LLM provider to use: gemini, claude, ollama, or openai_compat (default: gemini)",
     )
     parser.add_argument(
         "--model",
         default=None,
-        help="Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet, ollama -> llama3.2",
+        help="Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet, ollama -> llama3.2, openai_compat -> mistral-large-latest",
     )
     parser.add_argument(
         "--base-url",
         default=None,
-        help="Ollama server base URL (overrides manifest and OLLAMA_BASE_URL env var)",
+        help="Base URL for Ollama or OpenAI-compatible provider (overrides manifest)",
+    )
+    parser.add_argument(
+        "--api-key-env",
+        default=None,
+        help="Name of the environment variable holding the API key for openai_compat provider (default: OPENAI_API_KEY)",
     )
     parser.add_argument("--output-dir", default=None, help="Output directory for persona_XXXXX/ folders")
     parser.add_argument(
@@ -289,6 +307,8 @@ def main() -> None:
             args.output_dir = str(m.parallel_output_dir)
         if args.base_url is None and m.base_url is not None:
             args.base_url = m.base_url
+        if args.api_key_env is None and m.api_key_env_var is not None:
+            args.api_key_env = m.api_key_env_var
         if not args.retry_until_success and m.retry_until_success:
             args.retry_until_success = m.retry_until_success
         if args.structured_output is None:
@@ -320,6 +340,8 @@ def main() -> None:
             args.output_dir = str(m.parallel_output_dir)
         if args.base_url is None and m.base_url is not None:
             args.base_url = m.base_url
+        if args.api_key_env is None and m.api_key_env_var is not None:
+            args.api_key_env = m.api_key_env_var
         if not args.retry_until_success and m.retry_until_success:
             args.retry_until_success = m.retry_until_success
         if args.structured_output is None:
@@ -382,6 +404,8 @@ def main() -> None:
         model = "gemini-2.5-flash"
     elif args.provider == "ollama":
         model = "llama3.2"
+    elif args.provider == "openai_compat":
+        model = "mistral-large-latest"
     else:
         model = "sonnet"
 
@@ -396,7 +420,7 @@ def main() -> None:
         "model_config": {
             "provider": args.provider,
             "model": model,
-            "base_url": args.base_url if args.provider == "ollama" else None,
+            "base_url": args.base_url,
         },
         "parameters": {
             "mode": args.mode,
@@ -454,6 +478,7 @@ def main() -> None:
                     kwargs=kwargs,
                     log_llm=args.log_llm,
                     base_url=args.base_url,
+                    api_key_env_var=args.api_key_env,
                     generation_config=generation_config,
                     force=True if is_retry else args.force,
                     retry_until_success=args.retry_until_success,
