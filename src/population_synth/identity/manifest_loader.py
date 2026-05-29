@@ -35,6 +35,7 @@ class ManifestConfig:
     comparison_output_dir: Path | None
     base_url: str | None = None
     retry_until_success: bool = False
+    structured_output: bool = False
 
 
 def load_manifest(manifest_path: str | Path) -> ManifestConfig:
@@ -93,6 +94,7 @@ def load_manifest(manifest_path: str | Path) -> ManifestConfig:
     parallel_output_dir_rel = parallel.get("output_dir")
     parallel_output_dir = _resolve_path(parallel_output_dir_rel) if parallel_output_dir_rel else None
     retry_until_success = bool(parallel.get("retry_until_success", False))
+    structured_output = bool(params.get("structured_output", False))
 
     comparison_output_dir_rel = params.get("comparison_output_dir")
     comparison_output_dir = _resolve_path(comparison_output_dir_rel) if comparison_output_dir_rel else None
@@ -113,6 +115,7 @@ def load_manifest(manifest_path: str | Path) -> ManifestConfig:
         comparison_output_dir=comparison_output_dir,
         base_url=base_url,
         retry_until_success=retry_until_success,
+        structured_output=structured_output,
     )
 
 
@@ -182,6 +185,10 @@ def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> Manife
     output_base = defaults_params["output_base"]
     parallel_n = defaults_params["parallel"]["n"]
     retry_until_success = bool(defaults_params["parallel"].get("retry_until_success", False))
+    structured_output = bool(
+        model_data["parameters"].get("structured_output")
+        or defaults_params.get("structured_output", False)
+    )
 
     parallel_workers = model_data["parameters"]["parallel"]["workers"]
 
@@ -208,6 +215,7 @@ def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> Manife
         comparison_output_dir=comparison_output_dir,
         base_url=base_url,
         retry_until_success=retry_until_success,
+        structured_output=structured_output,
     )
 
 
@@ -247,6 +255,8 @@ def serialize_manifest(config: ManifestConfig) -> str:
         "log_llm": config.log_llm,
         "output": config.output,
     }
+    if config.structured_output:
+        parameters["structured_output"] = config.structured_output
     if config.strategy_path is not None:
         parameters["strategy"] = _path_str(config.strategy_path)
     if parallel:

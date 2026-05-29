@@ -25,6 +25,7 @@ class BaseIdentityGenerator(ABC):
         self.client = client
         self.interaction_collector: LLMInteractionCollector | None = None
         self.retry_until_success: bool = False
+        self.use_structured_output: bool = False
         logging.info(f"{self.__class__.__name__} initialized.")
 
     @abstractmethod

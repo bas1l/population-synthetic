@@ -152,6 +152,7 @@ class OllamaClient:
 
         target_model = effective_config.pop("model", self.default_model_name)
         system_instruction = effective_config.pop("system_instruction", None)
+        response_schema = effective_config.pop("response_schema", None)
 
         options: dict[str, Any] = {}
         for src_key, ollama_key in (
@@ -172,7 +173,7 @@ class OllamaClient:
             "model": target_model,
             "messages": messages,
             "stream": False,
-            "format": "json",
+            "format": response_schema if response_schema is not None else "json",
         }
         if options:
             payload["options"] = options

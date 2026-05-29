@@ -126,6 +126,12 @@ def main() -> None:
         default=False,
         help="Retry LLM evaluation calls indefinitely until correct (default: cap at 3)",
     )
+    parser.add_argument(
+        "--structured-output",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Use JSON-Schema–constrained decoding for Ollama (default: off)",
+    )
     args = parser.parse_args()
 
     axis_ids = [args.model_id, args.strategy_id, args.country_id]
@@ -155,6 +161,8 @@ def main() -> None:
             args.output = m.output
         if args.base_url is None and m.base_url is not None:
             args.base_url = m.base_url
+        if args.structured_output is None:
+            args.structured_output = m.structured_output
     elif args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
@@ -178,6 +186,8 @@ def main() -> None:
             args.output = m.output
         if args.base_url is None and m.base_url is not None:
             args.base_url = m.base_url
+        if args.structured_output is None:
+            args.structured_output = m.structured_output
 
     if args.provider is None:
         args.provider = "gemini"
@@ -185,6 +195,8 @@ def main() -> None:
         args.log_llm = True
     if args.output is None:
         args.output = "identity.json"
+    if args.structured_output is None:
+        args.structured_output = False
 
     if not args.mode or not args.config:
         parser.error("Either --manifest or both --mode and --config are required")
@@ -241,6 +253,7 @@ def main() -> None:
     logger.info("Model: %s", client.model_name)
     generator = FactoryIdentityGenerator.create_generator(args.mode, client)
     generator.retry_until_success = args.retry_until_success
+    generator.use_structured_output = args.structured_output
 
     if args.log_llm:
         llm_log_path = output_path.parent / "llm_interactions.jsonl"

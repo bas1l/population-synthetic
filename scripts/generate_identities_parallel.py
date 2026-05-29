@@ -98,6 +98,7 @@ def _generate_one(
     generation_config: dict | None = None,
     force: bool = False,
     retry_until_success: bool = False,
+    structured_output: bool = False,
 ) -> tuple[int, bool, str]:
     global _completed, _failed
 
@@ -131,6 +132,7 @@ def _generate_one(
             raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini', 'claude', or 'ollama'.")
         generator = FactoryIdentityGenerator.create_generator(mode, client)
         generator.retry_until_success = retry_until_success
+        generator.use_structured_output = structured_output
         if log_llm:
             generator.interaction_collector = LLMInteractionCollector(
                 persona_dir / "llm_interactions.jsonl"
@@ -211,6 +213,12 @@ def main() -> None:
         help="Retry failed persona slots and LLM evaluation calls until all N succeed (default: disabled)",
     )
     parser.add_argument(
+        "--structured-output",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Use JSON-Schema–constrained decoding for Ollama (default: off)",
+    )
+    parser.add_argument(
         "--generate-all-strategies",
         action="store_true",
         default=False,
@@ -244,6 +252,8 @@ def main() -> None:
                 sub_cmd.append("--force")
             if args.retry_until_success:
                 sub_cmd.append("--retry-until-success")
+            if args.structured_output:
+                sub_cmd.append("--structured-output")
             subprocess.run(sub_cmd, stdout=sys.stdout, stderr=sys.stderr)
 
         sys.exit(0)
@@ -281,6 +291,8 @@ def main() -> None:
             args.base_url = m.base_url
         if not args.retry_until_success and m.retry_until_success:
             args.retry_until_success = m.retry_until_success
+        if args.structured_output is None:
+            args.structured_output = m.structured_output
     elif args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
@@ -310,6 +322,8 @@ def main() -> None:
             args.base_url = m.base_url
         if not args.retry_until_success and m.retry_until_success:
             args.retry_until_success = m.retry_until_success
+        if args.structured_output is None:
+            args.structured_output = m.structured_output
 
     generation_config = m.generation_config if m is not None else {}
 
@@ -319,6 +333,8 @@ def main() -> None:
         args.log_llm = True
     if args.workers is None:
         args.workers = 1
+    if args.structured_output is None:
+        args.structured_output = False
 
     if not args.mode or not args.config:
         parser.error("Either --manifest or both --mode and --config are required")
@@ -392,6 +408,7 @@ def main() -> None:
             "output_dir": args.output_dir,
             "force": args.force,
             "retry_until_success": args.retry_until_success,
+            "structured_output": args.structured_output,
         },
         "started_at": started_at,
     }
@@ -440,6 +457,7 @@ def main() -> None:
                     generation_config=generation_config,
                     force=True if is_retry else args.force,
                     retry_until_success=args.retry_until_success,
+                    structured_output=args.structured_output,
                 )
                 round_futures.append(fut)
 
