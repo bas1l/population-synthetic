@@ -2,7 +2,8 @@
 
 **Date:** 2026-05-29
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-06-01 12:55
 **Base Branch:** `feature/ollama-structured-output`
 **Branch:** `feature/openai-compat-european-providers`
 
