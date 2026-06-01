@@ -34,10 +34,10 @@ import sys
 from pathlib import Path
 
 from population_synth._paths import PROJECT_ROOT
-from population_synth.comparison.extractor import extract_population
-from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
-from population_synth.comparison.normalizer import load_mappings, normalize_if_raw
 from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
+from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+from population_synth.comparison.extractor import extract_population
+from population_synth.comparison.normalizer import load_mappings, normalize_if_raw
 
 _DEFAULT_REFERENCE = PROJECT_ROOT / "data" / "scb_api" / "scb_population_pop-10000_02.json"
 
@@ -50,17 +50,35 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Extract pipeline identities and compare against an SCB reference population"
     )
-    parser.add_argument("--manifest", default=None, help="Seed manifest YAML; derives --seed-root from parallel.output_dir")
-    parser.add_argument("--model-id", default=None, help="Axis model ID (e.g., 'claude_haiku') — mutually exclusive with --manifest")
-    parser.add_argument("--strategy-id", default=None, help="Axis strategy ID (e.g., 'all_pick') — mutually exclusive with --manifest")
-    parser.add_argument("--country-id", default=None, help="Axis country ID (e.g., 'swedish') — mutually exclusive with --manifest")
-    parser.add_argument("--seed-root", default=None, help="Pipeline seed output directory")
+    parser.add_argument(
+        "--manifest", default=None,
+        help="Seed manifest YAML; derives --seed-root from parallel.output_dir",
+    )
+    parser.add_argument(
+        "--model-id", default=None,
+        help="Axis model ID (e.g., 'claude_haiku') — mutually exclusive with --manifest",
+    )
+    parser.add_argument(
+        "--strategy-id", default=None,
+        help="Axis strategy ID (e.g., 'all_pick') — mutually exclusive with --manifest",
+    )
+    parser.add_argument(
+        "--country-id", default=None,
+        help="Axis country ID (e.g., 'swedish') — mutually exclusive with --manifest",
+    )
+    parser.add_argument(
+        "--seed-root", default=None,
+        help="Pipeline seed output directory",
+    )
     parser.add_argument(
         "--reference",
         default=str(_DEFAULT_REFERENCE),
         help=f"SCB reference population JSON file (default: {_DEFAULT_REFERENCE.name})",
     )
-    parser.add_argument("--output", default=None, help="Output JSON report path (default: data/analysis/compare_with_scb02/<seed-root-name>.json)")
+    parser.add_argument(
+        "--output", default=None,
+        help="Output JSON report path (default: data/analysis/compare_with_scb02/<name>.json)",
+    )
     parser.add_argument(
         "--save-extracted",
         default=None,
@@ -141,7 +159,9 @@ def main() -> None:
     reference_pop = normalize_if_raw(reference_pop, mappings)
 
     if pipeline_pop["metadata"]["n"] < 5:
-        print(f"WARNING: Pipeline population has only {pipeline_pop['metadata']['n']} individuals -- statistical tests will be unreliable.\n")
+        n = pipeline_pop["metadata"]["n"]
+        print(f"WARNING: Pipeline population has only {n} individuals"
+              " -- statistical tests will be unreliable.\n")
 
     evaluator = StatisticalEvaluator(reference_pop, pipeline_pop)
     evaluator.print_summary(args.reference, args.seed_root)
@@ -170,6 +190,7 @@ def main() -> None:
             charts_dir,
             pop_a_label=Path(args.reference).stem,
             pop_b_label=seed_root.name,
+            prefix=seed_root.name,
         )
         print(f"Charts written to {charts_dir}")
         radar_path = plot_radar_comparison(
@@ -178,6 +199,7 @@ def main() -> None:
             pop_a_label=Path(args.reference).stem,
             pop_b_label=seed_root.name,
             show_chi_sq=not args.radar_tv_only,
+            prefix=seed_root.name,
         )
         if radar_path is not None:
             print(f"Radar chart written to {radar_path}")

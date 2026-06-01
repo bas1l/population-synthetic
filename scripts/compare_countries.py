@@ -9,7 +9,6 @@ Usage:
 import argparse
 import json
 import logging
-import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,7 +82,7 @@ def _print_summary(
                 print(f"  {tv:>12.4f}", end="")
         print(f"   {note}")
 
-    print(f"\n--- Summary (comparable fields only) ---")
+    print("\n--- Summary (comparable fields only) ---")
     print(f"{'Pair':<16s}  {'Mean TV':>8s}  {'Mean KL':>8s}")
     for pn in pair_names:
         tvs, kls = [], []
@@ -227,11 +226,13 @@ def main() -> None:
             swe, nor, ita,
             labels=("Sweden", "Norway", "Italy"),
             output_dir=charts_dir,
+            prefix="cross_country",
         )
         plot_3way_radar(
             pairwise,
             labels=("SWE vs NOR", "SWE vs ITA", "NOR vs ITA"),
             output_dir=charts_dir,
+            prefix="cross_country",
         )
         logger.info("Charts written to %s", charts_dir)
 
