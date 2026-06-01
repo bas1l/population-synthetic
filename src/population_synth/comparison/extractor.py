@@ -52,6 +52,20 @@ def _load_pipeline_mappings() -> dict[str, dict[str, str]]:
 _PIPELINE_MAPPINGS: dict[str, dict[str, str]] = _load_pipeline_mappings()
 
 
+_UTF8_DOUBLE_ENCODING_REPAIRS: dict[str, str] = {
+    "√§": "ä", "√∂": "ö", "√•": "å",
+    "√Ñ": "Ä", "√ñ": "Ö", "√Ö": "Å",
+    "Ã¤": "ä", "Ã¶": "ö", "Ã¥": "å",
+    "Ã": "Ä", "Ã": "Ö", "Ã": "Å",
+}
+
+
+def _repair_utf8_double_encoding(text: str) -> str:
+    for bad, good in _UTF8_DOUBLE_ENCODING_REPAIRS.items():
+        text = text.replace(bad, good)
+    return text
+
+
 def _json_lookup(category: str, raw: str) -> str | None:
     """Case-insensitive exact-match lookup against pipeline_label_mappings."""
     if not raw:
@@ -1272,6 +1286,8 @@ def _birth_location_from_flat(raw: str) -> str:
 
 def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
     """Extract attributes from the flat configurable identity.json format."""
+    identity = {k: _repair_utf8_double_encoding(str(v)) if isinstance(v, str) else v
+                for k, v in identity.items()}
     unmapped: list[str] = []
 
     raw_age = identity.get("age")
@@ -1286,9 +1302,13 @@ def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
 
     raw_sex = str(identity.get("biological_sex") or "")
     sex_lower = raw_sex.lower().strip()
-    if "female" in sex_lower or "kvinna" in sex_lower or sex_lower == "xx":
+    if any(k in sex_lower for k in ("female", "kvinna", "kvinnlig", "flicka", "tjej", "hona", "woman")):
         biological_sex = "Female"
-    elif "male" in sex_lower or sex_lower == "man" or "xy" in sex_lower:
+    elif sex_lower in ("xx", "hon", "f"):
+        biological_sex = "Female"
+    elif any(k in sex_lower for k in ("male", "pojke", "kille")):
+        biological_sex = "Male"
+    elif sex_lower in ("man", "xy", "m") or "kön man" in sex_lower:
         biological_sex = "Male"
     else:
         biological_sex = None
@@ -1347,7 +1367,7 @@ def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
 
     region = str(identity.get("region") or "Non-standard label")
     if region not in REGION_LABELS:
-        region = _fuzzy_match(region, REGION_LABELS) or "Non-standard label"
+        region = _json_lookup("region", region) or _fuzzy_match(region, REGION_LABELS) or "Non-standard label"
 
     raw_bcd = str(identity.get("birth_country_detail") or "")
     birth_country_detail = _normalize_birth_country_detail(raw_bcd) if raw_bcd else "Non-standard label"

@@ -76,6 +76,8 @@ def plot_comparison_charts(
     output_dir: Path,
     pop_a_label: str = "Population A",
     pop_b_label: str = "Population B",
+    *,
+    prefix: str | None = None,
 ) -> None:
     """Generate side-by-side bar charts for each demographic attribute."""
     import matplotlib
@@ -144,7 +146,8 @@ def plot_comparison_charts(
 
         plt.tight_layout()
 
-        out_path = output_dir / f"{attr}.png"
+        fname = f"{prefix}_{attr}.png" if prefix else f"{attr}.png"
+        out_path = output_dir / fname
         fig.savefig(out_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
@@ -160,6 +163,7 @@ def plot_radar_comparison(
     pop_b_label: str = "Population B",
     *,
     show_chi_sq: bool = True,
+    prefix: str | None = None,
 ) -> Path | None:
     """Generate a radar chart of TV-similarity (and optionally chi-sq p-values)."""
     import matplotlib
@@ -245,7 +249,8 @@ def plot_radar_comparison(
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / "radar.png"
+    fname = f"{prefix}_radar.png" if prefix else "radar.png"
+    out_path = output_dir / fname
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return out_path
@@ -264,6 +269,8 @@ def plot_3way_comparison_charts(
     pop_c: dict,
     labels: tuple[str, str, str],
     output_dir: Path,
+    *,
+    prefix: str | None = None,
 ) -> None:
     """Generate grouped bar charts comparing three populations per attribute."""
     import matplotlib
@@ -334,7 +341,8 @@ def plot_3way_comparison_charts(
             ax.tick_params(axis="both", labelsize=7)
 
         plt.tight_layout()
-        fig.savefig(output_dir / f"{attr}.png", dpi=150, bbox_inches="tight")
+        fname = f"{prefix}_{attr}.png" if prefix else f"{attr}.png"
+        fig.savefig(output_dir / fname, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
 
@@ -346,6 +354,8 @@ def plot_3way_radar(
     pairwise: dict[str, dict],
     labels: tuple[str, ...],
     output_dir: Path,
+    *,
+    prefix: str | None = None,
 ) -> Path | None:
     """Generate a radar chart with overlaid TV-similarity polygons for each pair."""
     import matplotlib
@@ -403,7 +413,145 @@ def plot_3way_radar(
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / "radar_3way.png"
+    fname = f"{prefix}_radar_3way.png" if prefix else "radar_3way.png"
+    out_path = output_dir / fname
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
+# ------------------------------------------------------------------
+# Radar grid (models × strategies)
+# ------------------------------------------------------------------
+
+STRATEGY_COMPLEXITY_ORDER = [
+    "all_pick",
+    "all_pick_dag",
+    "all_generate_pick",
+    "all_generate_evaluate_pick",
+    "all_generate_evaluate_random_pick",
+]
+
+
+def plot_radar_grid(
+    results: dict[tuple[str, str], dict[str, dict[str, Any]]],
+    output_dir: Path,
+    *,
+    strategy_order: list[str] | None = None,
+    prefix: str | None = None,
+) -> Path | None:
+    """Grid of radar subplots: rows = models, columns = strategies (by complexity)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if not results:
+        return None
+
+    if strategy_order is None:
+        strategy_order = STRATEGY_COMPLEXITY_ORDER
+
+    all_models = sorted({m for m, _ in results})
+    all_strategies = sorted({s for _, s in results})
+    strategies = [s for s in strategy_order if s in all_strategies]
+    if not strategies:
+        return None
+
+    attrs = [a for a in DEMOGRAPHIC_ATTRIBUTES
+             if any(a in marg for marg in results.values())]
+    if len(attrs) < 3:
+        print(f"Skipping radar grid: needs >=3 attributes (got {len(attrs)})",
+              file=sys.stderr)
+        return None
+
+    n_attrs = len(attrs)
+    angles = [2 * np.pi * i / n_attrs for i in range(n_attrs)]
+    closed_angles = _close_polygon(angles)
+
+    n_rows = len(all_models)
+    n_cols = len(strategies)
+
+    cell_size = 3.2
+    fig, axes = plt.subplots(
+        n_rows, n_cols,
+        figsize=(n_cols * cell_size + 1.5, n_rows * cell_size + 1.2),
+        subplot_kw={"projection": "polar"},
+    )
+
+    if n_rows == 1 and n_cols == 1:
+        axes = np.array([[axes]])
+    elif n_rows == 1:
+        axes = axes[np.newaxis, :]
+    elif n_cols == 1:
+        axes = axes[:, np.newaxis]
+
+    for r, model in enumerate(all_models):
+        for c, strategy in enumerate(strategies):
+            ax = axes[r, c]
+            ax.set_theta_offset(np.pi / 2)
+            ax.set_theta_direction(-1)
+
+            marginals = results.get((model, strategy))
+            if marginals is None:
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.text(0.5, 0.5, "N/A", transform=ax.transAxes,
+                        ha="center", va="center", fontsize=11, color="gray")
+                if r == 0:
+                    ax.set_title(strategy.replace("_", "\n"), fontsize=7,
+                                 fontweight="bold", pad=14)
+                if c == 0:
+                    ax.set_ylabel(model, fontsize=7, labelpad=30,
+                                  fontweight="bold")
+                continue
+
+            tv_sim = []
+            for a in attrs:
+                tv = marginals.get(a, {}).get("tv_distance", 0.0)
+                if tv != tv:
+                    tv = 0.0
+                tv_sim.append(1.0 - tv)
+
+            closed_tv = _close_polygon(tv_sim)
+            ax.plot(closed_angles, closed_tv, color=_RADAR_TV_COLOR,
+                    linewidth=1.5)
+            ax.fill(closed_angles, closed_tv, color=_RADAR_TV_COLOR,
+                    alpha=0.20)
+
+            ax.set_ylim(0, 1)
+            ax.set_yticks([0.5, 1.0])
+            ax.set_yticklabels(["0.5", "1.0"], fontsize=5, color="gray")
+            ax.yaxis.grid(True, color="lightgray", linewidth=0.5)
+
+            ax.set_xticks(angles)
+            ax.set_xticklabels([])
+            for ang, label_text in zip(angles, attrs):
+                rotation = (np.degrees(ang) - 90 if ang <= np.pi
+                            else np.degrees(ang) + 90)
+                ax.text(ang, 1.22, label_text, ha="center", va="center",
+                        fontsize=4.5, rotation=rotation,
+                        rotation_mode="anchor")
+
+            mean_tv_sim = sum(tv_sim) / len(tv_sim)
+            ax.text(0.5, -0.08, f"mean: {mean_tv_sim:.2f}",
+                    transform=ax.transAxes, ha="center", fontsize=6,
+                    color=_RADAR_TV_COLOR, fontweight="bold")
+
+            if r == 0:
+                ax.set_title(strategy.replace("_", "\n"), fontsize=7,
+                             fontweight="bold", pad=14)
+            if c == 0:
+                ax.set_ylabel(model, fontsize=7, labelpad=30,
+                              fontweight="bold")
+
+    fig.suptitle("TV-similarity radar: models × strategies",
+                 fontsize=13, fontweight="bold", y=1.01)
+    plt.tight_layout(rect=[0, 0, 1, 0.98])
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"{prefix}_radar_grid.png" if prefix else "radar_grid.png"
+    out_path = output_dir / fname
+    fig.savefig(out_path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return out_path

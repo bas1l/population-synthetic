@@ -17,9 +17,9 @@ import sys
 from pathlib import Path
 
 from population_synth._paths import PROJECT_ROOT
+from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
 from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
 from population_synth.comparison.normalizer import load_mappings, normalize_if_raw
-from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
 
 
 def _load_population(path: str) -> dict:
@@ -87,6 +87,7 @@ def main() -> None:
             charts_dir,
             pop_a_label=Path(args.pop_a).stem,
             pop_b_label=Path(args.pop_b).stem,
+            prefix=Path(args.pop_b).stem,
         )
         print(f"Charts written to {charts_dir}")
         radar_path = plot_radar_comparison(
@@ -95,6 +96,7 @@ def main() -> None:
             pop_a_label=Path(args.pop_a).stem,
             pop_b_label=Path(args.pop_b).stem,
             show_chi_sq=not args.radar_tv_only,
+            prefix=Path(args.pop_b).stem,
         )
         if radar_path is not None:
             print(f"Radar chart written to {radar_path}")

@@ -90,13 +90,18 @@ def main() -> None:
     parser.add_argument(
         "--provider",
         default=None,
-        choices=["gemini", "claude", "ollama"],
-        help="LLM provider to use: gemini, claude, or ollama (default: gemini)",
+        choices=["gemini", "claude", "ollama", "openai_compat"],
+        help="LLM provider to use: gemini, claude, ollama, or openai_compat (default: gemini)",
     )
     parser.add_argument(
         "--base-url",
         default=None,
-        help="Ollama server base URL (overrides manifest and OLLAMA_BASE_URL env var)",
+        help="Base URL for Ollama or OpenAI-compatible provider (overrides manifest)",
+    )
+    parser.add_argument(
+        "--api-key-env",
+        default=None,
+        help="Name of the environment variable holding the API key for openai_compat provider (default: OPENAI_API_KEY)",
     )
     parser.add_argument(
         "--strategy",
@@ -161,6 +166,8 @@ def main() -> None:
             args.output = m.output
         if args.base_url is None and m.base_url is not None:
             args.base_url = m.base_url
+        if args.api_key_env is None and m.api_key_env_var is not None:
+            args.api_key_env = m.api_key_env_var
         if args.structured_output is None:
             args.structured_output = m.structured_output
     elif args.model_id is not None:
@@ -186,6 +193,8 @@ def main() -> None:
             args.output = m.output
         if args.base_url is None and m.base_url is not None:
             args.base_url = m.base_url
+        if args.api_key_env is None and m.api_key_env_var is not None:
+            args.api_key_env = m.api_key_env_var
         if args.structured_output is None:
             args.structured_output = m.structured_output
 
@@ -247,8 +256,18 @@ def main() -> None:
     elif args.provider == "ollama":
         from population_synth.clients.ollama_client import OllamaClient
         client = OllamaClient(model_name=args.model or "llama3.2", base_url=args.base_url, default_config=generation_config)
+    elif args.provider == "openai_compat":
+        from population_synth.clients.openai_compat_client import OpenAICompatClient
+        if not args.base_url:
+            raise ValueError("--base-url is required for provider 'openai_compat'")
+        client = OpenAICompatClient(
+            model_name=args.model or "mistral-large-latest",
+            base_url=args.base_url,
+            api_key_env_var=args.api_key_env or "OPENAI_API_KEY",
+            default_config=generation_config,
+        )
     else:
-        raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini', 'claude', or 'ollama'.")
+        raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini', 'claude', 'ollama', or 'openai_compat'.")
 
     logger.info("Model: %s", client.model_name)
     generator = FactoryIdentityGenerator.create_generator(args.mode, client)

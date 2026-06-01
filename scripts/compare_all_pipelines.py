@@ -25,11 +25,15 @@ import sys
 from pathlib import Path
 
 from population_synth._paths import PROJECT_ROOT
-from population_synth.comparison.extractor import extract_population
+from population_synth.comparison.charts import (
+    plot_comparison_charts,
+    plot_radar_comparison,
+    plot_radar_grid,
+)
 from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+from population_synth.comparison.extractor import extract_population
 from population_synth.comparison.normalizer import load_mappings, normalize_if_raw
-from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
-from population_synth.identity.manifest_loader import discover_axis_values, compose_manifest
+from population_synth.identity.manifest_loader import compose_manifest, discover_axis_values
 
 _DEFAULT_REFERENCE = PROJECT_ROOT / "data" / "scb_api" / "scb_population_pop-10000_02.json"
 
@@ -158,6 +162,7 @@ def main() -> None:
     print()
 
     summary_rows: list[dict] = []
+    radar_grid_data: dict[tuple[str, str], dict] = {}
     output_base: Path | None = None
 
     for model_id, strategy_id, country_id in combos:
@@ -222,6 +227,7 @@ def main() -> None:
                 charts_dir,
                 pop_a_label=reference_path.stem,
                 pop_b_label=slug,
+                prefix=slug,
             )
             print(f"  Charts written to {charts_dir}")
             radar_path = plot_radar_comparison(
@@ -230,9 +236,12 @@ def main() -> None:
                 pop_a_label=reference_path.stem,
                 pop_b_label=slug,
                 show_chi_sq=not args.radar_tv_only,
+                prefix=slug,
             )
             if radar_path is not None:
                 print(f"  Radar chart written to {radar_path}")
+
+        radar_grid_data[(model_id, strategy_id)] = report["marginals"]
 
         mean_tv = _mean_tv_distance(report)
         coherence_score = report["coherence"]["score"]
@@ -271,6 +280,15 @@ def main() -> None:
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary_rows, f, indent=2, ensure_ascii=False)
     print(f"\nSummary written to {summary_path}")
+
+    if not args.no_charts and radar_grid_data:
+        grid_path = plot_radar_grid(
+            radar_grid_data,
+            summary_dir,
+            prefix="swedish",
+        )
+        if grid_path is not None:
+            print(f"Radar grid written to {grid_path}")
 
 
 if __name__ == "__main__":
