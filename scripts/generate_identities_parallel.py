@@ -60,7 +60,35 @@ from population_synth.identity.factory_identity_generator import FactoryIdentity
 from population_synth.identity.llm_interaction_log import LLMInteractionCollector
 from population_synth.utils import should_process_task
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+_SCRIPT_START_TIME = time.time()
+
+_LOG_FORMAT = "%(asctime)s %(levelname)s: %(message)s"
+_LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
+
+
+def _fmt_elapsed(seconds: float) -> str:
+    s = int(seconds)
+    if s < 60:
+        return f"+{seconds:.1f}s"
+    m, s = divmod(s, 60)
+    if m < 60:
+        return f"+{m}m{s:02d}s"
+    h, m = divmod(m, 60)
+    if h < 24:
+        return f"+{h}h{m:02d}m{s:02d}s"
+    d, h = divmod(h, 24)
+    return f"+{d}d{h:02d}h{m:02d}m{s:02d}s"
+
+
+class _ElapsedFormatter(logging.Formatter):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        base = super().formatTime(record, datefmt)
+        return f"{base} [{_fmt_elapsed(record.created - _SCRIPT_START_TIME)}]"
+
+
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(_ElapsedFormatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
+logging.basicConfig(level=logging.INFO, handlers=[_console_handler])
 logger = logging.getLogger(__name__)
 
 _progress_lock = threading.Lock()
@@ -394,7 +422,7 @@ def main() -> None:
     log_file = log_dir / f"run_{time.strftime('%Y%m%d_%H%M%S')}.log"
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    file_handler.setFormatter(_ElapsedFormatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
     logging.getLogger().addHandler(file_handler)
     logger.info("Log file: %s", log_file)
 
