@@ -61,6 +61,15 @@ python scripts/compare_pipeline_to_scb.py --seed-root path/to/pipeline_output/ \
 python scripts/extract_population_from_pipeline.py --seed-root path/to/pipeline_output/ \
     --output pipeline_population.json
 
+# Analyse a single-persona run directory (prints summary table)
+python scripts/analyze_run.py path/to/run_dir/
+
+# Analyse a batch run directory (persona_* subdirs) and export full analytics
+python scripts/analyze_run.py path/to/batch_run_dir/ --output run_analytics.json
+
+# Analyse with per-persona breakdown
+python scripts/analyze_run.py path/to/run_dir/ --verbose
+
 # Linting
 ruff check src/
 ```
