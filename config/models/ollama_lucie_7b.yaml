@@ -10,5 +10,6 @@ model_config:
     top_k: null
     max_output_tokens: 2048
 parameters:
+  structured_output: true
   parallel:
     workers: 1

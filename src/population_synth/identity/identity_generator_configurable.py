@@ -140,16 +140,22 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         system_instruction: str,
         *,
         expected_key: str | None = None,
+        response_schema: dict | None = None,
         log_category: str = "",
         log_method: str = "",
         log_step: str = "",
     ) -> Any:
+        extra = (
+            {"response_schema": response_schema}
+            if self.use_structured_output and response_schema is not None
+            else {}
+        )
         last_error: Exception | None = None
         for attempt in range(3):
             raw = ""
             try:
                 raw = self.client.generate_content(
-                    prompt, system_instruction=system_instruction
+                    prompt, system_instruction=system_instruction, **extra
                 )
                 parsed = self._extract_json(raw)
                 value = (
@@ -195,6 +201,45 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
     def _is_numeric_category(self, category_schema: dict) -> bool:
         return isinstance(category_schema, dict) and "min" in category_schema and "max" in category_schema
+
+    @staticmethod
+    def _schema_value(category_schema: dict) -> dict:
+        num_type = "integer" if category_schema.get("type") == "integer" else "number"
+        value_type = num_type if ("min" in category_schema and "max" in category_schema) else "string"
+        return {
+            "type": "object",
+            "properties": {"value": {"type": value_type}},
+            "required": ["value"],
+        }
+
+    @staticmethod
+    def _schema_candidates(category_schema: dict) -> dict:
+        item_type = "number" if ("min" in category_schema and "max" in category_schema) else "string"
+        return {
+            "type": "object",
+            "properties": {"candidates": {"type": "array", "items": {"type": item_type}}},
+            "required": ["candidates"],
+        }
+
+    @staticmethod
+    def _schema_weights() -> dict:
+        return {
+            "type": "object",
+            "properties": {"weights": {"type": "array", "items": {"type": "number"}}},
+            "required": ["weights"],
+        }
+
+    @staticmethod
+    def _schema_distribution() -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "distribution": {"type": "string", "enum": ["normal", "uniform", "beta"]},
+                "mean": {"type": "number"},
+                "std": {"type": "number"},
+            },
+            "required": ["distribution"],
+        }
 
     def _build_pick_prompt(
         self,
@@ -357,6 +402,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         value = self._call_llm_json(
             prompt, system_instruction,
             expected_key="value",
+            response_schema=self._schema_value(category_schema),
             log_category=category_name, log_method="pick", log_step="pick",
         )
         if self._is_numeric_category(category_schema):
@@ -376,6 +422,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         candidates = self._call_llm_json(
             enum_prompt, system_instruction,
             expected_key="candidates",
+            response_schema=self._schema_candidates(category_schema),
             log_category=category_name, log_method="generate_pick", log_step="enumerate",
         )
 
@@ -383,6 +430,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         value = self._call_llm_json(
             sel_prompt, system_instruction,
             expected_key="value",
+            response_schema=self._schema_value(category_schema),
             log_category=category_name, log_method="generate_pick", log_step="select",
         )
 
@@ -403,6 +451,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         candidates = self._call_llm_json(
             enum_prompt, system_instruction,
             expected_key="candidates",
+            response_schema=self._schema_candidates(category_schema),
             log_category=category_name, log_method="generate_evaluate_pick", log_step="enumerate",
         )
         if len(candidates) > 25:
@@ -416,6 +465,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             weights = self._call_llm_json(
                 eval_prompt, system_instruction,
                 expected_key="weights",
+                response_schema=self._schema_weights(),
                 log_category=category_name, log_method="generate_evaluate_pick", log_step="evaluate",
             )
             weights = self._normalize_weights(weights, category_name)
@@ -439,6 +489,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         value = self._call_llm_json(
             sel_prompt, system_instruction,
             expected_key="value",
+            response_schema=self._schema_value(category_schema),
             log_category=category_name, log_method="generate_evaluate_pick", log_step="select",
         )
 
@@ -461,6 +512,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             )
             spec = self._call_llm_json(
                 dist_prompt, system_instruction,
+                response_schema=self._schema_distribution(),
                 log_category=category_name, log_method="generate_evaluate_random_pick", log_step="distribution",
             )
             lo, hi = category_schema["min"], category_schema["max"]
@@ -488,6 +540,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         candidates = self._call_llm_json(
             enum_prompt, system_instruction,
             expected_key="candidates",
+            response_schema=self._schema_candidates(category_schema),
             log_category=category_name, log_method="generate_evaluate_random_pick", log_step="enumerate",
         )
         if len(candidates) > 25:
@@ -501,6 +554,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             weights = self._call_llm_json(
                 eval_prompt, system_instruction,
                 expected_key="weights",
+                response_schema=self._schema_weights(),
                 log_category=category_name, log_method="generate_evaluate_random_pick", log_step="evaluate",
             )
             weights = self._normalize_weights(weights, category_name)

@@ -8,38 +8,39 @@ import time
 from datetime import datetime
 from typing import Any
 
-import requests
+import openai
 
 from population_synth.clients.llm_protocol import LLMClient  # noqa: F401  # for type-checking
 
-_DEFAULT_BASE_URL = "http://192.168.0.19:11434"
+_FATAL_STATUS_CODES = {400, 401, 403, 404, 422}
 
 
-class OllamaClient:
+class OpenAICompatClient:
     """
-    HTTP client for the Ollama REST API satisfying the LLMClient Protocol.
+    OpenAI-SDK client for any OpenAI-compatible provider satisfying the LLMClient Protocol.
 
-    Targets the native POST /api/chat endpoint on a self-hosted Ollama server.
-    Each generate_content() call is stateless from the server's perspective
-    (no multi-turn conversation state is maintained across calls).
+    Targets /v1/chat/completions. Works with Mistral, OVHcloud AI Endpoints, Regolo.ai,
+    and any other provider exposing the OpenAI chat completions API shape.
     """
 
     def __init__(
         self,
-        model_name: str = "llama3.1",
-        base_url: str | None = None,
+        model_name: str,
+        base_url: str,
+        api_key_env_var: str = "OPENAI_API_KEY",
         default_config: dict[str, Any] | None = None,
         max_retries: int = 3,
         base_delay: float = 2.0,
         max_delay: float = 30.0,
-        timeout: int | None = None,
+        timeout: int = 120,
     ):
+        api_key = os.environ.get(api_key_env_var)
+        if not api_key:
+            raise ValueError(f"Environment variable {api_key_env_var!r} is not set")
+
         self.default_model_name = model_name
-        self.base_url = (
-            base_url
-            or os.environ.get("OLLAMA_BASE_URL")
-            or _DEFAULT_BASE_URL
-        ).rstrip("/")
+        self.base_url = base_url.rstrip("/")
+        self._api_key_env_var = api_key_env_var
         self._max_retries = max_retries
         self._base_delay = base_delay
         self._max_delay = max_delay
@@ -55,36 +56,19 @@ class OllamaClient:
         self._last_execution_metadata: dict[str, Any] | None = None
         self._execution_history: list[dict[str, Any]] = []
 
-        self._session = requests.Session()
-
-        self._validate_server()
+        self._client = openai.OpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            timeout=timeout,
+            max_retries=0,  # we handle retries ourselves
+        )
 
         self.logger.info(
-            "OllamaClient initialized. Model: %s. Base URL: %s. Config: %s",
+            "OpenAICompatClient initialized. Model: %s. Base URL: %s. Config: %s",
             self.default_model_name,
             self.base_url,
             self._config_state,
         )
-
-    def _validate_server(self) -> None:
-        try:
-            resp = self._session.get(f"{self.base_url}/api/tags", timeout=10)
-            resp.raise_for_status()
-        except requests.exceptions.ConnectionError as e:
-            raise ConnectionError(
-                f"Ollama server unreachable at {self.base_url}. "
-                f"Ensure the server is running and the URL is correct. Original error: {e}"
-            ) from e
-        except requests.exceptions.Timeout as e:
-            raise ConnectionError(
-                f"Ollama server timed out at {self.base_url} during startup validation. "
-                f"Original error: {e}"
-            ) from e
-        except requests.exceptions.HTTPError as e:
-            raise ConnectionError(
-                f"Ollama server at {self.base_url} returned HTTP {e.response.status_code} "
-                f"during startup validation. Original error: {e}"
-            ) from e
 
     # ------------------------------------------------------------------
     # Protocol methods
@@ -106,6 +90,7 @@ class OllamaClient:
         return {
             "model": self.default_model_name,
             "base_url": self.base_url,
+            "api_key_env_var": self._api_key_env_var,
             "generation_config": copy.deepcopy(self._config_state),
         }
 
@@ -130,19 +115,6 @@ class OllamaClient:
         return self.default_model_name
 
     # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
-    def close(self) -> None:
-        self._session.close()
-
-    def __del__(self) -> None:
-        try:
-            self.close()
-        except Exception:
-            pass
-
-    # ------------------------------------------------------------------
     # generate_content
     # ------------------------------------------------------------------
 
@@ -154,36 +126,35 @@ class OllamaClient:
         system_instruction = effective_config.pop("system_instruction", None)
         response_schema = effective_config.pop("response_schema", None)
 
-        options: dict[str, Any] = {}
-        for src_key, ollama_key in (
+        api_params: dict[str, Any] = {}
+        for src_key, api_key in (
             ("temperature", "temperature"),
             ("top_p", "top_p"),
-            ("top_k", "top_k"),
-            ("max_output_tokens", "num_predict"),
+            ("max_output_tokens", "max_tokens"),
         ):
             if src_key in effective_config:
-                options[ollama_key] = effective_config.pop(src_key)
+                api_params[api_key] = effective_config.pop(src_key)
+            if api_key in effective_config:
+                api_params[api_key] = effective_config.pop(api_key)
 
         messages: list[dict[str, Any]] = []
         if system_instruction:
             messages.append({"role": "system", "content": system_instruction})
         messages.append({"role": "user", "content": prompt})
 
-        payload: dict[str, Any] = {
-            "model": target_model,
-            "messages": messages,
-            "stream": False,
-            "format": response_schema if response_schema is not None else "json",
-        }
-        if options:
-            payload["options"] = options
+        response_format_strict: dict[str, Any] | None = None
+        if response_schema is not None:
+            response_format_strict = {
+                "type": "json_schema",
+                "json_schema": {"name": "output", "schema": response_schema, "strict": True},
+            }
 
         metadata: dict[str, Any] = {
-            "provider": "ollama",
+            "provider": "openai_compat",
             "model": target_model,
             "base_url": self.base_url,
             "timestamp": datetime.now().isoformat(),
-            "options": options,
+            "api_params": api_params,
         }
         self._last_execution_metadata = metadata
         self._execution_history.append(metadata)
@@ -191,49 +162,51 @@ class OllamaClient:
         last_error: Exception | None = None
         for attempt in range(self._max_retries):
             try:
+                response_format = response_format_strict
+
                 t0 = time.perf_counter()
-                resp = self._session.post(
-                    f"{self.base_url}/api/chat",
-                    json=payload,
-                    timeout=self._timeout,
-                )
+                try:
+                    completion = self._client.chat.completions.create(
+                        model=target_model,
+                        messages=messages,  # type: ignore[arg-type]
+                        **({"response_format": response_format} if response_format is not None else {}),
+                        **api_params,
+                    )
+                except openai.BadRequestError as exc:
+                    if response_format_strict is not None:
+                        # Provider rejected the strict JSON schema; fall back to plain json_object mode.
+                        self.logger.warning(
+                            "Provider rejected response_format json_schema (%s) — retrying with json_object",
+                            exc,
+                        )
+                        completion = self._client.chat.completions.create(
+                            model=target_model,
+                            messages=messages,  # type: ignore[arg-type]
+                            response_format={"type": "json_object"},
+                            **api_params,
+                        )
+                    else:
+                        raise RuntimeError(
+                            f"Provider returned 400 Bad Request: {exc}"
+                        ) from exc
+
                 elapsed_ms = (time.perf_counter() - t0) * 1000
 
-                if resp.status_code == 404:
-                    body = _safe_json(resp)
-                    err_msg = body.get("error", "") if isinstance(body, dict) else str(body)
-                    if "model" in err_msg.lower() or "not found" in err_msg.lower():
-                        raise RuntimeError(
-                            f"Model '{target_model}' not found on Ollama server at {self.base_url}. "
-                            f"Run 'ollama pull {target_model}' on the server."
-                        )
-                    raise RuntimeError(
-                        f"Ollama returned 404: {err_msg}"
-                    )
-
-                if 400 <= resp.status_code < 500:
-                    body = _safe_json(resp)
-                    raise RuntimeError(
-                        f"Ollama returned client error HTTP {resp.status_code}: {body}"
-                    )
-
-                resp.raise_for_status()
-
-                data = resp.json()
-                content = data["message"]["content"]
+                content = completion.choices[0].message.content
                 if not isinstance(content, str):
                     raise RuntimeError(
-                        f"Unexpected content type from Ollama: {type(content)!r}"
+                        f"Unexpected content type from provider: {type(content)!r}"
                     )
 
-                prompt_tokens = data.get("prompt_eval_count")
-                completion_tokens = data.get("eval_count")
+                usage = completion.usage
+                prompt_tokens = usage.prompt_tokens if usage else None
+                completion_tokens = usage.completion_tokens if usage else None
                 metadata["prompt_tokens"] = prompt_tokens
                 metadata["completion_tokens"] = completion_tokens
                 metadata["elapsed_ms"] = elapsed_ms
 
                 self.logger.info(
-                    "ollama call: model=%s base_url=%s elapsed_ms=%.0f "
+                    "openai_compat call: model=%s base_url=%s elapsed_ms=%.0f "
                     "prompt_tokens=%s completion_tokens=%s",
                     target_model,
                     self.base_url,
@@ -243,20 +216,36 @@ class OllamaClient:
                 )
                 return content.strip()
 
+            except (
+                openai.AuthenticationError,
+                openai.PermissionDeniedError,
+                openai.NotFoundError,
+            ) as e:
+                raise RuntimeError(
+                    f"Fatal provider error (no retry): {type(e).__name__}: {e}"
+                ) from e
+
             except RuntimeError:
                 raise
 
-            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            except (
+                openai.RateLimitError,
+                openai.APIConnectionError,
+                openai.APITimeoutError,
+                openai.InternalServerError,
+            ) as e:
                 last_error = e
-            except requests.exceptions.HTTPError as e:
-                if e.response is not None and 400 <= e.response.status_code < 500:
+
+            except openai.APIStatusError as e:
+                # Catch-all for any remaining 4xx that aren't handled above.
+                if e.status_code is not None and 400 <= e.status_code < 500:
                     raise RuntimeError(
-                        f"Ollama returned client error HTTP {e.response.status_code}: {e}"
+                        f"Fatal provider error HTTP {e.status_code} (no retry): {e}"
                     ) from e
                 last_error = e
 
             if attempt < self._max_retries - 1:
-                delay = min(self._base_delay * (2 ** attempt), self._max_delay)
+                delay = min(self._base_delay * (2**attempt), self._max_delay)
                 delay *= random.uniform(0.75, 1.25)
                 self.logger.warning(
                     "generate_content attempt %d/%d failed: %s — retrying in %.1fs",
@@ -271,12 +260,5 @@ class OllamaClient:
             "generate_content failed after %d attempts: %s", self._max_retries, last_error
         )
         raise RuntimeError(
-            f"Ollama generation failed after {self._max_retries} attempts: {last_error}"
+            f"OpenAI-compat generation failed after {self._max_retries} attempts: {last_error}"
         )
-
-
-def _safe_json(resp: requests.Response) -> Any:
-    try:
-        return resp.json()
-    except Exception:
-        return resp.text
