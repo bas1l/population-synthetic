@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PyQt5.QtWidgets import QFormLayout, QGroupBox, QLabel, QVBoxLayout, QWidget
 
-from population_synth.gui.manifest_model import ManifestDisplayInfo
+from population_synth.gui.manifest_model import ExperimentSelection, ManifestDisplayInfo
 
 _DASH = "—"
 
@@ -66,3 +66,23 @@ class ManifestOverview(QWidget):
         self._output_dir_label.setText(str(cfg.parallel_output_dir) if cfg.parallel_output_dir else _DASH)
         count = info.existing_persona_count
         self._personas_label.setText(str(count) if count is not None else _DASH)
+
+    def populate_selection(self, selection: ExperimentSelection) -> None:
+        if selection.is_single:
+            combo = selection.first_combo()
+            try:
+                info = ManifestDisplayInfo.from_axis(*combo)
+                self.populate(info)
+            except Exception:
+                self.populate(None)
+            return
+
+        self.populate(None)
+        n = len(selection.combinations())
+        self._name_label.setText(
+            f"{n} runs ({len(selection.model_ids)} models"
+            f" × {len(selection.strategy_ids)} strategies"
+            f" × {len(selection.country_ids)} countries)"
+        )
+        self._model_label.setText(", ".join(selection.model_ids) if selection.model_ids else _DASH)
+        self._strategy_label.setText(", ".join(selection.strategy_ids) if selection.strategy_ids else _DASH)
