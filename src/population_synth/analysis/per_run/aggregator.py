@@ -57,7 +57,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
-from population_synth.analysis._stats import median, percentile, shannon_entropy
+from population_synth.analysis.shared._stats import median, percentile, shannon_entropy
 
 # ---------------------------------------------------------------------------
 # Internal helpers

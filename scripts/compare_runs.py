@@ -24,8 +24,8 @@ from pathlib import Path
 import yaml
 
 from population_synth._paths import PROJECT_ROOT
-from population_synth.analysis.comparison_charts import plot_run_comparison
-from population_synth.analysis.run_comparison import (
+from population_synth.analysis.cross_run.comparison_charts import plot_run_comparison
+from population_synth.analysis.cross_run.run_comparison import (
     METRIC_SPECS,
     METRIC_SPECS_BY_KEY,
     build_comparison,

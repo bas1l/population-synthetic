@@ -52,15 +52,15 @@ from typing import Any
 import yaml
 
 from population_synth._paths import PROJECT_ROOT
-from population_synth.analysis.aggregator import compute_metrics
-from population_synth.analysis.charts import plot_run_charts
-from population_synth.analysis.console_report import print_metrics
-from population_synth.analysis.interaction_parser import (
+from population_synth.analysis.per_run.aggregator import compute_metrics
+from population_synth.analysis.per_run.charts import plot_run_charts
+from population_synth.analysis.per_run.console_report import print_metrics
+from population_synth.analysis.per_run.interaction_parser import (
     find_interaction_file,
     parse_interactions,
 )
-from population_synth.analysis.joiner import join_entries
-from population_synth.analysis.log_parser import (
+from population_synth.analysis.per_run.joiner import join_entries
+from population_synth.analysis.per_run.log_parser import (
     find_log_files,
     parse_log_file,
     parse_run_summary,

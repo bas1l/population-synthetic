@@ -1,12 +1,12 @@
 """run_comparison.py -- Cross-run scientific comparison of run analytics.
 
 Compares per-run metrics (produced by
-:func:`population_synth.analysis.aggregator.compute_metrics` and persisted as
+:func:`population_synth.analysis.per_run.aggregator.compute_metrics` and persisted as
 ``run_analytics.json`` files under the ``llm_metrics`` master folder) across the
 two experimental factors: **model** and **method/strategy** (country held fixed).
 
 Pipeline:
-    1. :func:`load_run_records` (in :mod:`population_synth.analysis.comparison_loader`)
+    1. :func:`load_run_records` (in :mod:`population_synth.analysis.cross_run.comparison_loader`)
        -- glob ``*/run_analytics.json``, decompose each slug into
        ``(country, strategy, model)``, extract comparable samples.
     2. :func:`build_comparison` -- group samples by model and by method, run a
@@ -16,8 +16,8 @@ Pipeline:
 
 This module is the builder/serialiser layer: it groups, aggregates, and assembles
 the comparison structure.  The hypothesis tests live in
-:mod:`population_synth.analysis.comparison_stats` and the registry/DTOs/I/O live in
-:mod:`population_synth.analysis.comparison_loader`; both are re-exported below so
+:mod:`population_synth.analysis.cross_run.comparison_stats` and the registry/DTOs/I/O live in
+:mod:`population_synth.analysis.cross_run.comparison_loader`; both are re-exported below so
 existing import sites keep working.
 """
 
@@ -29,8 +29,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from population_synth.analysis import _stats
-from population_synth.analysis.comparison_loader import (
+from population_synth.analysis.cross_run.comparison_loader import (
     METRIC_SPECS,
     METRIC_SPECS_BY_KEY,
     MetricSpec,
@@ -40,13 +39,14 @@ from population_synth.analysis.comparison_loader import (
     extract_comparison_metrics,
     load_run_records,
 )
-from population_synth.analysis.comparison_stats import (
+from population_synth.analysis.cross_run.comparison_stats import (
     _holm,
     _nonempty_groups,
     dunn_posthoc,
     kruskal_test,
     summarize,
 )
+from population_synth.analysis.shared import _stats
 
 __all__ = [
     # Registry / DTOs / loader (re-exported from comparison_loader)

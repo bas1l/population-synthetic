@@ -2,7 +2,7 @@
 console_report.py -- Render run-analytics metrics as console text tables.
 
 Turns the nested metrics dict produced by
-:func:`population_synth.analysis.aggregator.compute_metrics` into the
+:func:`population_synth.analysis.per_run.aggregator.compute_metrics` into the
 human-readable summary tables printed by ``scripts/analyze_run.py``.  This is the
 presentation concern only -- no orchestration, I/O, or metric computation.
 
