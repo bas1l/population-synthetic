@@ -30,11 +30,25 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _MAPPINGS_PATH = PROJECT_ROOT / "config" / "assets" / "scb_reference" / "category_mappings.json"
+_ISTAT_MAPPINGS_PATH = PROJECT_ROOT / "config" / "assets" / "istat_reference" / "category_mappings.json"
+
+_SEP_RE = re.compile(r"[\s_\-]+")
 
 
-def _load_pipeline_mappings() -> dict[str, dict[str, str]]:
-    """Return {category: {raw_label_lower: schema_label}} for fast case-insensitive lookup."""
-    with open(_MAPPINGS_PATH, "r", encoding="utf-8") as f:
+def _sep_norm(s: str) -> str:
+    """Collapse underscores, hyphens, and whitespace runs to single spaces.
+
+    Applied symmetrically to mapping keys and lookup inputs so snake_case /
+    kebab-case LLM output (e.g. ``two_biological_parents``, ``upper-middle``)
+    matches the space-form keys curated in category_mappings.json.
+    """
+    return _SEP_RE.sub(" ", s).strip()
+
+
+def _load_pipeline_mappings(path: Path | None = None) -> dict[str, dict[str, str]]:
+    """Return {category: {separator_normalized_label: schema_label}} for fast lookup."""
+    p = path or _MAPPINGS_PATH
+    with open(p, "r", encoding="utf-8") as f:
         m = json.load(f)
     out: dict[str, dict[str, str]] = {}
     for key in (
@@ -45,11 +59,12 @@ def _load_pipeline_mappings() -> dict[str, dict[str, str]]:
     ):
         section = m.get(key, {}) or {}
         plm = section.get("pipeline_label_mappings", {}) or {}
-        out[key] = {k.lower(): v for k, v in plm.items()}
+        out[key] = {_sep_norm(k.lower()): v for k, v in plm.items()}
     return out
 
 
 _PIPELINE_MAPPINGS: dict[str, dict[str, str]] = _load_pipeline_mappings()
+_PIPELINE_MAPPINGS_IT: dict[str, dict[str, str]] | None = None
 
 
 _UTF8_DOUBLE_ENCODING_REPAIRS: dict[str, str] = {
@@ -67,10 +82,10 @@ def _repair_utf8_double_encoding(text: str) -> str:
 
 
 def _json_lookup(category: str, raw: str) -> str | None:
-    """Case-insensitive exact-match lookup against pipeline_label_mappings."""
+    """Separator-insensitive, case-insensitive lookup against pipeline_label_mappings."""
     if not raw:
         return None
-    return _PIPELINE_MAPPINGS.get(category, {}).get(raw.strip().lower())
+    return _PIPELINE_MAPPINGS.get(category, {}).get(_sep_norm(raw.lower()))
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +181,7 @@ HOUSEHOLD_SIZE_LABELS = ["1 person", "2 persons", "3 persons", "4 persons", "5 p
 
 HOUSING_TENURE_LABELS = [
     "Owner-occupied (villa/house)",
-    "Bostadsrätt (cooperative apartment)",
+    "Tenant-owned apartment (bostadsrätt)",
     "Rental apartment",
     "Other",
 ]
@@ -200,6 +215,98 @@ INCOME_SOURCE_LABELS = [
     "Social Assistance",
     "Sickness / Activity Compensation",
 ]
+
+# Canonical OUTPUT values the Swedish normalizers actually emit (NOT the *_LABELS
+# input constants above, whose casing / slash-forms differ from real output).
+# employment_type and civil_status historically returned the raw string on
+# no-match instead of "Non-standard label", letting unmapped values masquerade
+# as real categories; the membership checks below restore consistent accounting.
+_EMPLOYMENT_TYPE_OUTPUT = frozenset({
+    "Permanent Full-time", "Permanent Part-time", "Temporary Full-time",
+    "Temporary Part-time", "Self-Employed", "Not Applicable",
+})
+_CIVIL_STATUS_OUTPUT = frozenset({
+    "Single/Never Married", "Married", "Divorced", "Widowed",
+})
+
+
+# ---------------------------------------------------------------------------
+# Italian label constants
+# ---------------------------------------------------------------------------
+
+EDUCATION_LABELS_IT = [
+    "No Formal Education",
+    "High School (Liceo/Professionale)",
+    "University Degree",
+]
+
+EMPLOYMENT_LABELS_IT = ["Employed", "Not Employed"]
+
+BIRTH_LOCATION_LABELS_IT = ["Italy", "Europe (Other)", "Outside Europe"]
+
+REGION_LABELS_IT = [
+    "Piemonte", "Valle d'Aosta", "Liguria", "Lombardia",
+    "Trentino-Alto Adige/Südtirol", "Veneto", "Friuli-Venezia Giulia",
+    "Emilia-Romagna", "Toscana", "Umbria", "Marche", "Lazio",
+    "Abruzzo", "Molise", "Campania", "Puglia", "Basilicata",
+    "Calabria", "Sicilia", "Sardegna",
+]
+
+CIVIL_STATUS_LABELS_IT = [
+    "Single", "Married", "Divorced", "Widowed", "Separated", "Civil Partnership",
+]
+
+HOUSING_TENURE_LABELS_IT = ["Owner-occupied", "Rental"]
+
+INDUSTRY_SECTOR_LABELS_IT = [
+    "Professional & Managerial",
+    "Clerical & Administrative",
+    "Craft & Technical",
+    "Elementary Occupations",
+    "Not Applicable",
+]
+
+EMPLOYMENT_TYPE_LABELS_IT = [
+    "Permanent|Full-time", "Permanent|Part-time",
+    "Temporary|Full-time", "Temporary|Part-time",
+    "Unspecified|Full-time", "Unspecified|Part-time",
+    "Not Applicable",
+]
+
+BIRTH_COUNTRY_DETAIL_LABELS_IT = [
+    "Italy", "Romania", "Albania", "Morocco", "China", "Ukraine",
+    "Philippines", "Moldova", "India", "Bangladesh", "Pakistan",
+    "Nigeria", "Egypt", "Senegal", "Tunisia", "Serbia",
+    "North Macedonia", "Germany", "France", "Spain", "Poland",
+    "Russia", "Turkey", "Other",
+]
+
+HOUSEHOLD_SIZE_LABELS_IT = ["1", "2", "3", "4", "5", "GE6"]
+
+PARENTAL_STRUCTURE_LABELS_IT = [
+    "Living Alone", "Single Parent", "Couple without Children",
+    "Nuclear Family", "Extended Family",
+]
+
+SOCIOECONOMIC_LABELS_IT = ["Poverty", "Working Class", "Middle Class", "Wealthy"]
+
+_CITY_TO_REGION_IT: dict[str, str] = {
+    "roma": "Lazio", "milano": "Lombardia", "napoli": "Campania",
+    "torino": "Piemonte", "palermo": "Sicilia", "genova": "Liguria",
+    "bologna": "Emilia-Romagna", "firenze": "Toscana", "bari": "Puglia",
+    "catania": "Sicilia", "venezia": "Veneto", "verona": "Veneto",
+    "messina": "Sicilia", "padova": "Veneto", "trieste": "Friuli-Venezia Giulia",
+    "brescia": "Lombardia", "taranto": "Puglia", "reggio calabria": "Calabria",
+    "reggio emilia": "Emilia-Romagna", "modena": "Emilia-Romagna",
+    "perugia": "Umbria", "cagliari": "Sardegna", "parma": "Emilia-Romagna",
+    "livorno": "Toscana", "foggia": "Puglia", "l'aquila": "Abruzzo",
+    "pescara": "Abruzzo", "ancona": "Marche", "potenza": "Basilicata",
+    "campobasso": "Molise", "aosta": "Valle d'Aosta",
+    "trento": "Trentino-Alto Adige/Südtirol", "bolzano": "Trentino-Alto Adige/Südtirol",
+    "rome": "Lazio", "milan": "Lombardia", "naples": "Campania",
+    "turin": "Piemonte", "florence": "Toscana", "venice": "Veneto",
+    "genoa": "Liguria",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -343,19 +450,20 @@ def _fuzzy_match(raw: str, labels: list[str]) -> str | None:
 
 
 def _normalize_education(raw: str) -> str | None:
-    raw_lower = raw.lower()
+    raw_lower = raw.lower().replace("_", " ")
     if raw in EDUCATION_LABELS:
         return raw
     js = _json_lookup("education", raw)
     if js is not None:
         return js
     _POSTGRAD = ("post-graduate", "postgraduate", "phd", "doctoral", "doktors", "research degree",
-                  "isced 6", "isced97 6")
+                  "licentiate", "isced 6", "isced97 6")
     if any(k in raw_lower for k in _POSTGRAD):
         return "Post-Graduate (ISCED 6)"
     _POSTSEC3 = ("post-secondary 3", "isced 5a", "isced97 5a", "university", "degree", "bachelor",
                   "master", "kandidat", "magister", "högskolex", "högskole", "hogskola", "akademisk",
-                  "universitet")
+                  "universitet", "tertiary", "undergraduate", "baccalaure", "first cycle",
+                  "higher education")
     if any(k in raw_lower for k in _POSTSEC3):
         return "Post-Secondary 3+ yrs (ISCED 5A)"
     _POSTSEC_LT3 = ("post-secondary <", "isced 4", "isced 5b", "isced97 4", "isced97 5b",
@@ -363,8 +471,13 @@ def _normalize_education(raw: str) -> str | None:
                      "yh-")
     if any(k in raw_lower for k in _POSTSEC_LT3):
         return "Post-Secondary < 3 yrs (ISCED 4+5B)"
-    _UPPER_SEC3 = ("upper secondary 3", "isced 3a", "isced97 3a", "gymnasium", "high school",
-                    "gymnasieskola", "gymnasie", "gymnasial")
+    # Lower secondary maps to ISCED 2 -- guard before the generic "secondary education"
+    # keyword below would otherwise sweep it into upper secondary.
+    if "lower secondary" in raw_lower:
+        return "Pre-Secondary 9-10 yrs (ISCED 2)"
+    _UPPER_SEC3 = ("upper secondary 3", "upper-secondary", "isced 3a", "isced97 3a", "gymnasium",
+                    "high school", "gymnasieskola", "gymnasie", "gymnasial", "secondary education",
+                    "secondary school", "higher secondary")
     if any(k in raw_lower for k in _UPPER_SEC3):
         return "Upper Secondary 3 yrs (ISCED 3A)"
     if any(k in raw_lower for k in ("upper secondary", "isced 3c", "isced97 3c")):
@@ -383,7 +496,7 @@ def _normalize_education(raw: str) -> str | None:
 
 
 def _normalize_employment(raw: str) -> str | None:
-    raw_lower = raw.lower()
+    raw_lower = raw.lower().replace("_", " ")
     js = _json_lookup("employment", raw)
     if js is not None:
         return js
@@ -397,14 +510,20 @@ def _normalize_employment(raw: str) -> str | None:
         return "Employed"
     _EMPLOYED = ("employ", "working", "worker", "job", "anställd", "heltid",
                   "deltid", "tillsvidare", "sysselsatt", "förvärvsarbetande",
-                  "yrkesverksam")
+                  "yrkesverksam", "arbetar", "full time", "part time", "selvständig",
+                  "self-employ", "freelanc", "egenföretag", "företagare", "frilans",
+                  "eget företag", "näringsidkare", "konstnär", "projektledare",
+                  "forskare", "tjänsteman", "lönearbetande", "kok",
+                  "praktikant", "uppdragstagare")
     if any(k in raw_lower for k in _EMPLOYED):
         return "Employed"
     _UNEMPLOYED = ("unemploy", "jobless", "seeking", "arbetssökande", "arbetslos",
-                    "arbetslös", "arbetsträning", "arbetstränade")
+                    "arbetslös", "arbetsträning", "arbetstränade",
+                    "a-kassa", "försörjning", "hemmafru", "hemvårdare")
     if any(k in raw_lower for k in _UNEMPLOYED):
         return "Unemployed"
-    if any(k in raw_lower for k in ("student", "study", "school", "studying", "studerande")):
+    if any(k in raw_lower for k in ("student", "study", "school", "studying", "studerande",
+                                     "studierande")):
         return "Student"
     if any(k in raw_lower for k in ("retire", "pension")):
         return "Retired"
@@ -464,23 +583,49 @@ def _normalize_environment(raw: str) -> str | None:
 
 
 def _normalize_socioeconomic(raw: str) -> str | None:
-    raw_lower = raw.lower()
+    raw_lower = raw.lower().replace("_", " ")
     js = _json_lookup("socioeconomic", raw)
     if js is not None:
         return js
-    if any(k in raw_lower for k in ("poverty", "poor", "destitute", "fattigdom", "låginkomsttagare")):
+    _POVERTY = ("poverty", "poor", "destitute", "fattigdom", "låginkomsttagare",
+                "low income", "low-income", "lower income", "lower-income",
+                "economic precariat", "precariat",
+                "povertà", "basso reddito", "classe bassa", "marginalizzat")
+    if any(k in raw_lower for k in _POVERTY):
         return "Poverty"
-    _WORKING = ("working class", "lower class", "blue collar", "arbetarklass",
-                 "lägre medelklass", "nedre mellanklass")
+    _WORKING = ("working class", "lower class", "blue collar", "blue-collar", "arbetarklass",
+                 "arbetar", "lägre medelklass", "nedre mellanklass", "skilled worker",
+                 "service worker", "semi-skilled", "semi skilled",
+                 "classe operaia", "classe lavoratrice", "operaio", "ceto popolare",
+                 "lavorante", "medio-bass", "medio bass", "media bass",
+                 "classe media bass", "ceto medio-bass", "ceto medio bass",
+                 "classe subaltern", "student", "studerande")
     if any(k in raw_lower for k in _WORKING):
         return "Working Class"
-    _MIDDLE = ("middle class", "middle-class", "medelklass", "övre medelklass",
-                "högre medelklass", "akademiker", "god ekonomi", "pensionär",
-                "mellanstora tjänstemän", "mellan-tjänstemän", "kvalificerad tjänsteman")
+    _MIDDLE = ("middle class", "middle-class", "medelklass", "mellanklass", "övre medelklass",
+                "högre medelklass", "akademiker", "akademi", "god ekonomi", "pensionär",
+                "mellanstora tjänstemän", "mellan-tjänstemän", "kvalificerad tjänsteman",
+                "professional", "upper middle", "upper-middle", "lower middle", "lower-middle",
+                "middle income", "middle-income", "white collar", "white-collar",
+                "managerial", "administrative", "median income", "above median",
+                "classe media", "ceto medio", "medio-alt", "medio alt",
+                "media-alt", "media alt", "borghes", "classe media alt",
+                "classe media elevat", "classe dirigent", "classe dirigenz",
+                "mellanskikt", "medelinkomst", "giovane professionista",
+                "giovani professionisti", "mediano", "mediocre",
+                "högskoleutbildad", "tjänsteman", "tjänstemän", "it-", "konsult",
+                "företagare", "egenföretagare", "professionell", "urban",
+                "mittenklass", "mittelsocial", "middelklass", "mellanposition",
+                "mellanliggande", "intellektuell")
     if any(k in raw_lower for k in _MIDDLE):
         return "Middle Class"
     _WEALTHY = ("wealthy", "rich", "affluent", "upper class", "välbärgad",
-                 "överklass", "högre tjänstemän")
+                 "överklass", "högre tjänstemän", "high income", "high-income",
+                 "higher income", "higher-income", "high socioeconomic", "corporate class",
+                 "elite",
+                 "alta borghesia", "alta buona", "classe elevat", "classe emergente",
+                 "kapitalist", "hög inkomst", "höginkomst",
+                 "comfortable income", "high-earning", "high earning")
     if any(k in raw_lower for k in _WEALTHY):
         return "Wealthy"
     return _fuzzy_match(raw, SOCIOECONOMIC_LABELS)
@@ -493,9 +638,14 @@ def _normalize_civil_status(raw: str) -> str:
         return js
     if any(k in raw_lower for k in ("skild", "frånskild", "separated", "divorced")):
         return "Divorced"
-    if any(k in raw_lower for k in ("singel", "ogift", "single", "never married", "ensamstående")):
+    if any(k in raw_lower for k in ("singel", "ogift", "single", "never married", "ensamstående", "ensam")):
         return "Single/Never Married"
-    if any(k in raw_lower for k in ("gift", "cohabiting", "sambo", "married", "registrerad partner")):
+    # Cohabiting / partnered descriptors collapse to the Married/Cohabiting bucket,
+    # consistent with the existing "sambo"/"cohabiting" handling.
+    if any(k in raw_lower for k in (
+        "gift", "cohabiting", "cohabit", "habiting", "habitant", "sambo", "samboende",
+        "särbo", "married", "partner", "relation", "förhållande", "registrerad partner",
+    )):
         return "Married"
     if any(k in raw_lower for k in ("änka", "änkling", "änklig", "änkeman", "widow")):
         return "Widowed"
@@ -566,10 +716,12 @@ def _normalize_employment_type(raw: str) -> str:
     js = _json_lookup("employment_type", raw)
     if js is not None:
         return js
-    raw_lower = raw.lower()
+    raw_lower = raw.lower().replace("_", " ")
     if raw_lower in ("not applicable", "ej tillämpbart", "n/a"):
         return "Not Applicable"
-    is_temp = any(k in raw_lower for k in ("temp", "fixed", "visstid", "project", "probation", "allmän visstid"))
+    is_temp = any(k in raw_lower for k in ("temp", "fixed", "visstid", "project", "probation",
+                                           "allmän visstid", "tidkontrakt", "tidsbegräns",
+                                           "timanställ", "internship", "seasonal"))
     is_full = any(k in raw_lower for k in ("full", "heltid", "100%"))
     is_part = any(k in raw_lower for k in ("part", "deltid", "50%", "75%"))
     if any(k in raw_lower for k in ("self-employ", "self employ", "freelan", "egenföretagare", "konsult",
@@ -591,6 +743,18 @@ def _normalize_employment_type(raw: str) -> str:
         return "Not Applicable"
     if "pensionsåldern" in raw_lower:
         return "Temporary Full-time"
+    # A (full-time) student is not employed; a job-bearing student term (studentjobb,
+    # student assistant) is left to fall through since its contract type is unknown.
+    if "student" in raw_lower and not any(
+        k in raw_lower for k in ("jobb", "job", "arbet", "assistant", "anställ", "worker", "intern")
+    ):
+        return "Not Applicable"
+    if any(k in raw_lower for k in ("pension", "pensionär", "pensioner")):
+        return "Not Applicable"
+    # Explicit full-time descriptor with no temp/part/self signal -> permanent full-time,
+    # matching the existing default that bare "permanent"/"tillsvidare" maps to full-time.
+    if is_full:
+        return "Permanent Full-time"
     return raw
 
 
@@ -637,37 +801,168 @@ def _normalize_birth_country_detail(raw: str) -> str:
 
 
 def _normalize_parental_structure(raw: str) -> str | None:
-    raw_lower = raw.lower()
+    raw_lower = raw.lower().replace("_", " ")
     js = _json_lookup("parental_structure", raw)
     if js is not None:
         return js
     _SINGLE_PARENT = (
-        "single parent", "single mother", "single father", "ensamstående",
+        "single parent", "single-parent", "single mother", "single father", "ensamstående",
         "single biological parent", "single-mother", "single-father",
         "mother only", "father only", "biological mother only",
         "biological father only", "grandparent", "farfar", "farmor",
         "morfar", "mormor", "other relative", "residential care", "guardian",
         "shared custody", "shared residency", "separated parents",
         "skilda föräldrar", "växelvis boende", "one biological parent",
+        "widowed mother", "widowed father", "unwed",
+        "genitore solo", "genitore singolo", "madre sola", "padre solo",
+        "monogenitor", "famiglia monogenitorial", "genitore unico",
+        "enskild mor", "enskild far", "enskild föräld", "enkel föräld",
+        "monofamilj", "monoparental",
     )
     if any(k in raw_lower for k in _SINGLE_PARENT):
         return "Single Parent"
     _NUCLEAR = (
-        "two parents", "two-parent", "intact", "nuclear", "biological parents",
+        "two parents", "two-parent", "two parent", "intact", "nuclear", "biological parents",
         "biological mother", "biological father", "mother and father", "blended",
-        "stepparent", "stepfamily", "stepmother", "stepfather", "step-parent",
-        "two mothers", "two fathers", "same-sex parent", "heterosexual parents",
-        "tvåförälder", "två föräldrar",
+        "stepparent", "stepfamily", "step-family", "stepchild", "stepmother", "stepfather",
+        "step-parent", "two mothers", "two fathers", "same-sex parent", "same-sex couple",
+        "same sex couple", "same sex", "heterosexual parents", "married parents",
+        "two married parents", "cohabit", "traditional", "unmarried cohabiting",
+        "both parents", "gift par", "gifta",
+        "tvåförälder", "tvåföräldra", "två föräldrar", "båda föräldra",
+        "båda biologiska föräldra", "biologiska föräldra", "heterosexuella föräldra",
+        "föräldrar tillsammans", "nukleär", "borgerlig famil", "borgerlig hushåll",
+        "ombildad famil", "närståendefamilj", "sambo",
+        "father and mother", "mother and father", "mother-father", "mother father",
+        "due genitori", "entrambi i genitori", "coppia coniugat", "coppia sposat",
+        "married couple", "madre e padre", "madre, padre", "genitori biologici",
+        "famiglia nucleare", "nucleo familiar", "con figli",
     )
     if any(k in raw_lower for k in _NUCLEAR):
         return "Nuclear Family"
+    if any(k in raw_lower for k in ("famiglia estesa", "famiglia allargata", "extended",
+                                     "multigenerational")):
+        return "Extended Family"
     if any(k in raw_lower for k in ("divorced", "split", "adoptive", "foster", "orphan", "ward")):
         return "Single Parent"
-    if any(k in raw_lower for k in ("couple without", "no children", "childless couple")):
+    if any(k in raw_lower for k in ("couple without", "no children", "childless couple",
+                                     "coppia senza figli", "senza figli", "dink", "childless")):
         return "Couple without Children"
-    if any(k in raw_lower for k in ("living alone", "alone", "solo")):
+    if any(k in raw_lower for k in ("living alone", "alone", "solo",
+                                     "vive da sol", "vivo da sol", "single person",
+                                     "single-person", "enkelhushåll", "enskilt hushåll",
+                                     "enskild hushåll")):
         return "Living Alone"
     return _fuzzy_match(raw, PARENTAL_STRUCTURE_LABELS)
+
+
+# ---------------------------------------------------------------------------
+# Italian normalizer helpers
+# ---------------------------------------------------------------------------
+
+def _get_it_mappings() -> dict[str, dict[str, str]]:
+    global _PIPELINE_MAPPINGS_IT
+    if _PIPELINE_MAPPINGS_IT is None:
+        _PIPELINE_MAPPINGS_IT = _load_pipeline_mappings(_ISTAT_MAPPINGS_PATH)
+    return _PIPELINE_MAPPINGS_IT
+
+
+def _json_lookup_it(category: str, raw: str) -> str | None:
+    """Separator-insensitive, case-insensitive lookup against Italian pipeline_label_mappings."""
+    if not raw:
+        return None
+    return _get_it_mappings().get(category, {}).get(_sep_norm(raw.lower()))
+
+
+def _normalize_education_it(raw: str) -> str | None:
+    if raw in EDUCATION_LABELS_IT:
+        return raw
+    js = _json_lookup_it("education", raw)
+    if js is not None:
+        return js
+    raw_lower = raw.lower()
+    if any(k in raw_lower for k in ("laurea", "university", "degree", "dottorato", "master",
+                                      "formazione professionale avanzata", "post-graduate", "postgraduate")):
+        return "University Degree"
+    if any(k in raw_lower for k in ("liceo", "diploma", "maturità", "istituto", "secondary",
+                                     "high school", "scuola superiore", "professionale", "tecnico",
+                                     "formazione")):
+        return "High School (Liceo/Professionale)"
+    if any(k in raw_lower for k in ("elementare", "media", "obbligo", "primary", "no formal",
+                                     "nessun", "analfabet", "alfabetizzazione", "scuola primaria")):
+        return "No Formal Education"
+    return None
+
+
+def _normalize_employment_it(raw: str) -> str | None:
+    js = _json_lookup_it("employment", raw)
+    if js is not None:
+        return js
+    raw_lower = raw.lower()
+    if any(k in raw_lower for k in ("not employed", "disoccupat", "pensionat", "pensione",
+                                     "ritirat", "student", "casaling", "inattiv", "inoccupat",
+                                     "unemploy", "retire", "neo-laureat", "neolaureato",
+                                     "neolaureata", "in cerca", "cerca lavoro",
+                                     "senza occupazione", "job search", "recently graduated",
+                                     "stagista", "tirocinante", "apprendista", "borsista",
+                                     "stage", "homemaker", "casalinga", "stay-at-home",
+                                     "materne", "nessun impiego")):
+        return "Not Employed"
+    if any(k in raw_lower for k in ("employ", "occupat", "lavora", "impiegat", "dipendente",
+                                     "manager", "dirigent", "responsabil", "docente",
+                                     "professore", "professionista", "imprendit", "artigian",
+                                     "tecnic", "ingegner", "commerc", "consulen",
+                                     "amministrat", "autonomo", "freelance", "libero",
+                                     "fulltime", "part-time", "parttime", "a tempo",
+                                     "in carriera", "in occupazione", "titolar", "costrutt")):
+        return "Employed"
+    return None
+
+
+def _normalize_birth_location_it(raw: str) -> str | None:
+    raw_lower = raw.lower()
+    if any(k in raw_lower for k in ("domestic", "italy", "italia", "nato in italia", "italian")):
+        return "Italy"
+    if any(k in raw_lower for k in ("europe", "europa", "eu ", "european")):
+        return "Europe (Other)"
+    if any(k in raw_lower for k in ("outside", "non-eu", "extra", "abroad", "estero", "fuori")):
+        return "Outside Europe"
+    return None
+
+
+def _normalize_civil_status_it(raw: str) -> str:
+    js = _json_lookup_it("civil_status", raw)
+    if js is not None:
+        return js
+    raw_lower = raw.lower()
+    if any(k in raw_lower for k in ("single", "celibe", "nubile", "unmarried")):
+        return "Single"
+    if any(k in raw_lower for k in ("married", "coniugat", "sposat")):
+        return "Married"
+    if any(k in raw_lower for k in ("divorced", "divorziat")):
+        return "Divorced"
+    if any(k in raw_lower for k in ("widowed", "vedov")):
+        return "Widowed"
+    if any(k in raw_lower for k in ("separated", "separat")):
+        return "Separated"
+    if any(k in raw_lower for k in ("civil partnership", "unione civile", "convivente")):
+        return "Civil Partnership"
+    return raw
+
+
+def _normalize_housing_tenure_it(raw: str) -> str:
+    js = _json_lookup_it("housing_tenure", raw)
+    if js is not None:
+        return js
+    raw_lower = raw.lower()
+    if any(k in raw_lower for k in ("owner", "owned", "proprietar", "proprietà", "mortgage",
+                                     "mutuo", "acquistato", "casa", "villa",
+                                     "appartamento proprio", "condominio", "ipoteca")):
+        return "Owner-occupied"
+    if any(k in raw_lower for k in ("rental", "rent", "affitto", "locatar", "inquilin", "tenant",
+                                     "locazione", "canone")):
+        return "Rental"
+    return raw
 
 
 # ---------------------------------------------------------------------------
@@ -1284,11 +1579,33 @@ def _birth_location_from_flat(raw: str) -> str:
     return "Non-standard label"
 
 
-def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
+def _birth_location_from_flat_it(raw: str) -> str:
+    """Map flat birth_location (city name or country) to Italian schema category."""
+    raw_lower = raw.lower().strip()
+    if any(k in raw_lower for k in ("domestic", "italy", "italia", "nato in italia", "italian")):
+        return "Italy"
+    if raw_lower in _CITY_TO_REGION_IT:
+        return "Italy"
+    if any(c.lower() == raw_lower for c in REGION_LABELS_IT):
+        return "Italy"
+    if any(k in raw_lower for k in _NON_EUROPEAN_COUNTRIES):
+        return "Outside Europe"
+    if any(k in raw_lower for k in _EUROPEAN_COUNTRIES):
+        return "Europe (Other)"
+    result = _normalize_birth_location_it(raw)
+    if result:
+        return result
+    return "Non-standard label"
+
+
+def _extract_flat(identity: dict, persona_id: str, country: str = "swedish") -> dict[str, Any] | None:
     """Extract attributes from the flat configurable identity.json format."""
     identity = {k: _repair_utf8_double_encoding(str(v)) if isinstance(v, str) else v
                 for k, v in identity.items()}
     unmapped: list[str] = []
+
+    # Country-specific references
+    is_italian = country == "italian"
 
     raw_age = identity.get("age")
     if raw_age is None:
@@ -1302,13 +1619,17 @@ def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
 
     raw_sex = str(identity.get("biological_sex") or "")
     sex_lower = raw_sex.lower().strip()
-    if any(k in sex_lower for k in ("female", "kvinna", "kvinnlig", "flicka", "tjej", "hona", "woman")):
+    if any(k in sex_lower for k in ("female", "kvinna", "kvinnlig", "kvinnor", "flicka", "tjej", "hona", "woman")):
         biological_sex = "Female"
     elif sex_lower in ("xx", "hon", "f"):
         biological_sex = "Female"
-    elif any(k in sex_lower for k in ("male", "pojke", "kille")):
+    elif is_italian and any(k in sex_lower for k in ("femmina", "femminile", "donna")):
+        biological_sex = "Female"
+    elif any(k in sex_lower for k in ("male", "pojke", "kille", "manlig")):
         biological_sex = "Male"
-    elif sex_lower in ("man", "xy", "m") or "kön man" in sex_lower:
+    elif sex_lower in ("man", "xy", "m") or "kön man" in sex_lower or sex_lower == "män":
+        biological_sex = "Male"
+    elif is_italian and any(k in sex_lower for k in ("maschio", "maschile", "uomo")):
         biological_sex = "Male"
     else:
         biological_sex = None
@@ -1317,42 +1638,61 @@ def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
         biological_sex = "Non-standard label"
 
     raw_edu = str(identity.get("education_level") or "")
-    education_level = _normalize_education(raw_edu) or "Non-standard label"
+    if is_italian:
+        education_level = _normalize_education_it(raw_edu) or "Non-standard label"
+    else:
+        education_level = _normalize_education(raw_edu) or "Non-standard label"
     if education_level == "Non-standard label":
         unmapped.append(f"education_level={raw_edu!r}")
 
     raw_emp = str(identity.get("employment_status") or "")
-    employment_status = _normalize_employment(raw_emp) or "Non-standard label"
+    if is_italian:
+        employment_status = _normalize_employment_it(raw_emp) or "Non-standard label"
+    else:
+        employment_status = _normalize_employment(raw_emp) or "Non-standard label"
     if employment_status == "Non-standard label":
         unmapped.append(f"employment_status={raw_emp!r}")
 
     raw_birth = str(identity.get("birth_location") or "")
-    birth_location = _birth_location_from_flat(raw_birth) if raw_birth else "Non-standard label"
-    raw_bcd_for_loc = str(identity.get("birth_country_detail") or "")
-    bcd_normalized = _normalize_birth_country_detail(raw_bcd_for_loc) if raw_bcd_for_loc else ""
-    if bcd_normalized == "Sweden":
-        birth_location = "Sweden"
-    elif birth_location == "Non-standard label" and bcd_normalized:
-        nordic = {"Norway", "Denmark", "Finland"}
-        european = {"Poland", "Germany", "United Kingdom", "Ukraine", "Romania",
-                    "Bosnia and Herzegovina", "Yugoslavia"}
-        if bcd_normalized in nordic:
-            birth_location = "Europe (Other)"
-        elif bcd_normalized in european:
-            birth_location = "Europe (Other)"
-        else:
-            birth_location = "Outside Europe"
+    if is_italian:
+        birth_location = _birth_location_from_flat_it(raw_birth) if raw_birth else "Non-standard label"
+        raw_bcd_for_loc = str(identity.get("birth_country_detail") or "")
+        bcd_normalized = raw_bcd_for_loc
+        bcd_lower = bcd_normalized.lower()
+        if any(k in bcd_lower for k in ("italy", "italia", "italiana")):
+            birth_location = "Italy"
+        elif birth_location == "Non-standard label" and bcd_normalized:
+            if any(k in bcd_lower for k in _EUROPEAN_COUNTRIES):
+                birth_location = "Europe (Other)"
+            elif any(k in bcd_lower for k in _NON_EUROPEAN_COUNTRIES):
+                birth_location = "Outside Europe"
+    else:
+        birth_location = _birth_location_from_flat(raw_birth) if raw_birth else "Non-standard label"
+        raw_bcd_for_loc = str(identity.get("birth_country_detail") or "")
+        bcd_normalized = _normalize_birth_country_detail(raw_bcd_for_loc) if raw_bcd_for_loc else ""
+        if bcd_normalized == "Sweden":
+            birth_location = "Sweden"
+        elif birth_location == "Non-standard label" and bcd_normalized:
+            nordic = {"Norway", "Denmark", "Finland"}
+            european = {"Poland", "Germany", "United Kingdom", "Ukraine", "Romania",
+                        "Bosnia and Herzegovina", "Yugoslavia"}
+            if bcd_normalized in nordic:
+                birth_location = "Europe (Other)"
+            elif bcd_normalized in european:
+                birth_location = "Europe (Other)"
+            else:
+                birth_location = "Outside Europe"
     if birth_location == "Non-standard label":
         unmapped.append(f"birth_location={raw_birth!r}")
 
     raw_eth = str(identity.get("ethnicity_broad_global_approx") or "")
     ethnicity = _normalize_ethnicity(raw_eth) or "Non-standard label"
-    if ethnicity == "Non-standard label":
+    if ethnicity == "Non-standard label" and not is_italian:
         unmapped.append(f"ethnicity={raw_eth!r}")
 
     raw_env = str(identity.get("current_environment_type") or "")
     current_environment_type = _normalize_environment(raw_env) or "Non-standard label"
-    if current_environment_type == "Non-standard label":
+    if current_environment_type == "Non-standard label" and not is_italian:
         unmapped.append(f"current_environment_type={raw_env!r}")
 
     raw_sec = str(identity.get("socioeconomic_class") or "")
@@ -1366,121 +1706,208 @@ def _extract_flat(identity: dict, persona_id: str) -> dict[str, Any] | None:
         unmapped.append(f"parental_structure={raw_par!r}")
 
     region = str(identity.get("region") or "Non-standard label")
-    if region not in REGION_LABELS:
-        region = _json_lookup("region", region) or _fuzzy_match(region, REGION_LABELS) or "Non-standard label"
+    if is_italian:
+        if region not in REGION_LABELS_IT:
+            region = (_json_lookup_it("region", region)
+                      or _fuzzy_match(region, REGION_LABELS_IT)
+                      or "Non-standard label")
+            # Attempt city-to-region lookup for Italian cities
+            if region == "Non-standard label":
+                region = _CITY_TO_REGION_IT.get(str(identity.get("region") or "").lower().strip(),
+                                                "Non-standard label")
+    else:
+        if region not in REGION_LABELS:
+            region = _json_lookup("region", region) or _fuzzy_match(region, REGION_LABELS) or "Non-standard label"
 
     raw_bcd = str(identity.get("birth_country_detail") or "")
-    birth_country_detail = _normalize_birth_country_detail(raw_bcd) if raw_bcd else "Non-standard label"
+    if is_italian:
+        if raw_bcd:
+            bcd_lower = raw_bcd.lower()
+            if any(k in bcd_lower for k in ("italy", "italia", "italiana")):
+                birth_country_detail = "Italy"
+            else:
+                js_bcd = _json_lookup_it("birth_country_detail", raw_bcd)
+                birth_country_detail = js_bcd if js_bcd is not None else raw_bcd
+        else:
+            birth_country_detail = "Non-standard label"
+    else:
+        birth_country_detail = _normalize_birth_country_detail(raw_bcd) if raw_bcd else "Non-standard label"
 
     raw_cs = str(identity.get("civil_status") or "")
-    civil_status = _normalize_civil_status(raw_cs)
+    if is_italian:
+        civil_status = _normalize_civil_status_it(raw_cs)
+    else:
+        civil_status = _normalize_civil_status(raw_cs)
+        if civil_status not in _CIVIL_STATUS_OUTPUT:
+            unmapped.append(f"civil_status={raw_cs!r}")
+            civil_status = "Non-standard label"
 
     raw_hs = identity.get("household_size")
-    if isinstance(raw_hs, int):
-        if raw_hs == 1:
-            household_size = "1 person"
-        elif raw_hs == 2:
-            household_size = "2 persons"
-        elif raw_hs == 3:
-            household_size = "3 persons"
-        elif raw_hs == 4:
-            household_size = "4 persons"
-        elif raw_hs == 5:
-            household_size = "5 persons"
-        elif raw_hs == 6:
-            household_size = "6 persons"
+    if is_italian:
+        if isinstance(raw_hs, int):
+            if raw_hs >= 6:
+                household_size = "GE6"
+            else:
+                household_size = str(raw_hs)
+        elif isinstance(raw_hs, str) and raw_hs in HOUSEHOLD_SIZE_LABELS_IT:
+            household_size = raw_hs
         else:
-            household_size = "7+ persons"
+            household_size = _fuzzy_match(str(raw_hs or ""), HOUSEHOLD_SIZE_LABELS_IT) or "Non-standard label"
     else:
-        household_size = _fuzzy_match(str(raw_hs or ""), HOUSEHOLD_SIZE_LABELS) or "Non-standard label"
+        if isinstance(raw_hs, int):
+            if raw_hs == 1:
+                household_size = "1 person"
+            elif raw_hs == 2:
+                household_size = "2 persons"
+            elif raw_hs == 3:
+                household_size = "3 persons"
+            elif raw_hs == 4:
+                household_size = "4 persons"
+            elif raw_hs == 5:
+                household_size = "5 persons"
+            elif raw_hs == 6:
+                household_size = "6 persons"
+            else:
+                household_size = "7+ persons"
+        else:
+            household_size = _fuzzy_match(str(raw_hs or ""), HOUSEHOLD_SIZE_LABELS) or "Non-standard label"
 
     raw_ht = str(identity.get("housing_tenure") or "")
-    js_ht = _json_lookup("housing_tenure", raw_ht)
-    if js_ht is not None:
-        housing_tenure = js_ht
+    if is_italian:
+        housing_tenure = _normalize_housing_tenure_it(raw_ht) if raw_ht else "Non-standard label"
     else:
-        ht_lower = raw_ht.lower()
-        if any(k in ht_lower for k in ("bostadsrätt", "bostadsratt", "cooperative apartment", "tenant-owned")):
-            housing_tenure = "Tenant-owned apartment (bostadsrätt)"
-        elif any(k in ht_lower for k in ("villa", "radhus", "friköpt", "äganderätt", "owner", "house", "detached")):
-            housing_tenure = "Owner-occupied (villa/house)"
-        elif any(k in ht_lower for k in ("rental", "rent", "hyresrätt", "hyra", "studentbostad")):
-            housing_tenure = "Rental apartment"
+        js_ht = _json_lookup("housing_tenure", raw_ht)
+        if js_ht is not None:
+            housing_tenure = js_ht
         else:
-            housing_tenure = _fuzzy_match(raw_ht, HOUSING_TENURE_LABELS) or "Non-standard label"
+            ht_lower = raw_ht.lower()
+            if any(k in ht_lower for k in (
+                "bostadsrätt", "bostadsratt", "cooperative", "co-op", "tenant-owned",
+                "condominium", "bostadsbolag", "bostadsförening",
+            )):
+                housing_tenure = "Tenant-owned apartment (bostadsrätt)"
+            elif any(k in ht_lower for k in (
+                "villa", "radhus", "friköpt", "äganderätt", "owner", "house", "detached",
+                "egendom", "eget h", "egen bostad", "egna bostad", "egen hemma", "egenhemma",
+                "own home", "owning", "owned", "mortgage", "freehold",
+            )):
+                housing_tenure = "Owner-occupied (villa/house)"
+            elif any(k in ht_lower for k in (
+                "rental", "rent", "hyresrätt", "hyres", "hyra", "uthyr", "studentbostad",
+                "student", "shared apartment", "shared student", "social housing",
+            )):
+                housing_tenure = "Rental apartment"
+            else:
+                housing_tenure = _fuzzy_match(raw_ht, HOUSING_TENURE_LABELS) or "Non-standard label"
+        if housing_tenure == "Non-standard label" and raw_ht:
+            unmapped.append(f"housing_tenure={raw_ht!r}")
 
     raw_ind = str(identity.get("industry_sector") or "")
-    js_ind = _json_lookup("industry_sector", raw_ind)
-    if js_ind is not None:
-        industry_sector = js_ind
-    else:
-        ind_lower = raw_ind.lower()
-        if any(k in ind_lower for k in ("vård", "sjukvård", "omsorg", "healthcare")):
-            industry_sector = _normalize_industry_sector("Healthcare/Social Work")
-        elif any(k in ind_lower for k in ("finansiell", "bank", "finans")):
-            industry_sector = _normalize_industry_sector("IT/Technology")
-        elif any(k in ind_lower for k in ("detaljhandel", "handel")):
-            industry_sector = _normalize_industry_sector("Retail & Service")
-        elif any(k in ind_lower for k in ("utbildning", "forskning")):
-            industry_sector = _normalize_industry_sector("Education")
-        elif "offentlig förvaltning" in ind_lower:
-            industry_sector = _normalize_industry_sector("Public Administration/Defense")
-        elif any(k in ind_lower for k in ("teknik", " it", "information")):
-            industry_sector = _normalize_industry_sector("IT/Technology")
-        elif any(k in ind_lower for k in ("kultur", "kreativ")):
-            industry_sector = _normalize_industry_sector("Other Services")
-        elif any(k in ind_lower for k in ("bygg", "construction", "tillverkning", "industri")):
-            industry_sector = _normalize_industry_sector("Manufacturing/Industry")
-        elif raw_ind in INDUSTRY_SECTOR_LABELS:
-            industry_sector = _normalize_industry_sector(raw_ind)
+    if is_italian:
+        if raw_ind in INDUSTRY_SECTOR_LABELS_IT:
+            industry_sector = raw_ind
         else:
-            industry_sector = _normalize_industry_sector(
-                _fuzzy_match(raw_ind, INDUSTRY_SECTOR_LABELS) or "Non-standard label"
-            )
+            js_ind_it = _json_lookup_it("industry_sector", raw_ind)
+            if js_ind_it is not None:
+                industry_sector = js_ind_it
+            else:
+                industry_sector = _fuzzy_match(raw_ind, INDUSTRY_SECTOR_LABELS_IT) or "Not Applicable"
+    else:
+        js_ind = _json_lookup("industry_sector", raw_ind)
+        if js_ind is not None:
+            industry_sector = js_ind
+        else:
+            ind_lower = raw_ind.lower()
+            if any(k in ind_lower for k in ("vård", "sjukvård", "omsorg", "healthcare")):
+                industry_sector = _normalize_industry_sector("Healthcare/Social Work")
+            elif any(k in ind_lower for k in ("finansiell", "bank", "finans")):
+                industry_sector = _normalize_industry_sector("IT/Technology")
+            elif any(k in ind_lower for k in ("detaljhandel", "handel")):
+                industry_sector = _normalize_industry_sector("Retail & Service")
+            elif any(k in ind_lower for k in ("utbildning", "forskning")):
+                industry_sector = _normalize_industry_sector("Education")
+            elif "offentlig förvaltning" in ind_lower:
+                industry_sector = _normalize_industry_sector("Public Administration/Defense")
+            elif any(k in ind_lower for k in ("teknik", " it", "information")):
+                industry_sector = _normalize_industry_sector("IT/Technology")
+            elif any(k in ind_lower for k in ("kultur", "kreativ")):
+                industry_sector = _normalize_industry_sector("Other Services")
+            elif any(k in ind_lower for k in ("bygg", "construction", "tillverkning", "industri")):
+                industry_sector = _normalize_industry_sector("Manufacturing/Industry")
+            elif raw_ind in INDUSTRY_SECTOR_LABELS:
+                industry_sector = _normalize_industry_sector(raw_ind)
+            else:
+                industry_sector = _normalize_industry_sector(
+                    _fuzzy_match(raw_ind, INDUSTRY_SECTOR_LABELS) or "Non-standard label"
+                )
 
     raw_et = str(identity.get("employment_type") or "")
-    js_et = _json_lookup("employment_type", raw_et)
-    if js_et is not None:
-        employment_type = js_et
-    else:
-        et_lower = raw_et.lower()
-        _NA = ("not applicable", "n/a", "ej tillämpligt",
-               "ej relevant", "ingen anställning", "volontär", "arbetsträning")
-        _SELF = ("self-employed", "freelance", "egenföretagare",
-                 "enskild firma", "konsultanställning", "egenanställd", "aktiebolag")
-        _TEMP_MISC = ("projektanställning", "visstidsanställning",
-                      "provanställning", "praktik", "vikarie", "pensionsåldern")
-        _PERM = ("permanent", "tillsvidare")
-        _TEMP = ("temporary", "tillfällig", "visstid")
-        if any(k in et_lower for k in _NA):
-            employment_type = "Not Applicable"
-        elif any(k in et_lower for k in _SELF):
-            employment_type = "Self-Employed"
-        elif any(k in et_lower for k in _TEMP_MISC):
-            employment_type = "Temporary Full-time"
-        elif (any(k in et_lower for k in _PERM)
-              and any(k in et_lower for k in ("full", "heltid"))):
-            employment_type = "Permanent Full-time"
-        elif (any(k in et_lower for k in _PERM)
-              and any(k in et_lower for k in ("part", "deltid"))):
-            employment_type = "Permanent Part-time"
-        elif (any(k in et_lower for k in _TEMP)
-              and any(k in et_lower for k in ("full", "heltid"))):
-            employment_type = "Temporary Full-time"
-        elif (any(k in et_lower for k in _TEMP)
-              and any(k in et_lower for k in ("part", "deltid"))):
-            employment_type = "Temporary Part-time"
-        elif "tillsvidareanställning" in et_lower or "heltidsanställning" in et_lower:
-            employment_type = "Permanent Full-time"
+    if is_italian:
+        # Italian pipe-separated format passes through directly
+        if raw_et in EMPLOYMENT_TYPE_LABELS_IT:
+            employment_type = raw_et
+        elif "|" in raw_et:
+            employment_type = raw_et
         else:
-            employment_type = _normalize_employment_type(raw_et)
+            js_et_it = _json_lookup_it("employment_type", raw_et)
+            if js_et_it is not None:
+                employment_type = js_et_it
+            elif not raw_et or raw_et.lower() in ("not applicable", "n/a", "non applicabile"):
+                employment_type = "Not Applicable"
+            else:
+                employment_type = _fuzzy_match(raw_et, EMPLOYMENT_TYPE_LABELS_IT) or "Not Applicable"
+    else:
+        js_et = _json_lookup("employment_type", raw_et)
+        if js_et is not None:
+            employment_type = js_et
+        else:
+            et_lower = raw_et.lower().replace("_", " ")
+            _NA = ("not applicable", "n/a", "ej tillämpligt",
+                   "ej relevant", "ingen anställning", "volontär", "arbetsträning")
+            _SELF = ("self-employed", "freelance", "egenföretagare",
+                     "enskild firma", "konsultanställning", "egenanställd", "aktiebolag")
+            _TEMP_MISC = ("projektanställning", "visstidsanställning",
+                          "provanställning", "praktik", "vikarie", "pensionsåldern")
+            _PERM = ("permanent", "tillsvidare")
+            _TEMP = ("temporary", "tillfällig", "visstid")
+            if any(k in et_lower for k in _NA):
+                employment_type = "Not Applicable"
+            elif any(k in et_lower for k in _SELF):
+                employment_type = "Self-Employed"
+            elif any(k in et_lower for k in _TEMP_MISC):
+                employment_type = "Temporary Full-time"
+            elif (any(k in et_lower for k in _PERM)
+                  and any(k in et_lower for k in ("full", "heltid"))):
+                employment_type = "Permanent Full-time"
+            elif (any(k in et_lower for k in _PERM)
+                  and any(k in et_lower for k in ("part", "deltid"))):
+                employment_type = "Permanent Part-time"
+            elif (any(k in et_lower for k in _TEMP)
+                  and any(k in et_lower for k in ("full", "heltid"))):
+                employment_type = "Temporary Full-time"
+            elif (any(k in et_lower for k in _TEMP)
+                  and any(k in et_lower for k in ("part", "deltid"))):
+                employment_type = "Temporary Part-time"
+            elif "tillsvidareanställning" in et_lower or "heltidsanställning" in et_lower:
+                employment_type = "Permanent Full-time"
+            else:
+                employment_type = _normalize_employment_type(raw_et)
+        # Occupation titles / vague tokens that no rule resolved leak through as raw
+        # strings; count them as unmapped instead of letting them pose as categories.
+        if employment_type not in _EMPLOYMENT_TYPE_OUTPUT:
+            unmapped.append(f"employment_type={raw_et!r}")
+            employment_type = "Non-standard label"
 
     raw_inc = str(identity.get("income_source") or "")
-    income_source = _normalize_income_source(raw_inc) if raw_inc else "Wage / Business"
-    if income_source not in INCOME_SOURCE_LABELS:
-        income_source = _normalize_income_source(
-            _fuzzy_match(raw_inc, INCOME_SOURCE_LABELS) or "Wage / Business"
-        )
+    if is_italian:
+        # Italy does not have income_source in the pipeline
+        income_source = raw_inc if raw_inc else "Non-standard label"
+    else:
+        income_source = _normalize_income_source(raw_inc) if raw_inc else "Wage / Business"
+        if income_source not in INCOME_SOURCE_LABELS:
+            income_source = _normalize_income_source(
+                _fuzzy_match(raw_inc, INCOME_SOURCE_LABELS) or "Wage / Business"
+            )
 
     if unmapped:
         logger.warning("%s: unmapped flat fields: %s", persona_id, "; ".join(unmapped))
@@ -1518,7 +1945,7 @@ def _is_flat(identity: dict) -> bool:
 # Public API
 # ---------------------------------------------------------------------------
 
-def extract_individual(identity_path: Path) -> dict[str, Any] | None:
+def extract_individual(identity_path: Path, country: str = "swedish") -> dict[str, Any] | None:
     """Read an identity.json file, auto-detect format, and return a flat attribute dict.
 
     Returns None if the file cannot be read or the persona is critically incomplete.
@@ -1533,7 +1960,7 @@ def extract_individual(identity_path: Path) -> dict[str, Any] | None:
     if "narrative" in identity:
         attrs = _extract_batch(identity, persona_id)
     elif _is_flat(identity):
-        attrs = _extract_flat(identity, persona_id)
+        attrs = _extract_flat(identity, persona_id, country=country)
     else:
         logger.warning("%s: unrecognised identity format (keys: %s) -- skipping", persona_id, list(identity))
         return None
@@ -1544,7 +1971,7 @@ def extract_individual(identity_path: Path) -> dict[str, Any] | None:
     return {"id": persona_id, **attrs}
 
 
-def extract_population(seed_root: Path) -> dict[str, Any]:
+def extract_population(seed_root: Path, country: str = "swedish") -> dict[str, Any]:
     identity_files = sorted(seed_root.glob("persona_*/identity.json"))
     if not identity_files:
         raise ValueError(f"No persona_*/identity.json files found under {seed_root}")
@@ -1554,7 +1981,7 @@ def extract_population(seed_root: Path) -> dict[str, Any]:
     individuals: list[dict[str, Any]] = []
     skipped = 0
     for path in identity_files:
-        result = extract_individual(path)
+        result = extract_individual(path, country=country)
         if result is None:
             skipped += 1
         else:

@@ -19,6 +19,10 @@ _SWEDEN_BIRTH_LABELS: frozenset[str] = frozenset({
     "born in sweden", "sverige", "sweden", "födda i sverige",
 })
 
+_ITALY_BIRTH_LABELS: frozenset[str] = frozenset({
+    "born in italy", "italia", "italy", "nato in italia", "italiana",
+})
+
 
 def load_mappings(path: Path | None = None) -> dict:
     """Load category_mappings.json from *path* (defaults to SCB reference)."""
@@ -80,8 +84,8 @@ def is_raw_format(individuals: list[dict]) -> bool:
 # Main normalization
 # ------------------------------------------------------------------
 
-def normalize_scb_to_schema(records: list[dict], mappings: dict) -> list[dict]:
-    """Convert raw-format SCB records (nested RawCategory dicts) to flat schema strings.
+def normalize_raw_to_schema(records: list[dict], mappings: dict, country: str = "swedish") -> list[dict]:
+    """Convert raw-format population records (nested RawCategory dicts) to flat schema strings.
 
     Applies category_mappings.json at comparison time so statistical tests work
     against pipeline-format populations that use schema-aligned labels.
@@ -212,6 +216,9 @@ def normalize_scb_to_schema(records: list[dict], mappings: dict) -> list[dict]:
                 rec["employment_type"] = "Self-Employed"
             else:
                 rec["employment_type"] = f"{att_schema}/{hrs_schema}"
+        elif isinstance(emp_type_raw, str) and "|" in emp_type_raw:
+            # Italian pipe-separated format (e.g. "Permanent|Full-time")
+            rec["employment_type"] = emp_type_raw
         elif emp_type_raw is None:
             rec["employment_type"] = "Not Applicable"
         else:
@@ -227,15 +234,21 @@ def normalize_scb_to_schema(records: list[dict], mappings: dict) -> list[dict]:
         rec["income_source"] = _ci_get(income_map, income_raw) if income_raw else None
 
         bc_raw = ind.get("birth_country_detail")
-        if rec.get("birth_location") == "Sweden":
-            rec["birth_country_detail"] = "Sweden"
+        if country == "italian":
+            domestic_birth_labels = _ITALY_BIRTH_LABELS
+            domestic_name = "Italy"
+        else:
+            domestic_birth_labels = _SWEDEN_BIRTH_LABELS
+            domestic_name = "Sweden"
+        if rec.get("birth_location") == domestic_name:
+            rec["birth_country_detail"] = domestic_name
         elif isinstance(bc_raw, dict):
             code = bc_raw.get("code")
             label_val = bc_raw.get("label")
             if code and code in bc_detail_map:
                 rec["birth_country_detail"] = bc_detail_map[code]
-            elif label_val and label_val.lower() in _SWEDEN_BIRTH_LABELS:
-                rec["birth_country_detail"] = "Sweden"
+            elif label_val and label_val.lower() in domestic_birth_labels:
+                rec["birth_country_detail"] = domestic_name
             elif label_val:
                 rec["birth_country_detail"] = bc_detail_map.get(label_val, label_val)
             else:
@@ -250,10 +263,30 @@ def normalize_scb_to_schema(records: list[dict], mappings: dict) -> list[dict]:
     return normalized
 
 
-def normalize_if_raw(pop: dict, mappings: dict) -> dict:
-    """Return a copy of pop with individuals normalized if raw-format, else return pop unchanged."""
+def normalize_if_raw(
+    pop: dict,
+    mappings: dict,
+    mappings_path: Path | None = None,
+    country: str = "swedish",
+) -> dict:
+    """Return a copy of pop with individuals normalized if raw-format, else return pop unchanged.
+
+    Parameters
+    ----------
+    pop : dict
+        Population dict with an ``"individuals"`` list.
+    mappings : dict
+        Pre-loaded category mappings (used as-is).
+    mappings_path : Path | None
+        If provided, *overrides* ``mappings`` by loading from this path.
+    country : str
+        ``"swedish"`` (default) or ``"italian"`` -- controls birth-location
+        detection and other country-specific normalisation logic.
+    """
+    if mappings_path is not None:
+        mappings = load_mappings(path=mappings_path)
     individuals = pop.get("individuals", [])
     if not is_raw_format(individuals):
         return pop
-    normalized_individuals = normalize_scb_to_schema(individuals, mappings)
+    normalized_individuals = normalize_raw_to_schema(individuals, mappings, country=country)
     return {**pop, "individuals": normalized_individuals}
