@@ -23,7 +23,7 @@ actions:
       - key: n
         label: "Number of identities"
         type: int
-        default: null
+        default: 100
         default_from_manifest: parallel_n
         help: "How many identities to generate"
       - key: workers

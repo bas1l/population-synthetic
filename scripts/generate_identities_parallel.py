@@ -174,6 +174,9 @@ def _generate_one(
         generator = FactoryIdentityGenerator.create_generator(mode, client)
         generator.retry_until_success = retry_until_success
         generator.use_structured_output = structured_output
+        # Correlation key for exact log<->JSONL joining; matches persona_dir name.
+        if hasattr(generator, "persona_id"):
+            generator.persona_id = f"persona_{index:05d}"
         if log_llm:
             generator.interaction_collector = LLMInteractionCollector(
                 persona_dir / "llm_interactions.jsonl"

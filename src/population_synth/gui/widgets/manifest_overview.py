@@ -1,10 +1,49 @@
 from __future__ import annotations
 
-from PyQt5.QtWidgets import QFormLayout, QGroupBox, QLabel, QVBoxLayout, QWidget
+from pathlib import Path
 
-from population_synth.gui.manifest_model import ExperimentSelection, ManifestDisplayInfo
+from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtWidgets import (
+    QAbstractItemView,
+    QGroupBox,
+    QHeaderView,
+    QLabel,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from population_synth.gui.manifest_model import ExperimentSelection
+from population_synth.identity.manifest_loader import compose_manifest, discover_axis_values
 
 _DASH = "—"
+_PENDING = "…"
+_COLUMNS = ["Model", "Strategy", "Country", "Provider", "Mode", "Workers", "Personas"]
+_PERSONAS_COL = _COLUMNS.index("Personas")
+_NO_SELECTION = "No selection — check at least one item in each axis."
+
+
+class PersonaCountWorker(QThread):
+    """Globs each combination's output dir off the UI thread to count existing personas."""
+
+    count_ready = pyqtSignal(int, int, int)  # generation, row, count
+
+    def __init__(self, generation: int, rows: list[tuple[int, Path | None]], parent=None):
+        super().__init__(parent)
+        self._generation = generation
+        self._rows = rows
+
+    def run(self) -> None:
+        for row, output_dir in self._rows:
+            try:
+                if output_dir is not None and output_dir.exists():
+                    count = len(list(output_dir.glob("persona_*/identity.json")))
+                else:
+                    count = 0
+            except Exception:
+                count = 0
+            self.count_ready.emit(self._generation, row, count)
 
 
 class ManifestOverview(QWidget):
@@ -14,75 +53,84 @@ class ManifestOverview(QWidget):
         outer_layout.setContentsMargins(0, 0, 0, 0)
 
         group_box = QGroupBox("Overview")
-        form = QFormLayout(group_box)
+        group_layout = QVBoxLayout(group_box)
         outer_layout.addWidget(group_box)
 
-        self._name_label = QLabel(_DASH)
-        self._provider_label = QLabel(_DASH)
-        self._model_label = QLabel(_DASH)
-        self._mode_label = QLabel(_DASH)
-        self._strategy_label = QLabel(_DASH)
-        self._config_path_label = QLabel(_DASH)
-        self._config_path_label.setWordWrap(True)
-        self._parallel_workers_label = QLabel(_DASH)
-        self._output_dir_label = QLabel(_DASH)
-        self._output_dir_label.setWordWrap(True)
-        self._personas_label = QLabel(_DASH)
+        self._summary_label = QLabel(_NO_SELECTION)
+        self._summary_label.setWordWrap(True)
+        group_layout.addWidget(self._summary_label)
 
-        form.addRow("Name:", self._name_label)
-        form.addRow("Provider:", self._provider_label)
-        form.addRow("Model:", self._model_label)
-        form.addRow("Mode:", self._mode_label)
-        form.addRow("Strategy:", self._strategy_label)
-        form.addRow("Config Path:", self._config_path_label)
-        form.addRow("Parallel Workers:", self._parallel_workers_label)
-        form.addRow("Output Dir:", self._output_dir_label)
-        form.addRow("Personas:", self._personas_label)
+        self._table = QTableWidget(0, len(_COLUMNS))
+        self._table.setHorizontalHeaderLabels(_COLUMNS)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self._table.setSortingEnabled(False)
+        self._table.horizontalHeader().setStretchLastSection(True)
+        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        group_layout.addWidget(self._table)
 
-    def populate(self, info: ManifestDisplayInfo | None) -> None:
-        if info is None:
-            for label in (
-                self._name_label,
-                self._provider_label,
-                self._model_label,
-                self._mode_label,
-                self._strategy_label,
-                self._config_path_label,
-                self._parallel_workers_label,
-                self._output_dir_label,
-                self._personas_label,
-            ):
-                label.setText(_DASH)
-            return
-
-        cfg = info.config
-        self._name_label.setText(info.display_name)
-        self._provider_label.setText(cfg.provider or _DASH)
-        self._model_label.setText(cfg.model or _DASH)
-        self._mode_label.setText(cfg.mode or _DASH)
-        self._strategy_label.setText(info.strategy_name or _DASH)
-        self._config_path_label.setText(str(cfg.config_path) if cfg.config_path else _DASH)
-        self._parallel_workers_label.setText(str(cfg.parallel_workers) if cfg.parallel_workers is not None else _DASH)
-        self._output_dir_label.setText(str(cfg.parallel_output_dir) if cfg.parallel_output_dir else _DASH)
-        count = info.existing_persona_count
-        self._personas_label.setText(str(count) if count is not None else _DASH)
+        self._generation = 0
+        self._count_worker: PersonaCountWorker | None = None
 
     def populate_selection(self, selection: ExperimentSelection) -> None:
-        if selection.is_single:
-            combo = selection.first_combo()
-            try:
-                info = ManifestDisplayInfo.from_axis(*combo)
-                self.populate(info)
-            except Exception:
-                self.populate(None)
+        combos = selection.combinations()
+        self._generation += 1
+        country_labels = {c["id"]: c["label"] for c in discover_axis_values("countries")}
+
+        if not combos:
+            self._table.setRowCount(0)
+            self._summary_label.setText(_NO_SELECTION)
             return
 
-        self.populate(None)
-        n = len(selection.combinations())
-        self._name_label.setText(
+        self._summary_label.setText(self._summary_text(selection, len(combos)))
+
+        self._table.setRowCount(len(combos))
+        worker_rows: list[tuple[int, Path | None]] = []
+        for row, (model_id, strategy_id, country_id) in enumerate(combos):
+            try:
+                cfg = compose_manifest(model_id, strategy_id, country_id)
+            except Exception as e:
+                self._set_row(row, [model_id, strategy_id, country_labels.get(country_id, country_id), f"error: {e}", "", "", _DASH])
+                continue
+
+            workers = str(cfg.parallel_workers) if cfg.parallel_workers is not None else _DASH
+            self._set_row(
+                row,
+                [model_id, strategy_id, country_labels.get(country_id, country_id), cfg.provider or _DASH, cfg.mode or _DASH, workers, _PENDING],
+            )
+            tooltip = cfg.name
+            if cfg.parallel_output_dir is not None:
+                tooltip = f"{cfg.name}\n{cfg.parallel_output_dir}"
+            for col in range(len(_COLUMNS)):
+                item = self._table.item(row, col)
+                if item is not None:
+                    item.setToolTip(tooltip)
+            worker_rows.append((row, cfg.parallel_output_dir))
+
+        if worker_rows:
+            worker = PersonaCountWorker(self._generation, worker_rows, self)
+            worker.count_ready.connect(self._on_count_ready)
+            self._count_worker = worker
+            worker.start()
+
+    def _set_row(self, row: int, values: list[str]) -> None:
+        for col, value in enumerate(values):
+            self._table.setItem(row, col, QTableWidgetItem(value))
+
+    def _on_count_ready(self, generation: int, row: int, count: int) -> None:
+        if generation != self._generation or row >= self._table.rowCount():
+            return
+        item = self._table.item(row, _PERSONAS_COL)
+        if item is not None:
+            item.setText(str(count))
+
+    @staticmethod
+    def _summary_text(selection: ExperimentSelection, n: int) -> str:
+        if n == 1:
+            return "1 run"
+        return (
             f"{n} runs ({len(selection.model_ids)} models"
             f" × {len(selection.strategy_ids)} strategies"
             f" × {len(selection.country_ids)} countries)"
         )
-        self._model_label.setText(", ".join(selection.model_ids) if selection.model_ids else _DASH)
-        self._strategy_label.setText(", ".join(selection.strategy_ids) if selection.strategy_ids else _DASH)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import sys
 
@@ -15,11 +17,37 @@ from PyQt5.QtWidgets import (
 
 from population_synth.gui.launcher_config import ActionEntry, LauncherConfig
 from population_synth.gui.manifest_model import ExperimentSelection, ManifestDisplayInfo
+from population_synth.identity.manifest_loader import discover_axis_values
 from population_synth.gui.widgets.configuration_panel import ConfigurationPanel
 from population_synth.gui.widgets.console_widget import ConsoleWidget, ProcessOutputReader
 from population_synth.gui.widgets.dag_graph_widget import DagGraphWidget
 from population_synth.gui.widgets.manifest_overview import ManifestOverview
 from population_synth.gui.widgets.task_selector import TaskSelector
+
+
+def _kill_process_tree(process: subprocess.Popen) -> None:
+    """Force-kill a subprocess and all of its descendants.
+
+    ``Popen.terminate()`` only kills the immediate process; LLM generation
+    spawns grandchildren (e.g. the persistent ``claude`` CLI), which would be
+    orphaned. ``taskkill /F /T`` on Windows (and ``killpg`` on POSIX) takes
+    down the whole tree.
+    """
+    if process.poll() is not None:
+        return
+    try:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True,
+            )
+        else:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+    except Exception:
+        try:
+            process.kill()
+        except Exception:
+            pass
 
 
 class CombinationRunner(QThread):
@@ -42,9 +70,12 @@ class CombinationRunner(QThread):
         self._overrides = overrides
         self._force = force
         self._abort_flag = False
+        self._process: subprocess.Popen | None = None
 
     def abort(self) -> None:
         self._abort_flag = True
+        if self._process is not None:
+            _kill_process_tree(self._process)
 
     def run(self) -> None:
         total = len(self._combos)
@@ -73,17 +104,18 @@ class CombinationRunner(QThread):
                 elif value is not None and value != "":
                     cmd += [f"--{key}", str(value)]
 
-            process = subprocess.Popen(
+            self._process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 bufsize=0,
             )
-            assert process.stdout is not None
-            for raw in process.stdout:
+            assert self._process.stdout is not None
+            for raw in self._process.stdout:
                 line = raw.decode(errors="replace").rstrip("\n")
                 self.line_received.emit(line)
-            process.wait()
+            self._process.wait()
+            self._process = None
 
             if self._abort_flag:
                 break
@@ -98,6 +130,7 @@ class LauncherWindow(QMainWindow):
         self._process: subprocess.Popen | None = None
         self._reader: ProcessOutputReader | None = None
         self._runner: CombinationRunner | None = None
+        self._country_labels = {c["id"]: c["label"] for c in discover_axis_values("countries")}
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._check_process)
 
@@ -234,8 +267,9 @@ class LauncherWindow(QMainWindow):
     def _on_combo_started(
         self, idx: int, total: int, model_id: str, strategy_id: str, country_id: str
     ) -> None:
+        country = self._country_labels.get(country_id, country_id)
         self.statusBar().showMessage(
-            f"Running {idx}/{total}: {model_id} × {strategy_id} × {country_id}"
+            f"Running {idx}/{total}: {model_id} × {strategy_id} × {country}"
         )
 
     def _on_runner_finished(self) -> None:
@@ -265,12 +299,12 @@ class LauncherWindow(QMainWindow):
         if self._runner is not None:
             self._runner.abort()
         elif self._process is not None:
-            self._process.terminate()
+            _kill_process_tree(self._process)
         self.statusBar().showMessage("Aborted")
 
     def closeEvent(self, event) -> None:
         if self._runner is not None:
             self._runner.abort()
         if self._process is not None:
-            self._process.terminate()
+            _kill_process_tree(self._process)
         super().closeEvent(event)

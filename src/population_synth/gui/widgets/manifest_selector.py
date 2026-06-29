@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QCheckBox,
@@ -8,9 +10,12 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from population_synth._paths import PROJECT_ROOT
 from population_synth.gui.manifest_model import ExperimentSelection, ManifestDisplayInfo
 from population_synth.gui.widgets.checkable_axis_list import CheckableAxisList
 from population_synth.identity.manifest_loader import discover_axis_values
+
+_STATE_FILE = PROJECT_ROOT / "config" / "gui_state.json"
 
 
 class ExperimentSelector(QWidget):
@@ -77,7 +82,31 @@ class ExperimentSelector(QWidget):
                 items = []
             list_widget.populate(items)
 
+        try:
+            if _STATE_FILE.exists():
+                saved = json.loads(_STATE_FILE.read_text())
+                for list_widget, key in (
+                    (self._model_list, "model_ids"),
+                    (self._strategy_list, "strategy_ids"),
+                    (self._country_list, "country_ids"),
+                ):
+                    list_widget.blockSignals(True)
+                    list_widget.set_selected(saved.get(key, []))
+                    list_widget.blockSignals(False)
+        except Exception:
+            pass
+
         self._on_selection_changed()
 
     def _on_selection_changed(self) -> None:
-        self.selection_changed.emit(self.current_selection())
+        sel = self.current_selection()
+        self.selection_changed.emit(sel)
+        try:
+            _STATE_FILE.write_text(
+                json.dumps(
+                    {"model_ids": sel.model_ids, "strategy_ids": sel.strategy_ids, "country_ids": sel.country_ids},
+                    indent=2,
+                )
+            )
+        except Exception:
+            pass
