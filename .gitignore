@@ -16,3 +16,4 @@ config/assets/istat_cache/*.json
 .ruff_cache/
 data/
 *.layout.json
+config/gui_state.json
