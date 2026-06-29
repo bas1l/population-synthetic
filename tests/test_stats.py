@@ -11,9 +11,9 @@ import math
 
 import pytest
 
-from population_synth.analysis._stats import median as _median
-from population_synth.analysis._stats import percentile as _percentile
-from population_synth.analysis._stats import shannon_entropy as _shannon_entropy
+from population_synth.analysis.shared._stats import median as _median
+from population_synth.analysis.shared._stats import percentile as _percentile
+from population_synth.analysis.shared._stats import shannon_entropy as _shannon_entropy
 
 
 def test_median_odd_even_empty():
