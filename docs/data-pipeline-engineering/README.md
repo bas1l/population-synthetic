@@ -54,3 +54,10 @@ It overlaps three established disciplines:
 > All external resources in `04` were verified to exist (publisher, journal,
 > official docs, or hosting institution) at the time of writing. Editions and
 > course offerings move over time — re-verify before citing formally.
+
+## Related
+
+- [`../code-standards/`](../code-standards/) — sibling, repository-agnostic
+  reference for file and function *structure* (Google/PEP 8 rules, threshold
+  table) plus a structural audit checklist. This set is about *system design*;
+  that one is about *file and function structure*.
