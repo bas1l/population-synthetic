@@ -29,6 +29,9 @@ _FIELD_DEFAULTS: dict[str, Any] = {
     "error": None,
     "attempt": 1,
     "timestamp": None,
+    # Correlation key (present in newer runs; absent/None in legacy JSONL).
+    "persona_id": None,
+    "call_index": None,
 }
 
 

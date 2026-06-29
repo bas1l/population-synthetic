@@ -32,7 +32,13 @@ All returned dicts share the normalised schema::
         "elapsed_ms":         float | None,
         "prompt_tokens":      int | None,
         "completion_tokens":  int | None,
+        "persona_id":         str | None,   # from optional "corr=" suffix
+        "call_index":         int | None,   # from optional "corr=" suffix
     }
+
+Lines may carry an optional trailing ``corr=<persona_id>:<call_index>`` token
+(emitted by parallel runs) which the joiner uses for exact attribution; legacy
+lines without it parse with ``persona_id`` / ``call_index`` set to ``None``.
 
 For Claude calls, ``elapsed_ms`` is the sum of ``t_launch_ms`` and
 ``t_inference_ms``.  Token counts are always ``None`` for Claude because the
@@ -57,6 +63,9 @@ _RE_TIMESTAMP = re.compile(
     r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\w+:\s+(?P<msg>.+)$"
 )
 
+# Optional trailing correlation key:  " corr=<persona_id>:<call_index>"
+_CORR_SUFFIX = r"(?:\s+corr=(?P<corr>\S+))?"
+
 # Ollama / OpenAI-compat call line
 _RE_OLLAMA_OPENAI = re.compile(
     r"^(?P<provider>ollama|openai_compat) call:\s+"
@@ -65,6 +74,7 @@ _RE_OLLAMA_OPENAI = re.compile(
     r"elapsed_ms=(?P<elapsed_ms>[\d.]+)\s+"
     r"prompt_tokens=(?P<prompt_tokens>\S+)\s+"
     r"completion_tokens=(?P<completion_tokens>\S+)"
+    + _CORR_SUFFIX
 )
 
 # Claude call line
@@ -73,6 +83,7 @@ _RE_CLAUDE = re.compile(
     r"model=(?P<model>\S+)\s+"
     r"t_launch_ms=(?P<t_launch_ms>[\d.]+)\s+"
     r"t_inference_ms=(?P<t_inference_ms>[\d.]+)"
+    + _CORR_SUFFIX
 )
 
 # Parallel run summary line
@@ -96,6 +107,24 @@ def _parse_token_count(raw: str) -> int | None:
         return int(raw)
     except ValueError:
         return None
+
+
+def _parse_corr(raw: str | None) -> tuple[str | None, int | None]:
+    """Split a ``<persona_id>:<call_index>`` correlation token.
+
+    Returns ``(persona_id, call_index)``; either element is ``None`` when the
+    token is absent or malformed.  ``persona_id`` may itself contain no colon
+    (e.g. ``persona_00001``), so we split on the final ``:``.
+    """
+    if not raw:
+        return None, None
+    persona_id, sep, idx = raw.rpartition(":")
+    if not sep:
+        return None, None
+    try:
+        return persona_id, int(idx)
+    except ValueError:
+        return persona_id or None, None
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +232,7 @@ def _try_parse_call(msg: str, timestamp: str | None) -> dict[str, Any] | None:
     # Ollama / OpenAI-compat
     m = _RE_OLLAMA_OPENAI.match(msg)
     if m:
+        persona_id, call_index = _parse_corr(m.group("corr"))
         return {
             "timestamp": timestamp,
             "provider": m.group("provider"),
@@ -210,6 +240,8 @@ def _try_parse_call(msg: str, timestamp: str | None) -> dict[str, Any] | None:
             "elapsed_ms": float(m.group("elapsed_ms")),
             "prompt_tokens": _parse_token_count(m.group("prompt_tokens")),
             "completion_tokens": _parse_token_count(m.group("completion_tokens")),
+            "persona_id": persona_id,
+            "call_index": call_index,
         }
 
     # Claude
@@ -217,6 +249,7 @@ def _try_parse_call(msg: str, timestamp: str | None) -> dict[str, Any] | None:
     if m:
         t_launch = float(m.group("t_launch_ms"))
         t_inference = float(m.group("t_inference_ms"))
+        persona_id, call_index = _parse_corr(m.group("corr"))
         return {
             "timestamp": timestamp,
             "provider": "claude",
@@ -224,6 +257,8 @@ def _try_parse_call(msg: str, timestamp: str | None) -> dict[str, Any] | None:
             "elapsed_ms": t_launch + t_inference,
             "prompt_tokens": None,
             "completion_tokens": None,
+            "persona_id": persona_id,
+            "call_index": call_index,
         }
 
     return None
