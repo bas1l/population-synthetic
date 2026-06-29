@@ -1,0 +1,71 @@
+{
+  "description": "Occupation classification to industry sector schema labels for Italian population data",
+  "istat_source": "ISTAT occupation classification (CP2011)",
+  "mappings": {
+    "professional_managerial": {
+      "schema_label": "Professional & Managerial",
+      "description": "Legislators, senior officials, managers, professionals, technicians"
+    },
+    "clerical_administrative": {
+      "schema_label": "Clerical & Administrative",
+      "description": "Clerks, service workers, shop and market sales workers"
+    },
+    "craft_technical": {
+      "schema_label": "Craft & Technical",
+      "description": "Skilled agricultural, craft and related trades, plant and machine operators"
+    },
+    "elementary": {
+      "schema_label": "Elementary Occupations",
+      "description": "Elementary occupations, unskilled workers"
+    }
+  },
+  "output_categories": [
+    "Professional & Managerial",
+    "Clerical & Administrative",
+    "Craft & Technical",
+    "Elementary Occupations"
+  ],
+  "pipeline_label_mappings": {
+    "Manufacturing": "Craft & Technical",
+    "manufacturing": "Craft & Technical",
+    "Manifatturiero": "Craft & Technical",
+    "Services": "Clerical & Administrative",
+    "services": "Clerical & Administrative",
+    "Servizi": "Clerical & Administrative",
+    "servizi": "Clerical & Administrative",
+    "Finance": "Professional & Managerial",
+    "finance": "Professional & Managerial",
+    "Finance and Banking": "Professional & Managerial",
+    "Technology": "Professional & Managerial",
+    "technology": "Professional & Managerial",
+    "Technology/IT": "Professional & Managerial",
+    "IT/Technology": "Professional & Managerial",
+    "IT": "Professional & Managerial",
+    "Engineering": "Craft & Technical",
+    "Servizi professionali": "Professional & Managerial",
+    "Tecnologia": "Professional & Managerial",
+    "Public Administration": "Clerical & Administrative",
+    "Pubblica amministrazione": "Clerical & Administrative",
+    "Healthcare": "Professional & Managerial",
+    "Sanità": "Professional & Managerial",
+    "Education": "Professional & Managerial",
+    "Istruzione": "Professional & Managerial",
+    "Construction": "Craft & Technical",
+    "Edilizia": "Craft & Technical",
+    "Costruzioni": "Craft & Technical",
+    "Agriculture": "Elementary Occupations",
+    "Agricoltura": "Elementary Occupations",
+    "Retail": "Clerical & Administrative",
+    "Commercio": "Clerical & Administrative",
+    "Transport": "Craft & Technical",
+    "Trasporti": "Craft & Technical",
+    "Tourism": "Elementary Occupations",
+    "Turismo": "Elementary Occupations",
+    "Hospitality": "Elementary Occupations",
+    "Ristorazione": "Elementary Occupations",
+    "Professional": "Professional & Managerial",
+    "Clerical": "Clerical & Administrative",
+    "Craft": "Craft & Technical",
+    "Elementary": "Elementary Occupations"
+  }
+}

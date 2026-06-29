@@ -1,0 +1,59 @@
+{
+  "description": "Labour force status from table 13618 (ArbStyrkStatus). Combined with education level for employment_by_sex_education conditional distribution.",
+  "ssb_variable": "ArbStyrkStatus",
+  "ssb_tables": [
+    "13618",
+    "13785"
+  ],
+  "mappings": {
+    "employed": {
+      "schema_label": "Employed",
+      "ssb_codes": [
+        "1",
+        "Sysselsatte"
+      ]
+    },
+    "unemployed": {
+      "schema_label": "Unemployed",
+      "ssb_codes": [
+        "2",
+        "Arbeidsledige"
+      ]
+    },
+    "student": {
+      "schema_label": "Student",
+      "ssb_codes": [
+        "student",
+        "under utdanning"
+      ]
+    },
+    "retired_other": {
+      "schema_label": "Retired",
+      "ssb_codes": [
+        "6",
+        "Personer utenfor arbeidsstyrken"
+      ]
+    }
+  },
+  "label_mappings": {
+    "sysselsatte": "Employed",
+    "arbeidsledige": "Unemployed",
+    "personer utenfor arbeidsstyrken": "Retired",
+    "employed": "Employed",
+    "unemployed": "Unemployed",
+    "not in the labour force": "Retired",
+    "outside the labour force": "Retired"
+  },
+  "education_label_mappings": {
+    "grunnskolenivå": "No Formal Education",
+    "uoppgitt eller ingen fullført utdanning": "No Formal Education",
+    "videregående skolenivå": "High School (Videregående)",
+    "fagskolenivå": "Vocational (Fagskole)",
+    "universitets- og høgskolenivå": "University Degree",
+    "1-2": "No Formal Education",
+    "3-5": "High School (Videregående)",
+    "11": "Vocational (Fagskole)",
+    "6-8": "University Degree",
+    "0_9": "No Formal Education"
+  }
+}

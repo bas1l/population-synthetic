@@ -1,0 +1,47 @@
+{
+  "description": "Household size categories for Italian population data",
+  "istat_source": "Eurostat EU-SILC household composition",
+  "mappings": {
+    "1": {
+      "schema_label": "1",
+      "description": "Single-person household"
+    },
+    "2": {
+      "schema_label": "2",
+      "description": "Two-person household"
+    },
+    "3": {
+      "schema_label": "3",
+      "description": "Three-person household"
+    },
+    "4": {
+      "schema_label": "4",
+      "description": "Four-person household"
+    },
+    "5": {
+      "schema_label": "5",
+      "description": "Five-person household"
+    },
+    "GE6": {
+      "schema_label": "GE6",
+      "description": "Six or more person household"
+    }
+  },
+  "eurostat_label_mappings": {
+    "1 person": "1",
+    "2 persons": "2",
+    "3 persons": "3",
+    "4 persons": "4",
+    "5 persons": "5",
+    "6 or more persons": "GE6",
+    "6 persons or more": "GE6"
+  },
+  "output_categories": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "GE6"
+  ]
+}

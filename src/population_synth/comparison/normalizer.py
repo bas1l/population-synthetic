@@ -13,7 +13,7 @@ from typing import Any
 
 from population_synth._paths import PROJECT_ROOT
 
-_SCB_MAPPINGS_PATH = PROJECT_ROOT / "config" / "assets" / "scb_reference" / "category_mappings.json"
+_SCB_MAPPINGS_DIR = PROJECT_ROOT / "config" / "comparison" / "category_mappings" / "scb"
 
 _SWEDEN_BIRTH_LABELS: frozenset[str] = frozenset({
     "born in sweden", "sverige", "sweden", "födda i sverige",
@@ -25,8 +25,19 @@ _ITALY_BIRTH_LABELS: frozenset[str] = frozenset({
 
 
 def load_mappings(path: Path | None = None) -> dict:
-    """Load category_mappings.json from *path* (defaults to SCB reference)."""
-    p = path or _SCB_MAPPINGS_PATH
+    """Load category mappings from *path* (defaults to the SCB reference directory).
+
+    *path* may be either a directory of per-attribute JSON files (each filename
+    stem becomes a top-level key) or a single monolithic ``category_mappings.json``
+    file. The returned dict is identical for both layouts.
+    """
+    p = path or _SCB_MAPPINGS_DIR
+    if p.is_dir():
+        merged: dict = {}
+        for f in sorted(p.glob("*.json")):
+            with open(f, "r", encoding="utf-8") as fh:
+                merged[f.stem] = json.load(fh)
+        return merged
     with open(p, "r", encoding="utf-8") as f:
         return json.load(f)
 

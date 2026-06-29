@@ -1,0 +1,129 @@
+{
+  "description": "AKU (Labour Force Survey) status codes to schema labels",
+  "scb_variable": "ArbetsmarknadsstStatus",
+  "mappings": {
+    "employed": {
+      "schema_label": "Employed",
+      "scb_codes": [
+        "1",
+        "sysselsatta",
+        "employed"
+      ]
+    },
+    "unemployed": {
+      "schema_label": "Unemployed",
+      "scb_codes": [
+        "2",
+        "3",
+        "arbetslosa",
+        "unemployed",
+        "job-seekers"
+      ]
+    },
+    "student": {
+      "schema_label": "Student",
+      "scb_codes": [
+        "4",
+        "studerande",
+        "in education"
+      ]
+    },
+    "retired_other": {
+      "schema_label": "Retired",
+      "scb_codes": [
+        "5",
+        "6",
+        "7",
+        "pensionarer",
+        "retired",
+        "other inactive"
+      ]
+    }
+  },
+  "aku_label_mappings": {
+    "sysselsatta": "Employed",
+    "employed": "Employed",
+    "in employment": "Employed",
+    "employed, thousands": "Employed",
+    "arbetslösa": "Unemployed",
+    "unemployed": "Unemployed",
+    "unemployed, thousands": "Unemployed",
+    "ej i arbetskraften": "Retired",
+    "not in the labour force": "Retired",
+    "not in the labour force, thousands": "Retired",
+    "ej i arbetskraften - studerande": "Student",
+    "ej i arbetskraften - pensionärer": "Retired",
+    "ej i arbetskraften - övriga": "Retired",
+    "not in labour force - students": "Student",
+    "not in labour force - retired": "Retired",
+    "not in labour force - other": "Retired"
+  },
+  "aku_education_label_mappings": {
+    "primary and lower secondary education": "No Formal Education",
+    "förgymnasial utbildning": "No Formal Education",
+    "upper secondary education": "High School (Gymnasieskola)",
+    "gymnasial utbildning": "High School (Gymnasieskola)",
+    "post secondary education": "University Degree",
+    "eftergymnasial utbildning": "University Degree"
+  },
+  "pipeline_label_mappings": {
+    "Anställd": "Employed",
+    "Anställd heltid": "Employed",
+    "Anställd deltid": "Employed",
+    "Tillsvidareanställd": "Employed",
+    "Visstidsanställd": "Employed",
+    "Egenföretagare": "Employed",
+    "Egen företagare": "Employed",
+    "Frilansare": "Employed",
+    "Konsult": "Employed",
+    "Föräldraledig": "Employed",
+    "Tjänstledig": "Employed",
+    "Arbetslös": "Unemployed",
+    "Arbetssökande": "Unemployed",
+    "I arbetsmarknadsåtgärd": "Unemployed",
+    "Studerande": "Student",
+    "Student": "Student",
+    "Doktorand": "Student",
+    "Pensionär": "Retired",
+    "Pensionerad": "Retired",
+    "Ålderspensionär": "Retired",
+    "Förtidspensionär": "Retired",
+    "Sjukpensionär": "Retired",
+    "Mottagare av sjukersättning": "Retired",
+    "Sjukskriven": "Unemployed",
+    "Långtidssjukskriven": "Retired",
+    "Arbetstränade": "Unemployed",
+    "Arbetsträning": "Unemployed",
+    "Förvärvsarbetande": "Employed",
+    "Sysselsatt": "Employed",
+    "Yrkesverksam": "Employed",
+    "I arbete": "Employed",
+    "Heltidsarbetande": "Employed",
+    "Deltidsarbetande": "Employed",
+    "Ej i arbetskraften": "Retired",
+    "Hemarbetande": "Retired",
+    "Arbetande": "Employed",
+    "Full-time": "Employed",
+    "Part-time": "Employed",
+    "Studier": "Student",
+    "Heltidsarbete": "Employed",
+    "Deltidsarbete": "Employed",
+    "Arbetar": "Employed",
+    "Arbetar fulltid": "Employed",
+    "Arbeta fulltid": "Employed",
+    "Aktiv": "Employed",
+    "Aktiva": "Employed",
+    "Full time": "Employed",
+    "Fulgtid": "Employed",
+    "Anställd (Employed)": "Employed",
+    "Arbetar (Employed)": "Employed",
+    "Arbetar för ett företag": "Employed",
+    "Anställd fulltids": "Employed",
+    "Anställd fulltid": "Employed",
+    "Full-time employed": "Employed",
+    "Employed full-time": "Employed",
+    "Employed Full-time": "Employed",
+    "Employed Full-Time": "Employed",
+    "anställda": "Employed"
+  }
+}

@@ -40,7 +40,7 @@ from population_synth.comparison.extractor import extract_population
 from population_synth.comparison.normalizer import load_mappings, normalize_if_raw
 
 _DEFAULT_REFERENCE = PROJECT_ROOT / "data" / "istat_api" / "istat_population.json"
-_ISTAT_MAPPINGS_PATH = PROJECT_ROOT / "config" / "assets" / "istat_reference" / "category_mappings.json"
+_ISTAT_MAPPINGS_PATH = PROJECT_ROOT / "config" / "comparison" / "category_mappings" / "istat"
 
 
 # ---------------------------------------------------------------------------

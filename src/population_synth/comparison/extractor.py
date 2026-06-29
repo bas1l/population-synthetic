@@ -20,17 +20,19 @@ from pathlib import Path
 from typing import Any
 
 from population_synth._paths import PROJECT_ROOT
+from population_synth.comparison.normalizer import load_mappings
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Pipeline label mappings -- loaded from category_mappings.json so the JSON
-# file is the source of truth for free-form label -> schema-label translations.
+# Pipeline label mappings -- loaded from the per-attribute category-mapping
+# directories so the JSON files are the source of truth for free-form label ->
+# schema-label translations.
 # ---------------------------------------------------------------------------
 
-_MAPPINGS_PATH = PROJECT_ROOT / "config" / "assets" / "scb_reference" / "category_mappings.json"
-_ISTAT_MAPPINGS_PATH = PROJECT_ROOT / "config" / "assets" / "istat_reference" / "category_mappings.json"
+_MAPPINGS_PATH = PROJECT_ROOT / "config" / "comparison" / "category_mappings" / "scb"
+_ISTAT_MAPPINGS_PATH = PROJECT_ROOT / "config" / "comparison" / "category_mappings" / "istat"
 
 _SEP_RE = re.compile(r"[\s_\-]+")
 
@@ -47,9 +49,7 @@ def _sep_norm(s: str) -> str:
 
 def _load_pipeline_mappings(path: Path | None = None) -> dict[str, dict[str, str]]:
     """Return {category: {separator_normalized_label: schema_label}} for fast lookup."""
-    p = path or _MAPPINGS_PATH
-    with open(p, "r", encoding="utf-8") as f:
-        m = json.load(f)
+    m = load_mappings(path or _MAPPINGS_PATH)
     out: dict[str, dict[str, str]] = {}
     for key in (
         "education", "employment", "civil_status", "industry_sector",

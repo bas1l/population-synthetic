@@ -1,0 +1,24 @@
+{
+  "description": "Urban/rural classification based on SSB tettsted (urban settlement) data from table 04859. Derived from share of fylke population living in urban settlements.",
+  "ssb_variable": "TettSted",
+  "ssb_table": "04859",
+  "mappings": {
+    "urban_metropolis": {
+      "schema_label": "Urban Metropolis",
+      "description": "Oslo and larger cities — >85% of fylke population in urban settlements"
+    },
+    "suburban": {
+      "schema_label": "Suburban",
+      "description": "Mid-sized towns and densely settled areas — 60–85% urban"
+    },
+    "rural": {
+      "schema_label": "Rural/Countryside",
+      "description": "Sparsely settled areas — <60% urban"
+    }
+  },
+  "degurba_mappings": {
+    "densely populated area": "Urban Metropolis",
+    "intermediate density area": "Suburban",
+    "thinly populated area": "Rural/Countryside"
+  }
+}

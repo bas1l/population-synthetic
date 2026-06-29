@@ -1,0 +1,56 @@
+{
+  "description": "Birth location classification for Italian population data",
+  "istat_source": "ISTAT/Eurostat migration statistics",
+  "mappings": {
+    "italy": {
+      "schema_label": "Italy",
+      "description": "Born in Italy"
+    },
+    "europe_other": {
+      "schema_label": "Europe (Other)",
+      "description": "Born in a European country other than Italy"
+    },
+    "outside_europe": {
+      "schema_label": "Outside Europe",
+      "description": "Born outside Europe"
+    }
+  },
+  "output_categories": [
+    "Italy",
+    "Europe (Other)",
+    "Outside Europe"
+  ],
+  "pipeline_label_mappings": {
+    "Domestic": "Italy",
+    "domestic": "Italy",
+    "Domestically": "Italy",
+    "domestically": "Italy",
+    "Domestico": "Italy",
+    "domestico": "Italy",
+    "Born in Italy": "Italy",
+    "born in Italy": "Italy",
+    "Italy": "Italy",
+    "Italia": "Italy",
+    "Domestic (Italy)": "Italy",
+    "Nato in Italia": "Italy",
+    "nato in Italia": "Italy",
+    "Italian": "Italy",
+    "Abroad": "Outside Europe",
+    "abroad": "Outside Europe",
+    "Foreign": "Outside Europe",
+    "foreign": "Outside Europe",
+    "Estero": "Outside Europe",
+    "estero": "Outside Europe",
+    "Nato all'estero": "Outside Europe",
+    "Born abroad": "Outside Europe",
+    "Europe": "Europe (Other)",
+    "European": "Europe (Other)",
+    "EU": "Europe (Other)",
+    "Europa": "Europe (Other)",
+    "Born in Europe": "Europe (Other)",
+    "Outside Europe": "Outside Europe",
+    "Non-European": "Outside Europe",
+    "Extra-EU": "Outside Europe",
+    "Fuori Europa": "Outside Europe"
+  }
+}

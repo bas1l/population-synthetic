@@ -16,8 +16,8 @@ Failure policy
   country detail, socioeconomic) **raise** loudly on API error or empty parse.
 * Sparse/optional dimensions (parental structure, income source by employment
   age) log a WARNING and return a documented fallback distribution rather than
-  raising.  This is documented in ``category_mappings.json`` under the
-  ``income_source.fallback_note`` field.
+  raising.  This is documented in ``category_mappings/ssb/income_source.json``
+  under the ``fallback_note`` field.
 """
 
 from __future__ import annotations
@@ -427,7 +427,7 @@ class SSBFetchService:
         No SSB PxWebApi v2 table provides income component shares conditioned
         jointly on employment status and age group at national level. This method
         always returns the approximate distributions documented in
-        ``config/assets/ssb_reference/category_mappings.json`` and logs a WARNING.
+        ``config/comparison/category_mappings/ssb/`` and logs a WARNING.
         """
         logger.warning(
             "SSBFetchService.fetch_income_source_by_employment_age: No SSB PxWebApi v2 "

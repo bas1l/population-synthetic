@@ -1,0 +1,33 @@
+{
+  "description": "Family type from table 06083 (FamilieType). Marginal distribution at national level.",
+  "ssb_variable": "FamilieType",
+  "ssb_table": "06083",
+  "ssb_codes": {
+    "001": "Enpersonfamilie",
+    "002": "Par med små barn (yngste barn 0-5 år)",
+    "003": "Par med store barn (yngste barn 6-17 år)",
+    "004": "Mor/far med små barn (yngste barn 0-5 år)",
+    "005": "Mor/far med store barn (yngste barn 6-17 år)",
+    "006": "Par uten barn",
+    "007": "Par med voksne barn (yngste barn 18 år og over)",
+    "008": "Mor/far med voksne barn (yngste barn 18 år og over)",
+    "009": "Andre familier"
+  },
+  "label_mappings": {
+    "enpersonfamilie": "Living Alone",
+    "par med små barn (yngste barn 0-5 år)": "Nuclear Family",
+    "par med store barn (yngste barn 6-17 år)": "Nuclear Family",
+    "mor/far med små barn (yngste barn 0-5 år)": "Single Parent",
+    "mor/far med store barn (yngste barn 6-17 år)": "Single Parent",
+    "par uten barn": "Couple without Children",
+    "par med voksne barn (yngste barn 18 år og over)": "Couple without Children",
+    "mor/far med voksne barn (yngste barn 18 år og over)": "Single Parent",
+    "andre familier": "Living Alone"
+  },
+  "output_categories": [
+    "Nuclear Family",
+    "Single Parent",
+    "Couple without Children",
+    "Living Alone"
+  ]
+}

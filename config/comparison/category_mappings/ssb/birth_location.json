@@ -1,0 +1,58 @@
+{
+  "description": "Country of birth region from table 09817 (InnvandrKat=B for immigrants, remainder = Norwegian-born). Maps to schema birth-location categories.",
+  "ssb_variable": "Landbakgrunn",
+  "ssb_table": "09817",
+  "mappings": {
+    "norway": {
+      "schema_label": "Norway",
+      "ssb_codes": [
+        "0",
+        "Norge",
+        "abc",
+        "Den øvrige befolkningen"
+      ]
+    },
+    "nordic": {
+      "schema_label": "Nordic Country",
+      "ssb_codes": [
+        "VES",
+        "00-",
+        "Norden utenom Norge"
+      ]
+    },
+    "europe_other": {
+      "schema_label": "Europe (Other)",
+      "ssb_codes": [
+        "EU/EFTA/Storbritannia",
+        "Europa utenom EU/EFTA og Storbritannia",
+        "Eu-Eos",
+        "IkkeEu-Eos"
+      ]
+    },
+    "outside_europe": {
+      "schema_label": "Outside Europe",
+      "ssb_codes": [
+        "IVE",
+        "Afrika",
+        "Asia",
+        "Latin-Amerika og Karibia",
+        "Nord-Amerika utenom USA og Canada"
+      ]
+    }
+  },
+  "region_label_mappings": {
+    "Norge": "Norway",
+    "Born in Norway": "Norway",
+    "Norden utenom Norge": "Nordic Country",
+    "Nordic countries except Norway": "Nordic Country",
+    "EU/EFTA/Storbritannia": "Europe (Other)",
+    "Europa utenom EU/EFTA og Storbritannia": "Europe (Other)",
+    "Europa utenom EU/EFTA/Storbritannia": "Europe (Other)",
+    "Afrika": "Outside Europe",
+    "Africa": "Outside Europe",
+    "Asia": "Outside Europe",
+    "Latin-Amerika og Karibia": "Outside Europe",
+    "Nord-Amerika utenom USA og Canada": "Outside Europe",
+    "Oseania utenom Australia og NZ, polare områder": "Outside Europe"
+  }
+}

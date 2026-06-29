@@ -1,0 +1,25 @@
+{
+  "description": "Number of persons in household from table 06079 (HushStr). National distribution in percent.",
+  "ssb_variable": "HushStr",
+  "ssb_table": "06079",
+  "ssb_codes": {
+    "1": "1 person",
+    "2": "2 personer",
+    "3": "3 personer",
+    "4": "4 personer",
+    "5": "5 personer +"
+  },
+  "output_categories": [
+    "1 person",
+    "2 persons",
+    "3-4 persons",
+    "5+ persons"
+  ],
+  "label_mappings": {
+    "1 person": "1 person",
+    "2 personer": "2 persons",
+    "3 personer": "3-4 persons",
+    "4 personer": "3-4 persons",
+    "5 personer +": "5+ persons"
+  }
+}

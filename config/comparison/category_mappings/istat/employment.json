@@ -1,0 +1,61 @@
+{
+  "description": "ILO employment status codes to schema labels for Italian population data",
+  "istat_source": "150_938_DF_DCCV_OCCUPATIT1_17",
+  "mappings": {
+    "employed": {
+      "schema_label": "Employed",
+      "ilo_codes": [
+        "employed",
+        "occupato"
+      ]
+    },
+    "not_employed": {
+      "schema_label": "Not Employed",
+      "ilo_codes": [
+        "not_employed",
+        "disoccupato",
+        "inattivo"
+      ]
+    }
+  },
+  "output_categories": [
+    "Employed",
+    "Not Employed"
+  ],
+  "pipeline_label_mappings": {
+    "Employed": "Employed",
+    "employed": "Employed",
+    "Occupato": "Employed",
+    "occupato": "Employed",
+    "Occupata": "Employed",
+    "Employed (full-time)": "Employed",
+    "Employed full-time": "Employed",
+    "Full-time employed": "Employed",
+    "Lavoratore": "Employed",
+    "Lavoratrice": "Employed",
+    "Impiegato": "Employed",
+    "Impiegata": "Employed",
+    "Impiegato/a": "Employed",
+    "Occupato/a": "Employed",
+    "Lavora": "Employed",
+    "Not Employed": "Not Employed",
+    "not employed": "Not Employed",
+    "Disoccupato": "Not Employed",
+    "disoccupato": "Not Employed",
+    "Disoccupata": "Not Employed",
+    "Disoccupato/a": "Not Employed",
+    "Inoccupato": "Not Employed",
+    "Pensionato": "Not Employed",
+    "Pensionata": "Not Employed",
+    "Pensionato/a": "Not Employed",
+    "Studente": "Not Employed",
+    "Studentessa": "Not Employed",
+    "Casalinga": "Not Employed",
+    "Casalingo": "Not Employed",
+    "Unemployed": "Not Employed",
+    "Retired": "Not Employed",
+    "Student": "Not Employed",
+    "Inattivo": "Not Employed",
+    "Non occupato": "Not Employed"
+  }
+}

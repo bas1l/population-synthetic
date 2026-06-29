@@ -41,8 +41,8 @@ _COUNTRY_REFERENCES = {
 }
 
 _COUNTRY_MAPPINGS = {
-    "swedish": PROJECT_ROOT / "config" / "assets" / "scb_reference" / "category_mappings.json",
-    "italian": PROJECT_ROOT / "config" / "assets" / "istat_reference" / "category_mappings.json",
+    "swedish": PROJECT_ROOT / "config" / "comparison" / "category_mappings" / "scb",
+    "italian": PROJECT_ROOT / "config" / "comparison" / "category_mappings" / "istat",
 }
 
 

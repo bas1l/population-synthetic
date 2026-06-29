@@ -1,0 +1,49 @@
+{
+  "description": "Housing tenure status labels for Italian population data",
+  "istat_source": "Eurostat EU-SILC housing tenure",
+  "mappings": {
+    "owner_occupied": {
+      "schema_label": "Owner-occupied",
+      "description": "Owner-occupied dwelling (with or without mortgage)"
+    },
+    "rental": {
+      "schema_label": "Rental",
+      "description": "Rented dwelling (market rate or reduced rent)"
+    }
+  },
+  "output_categories": [
+    "Owner-occupied",
+    "Rental"
+  ],
+  "pipeline_label_mappings": {
+    "Owner-occupied": "Owner-occupied",
+    "owner-occupied": "Owner-occupied",
+    "Owner": "Owner-occupied",
+    "owner": "Owner-occupied",
+    "Owned": "Owner-occupied",
+    "owned": "Owner-occupied",
+    "Owner/Owned": "Owner-occupied",
+    "Proprietario": "Owner-occupied",
+    "proprietario": "Owner-occupied",
+    "Proprietà": "Owner-occupied",
+    "proprietà": "Owner-occupied",
+    "Casa di proprietà": "Owner-occupied",
+    "Di proprietà": "Owner-occupied",
+    "Mortgaged": "Owner-occupied",
+    "mortgaged": "Owner-occupied",
+    "Owns": "Owner-occupied",
+    "Homeowner": "Owner-occupied",
+    "Rental": "Rental",
+    "rental": "Rental",
+    "Rented": "Rental",
+    "rented": "Rental",
+    "Affitto": "Rental",
+    "affitto": "Rental",
+    "In affitto": "Rental",
+    "Casa in affitto": "Rental",
+    "Locatario": "Rental",
+    "Inquilino": "Rental",
+    "Renter": "Rental",
+    "Tenant": "Rental"
+  }
+}
