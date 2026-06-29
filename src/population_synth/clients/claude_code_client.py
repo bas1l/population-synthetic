@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 from typing import Any
 
+from population_synth.clients.call_context import format_corr_token
 from population_synth.clients.llm_protocol import LLMClient  # noqa: F401  # for type-checking
 
 
@@ -126,6 +127,15 @@ class ClaudeCodeClient:
             "--output-format", "stream-json",
             "--verbose",
             "--max-turns", "1",
+            # Lock the subprocess down to pure text generation: deny every built-in tool
+            # (WebSearch/WebFetch are the actual internet-query tools; the rest are
+            # defense-in-depth) and refuse to load any inherited MCP servers. Identity
+            # generation never needs tools, and the host's user-level settings globally
+            # auto-approve WebSearch, so the restriction must be imposed here.
+            "--strict-mcp-config",
+            "--disallowedTools",
+            "Bash", "WebSearch", "WebFetch", "Read", "Write", "Edit",
+            "Glob", "Grep", "Task", "NotebookEdit", "TodoWrite",
         ]
         if system_instruction:
             cmd += ["--system-prompt", system_instruction]
@@ -289,8 +299,8 @@ class ClaudeCodeClient:
                 t_inference_ms = (time.perf_counter() - t_inf_start) * 1000
 
                 self.logger.info(
-                    "claude call: model=%s t_launch_ms=%.0f t_inference_ms=%.0f",
-                    target_model, launch_ms, t_inference_ms,
+                    "claude call: model=%s t_launch_ms=%.0f t_inference_ms=%.0f%s",
+                    target_model, launch_ms, t_inference_ms, format_corr_token(),
                 )
                 return result
 

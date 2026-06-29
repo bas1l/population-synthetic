@@ -1,0 +1,4 @@
+id: "italian"
+label: "Italy"
+parameters:
+  config: "config/assets/identity/configurable/simulation_config_005_italian_generative.json"

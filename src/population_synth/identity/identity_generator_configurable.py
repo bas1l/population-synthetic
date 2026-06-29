@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 
+from population_synth.clients.call_context import set_correlation
 from population_synth.clients.llm_protocol import LLMClient
 
 from .base_identity_generator import BaseIdentityGenerator
@@ -21,6 +22,11 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
     def __init__(self, client: LLMClient):
         super().__init__(client)
+        # Correlation context for exact log<->JSONL joining.  ``persona_id`` is
+        # assigned externally by the parallel runner; ``_call_index`` increments
+        # once per client call so each log line + JSONL entry share a unique key.
+        self.persona_id: str | None = None
+        self._call_index: int = 0
 
     def _load_flat_schema(self, filepath: str) -> dict:
         if not os.path.exists(filepath):
@@ -153,6 +159,12 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         last_error: Exception | None = None
         for attempt in range(3):
             raw = ""
+            # One unique correlation key per client call (not per invocation): the
+            # log line the client emits and the JSONL entry recorded below share it,
+            # so the joiner can attach token/latency to the exact persona+call.
+            self._call_index += 1
+            call_index = self._call_index
+            set_correlation(self.persona_id, call_index)
             try:
                 raw = self.client.generate_content(
                     prompt, system_instruction=system_instruction, **extra
@@ -172,6 +184,8 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                         raw_response=raw,
                         parsed_value=parsed,
                         attempt=attempt + 1,
+                        persona_id=self.persona_id,
+                        call_index=call_index,
                     ))
                 return value
             except (json.JSONDecodeError, KeyError, RuntimeError) as e:
@@ -185,6 +199,8 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                         parsed_value=None,
                         error=f"{type(e).__name__}: {e}",
                         attempt=attempt + 1,
+                        persona_id=self.persona_id,
+                        call_index=call_index,
                     ))
                 last_error = e
                 raw_snippet = raw[:500] if raw else "(no response)"
