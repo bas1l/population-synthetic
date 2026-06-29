@@ -5,7 +5,7 @@ Kruskal-Wallis omnibus test, an inline Dunn post-hoc with Holm step-down
 correction, and the descriptive :func:`summarize` of a sample list.
 
 These carry the ``scipy``/``numpy`` dependency surface and are kept separate from
-the stdlib-only numeric primitives in :mod:`population_synth.analysis._stats`.
+the stdlib-only numeric primitives in :mod:`population_synth.analysis.shared._stats`.
 The Kruskal-Wallis H-test and Dunn post-hoc are chosen over parametric ANOVA
 because per-group sample sizes are small and the metrics are not expected to be
 normally distributed; Dunn's test is implemented here (rather than via
@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 from scipy import stats
 
-from population_synth.analysis import _stats
+from population_synth.analysis.shared import _stats
 
 
 def _nonempty_groups(groups: dict[str, list[float]]) -> dict[str, list[float]]:

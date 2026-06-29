@@ -98,7 +98,7 @@ python -m population_synth.gui.main
 ruff check src/
 ```
 
-No test suite exists currently.
+A pytest suite lives under `tests/` (covers the `analysis/` layer and `clients/call_context`). Run it with `pytest` (requires `pip install -e ".[dev]"`).
 
 ## Import Convention
 
@@ -139,13 +139,20 @@ All imports use the fully-qualified `population_synth.*` package namespace. Scri
 
 **`gui/`** -- PyQt5 desktop launcher for running generation and comparison tasks. `LauncherWindow` presents action groups (Generate, Compare) defined in `config/gui_launcher.yaml`. Axis selection uses checkbox lists (`CheckableAxisList` x3 inside `ExperimentSelector`) rather than dropdowns, so a single launch runs the full **cartesian product** of selected models x strategies x countries -- `ExperimentSelection.combinations()` enumerates the tuples via `itertools.product`, `ManifestOverview` previews them in a table, and `CombinationRunner` (QThread) runs each as a `--model-id/--strategy-id/--country-id` subprocess with live console streaming and process-tree abort. Selections persist to `config/gui_state.json`.
 
-**`analysis/`** -- Post-processing analytics for identity generation runs (LLM call behaviour, distinct from `comparison/` which scores population quality):
-- `interaction_parser.py` / `log_parser.py` -- Parse `llm_interactions.jsonl` and log files from run output
-- `joiner.py` -- Enriches JSONL interaction records by matching to log-file call records via timestamp proximity (±2s). Note: parallel runs write a single top-level master log (`01_Raw/{slug}/logs/`), not per-persona logs; `analyze_run.py` joins that master log so token/latency fields populate. The ±2s join means per-persona token sums are approximate in parallel runs, but aggregate/per-category distributions are sound
-- `aggregator.py` -- Computes per-persona metrics: call counts, retry rates, token consumption, latency percentiles, prompt size growth, value diversity (Shannon entropy)
-- `charts.py` (`plot_run_charts`) -- 9 per-run analytics PNGs (call counts, retry rates, entropy, token budgets, latency); token-gated charts skipped when the provider reports no token counts (e.g. Claude/Gemini CLI)
-- `run_comparison.py` (`build_comparison`, `METRIC_SPECS`, `decompose_slug`) -- Cross-run statistics: groups runs by model and strategy (country fixed), runs Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected, no external dep)
-- `comparison_charts.py` (`plot_run_comparison`) -- Box plots (with significance brackets), mean±SD bars, and model×method heatmaps per metric
+**`analysis/`** -- Post-processing analytics for identity generation runs (LLM call behaviour, distinct from `comparison/` which scores population quality). Organised as a **two-level pipeline** split across three subpackages: `per_run/` (pipeline A, driven by `analyze_run.py`) turns one run into per-persona analytics + a report; `cross_run/` (pipeline B, driven by `compare_runs.py`) consumes many runs' analytics and produces a cross-run comparison; `shared/` holds the numeric primitives both pipelines use. `per_run/` and `cross_run/` never import each other -- only through `shared/`.
+
+- **`shared/`** -- `_stats.py` -- stdlib numeric primitives (median, percentile, Shannon entropy) used by both pipelines; no external dep.
+- **`per_run/`** -- single-run pipeline (parse -> join -> aggregate -> visualize/report):
+  - `interaction_parser.py` / `log_parser.py` -- Parse `llm_interactions.jsonl` and log files from run output
+  - `joiner.py` -- Enriches JSONL interaction records by matching to log-file call records via timestamp proximity (±2s). Note: parallel runs write a single top-level master log (`01_Raw/{slug}/logs/`), not per-persona logs; `analyze_run.py` joins that master log so token/latency fields populate. The ±2s join means per-persona token sums are approximate in parallel runs, but aggregate/per-category distributions are sound
+  - `aggregator.py` -- Computes per-persona metrics: call counts, retry rates, token consumption, latency percentiles, prompt size growth, value diversity (Shannon entropy)
+  - `charts.py` (`plot_run_charts`) -- 9 per-run analytics PNGs (call counts, retry rates, entropy, token budgets, latency); token-gated charts skipped when the provider reports no token counts (e.g. Claude/Gemini CLI)
+  - `console_report.py` (`print_metrics`) -- Renders the per-run summary table to the console
+- **`cross_run/`** -- cross-run pipeline (load -> test -> build -> visualize):
+  - `comparison_loader.py` -- Discovers and loads the per-run `run_analytics.json` files to compare
+  - `comparison_stats.py` -- Statistical tests: Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected, no external dep)
+  - `run_comparison.py` (`build_comparison`, `METRIC_SPECS`, `decompose_slug`) -- Cross-run statistics: groups runs by model and strategy (country fixed) and assembles the comparison
+  - `comparison_charts.py` (`plot_run_comparison`) -- Box plots (with significance brackets), mean±SD bars, and model×method heatmaps per metric
 
 **`utils/`** -- Minimal pipeline utilities (`should_process_task()` for skip-if-done logic)
 
@@ -195,7 +202,7 @@ The output slug is `{country_id}_{strategy_id}_{model_id}`, and the run director
 - **SSB API cache:** `config/assets/ssb_cache/` (git-ignored)
 - **Eurostat API cache:** `config/assets/eurostat_cache/` (git-ignored)
 - **ISTAT API cache:** `config/assets/istat_cache/` (git-ignored)
-- **Category label mappings:** `config/assets/scb_reference/category_mappings.json`, `config/assets/ssb_reference/category_mappings.json`, and `config/assets/istat_reference/category_mappings.json` (Italy). All three share the same sub-key structure so the normalizer is country-agnostic -- the JSON content supplies the translations
+- **Category label mappings:** `config/comparison/category_mappings/{scb,ssb,istat}/` -- one JSON file per demographic attribute (filename stem == top-level key), grouped by source agency (SCB/Sweden, SSB/Norway, ISTAT/Italy). The loader (`load_mappings` in `comparison/normalizer.py`) merges every `*.json` in a country directory back into a single dict keyed by attribute (it also still accepts a single monolithic file). All three share the same sub-key structure so the normalizer is country-agnostic -- the JSON content supplies the translations. Each country directory has a `README.md` documenting its source
 - **Axis configs:** `config/models/`, `config/strategies/`, `config/countries/` -- YAML files composable via `--model-id`, `--strategy-id`, `--country-id`. A country YAML is minimal (`id`, `label`, `parameters.config` pointing at a simulation config JSON). `swedish` -> `simulation_config_004_swedish_generative.json`, `italian` -> `simulation_config_005_italian_generative.json`; each simulation config carries a locale-specific `instruction` system prompt and per-attribute `categories`
 - **Experiment defaults:** `config/experiment_defaults.yaml` -- base parameters including `output_base` path
 - **Run-analytics defaults:** `config/analyze_defaults.yaml` -- `output_base` plus the `analytics` output layout used by `analyze_run.py` / `compare_runs.py`: per-run analytics land in `{output_base}/03_Analysis/llm_metrics/{slug}/` and cross-run comparison in `.../llm_metrics/_comparison/`
