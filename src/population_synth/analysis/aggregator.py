@@ -130,7 +130,7 @@ def _persona_id(entry: dict[str, Any], index: int) -> str:
 # when ``has_token_data`` is true; otherwise the assembler emits ``None``.
 # ---------------------------------------------------------------------------
 
-def _compute_summary(
+def _summary(
     entries: list[dict[str, Any]],
     persona_ids: set[str],
     has_token_data: bool,
@@ -160,7 +160,7 @@ def _compute_summary(
     }
 
 
-def _compute_per_category(entries: list[dict[str, Any]]) -> dict[str, Any]:
+def _per_category(entries: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-category call counts, retry rates, error taxonomy, method retries."""
     cat_call: dict[str, int] = defaultdict(int)
     cat_retry: dict[str, int] = defaultdict(int)
@@ -198,7 +198,7 @@ def _compute_per_category(entries: list[dict[str, Any]]) -> dict[str, Any]:
     return per_category
 
 
-def _compute_method_distribution(entries: list[dict[str, Any]]) -> dict[str, int]:
+def _method_distribution(entries: list[dict[str, Any]]) -> dict[str, int]:
     """Raw counts per generation method string."""
     method_counts: dict[str, int] = defaultdict(int)
     for e in entries:
@@ -207,7 +207,7 @@ def _compute_method_distribution(entries: list[dict[str, Any]]) -> dict[str, int
     return dict(method_counts)
 
 
-def _compute_prompt_size_growth(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _prompt_size_growth(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Prompt length tagged with per-persona chain position."""
     persona_positions: dict[str, int] = defaultdict(int)
     prompt_size_growth: list[dict[str, Any]] = []
@@ -228,7 +228,7 @@ def _compute_prompt_size_growth(entries: list[dict[str, Any]]) -> list[dict[str,
     return prompt_size_growth
 
 
-def _compute_response_verbosity(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _response_verbosity(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Per-entry ratio of raw-response length to serialized parsed-value length."""
     response_verbosity: list[dict[str, Any]] = []
     for i, e in enumerate(entries):
@@ -254,7 +254,7 @@ def _compute_response_verbosity(entries: list[dict[str, Any]]) -> list[dict[str,
     return response_verbosity
 
 
-def _compute_wall_clock_per_persona(entries: list[dict[str, Any]]) -> dict[str, float | None]:
+def _wall_clock_per_persona(entries: list[dict[str, Any]]) -> dict[str, float | None]:
     """First-to-last timestamp span (seconds) per persona."""
     persona_timestamps: dict[str, list[datetime]] = defaultdict(list)
     for i, e in enumerate(entries):
@@ -273,7 +273,7 @@ def _compute_wall_clock_per_persona(entries: list[dict[str, Any]]) -> dict[str, 
     return wall_clock_per_persona
 
 
-def _compute_value_diversity(entries: list[dict[str, Any]]) -> dict[str, Any]:
+def _value_diversity(entries: list[dict[str, Any]]) -> dict[str, Any]:
     """Shannon entropy (bits) of resolved values per category."""
     cat_value_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for e in entries:
@@ -293,7 +293,7 @@ def _compute_value_diversity(entries: list[dict[str, Any]]) -> dict[str, Any]:
     return value_diversity
 
 
-def _compute_token_consumption_per_persona(
+def _token_consumption_per_persona(
     entries: list[dict[str, Any]],
     persona_ids: set[str],
 ) -> dict[str, Any]:
@@ -318,7 +318,7 @@ def _compute_token_consumption_per_persona(
     }
 
 
-def _compute_token_consumption_per_category(entries: list[dict[str, Any]]) -> dict[str, Any]:
+def _token_consumption_per_category(entries: list[dict[str, Any]]) -> dict[str, Any]:
     """Prompt/completion/total token sums per category."""
     cat_prompt: dict[str, int] = defaultdict(int)
     cat_completion: dict[str, int] = defaultdict(int)
@@ -341,7 +341,7 @@ def _compute_token_consumption_per_category(entries: list[dict[str, Any]]) -> di
     }
 
 
-def _compute_tokens_per_second(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _tokens_per_second(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Per-entry completion-tokens-per-second (None when timing unavailable)."""
     tokens_per_second: list[dict[str, Any]] = []
     for i, e in enumerate(entries):
@@ -364,7 +364,7 @@ def _compute_tokens_per_second(entries: list[dict[str, Any]]) -> list[dict[str, 
     return tokens_per_second
 
 
-def _compute_latency_by_category(entries: list[dict[str, Any]]) -> dict[str, Any]:
+def _latency_by_category(entries: list[dict[str, Any]]) -> dict[str, Any]:
     """Median, p95 (nearest-rank), and max elapsed_ms per category."""
     cat_latencies: dict[str, list[float]] = defaultdict(list)
     for e in entries:
@@ -384,7 +384,7 @@ def _compute_latency_by_category(entries: list[dict[str, Any]]) -> dict[str, Any
     return latency_by_category
 
 
-def _compute_token_budget_by_step_type(entries: list[dict[str, Any]]) -> dict[str, Any]:
+def _token_budget_by_step_type(entries: list[dict[str, Any]]) -> dict[str, Any]:
     """Call counts and token sums grouped by coarse step type."""
     step_type_prompt: dict[str, int] = defaultdict(int)
     step_type_completion: dict[str, int] = defaultdict(int)
@@ -409,6 +409,35 @@ def _compute_token_budget_by_step_type(entries: list[dict[str, Any]]) -> dict[st
             ),
         }
         for stype in all_step_types
+    }
+
+
+def _token_metrics(
+    entries: list[dict[str, Any]],
+    persona_ids: set[str],
+    has_token_data: bool,
+) -> dict[str, Any]:
+    """Bundle the five token-gated families.
+
+    Returns all five sub-dicts together so the assembler can spread them into the
+    final metrics dict in order.  When ``has_token_data`` is false every value is
+    ``None`` (matching the token-less run contract); otherwise each family is
+    computed from its own helper.
+    """
+    if not has_token_data:
+        return {
+            "token_consumption_per_persona": None,
+            "token_consumption_per_category": None,
+            "tokens_per_second": None,
+            "latency_by_category": None,
+            "token_budget_by_step_type": None,
+        }
+    return {
+        "token_consumption_per_persona": _token_consumption_per_persona(entries, persona_ids),
+        "token_consumption_per_category": _token_consumption_per_category(entries),
+        "tokens_per_second": _tokens_per_second(entries),
+        "latency_by_category": _latency_by_category(entries),
+        "token_budget_by_step_type": _token_budget_by_step_type(entries),
     }
 
 
@@ -476,27 +505,12 @@ def compute_metrics(
     persona_ids: set[str] = {_persona_id(e, i) for i, e in enumerate(entries)}
 
     return {
-        "summary": _compute_summary(entries, persona_ids, has_token_data, run_summary),
-        "per_category": _compute_per_category(entries),
-        "method_distribution": _compute_method_distribution(entries),
-        "prompt_size_growth": _compute_prompt_size_growth(entries),
-        "response_verbosity": _compute_response_verbosity(entries),
-        "wall_clock_per_persona": _compute_wall_clock_per_persona(entries),
-        "value_diversity": _compute_value_diversity(entries),
-        "token_consumption_per_persona": (
-            _compute_token_consumption_per_persona(entries, persona_ids)
-            if has_token_data else None
-        ),
-        "token_consumption_per_category": (
-            _compute_token_consumption_per_category(entries) if has_token_data else None
-        ),
-        "tokens_per_second": (
-            _compute_tokens_per_second(entries) if has_token_data else None
-        ),
-        "latency_by_category": (
-            _compute_latency_by_category(entries) if has_token_data else None
-        ),
-        "token_budget_by_step_type": (
-            _compute_token_budget_by_step_type(entries) if has_token_data else None
-        ),
+        "summary": _summary(entries, persona_ids, has_token_data, run_summary),
+        "per_category": _per_category(entries),
+        "method_distribution": _method_distribution(entries),
+        "prompt_size_growth": _prompt_size_growth(entries),
+        "response_verbosity": _response_verbosity(entries),
+        "wall_clock_per_persona": _wall_clock_per_persona(entries),
+        "value_diversity": _value_diversity(entries),
+        **_token_metrics(entries, persona_ids, has_token_data),
     }
