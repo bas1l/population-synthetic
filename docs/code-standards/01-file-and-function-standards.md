@@ -166,11 +166,22 @@ rule. **Soft** = official but advisory. **Tool** = configurable linter default.
 
 ## 5. Sources
 
-- [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
-  — §2.2 Imports, §2.5 Global variables, §2.6 Nested functions, §2.10 Lambdas,
-  §2.12 Default arguments, §3.2 Line length, §3.8.2 Modules, §3.8.3 Functions and
-  methods, §3.13 Imports formatting, §3.16 Naming, §3.17 Main, §3.18 Function
-  length, §3.19 Type annotations.
+- **[Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)**
+  — deep links to each cited section:
+  - [§2.2 Imports](https://google.github.io/styleguide/pyguide.html#22-imports)
+  - [§2.5 Global variables](https://google.github.io/styleguide/pyguide.html#25-global-variables)
+  - [§2.6 Nested/Local/Inner Classes and Functions](https://google.github.io/styleguide/pyguide.html#26-nested-local-inner-classes-and-functions)
+  - [§2.10 Lambda Functions](https://google.github.io/styleguide/pyguide.html#210-lambda-functions)
+  - [§2.12 Default Argument Values](https://google.github.io/styleguide/pyguide.html#212-default-argument-values)
+  - [§2.21 Type Annotated Code](https://google.github.io/styleguide/pyguide.html#221-type-annotated-code)
+  - [§3.2 Line length](https://google.github.io/styleguide/pyguide.html#32-line-length)
+  - [§3.8.2 Modules](https://google.github.io/styleguide/pyguide.html#382-modules)
+  - [§3.8.3 Functions and Methods](https://google.github.io/styleguide/pyguide.html#383-functions-and-methods)
+  - [§3.13 Imports formatting](https://google.github.io/styleguide/pyguide.html#313-imports-formatting)
+  - [§3.16 Naming](https://google.github.io/styleguide/pyguide.html#316-naming)
+  - [§3.17 Main](https://google.github.io/styleguide/pyguide.html#317-main)
+  - [§3.18 Function length](https://google.github.io/styleguide/pyguide.html#318-function-length)
+  - [§3.19 Type Annotations](https://google.github.io/styleguide/pyguide.html#319-type-annotations)
 - [PEP 8 — Style Guide for Python Code](https://peps.python.org/pep-0008/)
 - [PEP 20 — The Zen of Python](https://peps.python.org/pep-0020/)
 - [PEP 257 — Docstring Conventions](https://peps.python.org/pep-0257/)
