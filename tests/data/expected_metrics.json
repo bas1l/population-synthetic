@@ -1,0 +1,262 @@
+{
+  "latency_by_category": {
+    "age": {
+      "count": 4,
+      "max_ms": 1500.0,
+      "median_ms": 1000.0,
+      "p95_ms": 1500.0
+    },
+    "first_name": {
+      "count": 2,
+      "max_ms": 600.0,
+      "median_ms": 550.0,
+      "p95_ms": 600.0
+    }
+  },
+  "method_distribution": {
+    "generate_evaluate_pick": 4,
+    "pick": 2
+  },
+  "per_category": {
+    "age": {
+      "call_count": 4,
+      "error_taxonomy": {
+        "JSONDecodeError": 1
+      },
+      "method_retry_counts": {
+        "generate_evaluate_pick": 1
+      },
+      "retry_count": 1,
+      "retry_rate": 0.25
+    },
+    "first_name": {
+      "call_count": 2,
+      "error_taxonomy": {},
+      "method_retry_counts": {},
+      "retry_count": 0,
+      "retry_rate": 0.0
+    }
+  },
+  "prompt_size_growth": [
+    {
+      "category": "first_name",
+      "chain_position": 0,
+      "global_index": 0,
+      "persona_id": "persona_00001",
+      "prompt_len": 17
+    },
+    {
+      "category": "age",
+      "chain_position": 1,
+      "global_index": 1,
+      "persona_id": "persona_00001",
+      "prompt_len": 24
+    },
+    {
+      "category": "age",
+      "chain_position": 2,
+      "global_index": 2,
+      "persona_id": "persona_00001",
+      "prompt_len": 12
+    },
+    {
+      "category": "age",
+      "chain_position": 3,
+      "global_index": 3,
+      "persona_id": "persona_00001",
+      "prompt_len": 12
+    },
+    {
+      "category": "first_name",
+      "chain_position": 0,
+      "global_index": 4,
+      "persona_id": "persona_00002",
+      "prompt_len": 17
+    },
+    {
+      "category": "age",
+      "chain_position": 1,
+      "global_index": 5,
+      "persona_id": "persona_00002",
+      "prompt_len": 12
+    }
+  ],
+  "response_verbosity": [
+    {
+      "category": "first_name",
+      "global_index": 0,
+      "parsed_value_len": 17,
+      "persona_id": "persona_00001",
+      "raw_response_len": 17,
+      "verbosity_ratio": 1.0
+    },
+    {
+      "category": "age",
+      "global_index": 1,
+      "parsed_value_len": 23,
+      "persona_id": "persona_00001",
+      "raw_response_len": 23,
+      "verbosity_ratio": 1.0
+    },
+    {
+      "category": "age",
+      "global_index": 2,
+      "parsed_value_len": 0,
+      "persona_id": "persona_00001",
+      "raw_response_len": 8,
+      "verbosity_ratio": null
+    },
+    {
+      "category": "age",
+      "global_index": 3,
+      "parsed_value_len": 13,
+      "persona_id": "persona_00001",
+      "raw_response_len": 13,
+      "verbosity_ratio": 1.0
+    },
+    {
+      "category": "first_name",
+      "global_index": 4,
+      "parsed_value_len": 18,
+      "persona_id": "persona_00002",
+      "raw_response_len": 18,
+      "verbosity_ratio": 1.0
+    },
+    {
+      "category": "age",
+      "global_index": 5,
+      "parsed_value_len": 13,
+      "persona_id": "persona_00002",
+      "raw_response_len": 13,
+      "verbosity_ratio": 1.0
+    }
+  ],
+  "summary": {
+    "run_summary": {
+      "elapsed_s": 12.0,
+      "failed": 0,
+      "success": 2
+    },
+    "token_match_rate": 1.0,
+    "total_entries": 6,
+    "total_errors": 1,
+    "total_personas": 2,
+    "total_retries": 1
+  },
+  "token_budget_by_step_type": {
+    "enumerate": {
+      "call_count": 1,
+      "completion_tokens": 30,
+      "prompt_tokens": 200,
+      "total_tokens": 230
+    },
+    "pick": {
+      "call_count": 4,
+      "completion_tokens": 39,
+      "prompt_tokens": 650,
+      "total_tokens": 689
+    },
+    "retry": {
+      "call_count": 1,
+      "completion_tokens": 5,
+      "prompt_tokens": 210,
+      "total_tokens": 215
+    }
+  },
+  "token_consumption_per_category": {
+    "age": {
+      "completion_tokens": 52,
+      "prompt_tokens": 860,
+      "total_tokens": 912
+    },
+    "first_name": {
+      "completion_tokens": 22,
+      "prompt_tokens": 200,
+      "total_tokens": 222
+    }
+  },
+  "token_consumption_per_persona": {
+    "persona_00001": {
+      "completion_tokens": 53,
+      "prompt_tokens": 730,
+      "total_tokens": 783
+    },
+    "persona_00002": {
+      "completion_tokens": 21,
+      "prompt_tokens": 330,
+      "total_tokens": 351
+    }
+  },
+  "tokens_per_second": [
+    {
+      "category": "first_name",
+      "completion_tokens": 10,
+      "elapsed_ms": 500.0,
+      "global_index": 0,
+      "persona_id": "persona_00001",
+      "tokens_per_second": 20.0
+    },
+    {
+      "category": "age",
+      "completion_tokens": 30,
+      "elapsed_ms": 1500.0,
+      "global_index": 1,
+      "persona_id": "persona_00001",
+      "tokens_per_second": 20.0
+    },
+    {
+      "category": "age",
+      "completion_tokens": 5,
+      "elapsed_ms": 800.0,
+      "global_index": 2,
+      "persona_id": "persona_00001",
+      "tokens_per_second": 6.25
+    },
+    {
+      "category": "age",
+      "completion_tokens": 8,
+      "elapsed_ms": 900.0,
+      "global_index": 3,
+      "persona_id": "persona_00001",
+      "tokens_per_second": 8.89
+    },
+    {
+      "category": "first_name",
+      "completion_tokens": 12,
+      "elapsed_ms": 600.0,
+      "global_index": 4,
+      "persona_id": "persona_00002",
+      "tokens_per_second": 20.0
+    },
+    {
+      "category": "age",
+      "completion_tokens": 9,
+      "elapsed_ms": 1100.0,
+      "global_index": 5,
+      "persona_id": "persona_00002",
+      "tokens_per_second": 8.18
+    }
+  ],
+  "value_diversity": {
+    "age": {
+      "entropy_bits": 0.9183,
+      "unique_values": 2,
+      "value_counts": {
+        "42": 2,
+        "[40, 41, 42]": 1
+      }
+    },
+    "first_name": {
+      "entropy_bits": 1.0,
+      "unique_values": 2,
+      "value_counts": {
+        "Anna": 1,
+        "Bjorn": 1
+      }
+    }
+  },
+  "wall_clock_per_persona": {
+    "persona_00001": 3.0,
+    "persona_00002": 2.0
+  }
+}

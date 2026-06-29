@@ -10,6 +10,7 @@ from typing import Any
 
 import openai
 
+from population_synth.clients.call_context import format_corr_token
 from population_synth.clients.llm_protocol import LLMClient  # noqa: F401  # for type-checking
 
 _FATAL_STATUS_CODES = {400, 401, 403, 404, 422}
@@ -207,12 +208,13 @@ class OpenAICompatClient:
 
                 self.logger.info(
                     "openai_compat call: model=%s base_url=%s elapsed_ms=%.0f "
-                    "prompt_tokens=%s completion_tokens=%s",
+                    "prompt_tokens=%s completion_tokens=%s%s",
                     target_model,
                     self.base_url,
                     elapsed_ms,
                     prompt_tokens,
                     completion_tokens,
+                    format_corr_token(),
                 )
                 return content.strip()
 
