@@ -1,9 +1,29 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import itertools
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from population_synth.identity.manifest_loader import ManifestConfig, load_manifest
+
+
+@dataclass
+class ExperimentSelection:
+    model_ids: list[str] = field(default_factory=list)
+    strategy_ids: list[str] = field(default_factory=list)
+    country_ids: list[str] = field(default_factory=list)
+
+    def combinations(self) -> list[tuple[str, str, str]]:
+        return list(itertools.product(self.model_ids, self.strategy_ids, self.country_ids))
+
+    @property
+    def is_single(self) -> bool:
+        return len(self.model_ids) == 1 and len(self.strategy_ids) == 1 and len(self.country_ids) == 1
+
+    def first_combo(self) -> tuple[str, str, str] | None:
+        if not self.model_ids or not self.strategy_ids or not self.country_ids:
+            return None
+        return (self.model_ids[0], self.strategy_ids[0], self.country_ids[0])
 
 
 @dataclass

@@ -269,7 +269,7 @@ def main() -> None:
     else:
         raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini', 'claude', 'ollama', or 'openai_compat'.")
 
-    logger.info("Model: %s", client.model_name)
+    logger.info("Model: %s", client.get_current_configuration()["model"])
     generator = FactoryIdentityGenerator.create_generator(args.mode, client)
     generator.retry_until_success = args.retry_until_success
     generator.use_structured_output = args.structured_output
@@ -301,7 +301,7 @@ def main() -> None:
         "manifest": args.manifest,
         "model_config": {
             "provider": args.provider,
-            "model": client.model_name,
+            "model": client.get_current_configuration()["model"],
             "base_url": getattr(client, "base_url", None),
         },
         "parameters": {

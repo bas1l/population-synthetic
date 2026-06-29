@@ -16,6 +16,10 @@ class LLMInteractionEntry:
     error: str | None = None
     attempt: int = 1
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    # Correlation key for exact joining against the shared run log (parallel runs).
+    # ``None`` for legacy entries and single-run callers that don't set it.
+    persona_id: str | None = None
+    call_index: int | None = None
 
 
 class LLMInteractionCollector:

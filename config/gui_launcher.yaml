@@ -23,7 +23,7 @@ actions:
       - key: n
         label: "Number of identities"
         type: int
-        default: null
+        default: 100
         default_from_manifest: parallel_n
         help: "How many identities to generate"
       - key: workers
@@ -38,11 +38,6 @@ actions:
         default: false
         default_from_manifest: retry_until_success
         help: "Retry failed slots and LLM calls until all N succeed"
-      - key: generate-all-strategies
-        label: "Generate all strategies"
-        type: bool
-        default: false
-        help: "Run all strategies sequentially for the selected model and country"
 
   - id: gen_db_pop
     label: "Database Population"

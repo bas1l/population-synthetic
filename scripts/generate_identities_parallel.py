@@ -174,6 +174,9 @@ def _generate_one(
         generator = FactoryIdentityGenerator.create_generator(mode, client)
         generator.retry_until_success = retry_until_success
         generator.use_structured_output = structured_output
+        # Correlation key for exact log<->JSONL joining; matches persona_dir name.
+        if hasattr(generator, "persona_id"):
+            generator.persona_id = f"persona_{index:05d}"
         if log_llm:
             generator.interaction_collector = LLMInteractionCollector(
                 persona_dir / "llm_interactions.jsonl"
@@ -264,45 +267,7 @@ def main() -> None:
         default=None,
         help="Use JSON-Schema–constrained decoding for Ollama (default: off)",
     )
-    parser.add_argument(
-        "--generate-all-strategies",
-        action="store_true",
-        default=False,
-        help="Run all strategies sequentially for the selected model and country",
-    )
     args = parser.parse_args()
-
-    if args.generate_all_strategies:
-        if not args.model_id or not args.country_id:
-            parser.error("--generate-all-strategies requires --model-id and --country-id")
-
-        from population_synth.identity.manifest_loader import discover_axis_values
-
-        strategies = discover_axis_values("strategies")
-        if not strategies:
-            print("WARNING: No strategies found in config/strategies/")
-            sys.exit(1)
-
-        script = str(Path(__file__).resolve())
-        for strategy in strategies:
-            sid = strategy["id"]
-            print(f"\n{'=' * 60}")
-            print(f"  STRATEGY: {sid}")
-            print(f"{'=' * 60}\n")
-            sub_cmd = [sys.executable, script, "--model-id", args.model_id, "--strategy-id", sid, "--country-id", args.country_id]
-            if args.n is not None:
-                sub_cmd += ["--n", str(args.n)]
-            if args.workers is not None:
-                sub_cmd += ["--workers", str(args.workers)]
-            if args.force:
-                sub_cmd.append("--force")
-            if args.retry_until_success:
-                sub_cmd.append("--retry-until-success")
-            if args.structured_output:
-                sub_cmd.append("--structured-output")
-            subprocess.run(sub_cmd, stdout=sys.stdout, stderr=sys.stderr)
-
-        sys.exit(0)
 
     axis_ids = [args.model_id, args.strategy_id, args.country_id]
     if args.manifest and any(x is not None for x in axis_ids):
