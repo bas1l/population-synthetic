@@ -1,6 +1,8 @@
 {
+  "reference_handler": "composite",
   "description": "Contract type and work schedule composite labels for Italian population data",
   "istat_source": "ISTAT labour force survey (contract type + work schedule)",
+  "reference_none_default": "Not Applicable",
   "mappings": {
     "permanent_fulltime": {
       "schema_label": "Permanent|Full-time",

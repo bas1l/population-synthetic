@@ -1,4 +1,5 @@
 {
+  "reference_handler": "label",
   "description": "Civil/marital status codes to schema labels for Italian population data",
   "istat_source": "ISTAT civil status classification",
   "mappings": {

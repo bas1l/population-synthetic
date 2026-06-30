@@ -1,4 +1,5 @@
 {
+  "reference_handler": "label",
   "description": "NUTS2 region codes and names for Italian population data",
   "istat_source": "NUTS2 regional classification",
   "mappings": {

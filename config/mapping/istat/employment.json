@@ -1,4 +1,6 @@
 {
+  "reference_handler": "label",
+  "reference_attr": "employment_status",
   "description": "ILO employment status codes to schema labels for Italian population data",
   "istat_source": "150_938_DF_DCCV_OCCUPATIT1_17",
   "mappings": {

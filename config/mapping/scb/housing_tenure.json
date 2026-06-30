@@ -1,4 +1,5 @@
 {
+  "reference_handler": "label",
   "description": "Dwelling ownership form from BO/BO0104/BO0104D/BO0104T04. Marginal distribution combining Hustyp (building type) and Upplatelseform (tenure form). Cross-tab by socioeconomic class and age is not available at national level in this table.",
   "scb_table": "BO/BO0104/BO0104D/BO0104T04",
   "scb_tenure_codes": {
@@ -16,7 +17,7 @@
     "Rental apartment",
     "Other"
   ],
-  "scb_label_mappings": {
+  "reference_label_mappings": {
     "rented dwellings": "Rental apartment",
     "tenant-owned dwellings": "Tenant-owned apartment (bostadsrätt)",
     "owner-occupied dwellings": "Owner-occupied (villa/house)"

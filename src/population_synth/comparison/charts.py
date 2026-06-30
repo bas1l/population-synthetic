@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from population_synth.comparison.evaluator import DEMOGRAPHIC_ATTRIBUTES
+from population_synth.comparison.evaluator import DEMOGRAPHIC_ATTRIBUTES, attr_value
 
 # ------------------------------------------------------------------
 # Chart styling constants
@@ -53,7 +53,7 @@ _RADAR_3WAY_STYLES = ("solid", "dashed", "dotted")
 def _compute_proportions(individuals: list[dict], attr: str) -> dict[str, float]:
     counts: Counter = Counter()
     for ind in individuals:
-        val = ind.get(attr)
+        val = attr_value(ind, attr)
         if val is not None:
             counts[val] += 1
     total = sum(counts.values())
@@ -78,8 +78,16 @@ def plot_comparison_charts(
     pop_b_label: str = "Population B",
     *,
     prefix: str | None = None,
+    attributes: list[str] | None = None,
+    categories: dict[str, list[str]] | None = None,
 ) -> None:
-    """Generate side-by-side bar charts for each demographic attribute."""
+    """Generate side-by-side bar charts for each demographic attribute.
+
+    When *attributes*/*categories* are supplied (from a per-country comparison
+    scheme), only those attributes are charted and each uses the scheme's
+    DB-grounded category set so no synthetic-only bar appears with a zero
+    reference. Otherwise categories fall back to the observed union.
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -90,11 +98,14 @@ def plot_comparison_charts(
     individuals_a: list[dict] = pop_a_data.get("individuals", [])
     individuals_b: list[dict] = pop_b_data.get("individuals", [])
 
-    for attr in DEMOGRAPHIC_ATTRIBUTES:
+    for attr in (attributes or DEMOGRAPHIC_ATTRIBUTES):
         props_a = _compute_proportions(individuals_a, attr)
         props_b = _compute_proportions(individuals_b, attr)
 
-        all_categories = sorted((set(props_a) | set(props_b)) - {None})
+        if categories is not None and attr in categories:
+            all_categories = list(categories[attr])
+        else:
+            all_categories = sorted((set(props_a) | set(props_b)) - {None})
         if not all_categories:
             continue
 
@@ -164,13 +175,14 @@ def plot_radar_comparison(
     *,
     show_chi_sq: bool = True,
     prefix: str | None = None,
+    attributes: list[str] | None = None,
 ) -> Path | None:
     """Generate a radar chart of TV-similarity (and optionally chi-sq p-values)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    attrs = [a for a in DEMOGRAPHIC_ATTRIBUTES if a in marginals]
+    attrs = [a for a in (attributes or DEMOGRAPHIC_ATTRIBUTES) if a in marginals]
     if len(attrs) < 3:
         print(f"Skipping radar: needs >=3 attributes (got {len(attrs)})", file=sys.stderr)
         return None
@@ -439,6 +451,7 @@ def plot_radar_grid(
     *,
     strategy_order: list[str] | None = None,
     prefix: str | None = None,
+    attributes: list[str] | None = None,
 ) -> Path | None:
     """Grid of radar subplots: rows = models, columns = strategies (by complexity)."""
     import matplotlib
@@ -457,7 +470,7 @@ def plot_radar_grid(
     if not strategies:
         return None
 
-    attrs = [a for a in DEMOGRAPHIC_ATTRIBUTES
+    attrs = [a for a in (attributes or DEMOGRAPHIC_ATTRIBUTES)
              if any(a in marg for marg in results.values())]
     if len(attrs) < 3:
         print(f"Skipping radar grid: needs >=3 attributes (got {len(attrs)})",

@@ -1,8 +1,10 @@
 {
+  "reference_handler": "label",
   "description": "Industry sector from AM/AM0401/AM0401I/AKURLSysSNI07Ar — SNI2007 (NACE Rev. 2) classification. Marginal among employed persons (no age cross-tab available). Non-employed get 'Not Applicable'.",
   "scb_variable": "SNI2007",
   "scb_table": "AM/AM0401/AM0401I/AKURLSysSNI07Ar",
-  "scb_label_mappings": {
+  "reference_none_default": "Not Applicable",
+  "reference_label_mappings": {
     "agriculture, forestry, fishing": "Agriculture & Forestry",
     "manufacturing, mining and quarrying, energy and environment": "Manufacturing & Industry",
     "construction": "Manufacturing & Industry",

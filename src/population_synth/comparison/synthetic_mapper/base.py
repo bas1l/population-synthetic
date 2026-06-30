@@ -157,12 +157,14 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
                     for k, v in identity.items()}
         unmapped: list[str] = []
 
-        age_group = self.map_age_group(identity.get("age"), persona_id)
-        if age_group is None:
+        # map_age_group is the validity gate (skip personas with missing/non-int age);
+        # the canonical schema stores the raw integer age, and the comparison stats
+        # derive the age group on the fly -- no synthesized age_group field is stored.
+        if self.map_age_group(identity.get("age"), persona_id) is None:
             return None
 
         result = {
-            "age_group": age_group,
+            "age": int(identity["age"]),
             "biological_sex": self.map_biological_sex(str(identity.get("biological_sex") or ""), unmapped),
             "education_level": self.map_education(str(identity.get("education_level") or ""), unmapped),
             "employment_status": self.map_employment_status(str(identity.get("employment_status") or ""), unmapped),

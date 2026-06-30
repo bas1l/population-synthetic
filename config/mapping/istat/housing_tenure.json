@@ -1,4 +1,5 @@
 {
+  "reference_handler": "label",
   "description": "Housing tenure status labels for Italian population data",
   "istat_source": "Eurostat EU-SILC housing tenure",
   "mappings": {

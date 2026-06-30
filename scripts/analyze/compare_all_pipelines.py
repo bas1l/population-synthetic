@@ -32,6 +32,7 @@ from population_synth.comparison.charts import (
 )
 from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
 from population_synth.comparison.reference_mapper import load_reference_population, normalize_population
+from population_synth.comparison.scheme import load_scheme
 from population_synth.comparison.synthetic_mapper import load_raw_population, map_population
 from population_synth.identity.manifest_loader import compose_manifest, discover_axis_values
 
@@ -174,6 +175,8 @@ def main() -> None:
         database_pop_raw = load_reference_population(reference_path)
         database_pop = normalize_population(database_pop_raw, country=country_id, mappings_path=mappings_path)
 
+        scheme = load_scheme(country_id, mappings_path=mappings_path)
+
         print(f"=== {country_id.upper()} (reference: {reference_path.name}) ===")
         print()
 
@@ -216,7 +219,7 @@ def main() -> None:
             if n_synthetic < 5:
                 print(f"  WARNING: only {n_synthetic} extracted individuals -- statistical tests unreliable")
 
-            evaluator = StatisticalEvaluator(database_pop, synthetic_pop)
+            evaluator = StatisticalEvaluator(database_pop, synthetic_pop, scheme=scheme)
             report = evaluator.generate_report()
 
             comparison_output_dir = manifest.comparison_output_dir
@@ -246,6 +249,8 @@ def main() -> None:
                     pop_a_label=reference_path.stem,
                     pop_b_label=slug,
                     prefix=slug,
+                    attributes=scheme.attributes,
+                    categories=scheme.categories,
                 )
                 print(f"  Charts written to {charts_dir}")
                 radar_path = plot_radar_comparison(
@@ -255,6 +260,7 @@ def main() -> None:
                     pop_b_label=slug,
                     show_chi_sq=not args.radar_tv_only,
                     prefix=slug,
+                    attributes=scheme.attributes,
                 )
                 if radar_path is not None:
                     print(f"  Radar chart written to {radar_path}")
@@ -285,6 +291,7 @@ def main() -> None:
                 radar_grid_data,
                 summary_dir,
                 prefix=country_id,
+                attributes=scheme.attributes,
             )
             if grid_path is not None:
                 print(f"Radar grid written to {grid_path}")

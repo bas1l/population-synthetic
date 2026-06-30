@@ -1,4 +1,6 @@
 {
+  "reference_handler": "label",
+  "reference_attr": "employment_status",
   "description": "AKU (Labour Force Survey) status codes to schema labels",
   "scb_variable": "ArbetsmarknadsstStatus",
   "mappings": {
@@ -40,7 +42,7 @@
       ]
     }
   },
-  "aku_label_mappings": {
+  "reference_label_mappings": {
     "sysselsatta": "Employed",
     "employed": "Employed",
     "in employment": "Employed",

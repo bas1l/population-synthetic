@@ -1,4 +1,6 @@
 {
+  "reference_handler": "label",
+  "reference_attr": "education_level",
   "description": "SUN2020 education level codes to schema labels",
   "scb_variable": "Sun2000Niva",
   "mappings": {
@@ -47,7 +49,7 @@
       ]
     }
   },
-  "sun2020_level_mappings": {
+  "reference_label_mappings": {
     "förgymnasial utbildning kortare än 9 år": "Pre-Secondary < 9 yrs (ISCED 1)",
     "förgymnasial utbildning, 9 (10) år": "Pre-Secondary 9-10 yrs (ISCED 2)",
     "gymnasial utbildning, högst 2 år": "Upper Secondary ≤ 2 yrs (ISCED 3C)",

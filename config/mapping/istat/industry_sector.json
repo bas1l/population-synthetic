@@ -1,6 +1,8 @@
 {
+  "reference_handler": "label",
   "description": "Occupation classification to industry sector schema labels for Italian population data",
   "istat_source": "ISTAT occupation classification (CP2011)",
+  "reference_none_default": "Not Applicable",
   "mappings": {
     "professional_managerial": {
       "schema_label": "Professional & Managerial",

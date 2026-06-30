@@ -1,4 +1,6 @@
 {
+  "reference_handler": "decile_coded",
+  "reference_attr": "socioeconomic_class",
   "description": "Income bracket groups to socioeconomic class labels (relative to country median, Eurostat AROP + OECD/Pew thresholds)",
   "istat_source": "ISTAT income distribution / Eurostat EU-SILC",
   "mappings": {

@@ -1,4 +1,5 @@
 {
+  "reference_handler": "label",
   "description": "Country of birth (detailed) from BE/BE0101/BE0101E/FodelselandArK. Conditional on birth_location: if Sweden → always 'Sweden'; if foreign-born → sample from distribution of top origin countries (adults 18-85, 2024). Remaining countries collapse to 'Other'.",
   "scb_table": "BE/BE0101/BE0101E/FodelselandArK",
   "top_country_codes": [
@@ -46,7 +47,11 @@
     "Ukraine",
     "United Kingdom"
   ],
-  "scb_label_mappings": {
+  "reference_label_mappings": {
+    "born in Sweden": "Sweden",
+    "Sweden": "Sweden",
+    "Sverige": "Sweden",
+    "födda i sverige": "Sweden",
     "SY": "Syria",
     "Syrian Arab Republic": "Syria",
     "IQ": "Iraq",

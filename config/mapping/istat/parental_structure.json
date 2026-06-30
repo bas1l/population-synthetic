@@ -1,4 +1,5 @@
 {
+  "reference_handler": "substring_coded",
   "description": "Household composition to parental structure schema labels for Italian population data",
   "istat_source": "Eurostat EU-SILC household composition (HHCOMP)",
   "mappings": {

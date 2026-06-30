@@ -1,6 +1,13 @@
 {
+  "reference_handler": "label",
   "description": "Detailed birth country labels for Italian population data (top foreign-born nationalities)",
   "istat_source": "Eurostat migr_pop1ctz / ISTAT foreign resident statistics",
+  "reference_label_mappings": {
+    "Italy": "Italy",
+    "Italia": "Italy",
+    "nato in italia": "Italy",
+    "italiana": "Italy"
+  },
   "mappings": {
     "IT": "Italy",
     "RO": "Romania",
