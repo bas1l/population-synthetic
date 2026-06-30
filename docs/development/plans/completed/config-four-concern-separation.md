@@ -2,7 +2,8 @@
 
 **Date:** 2026-06-30
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-06-30 13:15
 **Base Branch:** `feature/synthetic-mapper-load-map-split`
 **Branch:** _implemented in place on `feature/synthetic-mapper-load-map-split` (no separate branch — user opted to implement here, 2026-06-30)_
 
