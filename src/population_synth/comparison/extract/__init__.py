@@ -1,10 +1,10 @@
-"""Demographic-profile extraction subpackage.
+"""Demographic-profile extraction helpers.
 
-Splits the former monolithic ``extractor`` module into focused submodules:
-schema label constants, mapping/lookup helpers, Swedish and Italian normalizers,
-prose inference, and the batch / flat format extractors.  The public entry
-points remain :func:`population_synth.comparison.extractor.extract_individual`
-and :func:`population_synth.comparison.extractor.extract_population`.
+Contains only the generic text helpers used by the config-driven flat-path
+engine: separator normalisation, UTF-8 double-encoding repair, and fuzzy
+substring matching (``extract.mappings``).  The former narrative/batch
+submodules (``normalizers_se``, ``normalizers_it``, ``prose_inference``,
+``batch``, ``schema_labels``) have been retired.
 """
 
 from __future__ import annotations

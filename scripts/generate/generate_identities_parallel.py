@@ -216,7 +216,8 @@ def main() -> None:
     parser.add_argument("--model-id", default=None, help="Axis model ID (e.g., 'claude_haiku') — mutually exclusive with --manifest")
     parser.add_argument("--strategy-id", default=None, help="Axis strategy ID (e.g., 'all_pick') — mutually exclusive with --manifest")
     parser.add_argument("--country-id", default=None, help="Axis country ID (e.g., 'swedish') — mutually exclusive with --manifest")
-    parser.add_argument("--mode", default=None, choices=["batch", "configurable"])
+    parser.add_argument("--mode", default=None, choices=["configurable"],
+                        help="Identity generation strategy (currently only 'configurable' is supported)")
     parser.add_argument("--config", default=None, help="Flat schema / prompt config file")
     parser.add_argument("--strategy", default=None, help="Strategy definition file (required for configurable)")
     parser.add_argument("--n", type=int, default=None, help="Number of identities to generate")

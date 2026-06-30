@@ -1,11 +1,11 @@
 """extractor.py -- Extract demographic profiles from pipeline identity.json files.
 
-Supports two identity formats:
-- Batch (single "narrative" key with free-text description)
-- Flat / configurable (top-level attribute keys)
+Only the flat / configurable identity format (top-level attribute keys) is
+supported.  A legacy narrative dict (``{"narrative": ...}``) is treated as an
+unrecognised format and returns ``None`` (warn-and-skip).
 
-The public entry point is ``extract_individual(identity_path)`` which auto-detects
-the format and returns a flat attribute dict (or None on failure).
+The public entry point is ``extract_individual(identity_path)`` which returns a
+flat attribute dict (or None on failure).
 
 This module is a thin facade over the ``population_synth.comparison.synthetic_mapper``
 subpackage: the country mapper classes own the per-attribute mapping, and
