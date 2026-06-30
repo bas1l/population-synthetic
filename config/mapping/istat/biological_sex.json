@@ -1,5 +1,17 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "text_coded",
+  "pipeline_fuzzy": false,
+  "output_categories": ["Female", "Male"],
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["female", "kvinna", "kvinnlig", "kvinnor", "flicka", "tjej", "hona", "woman"], "label": "Female"},
+    {"match": "equals", "any_of": ["xx", "hon", "f"], "label": "Female"},
+    {"match": "contains", "any_of": ["male", "pojke", "kille", "manlig"], "label": "Male"},
+    {"match": "equals", "any_of": ["man", "xy", "m", "män"], "label": "Male"},
+    {"match": "contains", "any_of": ["kön man"], "label": "Male"},
+    {"match": "contains", "any_of": ["femmina", "femminile", "donna"], "label": "Female"},
+    {"match": "contains", "any_of": ["maschio", "maschile", "uomo"], "label": "Male"}
+  ],
   "description": "Biological sex raw labels/codes to canonical schema labels",
   "reference_label_mappings": {
     "men": "Male",

@@ -1,5 +1,8 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "text_coded",
+  "pipeline_silent_unmapped": true,
+  "pipeline_empty_raw": "Non-standard label",
   "description": "NUTS2 region codes and names for Italian population data",
   "istat_source": "NUTS2 regional classification",
   "mappings": {

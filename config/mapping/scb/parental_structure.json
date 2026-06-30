@@ -1,5 +1,14 @@
 {
   "reference_handler": "substring_coded",
+  "pipeline_handler": "text_coded",
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["single parent", "single-parent", "single mother", "single father", "ensamstående", "single biological parent", "single-mother", "single-father", "mother only", "father only", "biological mother only", "biological father only", "grandparent", "farfar", "farmor", "morfar", "mormor", "other relative", "residential care", "guardian", "shared custody", "shared residency", "separated parents", "skilda föräldrar", "växelvis boende", "one biological parent", "widowed mother", "widowed father", "unwed", "genitore solo", "genitore singolo", "madre sola", "padre solo", "monogenitor", "famiglia monogenitorial", "genitore unico", "enskild mor", "enskild far", "enskild föräld", "enkel föräld", "monofamilj", "monoparental"], "label": "Single Parent"},
+    {"match": "contains", "any_of": ["two parents", "two-parent", "two parent", "intact", "nuclear", "biological parents", "biological mother", "biological father", "mother and father", "blended", "stepparent", "stepfamily", "step-family", "stepchild", "stepmother", "stepfather", "step-parent", "two mothers", "two fathers", "same-sex parent", "same-sex couple", "same sex couple", "same sex", "heterosexual parents", "married parents", "two married parents", "cohabit", "traditional", "unmarried cohabiting", "both parents", "gift par", "gifta", "tvåförälder", "tvåföräldra", "två föräldrar", "båda föräldra", "båda biologiska föräldra", "biologiska föräldra", "heterosexuella föräldra", "föräldrar tillsammans", "nukleär", "borgerlig famil", "borgerlig hushåll", "ombildad famil", "närståendefamilj", "sambo", "father and mother", "mother and father", "mother-father", "mother father", "due genitori", "entrambi i genitori", "coppia coniugat", "coppia sposat", "married couple", "madre e padre", "madre, padre", "genitori biologici", "famiglia nucleare", "nucleo familiar", "con figli"], "label": "Nuclear Family"},
+    {"match": "contains", "any_of": ["famiglia estesa", "famiglia allargata", "extended", "multigenerational"], "label": "Extended Family"},
+    {"match": "contains", "any_of": ["divorced", "split", "adoptive", "foster", "orphan", "ward"], "label": "Single Parent"},
+    {"match": "contains", "any_of": ["couple without", "no children", "childless couple", "coppia senza figli", "senza figli", "dink", "childless"], "label": "Couple without Children"},
+    {"match": "contains", "any_of": ["living alone", "alone", "solo", "vive da sol", "vivo da sol", "single person", "single-person", "enkelhushåll", "enskilt hushåll", "enskild hushåll"], "label": "Living Alone"}
+  ],
   "description": "Family/household type to schema labels",
   "scb_variable": "Familjetyp",
   "mappings": {
@@ -64,6 +73,12 @@
       ]
     }
   },
+  "output_categories": [
+    "Nuclear Family",
+    "Single Parent",
+    "Couple without Children",
+    "Living Alone"
+  ],
   "pipeline_label_mappings": {
     "Both biological parents": "Nuclear Family",
     "Two biological parents": "Nuclear Family",

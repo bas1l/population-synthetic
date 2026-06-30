@@ -1,6 +1,14 @@
 {
   "reference_handler": "decile_coded",
   "reference_attr": "socioeconomic_class",
+  "pipeline_handler": "text_coded",
+  "pipeline_attr": "socioeconomic_class",
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["poverty", "poor", "destitute", "fattigdom", "låginkomsttagare", "low income", "low-income", "lower income", "lower-income", "economic precariat", "precariat", "povertà", "basso reddito", "classe bassa", "marginalizzat"], "label": "Poverty"},
+    {"match": "contains", "any_of": ["working class", "lower class", "blue collar", "blue-collar", "arbetarklass", "arbetar", "lägre medelklass", "nedre mellanklass", "skilled worker", "service worker", "semi-skilled", "semi skilled", "classe operaia", "classe lavoratrice", "operaio", "ceto popolare", "lavorante", "medio-bass", "medio bass", "media bass", "classe media bass", "ceto medio-bass", "ceto medio bass", "classe subaltern", "student", "studerande"], "label": "Working Class"},
+    {"match": "contains", "any_of": ["middle class", "middle-class", "medelklass", "mellanklass", "övre medelklass", "högre medelklass", "akademiker", "akademi", "god ekonomi", "pensionär", "mellanstora tjänstemän", "mellan-tjänstemän", "kvalificerad tjänsteman", "professional", "upper middle", "upper-middle", "lower middle", "lower-middle", "middle income", "middle-income", "white collar", "white-collar", "managerial", "administrative", "median income", "above median", "classe media", "ceto medio", "medio-alt", "medio alt", "media-alt", "media alt", "borghes", "classe media alt", "classe media elevat", "classe dirigent", "classe dirigenz", "mellanskikt", "medelinkomst", "giovane professionista", "giovani professionisti", "mediano", "mediocre", "högskoleutbildad", "tjänsteman", "tjänstemän", "it-", "konsult", "företagare", "egenföretagare", "professionell", "urban", "mittenklass", "mittelsocial", "middelklass", "mellanposition", "mellanliggande", "intellektuell"], "label": "Middle Class"},
+    {"match": "contains", "any_of": ["wealthy", "rich", "affluent", "upper class", "välbärgad", "överklass", "högre tjänstemän", "high income", "high-income", "higher income", "higher-income", "high socioeconomic", "corporate class", "elite", "alta borghesia", "alta buona", "classe elevat", "classe emergente", "kapitalist", "hög inkomst", "höginkomst", "comfortable income", "high-earning", "high earning"], "label": "Wealthy"}
+  ],
   "description": "Income bracket groups to socioeconomic class labels (SamForvInk1, relative to country median)",
   "scb_variable": "Inkomstklass",
   "mappings": {
@@ -33,6 +41,12 @@
     "Decile 9": "Wealthy",
     "Decile 10": "Wealthy"
   },
+  "output_categories": [
+    "Poverty",
+    "Working Class",
+    "Middle Class",
+    "Wealthy"
+  ],
   "pipeline_label_mappings": {
     "Fattigdom": "Poverty",
     "Underklass": "Poverty",

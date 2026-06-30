@@ -1,5 +1,12 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "numeric_bucket",
+  "pipeline_numeric_buckets": {
+    "1": "1 person", "2": "2 persons", "3": "3 persons",
+    "4": "4 persons", "5": "5 persons", "6": "6 persons"
+  },
+  "pipeline_bucket_overflow": {"threshold": 7, "label": "7+ persons"},
+  "pipeline_bucket_default": "overflow",
   "description": "Number of persons in household from BE/BE0101/BE0101S/HushallT03. Marginal distribution. No cross-tab with parental_structure is available at national level in this table.",
   "scb_table": "BE/BE0101/BE0101S/HushallT03",
   "scb_codes": {

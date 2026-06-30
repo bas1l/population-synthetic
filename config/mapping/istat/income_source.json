@@ -1,0 +1,6 @@
+{
+  "pipeline_handler": "text_coded",
+  "pipeline_fuzzy": false,
+  "pipeline_on_miss": "passthrough_or_nonstandard",
+  "description": "Pipeline-only block: ISTAT provides no income-source field, so income_source is not a comparison attribute for Italy (absent from istat/_scheme.json and the reference mapper, which has no reference_handler here). The synthetic mapper still emits the key for parity with the Swedish output: a non-empty pipeline value passes through verbatim, an absent value becomes 'Non-standard label'."
+}

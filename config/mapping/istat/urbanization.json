@@ -1,0 +1,20 @@
+{
+  "pipeline_handler": "text_coded",
+  "pipeline_attr": "current_environment_type",
+  "pipeline_silent_unmapped": true,
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["suburban", "suburb", "förort", "stadsnära"], "label": "Suburban"},
+    {"match": "contains", "any_of": ["rural", "countryside", "village", "nomadic", "landsbygd", "glesbygd"], "label": "Rural/Countryside"},
+    {"match": "equals", "any_of": ["by", "landsby"], "label": "Rural/Countryside"},
+    {"match": "contains", "any_of": ["small town", "smaller town", "town", "tätort", "mindre stad"], "label": "Suburban"},
+    {"match": "contains", "any_of": ["urban metropolis", "metropolis", "city center", "inner city", "major city", "storstad", "innerstad"], "label": "Urban Metropolis"},
+    {"match": "contains", "any_of": ["urban", " city", "/city"], "label": "Urban Metropolis"},
+    {"match": "equals", "any_of": ["city", "urban"], "label": "Urban Metropolis"}
+  ],
+  "description": "Pipeline-only block: ISTAT has no urbanization field (absent from istat/_scheme.json and the reference mapper). The synthetic mapper emits current_environment_type for parity with the Swedish output, reusing the same environment resolver; unmapped values are silenced (SILENT_UNMAPPED parity).",
+  "output_categories": [
+    "Urban Metropolis",
+    "Suburban",
+    "Rural/Countryside"
+  ]
+}

@@ -1,5 +1,6 @@
 {
   "pipeline_handler": "text_coded",
+  "pipeline_silent_unmapped": true,
   "pipeline_source_key": "ethnicity_broad_global_approx",
   "pipeline_keyword_rules": [
     {"match": "contains", "any_of": ["caucasian", "white", "swedish", "svensk"], "label": "Swedish"},
@@ -7,7 +8,7 @@
     {"match": "contains", "any_of": ["european", "southern european", "eastern european", "östeuropeisk", "europeisk"], "label": "European"},
     {"match": "contains", "any_of": ["middle eastern", "african", "asian", "hispanic", "latino", "non-european", "mixed", "indigenous", "chaldean", "assyrisk", "syriansk", "utomeuropeisk", "mellanöstern", "afrikansk", "asiatisk"], "label": "Non-European"}
   ],
-  "description": "Broad ethnicity categories for comparison with SCB birth-location proxy",
+  "description": "Pipeline-only block: ISTAT has no ethnicity field (absent from istat/_scheme.json and the reference mapper). The synthetic mapper emits the key for parity with the Swedish output, reusing the same broad-ethnicity resolver; unmapped values are silenced (SILENT_UNMAPPED parity).",
   "output_categories": [
     "Swedish",
     "Nordic",

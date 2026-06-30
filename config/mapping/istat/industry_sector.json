@@ -1,5 +1,7 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "text_coded",
+  "pipeline_on_miss": "Not Applicable",
   "description": "Occupation classification to industry sector schema labels for Italian population data",
   "istat_source": "ISTAT occupation classification (CP2011)",
   "reference_none_default": "Not Applicable",

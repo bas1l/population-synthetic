@@ -2,15 +2,35 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from population_synth._paths import PROJECT_ROOT
+from population_synth.comparison.normalizer import load_mappings
 from population_synth.comparison.synthetic_mapper.base import AbstractSyntheticMapper
 from population_synth.comparison.synthetic_mapper.italy import ItalianSyntheticMapper
 from population_synth.comparison.synthetic_mapper.sweden import SwedishSyntheticMapper
 
+_MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 
-def get_synthetic_mapper(country: str = "swedish") -> AbstractSyntheticMapper:
-    """Return the synthetic mapper for *country* (``"swedish"`` or ``"italian"``)."""
-    if country == "italian":
-        return ItalianSyntheticMapper()
-    if country == "swedish":
-        return SwedishSyntheticMapper()
-    raise ValueError(f"No synthetic mapper for country {country!r}")
+_SYNTHETIC_MAPPERS: dict[str, type[AbstractSyntheticMapper]] = {
+    "swedish": SwedishSyntheticMapper,
+    "italian": ItalianSyntheticMapper,
+}
+
+
+def _mapper_class(country: str) -> type[AbstractSyntheticMapper]:
+    cls = _SYNTHETIC_MAPPERS.get(country)
+    if cls is None:
+        raise ValueError(f"No synthetic mapper for country {country!r}")
+    return cls
+
+
+def get_synthetic_mapper(country: str = "swedish", mappings_path: Path | None = None) -> AbstractSyntheticMapper:
+    """Return the synthetic mapper for *country* (``"swedish"`` or ``"italian"``).
+
+    The mapper loads its category mappings from *mappings_path* if given,
+    otherwise from the country's default ``config/mapping/{subdir}`` directory.
+    """
+    cls = _mapper_class(country)
+    path = mappings_path or (_MAPPINGS_ROOT / cls.MAPPINGS_SUBDIR)
+    return cls(load_mappings(path))

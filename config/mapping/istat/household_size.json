@@ -1,5 +1,10 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "numeric_bucket",
+  "pipeline_numeric_buckets": {
+    "1": "1", "2": "2", "3": "3", "4": "4", "5": "5"
+  },
+  "pipeline_bucket_overflow": {"threshold": 6, "label": "GE6"},
   "description": "Household size categories for Italian population data",
   "istat_source": "Eurostat EU-SILC household composition",
   "mappings": {
