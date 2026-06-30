@@ -1,5 +1,12 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "text_coded",
+  "pipeline_fuzzy": false,
+  "pipeline_on_miss": "passthrough_or_nonstandard",
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["owner", "owned", "proprietar", "proprietà", "mortgage", "mutuo", "acquistato", "casa", "villa", "appartamento proprio", "condominio", "ipoteca"], "label": "Owner-occupied"},
+    {"match": "contains", "any_of": ["rental", "rent", "affitto", "locatar", "inquilin", "tenant", "locazione", "canone"], "label": "Rental"}
+  ],
   "description": "Housing tenure status labels for Italian population data",
   "istat_source": "Eurostat EU-SILC housing tenure",
   "mappings": {

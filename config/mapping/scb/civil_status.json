@@ -1,5 +1,13 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "text_coded",
+  "pipeline_fuzzy": false,
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["skild", "frånskild", "separated", "divorced"], "label": "Divorced"},
+    {"match": "contains", "any_of": ["singel", "ogift", "single", "never married", "ensamstående", "ensam"], "label": "Single/Never Married"},
+    {"match": "contains", "any_of": ["gift", "cohabiting", "cohabit", "habiting", "habitant", "sambo", "samboende", "särbo", "married", "partner", "relation", "förhållande", "registrerad partner"], "label": "Married"},
+    {"match": "contains", "any_of": ["änka", "änkling", "änklig", "änkeman", "widow"], "label": "Widowed"}
+  ],
   "description": "Marital status from BE/BE0101/BE0101A/BefolkningNy — Civilstand variable. Conditional on age_group × biological_sex.",
   "scb_variable": "Civilstand",
   "scb_table": "BE/BE0101/BE0101A/BefolkningNy",
@@ -15,6 +23,12 @@
     "widowers/widows": "Widowed",
     "divorced": "Divorced"
   },
+  "output_categories": [
+    "Single/Never Married",
+    "Married",
+    "Divorced",
+    "Widowed"
+  ],
   "pipeline_label_mappings": {
     "Ogift": "Single/Never Married",
     "Singel": "Single/Never Married",

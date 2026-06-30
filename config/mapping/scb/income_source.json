@@ -1,5 +1,15 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "text_coded",
+  "pipeline_on_miss": "Wage / Business",
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["sickness", "activity compensation", "sjukersättning", "aktivitetsersättning"], "label": "Sickness / Activity Compensation"},
+    {"match": "contains", "any_of": ["social assistance", "försörjningsstöd", "socialbidrag"], "label": "Social Assistance"},
+    {"match": "contains", "any_of": ["insurance", "allowance", "a-kassa", "sjukpenning", "föräldrapenning", "allowan", "ersättning", "transfer", "benefit"], "label": "Insurance / Allowance"},
+    {"match": "contains", "any_of": ["pension"], "label": "Pension"},
+    {"match": "contains", "any_of": ["capital", "kapital", "dividend", "interest", "ränta", "aktieutdelning"], "label": "Capital"},
+    {"match": "contains", "any_of": ["wage", "business", "employment", "self-employ", "lön", "företag", "egenföretagare", "freelan", "frilans", "work"], "label": "Wage / Business"}
+  ],
   "description": "Primary income source from HE/HE0110/HE0110F/TabVX13InkStruktN — percentage share of each income component, conditional on employment status and broad age group. Values are used as sampling weights.",
   "scb_table": "HE/HE0110/HE0110F/TabVX13InkStruktN",
   "scb_income_codes": {

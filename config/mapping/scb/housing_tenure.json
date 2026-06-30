@@ -1,5 +1,11 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "text_coded",
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["bostadsrätt", "bostadsratt", "cooperative", "co-op", "tenant-owned", "condominium", "bostadsbolag", "bostadsförening"], "label": "Tenant-owned apartment (bostadsrätt)"},
+    {"match": "contains", "any_of": ["villa", "radhus", "friköpt", "äganderätt", "owner", "house", "detached", "egendom", "eget h", "egen bostad", "egna bostad", "egen hemma", "egenhemma", "own home", "owning", "owned", "mortgage", "freehold"], "label": "Owner-occupied (villa/house)"},
+    {"match": "contains", "any_of": ["rental", "rent", "hyresrätt", "hyres", "hyra", "uthyr", "studentbostad", "student", "shared apartment", "shared student", "social housing"], "label": "Rental apartment"}
+  ],
   "description": "Dwelling ownership form from BO/BO0104/BO0104D/BO0104T04. Marginal distribution combining Hustyp (building type) and Upplatelseform (tenure form). Cross-tab by socioeconomic class and age is not available at national level in this table.",
   "scb_table": "BO/BO0104/BO0104D/BO0104T04",
   "scb_tenure_codes": {

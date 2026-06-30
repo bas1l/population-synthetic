@@ -1,6 +1,17 @@
 {
   "reference_handler": "label",
   "reference_attr": "employment_status",
+  "pipeline_handler": "text_coded",
+  "pipeline_attr": "employment_status",
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["parental leave", "föräldraledig", "mammaledig", "pappaledig"], "label": "Employed"},
+    {"match": "contains", "any_of": ["sick leave", "sjukskriven", "sjukskrivning", "disability benefit", "long-term sick", "long term sick"], "label": "Unemployed"},
+    {"match": "contains", "any_of": ["military", "värnplikt", "armed forces"], "label": "Employed"},
+    {"match": "contains", "any_of": ["employ", "working", "worker", "job", "anställd", "heltid", "deltid", "tillsvidare", "sysselsatt", "förvärvsarbetande", "yrkesverksam", "arbetar", "full time", "part time", "selvständig", "self-employ", "freelanc", "egenföretag", "företagare", "frilans", "eget företag", "näringsidkare", "konstnär", "projektledare", "forskare", "tjänsteman", "lönearbetande", "kok", "praktikant", "uppdragstagare"], "label": "Employed"},
+    {"match": "contains", "any_of": ["unemploy", "jobless", "seeking", "arbetssökande", "arbetslos", "arbetslös", "arbetsträning", "arbetstränade", "a-kassa", "försörjning", "hemmafru", "hemvårdare"], "label": "Unemployed"},
+    {"match": "contains", "any_of": ["student", "study", "school", "studying", "studerande", "studierande"], "label": "Student"},
+    {"match": "contains", "any_of": ["retire", "pension"], "label": "Retired"}
+  ],
   "description": "AKU (Labour Force Survey) status codes to schema labels",
   "scb_variable": "ArbetsmarknadsstStatus",
   "mappings": {
@@ -68,6 +79,12 @@
     "post secondary education": "University Degree",
     "eftergymnasial utbildning": "University Degree"
   },
+  "output_categories": [
+    "Employed",
+    "Unemployed",
+    "Student",
+    "Retired"
+  ],
   "pipeline_label_mappings": {
     "Anställd": "Employed",
     "Anställd heltid": "Employed",

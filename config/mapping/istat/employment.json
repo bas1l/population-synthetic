@@ -1,6 +1,13 @@
 {
   "reference_handler": "label",
   "reference_attr": "employment_status",
+  "pipeline_handler": "text_coded",
+  "pipeline_attr": "employment_status",
+  "pipeline_fuzzy": false,
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["not employed", "disoccupat", "pensionat", "pensione", "ritirat", "student", "casaling", "inattiv", "inoccupat", "unemploy", "retire", "neo-laureat", "neolaureato", "neolaureata", "in cerca", "cerca lavoro", "senza occupazione", "job search", "recently graduated", "stagista", "tirocinante", "apprendista", "borsista", "stage", "homemaker", "casalinga", "stay-at-home", "materne", "nessun impiego"], "label": "Not Employed"},
+    {"match": "contains", "any_of": ["employ", "occupat", "lavora", "impiegat", "dipendente", "manager", "dirigent", "responsabil", "docente", "professore", "professionista", "imprendit", "artigian", "tecnic", "ingegner", "commerc", "consulen", "amministrat", "autonomo", "freelance", "libero", "fulltime", "part-time", "parttime", "a tempo", "in carriera", "in occupazione", "titolar", "costrutt"], "label": "Employed"}
+  ],
   "description": "ILO employment status codes to schema labels for Italian population data",
   "istat_source": "150_938_DF_DCCV_OCCUPATIT1_17",
   "mappings": {

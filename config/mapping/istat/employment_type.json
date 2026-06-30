@@ -1,5 +1,12 @@
 {
   "reference_handler": "composite",
+  "pipeline_handler": "text_coded",
+  "pipeline_passthrough_on_separator": "|",
+  "pipeline_empty_raw": "Not Applicable",
+  "pipeline_on_miss": "Not Applicable",
+  "pipeline_keyword_rules": [
+    {"match": "equals", "any_of": ["not applicable", "n/a", "non applicabile"], "label": "Not Applicable"}
+  ],
   "description": "Contract type and work schedule composite labels for Italian population data",
   "istat_source": "ISTAT labour force survey (contract type + work schedule)",
   "reference_none_default": "Not Applicable",

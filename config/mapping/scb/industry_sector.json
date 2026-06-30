@@ -1,5 +1,30 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "text_coded",
+  "pipeline_membership": false,
+  "pipeline_on_miss": "Other",
+  "pipeline_fuzzy_relabel": true,
+  "pipeline_fuzzy_categories": [
+    "Agriculture/Forestry/Fishing",
+    "Manufacturing/Industry",
+    "Retail & Service",
+    "IT/Technology",
+    "Public Administration/Defense",
+    "Education",
+    "Healthcare/Social Work",
+    "Other Services",
+    "Not Applicable"
+  ],
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["vård", "sjukvård", "omsorg", "healthcare"], "label": "Healthcare & Social"},
+    {"match": "contains", "any_of": ["finansiell", "bank", "finans"], "label": "IT & Technology"},
+    {"match": "contains", "any_of": ["detaljhandel", "handel"], "label": "Retail & Service"},
+    {"match": "contains", "any_of": ["utbildning", "forskning"], "label": "Education"},
+    {"match": "contains", "any_of": ["offentlig förvaltning"], "label": "Public Administration"},
+    {"match": "contains", "any_of": ["teknik", " it", "information"], "label": "IT & Technology"},
+    {"match": "contains", "any_of": ["kultur", "kreativ"], "label": "Other"},
+    {"match": "contains", "any_of": ["bygg", "construction", "tillverkning", "industri"], "label": "Manufacturing & Industry"}
+  ],
   "description": "Industry sector from AM/AM0401/AM0401I/AKURLSysSNI07Ar — SNI2007 (NACE Rev. 2) classification. Marginal among employed persons (no age cross-tab available). Non-employed get 'Not Applicable'.",
   "scb_variable": "SNI2007",
   "scb_table": "AM/AM0401/AM0401I/AKURLSysSNI07Ar",
@@ -18,6 +43,17 @@
     "human health and social work activities": "Healthcare & Social",
     "personal and cultural services": "Other"
   },
+  "output_categories": [
+    "Agriculture & Forestry",
+    "Manufacturing & Industry",
+    "Retail & Service",
+    "IT & Technology",
+    "Public Administration",
+    "Education",
+    "Healthcare & Social",
+    "Other",
+    "Not Applicable"
+  ],
   "pipeline_label_mappings": {
     "Jordbruk": "Agriculture & Forestry",
     "Lantbruk": "Agriculture & Forestry",

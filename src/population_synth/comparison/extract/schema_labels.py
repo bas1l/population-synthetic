@@ -47,8 +47,6 @@ def _load_output_categories(filename: str, key: str = "output_categories") -> li
     return categories
 
 
-AGE_GROUPS = [group["label"] for group in _load_output_categories("age_groups.json", "groups")]
-
 EDUCATION_LABELS = _load_output_categories("education.json")
 
 EMPLOYMENT_LABELS = ["Employed", "Unemployed", "Student", "Retired"]
@@ -68,69 +66,7 @@ PARENTAL_STRUCTURE_LABELS = [
     "Living Alone",
 ]
 
-REGION_LABELS = [
-    "Stockholm",
-    "Västra Götaland",
-    "Skåne",
-    "Östergötland",
-    "Uppsala",
-    "Örebro",
-    "Västernorrland",
-    "Norrbotten",
-    "Dalarna",
-    "Gävleborg",
-    "Halland",
-    "Jönköping",
-    "Kronoberg",
-    "Kalmar",
-    "Gotland",
-    "Blekinge",
-    "Värmland",
-    "Västmanland",
-    "Södermanland",
-    "Västerbotten",
-    "Jämtland",
-]
-
-BIRTH_COUNTRY_DETAIL_LABELS = _load_output_categories("birth_country_detail.json")
-
-CIVIL_STATUS_LABELS = [
-    "Single/Never Married",
-    "Married/Cohabiting",
-    "Divorced/Separated",
-    "Widowed",
-]
-
-HOUSEHOLD_SIZE_LABELS = _load_output_categories("household_size.json")
-
-HOUSING_TENURE_LABELS = _load_output_categories("housing_tenure.json")
-
-INDUSTRY_SECTOR_LABELS = [
-    "Agriculture/Forestry/Fishing",
-    "Manufacturing/Industry",
-    "Retail & Service",
-    "IT/Technology",
-    "Public Administration/Defense",
-    "Education",
-    "Healthcare/Social Work",
-    "Other Services",
-    "Not Applicable",
-]
-
 INCOME_SOURCE_LABELS = _load_output_categories("income_source.json")
-
-# Canonical OUTPUT values the Swedish normalizers actually emit (NOT the *_LABELS
-# input constants above, whose casing / slash-forms differ from real output).
-# employment_type and civil_status historically returned the raw string on
-# no-match instead of "Non-standard label", letting unmapped values masquerade
-# as real categories; the membership checks below restore consistent accounting.
-_EMPLOYMENT_TYPE_OUTPUT = frozenset({
-    "Permanent Full-time", "Permanent Part-time", "Temporary Full-time",
-    "Temporary Part-time", "Self-Employed", "Not Applicable",
-})
-_CIVIL_STATUS_OUTPUT = frozenset({
-    "Single/Never Married", "Married", "Divorced", "Widowed",
-})
 
 
 # ---------------------------------------------------------------------------
@@ -143,135 +79,10 @@ EDUCATION_LABELS_IT = [
     "University Degree",
 ]
 
-EMPLOYMENT_LABELS_IT = ["Employed", "Not Employed"]
-
-BIRTH_LOCATION_LABELS_IT = ["Italy", "Europe (Other)", "Outside Europe"]
-
-REGION_LABELS_IT = [
-    "Piemonte", "Valle d'Aosta", "Liguria", "Lombardia",
-    "Trentino-Alto Adige/Südtirol", "Veneto", "Friuli-Venezia Giulia",
-    "Emilia-Romagna", "Toscana", "Umbria", "Marche", "Lazio",
-    "Abruzzo", "Molise", "Campania", "Puglia", "Basilicata",
-    "Calabria", "Sicilia", "Sardegna",
-]
-
-CIVIL_STATUS_LABELS_IT = [
-    "Single", "Married", "Divorced", "Widowed", "Separated", "Civil Partnership",
-]
-
-HOUSING_TENURE_LABELS_IT = ["Owner-occupied", "Rental"]
-
-INDUSTRY_SECTOR_LABELS_IT = [
-    "Professional & Managerial",
-    "Clerical & Administrative",
-    "Craft & Technical",
-    "Elementary Occupations",
-    "Not Applicable",
-]
-
-EMPLOYMENT_TYPE_LABELS_IT = [
-    "Permanent|Full-time", "Permanent|Part-time",
-    "Temporary|Full-time", "Temporary|Part-time",
-    "Unspecified|Full-time", "Unspecified|Part-time",
-    "Not Applicable",
-]
-
-BIRTH_COUNTRY_DETAIL_LABELS_IT = [
-    "Italy", "Romania", "Albania", "Morocco", "China", "Ukraine",
-    "Philippines", "Moldova", "India", "Bangladesh", "Pakistan",
-    "Nigeria", "Egypt", "Senegal", "Tunisia", "Serbia",
-    "North Macedonia", "Germany", "France", "Spain", "Poland",
-    "Russia", "Turkey", "Other",
-]
-
-HOUSEHOLD_SIZE_LABELS_IT = ["1", "2", "3", "4", "5", "GE6"]
-
-PARENTAL_STRUCTURE_LABELS_IT = [
-    "Living Alone", "Single Parent", "Couple without Children",
-    "Nuclear Family", "Extended Family",
-]
-
-SOCIOECONOMIC_LABELS_IT = ["Poverty", "Working Class", "Middle Class", "Wealthy"]
-
-_CITY_TO_REGION_IT: dict[str, str] = {
-    "roma": "Lazio", "milano": "Lombardia", "napoli": "Campania",
-    "torino": "Piemonte", "palermo": "Sicilia", "genova": "Liguria",
-    "bologna": "Emilia-Romagna", "firenze": "Toscana", "bari": "Puglia",
-    "catania": "Sicilia", "venezia": "Veneto", "verona": "Veneto",
-    "messina": "Sicilia", "padova": "Veneto", "trieste": "Friuli-Venezia Giulia",
-    "brescia": "Lombardia", "taranto": "Puglia", "reggio calabria": "Calabria",
-    "reggio emilia": "Emilia-Romagna", "modena": "Emilia-Romagna",
-    "perugia": "Umbria", "cagliari": "Sardegna", "parma": "Emilia-Romagna",
-    "livorno": "Toscana", "foggia": "Puglia", "l'aquila": "Abruzzo",
-    "pescara": "Abruzzo", "ancona": "Marche", "potenza": "Basilicata",
-    "campobasso": "Molise", "aosta": "Valle d'Aosta",
-    "trento": "Trentino-Alto Adige/Südtirol", "bolzano": "Trentino-Alto Adige/Südtirol",
-    "rome": "Lazio", "milan": "Lombardia", "naples": "Campania",
-    "turin": "Piemonte", "florence": "Toscana", "venice": "Veneto",
-    "genoa": "Liguria",
-}
-
 
 # ---------------------------------------------------------------------------
-# Swedish city -> county mapping (for batch narrative Location field)
+# Occupation -> industry / education inference tables (prose inference)
 # ---------------------------------------------------------------------------
-
-_CITY_TO_COUNTY: dict[str, str] = {
-    "stockholm": "Stockholm", "solna": "Stockholm", "sundbyberg": "Stockholm",
-    "nacka": "Stockholm", "lidingö": "Stockholm", "danderyd": "Stockholm",
-    "täby": "Stockholm", "sollentuna": "Stockholm", "huddinge": "Stockholm",
-    "botkyrka": "Stockholm", "södertälje": "Stockholm", "haninge": "Stockholm",
-    "tumba": "Stockholm", "sigtuna": "Stockholm", "norrtälje": "Stockholm",
-    "göteborg": "Västra Götaland", "borås": "Västra Götaland",
-    "trollhättan": "Västra Götaland", "skövde": "Västra Götaland",
-    "uddevalla": "Västra Götaland", "lidköping": "Västra Götaland",
-    "alingsås": "Västra Götaland", "mölndal": "Västra Götaland",
-    "kungälv": "Västra Götaland", "partille": "Västra Götaland",
-    "mariestad": "Västra Götaland", "vänersborg": "Västra Götaland",
-    "malmö": "Skåne", "lund": "Skåne", "helsingborg": "Skåne",
-    "kristianstad": "Skåne", "landskrona": "Skåne", "trelleborg": "Skåne",
-    "ystad": "Skåne", "ängelholm": "Skåne",
-    "linköping": "Östergötland", "norrköping": "Östergötland", "motala": "Östergötland",
-    "mjölby": "Östergötland",
-    "uppsala": "Uppsala", "enköping": "Uppsala",
-    "västerås": "Västmanland",
-    "örebro": "Örebro", "kumla": "Örebro", "hallsberg": "Örebro",
-    "umeå": "Västerbotten", "skellefteå": "Västerbotten",
-    "robertsfors": "Västerbotten", "sorsele": "Västerbotten", "lycksele": "Västerbotten",
-    "vilhelmina": "Västerbotten", "storuman": "Västerbotten", "norsjö": "Västerbotten",
-    "sundsvall": "Västernorrland", "härnösand": "Västernorrland",
-    "örnsköldsvik": "Västernorrland", "kramfors": "Västernorrland",
-    "gävle": "Gävleborg", "sandviken": "Gävleborg", "bollnäs": "Gävleborg",
-    "hudiksvall": "Gävleborg",
-    "halmstad": "Halland", "varberg": "Halland", "falkenberg": "Halland",
-    "jönköping": "Jönköping", "värnamo": "Jönköping", "nässjö": "Jönköping",
-    "vetlanda": "Jönköping",
-    "växjö": "Kronoberg",
-    "kalmar": "Kalmar", "västervik": "Kalmar", "oskarshamn": "Kalmar",
-    "nybro": "Kalmar", "vimmerby": "Kalmar", "hultsfred": "Kalmar",
-    "visby": "Gotland",
-    "karlskrona": "Blekinge",
-    "karlstad": "Värmland", "arvika": "Värmland",
-    "eskilstuna": "Södermanland", "nyköping": "Södermanland",
-    "strängnäs": "Södermanland", "katrineholm": "Södermanland",
-    "falun": "Dalarna", "borlänge": "Dalarna", "mora": "Dalarna",
-    "hedemora": "Dalarna", "avesta": "Dalarna", "ludvika": "Dalarna",
-    "malung": "Dalarna", "leksand": "Dalarna", "rättvik": "Dalarna",
-    "östersund": "Jämtland",
-    "luleå": "Norrbotten", "kiruna": "Norrbotten", "piteå": "Norrbotten",
-    "boden": "Norrbotten", "gällivare": "Norrbotten", "kalix": "Norrbotten",
-    "haparanda": "Norrbotten", "arvidsjaur": "Norrbotten", "arjeplog": "Norrbotten",
-}
-
-_METRO_CITIES = {"stockholm", "göteborg", "malmö"}
-
-_LARGE_CITIES = {
-    "linköping", "norrköping", "uppsala", "västerås", "örebro",
-    "umeå", "lund", "växjö", "sundsvall", "gävle", "borås",
-    "eskilstuna", "halmstad", "jönköping", "karlstad", "kalmar",
-    "helsingborg", "kristianstad", "trollhättan", "luleå",
-    "nacka", "södertälje", "solna", "huddinge",
-}
 
 _OCCUPATION_TO_INDUSTRY: dict[str, str] = {
     "lärare": "Education", "förskollärare": "Education", "grundskollärare": "Education",

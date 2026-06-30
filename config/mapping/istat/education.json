@@ -1,6 +1,14 @@
 {
   "reference_handler": "label",
   "reference_attr": "education_level",
+  "pipeline_handler": "text_coded",
+  "pipeline_attr": "education_level",
+  "pipeline_fuzzy": false,
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["laurea", "university", "degree", "dottorato", "master", "formazione professionale avanzata", "post-graduate", "postgraduate"], "label": "University Degree"},
+    {"match": "contains", "any_of": ["liceo", "diploma", "maturità", "istituto", "secondary", "high school", "scuola superiore", "professionale", "tecnico", "formazione"], "label": "High School (Liceo/Professionale)"},
+    {"match": "contains", "any_of": ["elementare", "media", "obbligo", "primary", "no formal", "nessun", "analfabet", "alfabetizzazione", "scuola primaria"], "label": "No Formal Education"}
+  ],
   "description": "ISCED education level codes to schema labels for Italian population data",
   "istat_source": "52_1194_DF_DCCV_POPTIT1_UNT2020_1",
   "mappings": {

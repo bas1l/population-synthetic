@@ -1,5 +1,16 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "text_coded",
+  "pipeline_fuzzy": false,
+  "pipeline_on_miss": "passthrough",
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["single", "celibe", "nubile", "unmarried"], "label": "Single"},
+    {"match": "contains", "any_of": ["married", "coniugat", "sposat"], "label": "Married"},
+    {"match": "contains", "any_of": ["divorced", "divorziat"], "label": "Divorced"},
+    {"match": "contains", "any_of": ["widowed", "vedov"], "label": "Widowed"},
+    {"match": "contains", "any_of": ["separated", "separat"], "label": "Separated"},
+    {"match": "contains", "any_of": ["civil partnership", "unione civile", "convivente"], "label": "Civil Partnership"}
+  ],
   "description": "Civil/marital status codes to schema labels for Italian population data",
   "istat_source": "ISTAT civil status classification",
   "mappings": {

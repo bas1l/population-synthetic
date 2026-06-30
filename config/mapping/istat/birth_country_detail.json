@@ -1,5 +1,11 @@
 {
   "reference_handler": "label",
+  "pipeline_handler": "text_coded",
+  "pipeline_fuzzy": false,
+  "pipeline_on_miss": "passthrough_or_nonstandard",
+  "pipeline_keyword_rules": [
+    {"match": "contains", "any_of": ["italy", "italia", "italiana"], "label": "Italy"}
+  ],
   "description": "Detailed birth country labels for Italian population data (top foreign-born nationalities)",
   "istat_source": "Eurostat migr_pop1ctz / ISTAT foreign resident statistics",
   "reference_label_mappings": {

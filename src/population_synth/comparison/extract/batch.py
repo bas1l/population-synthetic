@@ -37,26 +37,40 @@ from population_synth.comparison.extract.prose_inference import (
     _industry_from_occupation,
     _parse_template_fields,
 )
-from population_synth.comparison.extract.schema_labels import (
-    _CITY_TO_COUNTY,
-    _LARGE_CITIES,
-    _METRO_CITIES,
-    BIRTH_COUNTRY_DETAIL_LABELS,
-    BIRTH_LOCATION_LABELS,
-    CIVIL_STATUS_LABELS,
-    EDUCATION_LABELS,
-    EMPLOYMENT_LABELS,
-    ENVIRONMENT_LABELS,
-    ETHNICITY_LABELS,
-    HOUSEHOLD_SIZE_LABELS,
-    HOUSING_TENURE_LABELS,
-    INDUSTRY_SECTOR_LABELS,
-    PARENTAL_STRUCTURE_LABELS,
-    REGION_LABELS,
-    SOCIOECONOMIC_LABELS,
-)
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Batch-only input search aliases (NOT canonical output vocabulary).
+#
+# Unlike the per-attribute ``output_categories`` (sourced from config below),
+# these two lists are *input-side* tokens the narrative scanner looks for in the
+# free text and then re-normalises to the canonical label via the matching
+# ``_normalize_*``.  They deliberately use the slash spellings (the values an LLM
+# narrative is likely to contain), which differ from the canonical emit forms
+# ("Married", "IT & Technology", ...), so they are not the same set as
+# ``output_categories`` and cannot be sourced from it.  They live here, local to
+# the batch extractor, rather than in the shared label module.
+# ---------------------------------------------------------------------------
+
+_CIVIL_STATUS_SEARCH_ALIASES = [
+    "Single/Never Married",
+    "Married/Cohabiting",
+    "Divorced/Separated",
+    "Widowed",
+]
+
+_INDUSTRY_SECTOR_SEARCH_ALIASES = [
+    "Agriculture/Forestry/Fishing",
+    "Manufacturing/Industry",
+    "Retail & Service",
+    "IT/Technology",
+    "Public Administration/Defense",
+    "Education",
+    "Healthcare/Social Work",
+    "Other Services",
+    "Not Applicable",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -71,12 +85,39 @@ _AGE_RE = re.compile(
 )
 
 
-def _extract_batch(identity: dict, persona_id: str) -> dict[str, Any] | None:
-    """Extract attributes from the batch identity.json format (free-text narrative)."""
+def _extract_batch(identity: dict, persona_id: str, mappings: dict) -> dict[str, Any] | None:
+    """Extract attributes from the batch identity.json format (free-text narrative).
+
+    *mappings* is the country mapper's loaded mapping tables; the canonical label
+    vocabularies and the city -> region / city -> environment tables are read from
+    its ``output_categories`` / ``pipeline_city_region`` / ``pipeline_city_environment``
+    keys (a single source of truth shared with the flat-path engine), so the batch
+    path holds no hardcoded canonical-label constants.
+    """
     text = identity.get("narrative", "")
     if not text:
         logger.warning("%s: batch identity has empty narrative -- skipping", persona_id)
         return None
+
+    # --- Canonical label vocabularies + city tables (from config) ---
+    def _oc(stem: str) -> list[str]:
+        return mappings[stem].get("output_categories", []) or []
+
+    EDUCATION_LABELS = _oc("education")
+    EMPLOYMENT_LABELS = _oc("employment")
+    BIRTH_LOCATION_LABELS = _oc("birth_location")
+    ETHNICITY_LABELS = _oc("ethnicity")
+    ENVIRONMENT_LABELS = _oc("urbanization")
+    SOCIOECONOMIC_LABELS = _oc("socioeconomic")
+    PARENTAL_STRUCTURE_LABELS = _oc("parental_structure")
+    REGION_LABELS = _oc("region")
+    BIRTH_COUNTRY_DETAIL_LABELS = _oc("birth_country_detail")
+    HOUSEHOLD_SIZE_LABELS = _oc("household_size")
+    HOUSING_TENURE_LABELS = _oc("housing_tenure")
+    _CITY_TO_COUNTY: dict[str, str] = mappings["region"]["pipeline_city_region"]
+    _city_env = mappings["urbanization"]["pipeline_city_environment"]
+    _METRO_CITIES = set(_city_env["metro"])
+    _LARGE_CITIES = set(_city_env["large"])
 
     text_lower = text.lower()
     unmapped: list[str] = []
@@ -282,7 +323,7 @@ def _extract_batch(identity: dict, persona_id: str) -> dict[str, Any] | None:
         if raw_industry:
             industry_sector = _normalize_industry_sector(raw_industry)
     if industry_sector == "Non-standard label":
-        for candidate in INDUSTRY_SECTOR_LABELS:
+        for candidate in _INDUSTRY_SECTOR_SEARCH_ALIASES:
             if candidate.lower() in text_lower:
                 industry_sector = _normalize_industry_sector(candidate)
                 break
@@ -317,7 +358,7 @@ def _extract_batch(identity: dict, persona_id: str) -> dict[str, Any] | None:
     elif lives_alone and not has_children and not has_partner:
         civil_status = "Single/Never Married"
     if civil_status == "Non-standard label":
-        for candidate in CIVIL_STATUS_LABELS:
+        for candidate in _CIVIL_STATUS_SEARCH_ALIASES:
             if candidate.lower() in text_lower:
                 civil_status = _normalize_civil_status(candidate)
                 break
