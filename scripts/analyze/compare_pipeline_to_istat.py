@@ -37,6 +37,7 @@ from population_synth._paths import PROJECT_ROOT
 from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
 from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
 from population_synth.comparison.reference_mapper import load_reference_population, normalize_population
+from population_synth.comparison.scheme import load_scheme
 from population_synth.comparison.synthetic_mapper import load_raw_population, map_population
 
 _DEFAULT_REFERENCE = PROJECT_ROOT / "data" / "istat_api" / "istat_population.json"
@@ -165,7 +166,8 @@ def main() -> None:
         print(f"WARNING: Synthetic population has only {n} individuals"
               " -- statistical tests will be unreliable.\n")
 
-    evaluator = StatisticalEvaluator(database_pop, synthetic_pop)
+    scheme = load_scheme("italian")
+    evaluator = StatisticalEvaluator(database_pop, synthetic_pop, scheme=scheme)
     evaluator.print_summary(args.reference, args.seed_root)
 
     report = evaluator.generate_report()
@@ -193,6 +195,8 @@ def main() -> None:
             pop_a_label=Path(args.reference).stem,
             pop_b_label=seed_root.name,
             prefix=seed_root.name,
+            attributes=scheme.attributes,
+            categories=scheme.categories,
         )
         print(f"Charts written to {charts_dir}")
         radar_path = plot_radar_comparison(
@@ -202,6 +206,7 @@ def main() -> None:
             pop_b_label=seed_root.name,
             show_chi_sq=not args.radar_tv_only,
             prefix=seed_root.name,
+            attributes=scheme.attributes,
         )
         if radar_path is not None:
             print(f"Radar chart written to {radar_path}")

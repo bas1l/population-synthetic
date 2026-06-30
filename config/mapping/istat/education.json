@@ -1,4 +1,6 @@
 {
+  "reference_handler": "label",
+  "reference_attr": "education_level",
   "description": "ISCED education level codes to schema labels for Italian population data",
   "istat_source": "52_1194_DF_DCCV_POPTIT1_UNT2020_1",
   "mappings": {

@@ -1,4 +1,5 @@
 {
+  "reference_handler": "label",
   "description": "Primary income source from HE/HE0110/HE0110F/TabVX13InkStruktN — percentage share of each income component, conditional on employment status and broad age group. Values are used as sampling weights.",
   "scb_table": "HE/HE0110/HE0110F/TabVX13InkStruktN",
   "scb_income_codes": {
@@ -24,7 +25,7 @@
     "Social Assistance",
     "Sickness / Activity Compensation"
   ],
-  "scb_label_mappings": {
+  "reference_label_mappings": {
     "wage and business income": "Wage / Business",
     "capital income": "Capital",
     "pensions": "Pension",

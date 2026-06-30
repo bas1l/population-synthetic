@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from population_synth.comparison.synthetic_mapper.factory import get_synthetic_mapper
+from population_synth.comparison.synthetic_mapper.base import  BaseSyntheticMapper
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +65,13 @@ def map_population(raw_pop: dict[str, Any], country: str = "swedish") -> dict[st
     and folds disk-unreadable files (from :func:`load_raw_population`) into the
     skip count, so the returned ``metadata`` matches the legacy one-shot path.
     """
-    mapper = get_synthetic_mapper(country)
+    mapper: BaseSyntheticMapper = get_synthetic_mapper(country)
     individuals: list[dict[str, Any]] = []
     skipped = int(raw_pop["metadata"].get("unreadable", 0))
 
-    for raw in raw_pop["individuals"]:
-        persona_id = raw.get("id", "?")
-        mapped = mapper.map_individual(raw, persona_id)
+    for indiv in raw_pop["individuals"]:
+        persona_id = indiv.get("id", "?")
+        mapped = mapper.map_individual(indiv, persona_id)
         if mapped is None:
             skipped += 1
         else:

@@ -1,0 +1,12 @@
+{
+  "reference_handler": "label",
+  "description": "Biological sex raw labels/codes to canonical schema labels",
+  "reference_label_mappings": {
+    "men": "Male",
+    "male": "Male",
+    "1": "Male",
+    "women": "Female",
+    "female": "Female",
+    "2": "Female"
+  }
+}

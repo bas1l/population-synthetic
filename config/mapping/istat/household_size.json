@@ -1,4 +1,5 @@
 {
+  "reference_handler": "label",
   "description": "Household size categories for Italian population data",
   "istat_source": "Eurostat EU-SILC household composition",
   "mappings": {

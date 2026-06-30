@@ -6,9 +6,9 @@ from pathlib import Path
 
 from population_synth._paths import PROJECT_ROOT
 from population_synth.comparison.reference_mapper.base import AbstractReferenceMapper
+from population_synth.comparison.reference_mapper.sweden import SwedishReferenceMapper
 from population_synth.comparison.reference_mapper.italy import ItalianReferenceMapper
 from population_synth.comparison.reference_mapper.mappings import load_mappings
-from population_synth.comparison.reference_mapper.sweden import SwedishReferenceMapper
 
 _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 

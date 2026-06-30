@@ -3,24 +3,58 @@
 The *reference mapper* turns one raw-format reference record (nested
 ``RawCategory`` dicts produced by a national statistics API, e.g. SCB/ISTAT)
 into the flat canonical schema dict the ``StatisticalEvaluator`` consumes.
-``AbstractReferenceMapper`` declares the per-country contract;
-``BaseReferenceMapper`` provides the orchestration plus all the mappings-driven
-attribute logic, which is identical across countries.  Country specificities
-(the domestic country name / birth-label tokens and the default mappings
-directory) live in the ``SwedishReferenceMapper`` / ``ItalianReferenceMapper``
-subclasses as class attributes, so the two countries are never interleaved in a
-single function.
 
-This mirrors the synthetic side (``synthetic_mapper/``): there, country
-divergence is behaviour expressed by method overrides; here it is data expressed
-by class attributes -- the reference input is already cleanly coded, so a single
-mappings-driven loop serves every country.
+``AbstractReferenceMapper`` is a pure contract: it declares the single per-country
+class attribute (``MAPPINGS_SUBDIR``) and the ``normalize_individual`` method, and
+knows nothing about which demographic fields exist or how any of them is coded.
+
+``BaseReferenceMapper`` is a **generic handler-kind engine**. It holds no field-name
+literal whatsoever: it discovers its field set at construction by scanning the loaded
+mapping tables for blocks that self-declare a ``reference_handler`` key. The handler
+kind names a generic algorithm (never a field); the binding of field -> algorithm, and
+every label the algorithm emits, lives in the country mapping JSON under
+``config/mapping/{scb,istat}/``.
+
+There are five handler kinds, each a factory ``(attr, block) -> handler`` that closes
+over the output schema attribute and that attribute's own mapping block:
+
+- ``passthrough`` -- emit the raw record value verbatim (e.g. ``id``, ``age``).
+- ``label`` -- case-insensitive lookup through ``reference_label_mappings`` with a
+  ``reference_none_default`` fallback when the field is absent.
+- ``composite`` -- combine attachment/hours sub-labels into one composite schema label;
+  an already-composite reference value passes through unchanged.
+- ``decile_coded`` -- decile/income-bracket codes -> class label (CI decile map, numeric
+  ``Decile N`` fallback, ``mappings[*].reference_codes``, raw passthrough).
+- ``substring_coded`` -- substring match of a raw code against ``mappings[*].reference_codes``.
+
+A block declaring a ``reference_attr`` emits under that schema key while reading its
+tables from the file's own block (resolving file-stem != schema-attribute). Blocks
+without a ``reference_handler`` key (``_scheme`` and the synthetic-only files) are
+ignored. The engine fails fast: an unknown handler kind, or no field declaring a
+handler at all, raises ``ValueError``. An unrecognised raw value passes through
+unchanged for every kind.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any, ClassVar
+
+# ---------------------------------------------------------------------------
+# Role-based config sub-keys and structural tokens (never field names)
+# ---------------------------------------------------------------------------
+
+#: Role-based sub-key holding a one-to-one ``reference label -> schema label`` table.
+_LABEL_KEY = "reference_label_mappings"
+
+#: Role-based sub-key holding the schema label to emit when the record omits the field.
+_NONE_DEFAULT_KEY = "reference_none_default"
+
+#: Separator joining the attachment/hours schema tokens into a composite key, and the
+#: marker for an already-composite reference value that passes through.
+_COMPOSITE_SEP = "|"
+
 
 # ---------------------------------------------------------------------------
 # Primitives
@@ -43,20 +77,120 @@ def _ci_get(ci_dict: dict[str, str], raw: str, default: str | None = None) -> st
     return ci_dict.get(raw.lower(), default if default is not None else raw)
 
 
-def _age_to_group(age: int) -> str:
-    if age < 25:
-        return "18-24"
-    if age < 35:
-        return "25-34"
-    if age < 45:
-        return "35-44"
-    if age < 55:
-        return "45-54"
-    if age < 65:
-        return "55-64"
-    if age < 75:
-        return "65-74"
-    return "75-85"
+# ---------------------------------------------------------------------------
+# Handler-kind factories
+#
+# Each factory shares the ``(attr, block) -> Callable[[record], value]`` signature.
+# It closes over the output schema attribute (``attr``) and that attribute's own
+# mapping block (``block``); the produced handler reads the record value via
+# ``record.get(attr)`` while pulling every table from ``block``. No factory names a
+# field -- the algorithm name is the only identity it carries.
+# ---------------------------------------------------------------------------
+
+def _passthrough_handler(attr: str, block: dict) -> Callable[[dict], Any]:
+    """Emit the raw record value for *attr* verbatim."""
+    return lambda record: record.get(attr)
+
+
+def _label_handler(attr: str, block: dict) -> Callable[[dict], str | None]:
+    """Single-label attribute resolved through ``_LABEL_KEY`` + ``_NONE_DEFAULT_KEY``."""
+    none_default = block.get(_NONE_DEFAULT_KEY)
+    label_map = _ci_map(block.get(_LABEL_KEY, {}))
+
+    def handler(record: dict) -> str | None:
+        raw = _label(record.get(attr))
+        if not raw:
+            return none_default
+        return _ci_get(label_map, raw)
+
+    return handler
+
+
+def _composite_handler(attr: str, block: dict) -> Callable[[dict], str | None]:
+    """Two composite sub-tables + a combination table, joined by ``_COMPOSITE_SEP``."""
+    att_map = _ci_map(block.get("reference_attachment_mappings", {}))
+    hrs_map = _ci_map(block.get("reference_hours_mappings", {}))
+    composite_map: dict[str, str] = block.get("reference_composite_mappings", {})
+    none_default: str | None = block.get(_NONE_DEFAULT_KEY)
+
+    def handler(record: dict) -> str | None:
+        raw = record.get(attr)
+        if isinstance(raw, dict) and "attachment" in raw:
+            att_label = _label(raw.get("attachment")) or ""
+            hrs_label = _label(raw.get("hours")) or ""
+            att = att_map.get(att_label.lower(), att_label)
+            hrs = hrs_map.get(hrs_label.lower(), hrs_label)
+            composite = (composite_map.get(f"{att}{_COMPOSITE_SEP}{hrs}")
+                         or composite_map.get(att))
+            return composite if composite is not None else f"{att}/{hrs}"
+        if isinstance(raw, str) and _COMPOSITE_SEP in raw:
+            # Already-composite reference value (e.g. "Permanent|Full-time").
+            return raw
+        if raw is None:
+            return none_default
+        return _label(raw)
+
+    return handler
+
+
+def _decile_coded_handler(attr: str, block: dict) -> Callable[[dict], str | None]:
+    """Decile/income-bracket codes -> class label, with raw passthrough fallback."""
+    code_to_schema: dict[str, str] = {}
+    for entry in block.get("mappings", {}).values():
+        schema_label = entry.get("schema_label", "")
+        for code in entry.get("reference_codes", []):
+            code_to_schema[str(code)] = schema_label
+    # Decile labels (legacy SCB-format populations like scb02) -> 4-class schema.
+    decile_map: dict[str, str] = block.get("reference_decile_mappings", {})
+    decile_ci: dict[str, str] = {k.lower(): v for k, v in decile_map.items()}
+    decile_num: dict[str, str] = {}
+    for k, v in decile_map.items():
+        if k.lower().startswith("decile "):
+            decile_num[k.split()[-1]] = v
+
+    def handler(record: dict) -> str | None:
+        raw = record.get(attr)
+        if isinstance(raw, dict):
+            raw_val = str(raw.get("label") or raw.get("decile", ""))
+            raw_val_l = raw_val.lower()
+            if raw_val_l in decile_ci:
+                return decile_ci[raw_val_l]
+            if raw_val_l.startswith("decile "):
+                token = raw_val.split()[-1]
+                return (decile_num.get(token)
+                        or code_to_schema.get(token) or raw_val)
+            return code_to_schema.get(raw_val) or (raw_val if raw_val else None)
+        if raw is not None:
+            return code_to_schema.get(str(raw), str(raw))
+        return None
+
+    return handler
+
+
+def _substring_coded_handler(attr: str, block: dict) -> Callable[[dict], str | None]:
+    """Reference codes -> schema label, matched exactly then by substring."""
+    raw_to_schema: dict[str, str] = {}
+    for entry in block.get("mappings", {}).values():
+        schema_label = entry.get("schema_label", "")
+        for code in entry.get("reference_codes", []):
+            raw_to_schema[code.lower()] = schema_label
+
+    def match(raw_lower: str) -> str | None:
+        exact = raw_to_schema.get(raw_lower)
+        if exact is not None:
+            return exact
+        for code, schema_label in raw_to_schema.items():
+            if code in raw_lower:
+                return schema_label
+        return None
+
+    def handler(record: dict) -> str | None:
+        raw = _label(record.get(attr))
+        if raw is not None:
+            return match(raw.lower()) or raw
+        return None
+
+    return handler
 
 
 # ---------------------------------------------------------------------------
@@ -66,14 +200,11 @@ def _age_to_group(age: int) -> str:
 class AbstractReferenceMapper(ABC):
     """Per-country contract for normalizing a raw reference population to schema.
 
-    Subclasses supply the three country class attributes below; the per-record
-    behaviour lives in :class:`BaseReferenceMapper`.
+    A subclass supplies only :data:`MAPPINGS_SUBDIR`; the per-record behaviour lives
+    in :class:`BaseReferenceMapper`, and every label it emits comes from that
+    directory's mapping tables.
     """
 
-    #: Domestic country name in the schema (e.g. ``"Sweden"`` / ``"Italy"``).
-    DOMESTIC_NAME: ClassVar[str]
-    #: Lowercased birth-label tokens that resolve to the domestic country.
-    DOMESTIC_BIRTH_LABELS: ClassVar[frozenset[str]]
     #: Default category-mappings sub-directory under ``config/mapping/``.
     MAPPINGS_SUBDIR: ClassVar[str]
 
@@ -82,207 +213,52 @@ class AbstractReferenceMapper(ABC):
 
 
 # ---------------------------------------------------------------------------
-# Base implementation: orchestration + mappings-driven attributes
+# Base implementation: generic handler-kind engine
 # ---------------------------------------------------------------------------
 
 class BaseReferenceMapper(AbstractReferenceMapper):
-    """Shared orchestration and the attribute logic identical across countries.
+    """Shared, field-literal-free engine driven entirely by the mapping tables.
 
-    Not instantiated directly -- a country subclass supplies the class
-    attributes :data:`DOMESTIC_NAME`, :data:`DOMESTIC_BIRTH_LABELS` and
-    :data:`MAPPINGS_SUBDIR`.
+    Not instantiated directly -- a country subclass supplies :data:`MAPPINGS_SUBDIR`.
+    The field set is discovered at construction by scanning the loaded mappings for
+    blocks that declare a ``reference_handler`` kind.
     """
 
+    #: Library of generic handler kinds, keyed by algorithm name (never by field).
+    #: Each value is a factory ``(attr, block) -> Callable[[record], value]``.
+    _HANDLER_KINDS: ClassVar[dict[str, Callable]] = {
+        "passthrough": _passthrough_handler,
+        "label": _label_handler,
+        "composite": _composite_handler,
+        "decile_coded": _decile_coded_handler,
+        "substring_coded": _substring_coded_handler,
+    }
+
     def __init__(self, mappings: dict) -> None:
-        """Pre-compute every category lookup once from *mappings*."""
+        """Build the handler registry by scanning *mappings* for declared fields.
+
+        Every block carrying a ``reference_handler`` key contributes one handler,
+        bound to ``reference_attr`` (defaulting to the file stem). Blocks without the
+        key (``_scheme`` and the synthetic-only files) are skipped. Fail fast on an
+        unknown kind or a mapping set that declares no reference field at all.
+        """
         self.mappings = mappings
-        self._edu_map = _ci_map(mappings.get("education", {}).get("sun2020_level_mappings", {}))
-        self._emp_map = _ci_map(mappings.get("employment", {}).get("aku_label_mappings", {}))
-        self._birth_loc_map = _ci_map(mappings.get("birth_location", {}).get("region_label_mappings", {}))
-        self._region_map = _ci_map(mappings.get("region", {}).get("scb_label_mappings", {}))
-        self._cs_map = _ci_map(mappings.get("civil_status", {}).get("scb_label_mappings", {}))
-        self._industry_map = _ci_map(mappings.get("industry_sector", {}).get("scb_label_mappings", {}))
-        self._att_map = _ci_map(mappings.get("employment_type", {}).get("attachment_label_mappings", {}))
-        self._hrs_map = _ci_map(mappings.get("employment_type", {}).get("hours_label_mappings", {}))
-        self._housing_map = _ci_map(mappings.get("housing_tenure", {}).get("scb_label_mappings", {}))
-        self._hh_size_map = _ci_map(mappings.get("household_size", {}).get("scb_label_mappings", {}))
-        self._income_map = _ci_map(mappings.get("income_source", {}).get("scb_label_mappings", {}))
-        self._bc_detail_map: dict[str, str] = mappings.get("birth_country_detail", {}).get("scb_label_mappings", {})
 
-        self._socio_code_to_schema: dict[str, str] = {}
-        for entry in mappings.get("socioeconomic", {}).get("mappings", {}).values():
-            schema_label = entry.get("schema_label", "")
-            for code in entry.get("scb_codes", []):
-                self._socio_code_to_schema[str(code)] = schema_label
-        # Decile labels (legacy SCB-format populations like scb02) -> 4-class schema
-        socio_decile_map: dict[str, str] = mappings.get("socioeconomic", {}).get("scb_decile_mappings", {})
-        self._socio_decile_ci: dict[str, str] = {k.lower(): v for k, v in socio_decile_map.items()}
-        self._socio_decile_num: dict[str, str] = {}
-        for k, v in socio_decile_map.items():
-            if k.lower().startswith("decile "):
-                self._socio_decile_num[k.split()[-1]] = v
-
-        self._parental_raw_to_schema: dict[str, str] = {}
-        for entry in mappings.get("parental_structure", {}).get("mappings", {}).values():
-            schema_label = entry.get("schema_label", "")
-            for code in entry.get("scb_codes", []):
-                self._parental_raw_to_schema[code.lower()] = schema_label
+        self._handlers: dict[str, Callable[[dict], Any]] = {}
+        for stem, block in mappings.items():
+            if not isinstance(block, dict) or "reference_handler" not in block:
+                continue
+            kind = block["reference_handler"]
+            factory = self._HANDLER_KINDS.get(kind)
+            if factory is None:
+                raise ValueError(f"Unknown reference handler kind {kind!r} in {stem!r}")
+            attr = block.get("reference_attr", stem)
+            self._handlers[attr] = factory(attr, block)
+        if not self._handlers:
+            raise ValueError("reference mapper found no fields declaring 'reference_handler'")
 
     # -- orchestrator -------------------------------------------------------
 
     def normalize_individual(self, record: dict[str, Any]) -> dict[str, Any]:
         """Convert one raw-format record (nested RawCategory dicts) to flat schema strings."""
-        rec: dict[str, Any] = {"id": record.get("id")}
-
-        age = record.get("age")
-        rec["age"] = age
-        if age is not None:
-            rec["age_group"] = self.map_age_group(age)
-
-        rec["biological_sex"] = self.map_biological_sex(record)
-        rec["education_level"] = self.map_education(record)
-        rec["employment_status"] = self.map_employment_status(record)
-        rec["birth_location"] = self.map_birth_location(record)
-        rec["region"] = self.map_region(record)
-        rec["socioeconomic_class"] = self.map_socioeconomic(record)
-        rec["parental_structure"] = self.map_parental_structure(record)
-        rec["civil_status"] = self.map_civil_status(record)
-        rec["industry_sector"] = self.map_industry_sector(record)
-        rec["employment_type"] = self.map_employment_type(record)
-        rec["housing_tenure"] = self.map_housing_tenure(record)
-        rec["household_size"] = self.map_household_size(record)
-        rec["income_source"] = self.map_income_source(record)
-        rec["birth_country_detail"] = self.map_birth_country_detail(record, rec.get("birth_location"))
-        return rec
-
-    # -- mappings-driven attributes (identical across countries) ------------
-
-    def map_age_group(self, age: Any) -> str | None:
-        try:
-            return _age_to_group(int(age))
-        except (ValueError, TypeError):
-            return None
-
-    def map_biological_sex(self, record: dict) -> str | None:
-        sex_raw = _label(record.get("biological_sex"))
-        if sex_raw is None:
-            return None
-        sex_lower = sex_raw.lower()
-        if sex_lower in ("men", "male", "1"):
-            return "Male"
-        if sex_lower in ("women", "female", "2"):
-            return "Female"
-        return sex_raw
-
-    def map_education(self, record: dict) -> str | None:
-        edu_raw = _label(record.get("education_level"))
-        return _ci_get(self._edu_map, edu_raw) if edu_raw else None
-
-    def map_employment_status(self, record: dict) -> str | None:
-        emp_raw = _label(record.get("employment_status"))
-        return _ci_get(self._emp_map, emp_raw) if emp_raw else None
-
-    def map_birth_location(self, record: dict) -> str | None:
-        birth_raw = _label(record.get("birth_location"))
-        return _ci_get(self._birth_loc_map, birth_raw) if birth_raw else None
-
-    def map_region(self, record: dict) -> str | None:
-        region_raw = _label(record.get("region"))
-        return _ci_get(self._region_map, region_raw) if region_raw else None
-
-    def map_socioeconomic(self, record: dict) -> str | None:
-        socio_raw = record.get("socioeconomic_class")
-        if isinstance(socio_raw, dict):
-            raw_val = str(socio_raw.get("label") or socio_raw.get("decile", ""))
-            raw_val_l = raw_val.lower()
-            if raw_val_l in self._socio_decile_ci:
-                return self._socio_decile_ci[raw_val_l]
-            if raw_val_l.startswith("decile "):
-                token = raw_val.split()[-1]
-                return (self._socio_decile_num.get(token)
-                        or self._socio_code_to_schema.get(token) or raw_val)
-            return self._socio_code_to_schema.get(raw_val) or (raw_val if raw_val else None)
-        if socio_raw is not None:
-            return self._socio_code_to_schema.get(str(socio_raw), str(socio_raw))
-        return None
-
-    def _match_parental(self, raw_lower: str) -> str | None:
-        exact = self._parental_raw_to_schema.get(raw_lower)
-        if exact is not None:
-            return exact
-        for code, schema_label in self._parental_raw_to_schema.items():
-            if code in raw_lower:
-                return schema_label
-        return None
-
-    def map_parental_structure(self, record: dict) -> str | None:
-        par_raw = _label(record.get("parental_structure"))
-        if par_raw is not None:
-            return self._match_parental(par_raw.lower()) or par_raw
-        return None
-
-    def map_civil_status(self, record: dict) -> str | None:
-        cs_raw = _label(record.get("civil_status"))
-        return _ci_get(self._cs_map, cs_raw) if cs_raw else None
-
-    def map_industry_sector(self, record: dict) -> str | None:
-        industry_raw = _label(record.get("industry_sector"))
-        return _ci_get(self._industry_map, industry_raw) if industry_raw else "Not Applicable"
-
-    def map_employment_type(self, record: dict) -> str | None:
-        emp_type_raw = record.get("employment_type")
-        if isinstance(emp_type_raw, dict) and "attachment" in emp_type_raw:
-            att_label = _label(emp_type_raw.get("attachment")) or ""
-            hrs_label = _label(emp_type_raw.get("hours")) or ""
-            att_schema = self._att_map.get(att_label.lower(), att_label)
-            hrs_schema = self._hrs_map.get(hrs_label.lower(), hrs_label)
-            if att_schema == "permanent" and hrs_schema == "full_time":
-                return "Permanent Full-time"
-            if att_schema == "permanent" and hrs_schema == "part_time":
-                return "Permanent Part-time"
-            if att_schema == "temporary" and hrs_schema == "full_time":
-                return "Temporary Full-time"
-            if att_schema == "temporary" and hrs_schema == "part_time":
-                return "Temporary Part-time"
-            if att_schema == "self_employed":
-                return "Self-Employed"
-            return f"{att_schema}/{hrs_schema}"
-        if isinstance(emp_type_raw, str) and "|" in emp_type_raw:
-            # Italian pipe-separated format (e.g. "Permanent|Full-time")
-            return emp_type_raw
-        if emp_type_raw is None:
-            return "Not Applicable"
-        return _label(emp_type_raw)
-
-    def map_housing_tenure(self, record: dict) -> str | None:
-        housing_raw = _label(record.get("housing_tenure"))
-        return _ci_get(self._housing_map, housing_raw) if housing_raw else None
-
-    def map_household_size(self, record: dict) -> str | None:
-        hh_raw = _label(record.get("household_size"))
-        return _ci_get(self._hh_size_map, hh_raw) if hh_raw else None
-
-    def map_income_source(self, record: dict) -> str | None:
-        income_raw = _label(record.get("income_source"))
-        return _ci_get(self._income_map, income_raw) if income_raw else None
-
-    # -- country-divergent attribute (data-driven via class attributes) -----
-
-    def map_birth_country_detail(self, record: dict, birth_location: str | None) -> str | None:
-        """Resolve birth-country detail, collapsing domestic-born to ``DOMESTIC_NAME``."""
-        bc_raw = record.get("birth_country_detail")
-        if birth_location == self.DOMESTIC_NAME:
-            return self.DOMESTIC_NAME
-        if isinstance(bc_raw, dict):
-            code = bc_raw.get("code")
-            label_val = bc_raw.get("label")
-            if code and code in self._bc_detail_map:
-                return self._bc_detail_map[code]
-            if label_val and label_val.lower() in self.DOMESTIC_BIRTH_LABELS:
-                return self.DOMESTIC_NAME
-            if label_val:
-                return self._bc_detail_map.get(label_val, label_val)
-            return None
-        if bc_raw is not None:
-            return str(bc_raw)
-        return None
+        return {attr: handler(record) for attr, handler in self._handlers.items()}

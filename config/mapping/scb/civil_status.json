@@ -1,4 +1,5 @@
 {
+  "reference_handler": "label",
   "description": "Marital status from BE/BE0101/BE0101A/BefolkningNy — Civilstand variable. Conditional on age_group × biological_sex.",
   "scb_variable": "Civilstand",
   "scb_table": "BE/BE0101/BE0101A/BefolkningNy",
@@ -8,7 +9,7 @@
     "ÄNKL": "Widowed",
     "SK": "Divorced"
   },
-  "scb_label_mappings": {
+  "reference_label_mappings": {
     "single": "Single/Never Married",
     "married": "Married",
     "widowers/widows": "Widowed",

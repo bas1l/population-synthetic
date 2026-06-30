@@ -6,14 +6,12 @@ from typing import ClassVar
 
 from population_synth.comparison.reference_mapper.base import BaseReferenceMapper
 
-_SWEDEN_BIRTH_LABELS: frozenset[str] = frozenset({
-    "born in sweden", "sverige", "sweden", "födda i sverige",
-})
-
 
 class SwedishReferenceMapper(BaseReferenceMapper):
-    """Normalize raw SCB reference records to the canonical schema."""
+    """Normalize raw SCB reference records to the canonical schema.
 
-    DOMESTIC_NAME: ClassVar[str] = "Sweden"
-    DOMESTIC_BIRTH_LABELS: ClassVar[frozenset[str]] = _SWEDEN_BIRTH_LABELS
+    Country divergence is entirely the mapping directory: every label, including the
+    domestic-birth collapse, lives in ``config/mapping/scb/``.
+    """
+
     MAPPINGS_SUBDIR: ClassVar[str] = "scb"

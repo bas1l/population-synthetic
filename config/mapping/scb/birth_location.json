@@ -1,4 +1,5 @@
 {
+  "reference_handler": "label",
   "description": "Country of birth / world region to schema labels",
   "scb_variable": "Fodelseland",
   "mappings": {
@@ -41,7 +42,7 @@
       ]
     }
   },
-  "region_label_mappings": {
+  "reference_label_mappings": {
     "Sverige": "Sweden",
     "Sweden": "Sweden",
     "Born in Sweden": "Sweden",

@@ -1,4 +1,6 @@
 {
+  "reference_handler": "decile_coded",
+  "reference_attr": "socioeconomic_class",
   "description": "Income bracket groups to socioeconomic class labels (SamForvInk1, relative to country median)",
   "scb_variable": "Inkomstklass",
   "mappings": {
@@ -19,7 +21,7 @@
       "description": "Individual gross income >= 200% of national median (OECD/Pew upper income)"
     }
   },
-  "scb_decile_mappings": {
+  "reference_decile_mappings": {
     "Decile 1": "Poverty",
     "Decile 2": "Poverty",
     "Decile 3": "Working Class",

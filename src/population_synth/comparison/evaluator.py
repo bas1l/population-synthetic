@@ -17,6 +17,9 @@ from typing import Any
 import numpy as np
 from scipy.stats import chi2_contingency, chisquare
 
+from population_synth.comparison.scheme import ComparisonScheme
+from population_synth.population.helpers import age_to_group
+
 # ------------------------------------------------------------------
 # Shared constants used across the comparison package
 # ------------------------------------------------------------------
@@ -51,13 +54,42 @@ COHERENCE_THRESHOLD = 0.001
 
 
 # ------------------------------------------------------------------
+# Derived-attribute access (age binning lives in the stats layer)
+# ------------------------------------------------------------------
+
+def _bin_age(age: Any) -> str | None:
+    """Bin a raw age into the canonical age group, or ``None`` if missing/non-int/out-of-range."""
+    try:
+        return age_to_group(int(age))
+    except (TypeError, ValueError):
+        return None
+
+
+def attr_value(ind: dict, attr: str) -> Any:
+    """Return an individual's value for *attr*, deriving ``age_group`` from raw ``age``.
+
+    Canonical individuals store only the integer ``age`` (not a pre-binned
+    ``age_group``); the bin is computed on demand here so the comparison can keep
+    age as a dimension without baking it into the schema. Falls back to a stored
+    ``age_group`` for legacy populations (e.g. the ``flatten_raw`` path) that still
+    carry it.
+    """
+    if attr == "age_group":
+        if ind.get("age") is not None:
+            return _bin_age(ind["age"])
+        return ind.get("age_group")
+    return ind.get(attr)
+
+
+# ------------------------------------------------------------------
 # StatisticalEvaluator
 # ------------------------------------------------------------------
 
 class StatisticalEvaluator:
-    def __init__(self, pop_a: dict, pop_b: dict):
+    def __init__(self, pop_a: dict, pop_b: dict, scheme: ComparisonScheme | None = None):
         self.pop_a = pop_a
         self.pop_b = pop_b
+        self.scheme = scheme
         self.individuals_a: list[dict] = pop_a["individuals"]
         self.individuals_b: list[dict] = pop_b["individuals"]
         self.n_a = len(self.individuals_a)
@@ -66,7 +98,7 @@ class StatisticalEvaluator:
     # --- Marginal comparison -----------------------------------------------
 
     def _freq_table(self, individuals: list[dict], attr: str) -> Counter:
-        return Counter(ind.get(attr) for ind in individuals)
+        return Counter(attr_value(ind, attr) for ind in individuals)
 
     def _smoothed_probs(self, counts: Counter, categories: list) -> np.ndarray:
         """Laplace-smoothed probability vector over the given categories."""
@@ -77,8 +109,15 @@ class StatisticalEvaluator:
         counts_a = self._freq_table(self.individuals_a, attr)
         counts_b = self._freq_table(self.individuals_b, attr)
 
-        all_categories = sorted((set(counts_a) | set(counts_b)) - {None})
-        unmapped = [c for c in counts_b if c not in counts_a and c is not None]
+        if self.scheme is not None and attr in self.scheme.categories:
+            # Scheme-driven: the comparison axis is exactly the DB-grounded category
+            # set, so values the reference never emits cannot appear, and synthetic-only
+            # values fall outside the axis (reported as unmapped, not silently scored).
+            all_categories = list(self.scheme.categories[attr])
+            unmapped = [c for c in counts_b if c is not None and c not in all_categories]
+        else:
+            all_categories = sorted((set(counts_a) | set(counts_b)) - {None})
+            unmapped = [c for c in counts_b if c not in counts_a and c is not None]
         unknown_count_b = int(counts_b.get("Non-standard label", 0))
         unknown_count_a = int(counts_a.get("Non-standard label", 0))
 
@@ -139,21 +178,22 @@ class StatisticalEvaluator:
         }
 
     def compute_marginals(self) -> dict[str, dict[str, Any]]:
-        return {attr: self._marginal_metrics(attr) for attr in DEMOGRAPHIC_ATTRIBUTES}
+        attrs = self.scheme.attributes if self.scheme is not None else DEMOGRAPHIC_ATTRIBUTES
+        return {attr: self._marginal_metrics(attr) for attr in attrs}
 
     # --- Joint chi-squared -------------------------------------------------
 
     def _joint_chi_sq(self, attr_x: str, attr_y: str) -> float:
-        all_x = sorted({ind.get(attr_x) for ind in self.individuals_a + self.individuals_b} - {None})
-        all_y = sorted({ind.get(attr_y) for ind in self.individuals_a + self.individuals_b} - {None})
+        all_x = sorted({attr_value(ind, attr_x) for ind in self.individuals_a + self.individuals_b} - {None})
+        all_y = sorted({attr_value(ind, attr_y) for ind in self.individuals_a + self.individuals_b} - {None})
 
         def _crosstab(individuals: list[dict]) -> np.ndarray:
             table = np.zeros((len(all_x), len(all_y)), dtype=float)
             x_idx = {v: i for i, v in enumerate(all_x)}
             y_idx = {v: i for i, v in enumerate(all_y)}
             for ind in individuals:
-                xi = x_idx.get(ind.get(attr_x))
-                yi = y_idx.get(ind.get(attr_y))
+                xi = x_idx.get(attr_value(ind, attr_x))
+                yi = y_idx.get(attr_value(ind, attr_y))
                 if xi is not None and yi is not None:
                     table[xi, yi] += 1
             return table
@@ -169,8 +209,9 @@ class StatisticalEvaluator:
         return float(p)
 
     def compute_joint_chi_sq(self) -> dict[str, float]:
+        pairs = self.scheme.joint_pairs if self.scheme is not None else JOINT_PAIRS
         result = {}
-        for attr_x, attr_y in JOINT_PAIRS:
+        for attr_x, attr_y in pairs:
             key = f"{attr_x}_x_{attr_y}"
             result[key] = self._joint_chi_sq(attr_x, attr_y)
         return result
@@ -180,9 +221,10 @@ class StatisticalEvaluator:
     def compute_coherence(self) -> dict[str, Any]:
         # Build joint probability table from pop_a for
         # (age_group, education_level, employment_status)
+        coherence_attrs = self.scheme.coherence_attributes if self.scheme is not None else COHERENCE_ATTRIBUTES
         tuple_counts: Counter = Counter()
         for ind in self.individuals_a:
-            key = tuple(ind.get(a) for a in COHERENCE_ATTRIBUTES)
+            key = tuple(attr_value(ind, a) for a in coherence_attrs)
             if None not in key:
                 tuple_counts[key] += 1
 
@@ -192,7 +234,7 @@ class StatisticalEvaluator:
         flagged = []
         n_plausible = 0
         for ind in self.individuals_b:
-            key = tuple(ind.get(a) for a in COHERENCE_ATTRIBUTES)
+            key = tuple(attr_value(ind, a) for a in coherence_attrs)
             if None in key:
                 prob = 0.0
             else:
@@ -203,7 +245,7 @@ class StatisticalEvaluator:
             else:
                 flagged.append({
                     "id": ind.get("id"),
-                    "age_group": ind.get("age_group"),
+                    "age_group": attr_value(ind, "age_group"),
                     "education_level": ind.get("education_level"),
                     "employment_status": ind.get("employment_status"),
                     "probability": round(prob, 6),

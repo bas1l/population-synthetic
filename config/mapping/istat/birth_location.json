@@ -1,4 +1,5 @@
 {
+  "reference_handler": "label",
   "description": "Birth location classification for Italian population data",
   "istat_source": "ISTAT/Eurostat migration statistics",
   "mappings": {

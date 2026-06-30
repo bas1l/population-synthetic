@@ -12,6 +12,9 @@ from population_synth.comparison.evaluator import (
     StatisticalEvaluator,
     write_csv_summary,
 )
+from population_synth.comparison.scheme import ComparisonScheme, load_scheme
+
+_AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85"]
 
 
 def _pop(individuals, source="test"):
@@ -155,3 +158,72 @@ def test_write_csv_summary_one_row_per_attribute(tmp_path):
     # One row per demographic attribute in the report's marginals.
     assert len(rows) == len(report["marginals"])
     assert {"attribute", "tv_distance", "chi_sq_p"} <= set(rows[0])
+
+
+# --- scheme-driven comparison --------------------------------------------
+
+
+def _scheme(attributes, categories, *, joint_pairs=None, coherence_attributes=()):
+    return ComparisonScheme(
+        attributes=attributes,
+        categories=categories,
+        joint_pairs=joint_pairs or [],
+        coherence_attributes=coherence_attributes,
+    )
+
+
+def test_scheme_restricts_axis_and_flags_synthetic_only_category():
+    # The reference only ever emits Employed/Unemployed; a synthetic-only "Student"
+    # must fall outside the scored axis and be reported as unmapped.
+    scheme = _scheme(["employment_status"], {"employment_status": ["Employed", "Unemployed"]})
+    a = [_person(i, employment_status="Employed") for i in range(8)] + [_person(8, employment_status="Unemployed")]
+    b = [_person(0, employment_status="Employed"), _person(1, employment_status="Student")]
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=scheme)
+    metrics = ev.compute_marginals()["employment_status"]
+    assert metrics["categories"] == ["Employed", "Unemployed"]
+    assert "Student" not in metrics["categories"]
+    assert "Student" in metrics["unmapped"]
+
+
+def test_age_binning_derives_group_from_raw_age():
+    # Populations store only raw integer 'age'; the evaluator bins it on the fly.
+    scheme = _scheme(["age_group"], {"age_group": _AGE_GROUPS})
+    a = [_person(i, age=30) for i in range(4)]   # all 25-34
+    b = [_person(i, age=70) for i in range(4)]   # all 65-74
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=scheme)
+    metrics = ev.compute_marginals()["age_group"]
+    assert metrics["tv_distance"] == 1.0
+
+
+def test_age_binning_feeds_coherence_and_joint():
+    scheme = _scheme(
+        ["age_group", "education_level", "employment_status"],
+        {
+            "age_group": _AGE_GROUPS,
+            "education_level": ["University Degree"],
+            "employment_status": ["Employed"],
+        },
+        joint_pairs=[("age_group", "education_level")],
+        coherence_attributes=("age_group", "education_level", "employment_status"),
+    )
+    a = [_person(i, age=30, education_level="University Degree", employment_status="Employed") for i in range(10)]
+    b = [dict(p) for p in a]
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=scheme)
+    coherence = ev.compute_coherence()
+    assert coherence["score"] == 1.0
+    assert coherence["flagged"] == []
+    # The joint pair resolves the derived age_group rather than collapsing to NaN.
+    assert not math.isnan(ev.compute_joint_chi_sq()["age_group_x_education_level"])
+
+
+def test_load_scheme_is_country_specific():
+    sv = load_scheme("swedish")
+    it = load_scheme("italian")
+    # Italy has no income-source field in its database; Sweden does.
+    assert "income_source" in sv.attributes
+    assert "income_source" not in it.attributes
+    assert "age_group" in sv.attributes and "age_group" in it.attributes
+    # Category sets are DB-grounded (no empty buckets).
+    assert sv.categories["employment_status"] == ["Employed", "Unemployed"]
+    assert "Separated" not in it.categories["civil_status"]
+    assert "Civil Partnership" not in it.categories["civil_status"]

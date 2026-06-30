@@ -1,14 +1,23 @@
 {
+  "reference_handler": "composite",
   "description": "Employment contract type, combining attachment (permanent/temporary/self-employed) from AM/AM0401/AM0401I/AKURLSysAnkAr and working-hours (full-time/part-time) from AM/AM0401/AM0401S/NAKUSysselOkArbtidAr. Both conditional on age_group. Non-employed get 'Not Applicable'.",
   "attachment_table": "AM/AM0401/AM0401I/AKURLSysAnkAr",
   "hours_table": "AM/AM0401/AM0401S/NAKUSysselOkArbtidAr",
-  "attachment_label_mappings": {
+  "reference_none_default": "Not Applicable",
+  "reference_composite_mappings": {
+    "permanent|full_time": "Permanent Full-time",
+    "permanent|part_time": "Permanent Part-time",
+    "temporary|full_time": "Temporary Full-time",
+    "temporary|part_time": "Temporary Part-time",
+    "self_employed": "Self-Employed"
+  },
+  "reference_attachment_mappings": {
     "permanent employees": "permanent",
     "temporary employees": "temporary",
     "self-employed + family workers": "self_employed",
     "self-employed + family workers (fa+mh)": "self_employed"
   },
-  "hours_label_mappings": {
+  "reference_hours_mappings": {
     "1-19 hours": "part_time",
     "20-34 hours": "part_time",
     "35+ hours": "full_time"

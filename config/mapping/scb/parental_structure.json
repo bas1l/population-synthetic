@@ -1,11 +1,12 @@
 {
+  "reference_handler": "substring_coded",
   "description": "Family/household type to schema labels",
   "scb_variable": "Familjetyp",
   "mappings": {
     "nuclear_family": {
       "schema_label": "Nuclear Family",
       "description": "Couple with children (married or cohabiting)",
-      "scb_codes": [
+      "reference_codes": [
         "sammanboende med barn",
         "couple with children",
         "gifts med barn",
@@ -19,7 +20,7 @@
     "blended_family": {
       "schema_label": "Nuclear Family",
       "description": "Step-parent family (mapped to Nuclear Family)",
-      "scb_codes": [
+      "reference_codes": [
         "stepparent",
         "styvförälder",
         "mother and stepparent",
@@ -31,7 +32,7 @@
     "single_parent": {
       "schema_label": "Single Parent",
       "description": "Single parent with children",
-      "scb_codes": [
+      "reference_codes": [
         "ensamstående med barn",
         "single parent",
         "lone parent with children",
@@ -44,7 +45,7 @@
     "couple_no_children": {
       "schema_label": "Couple without Children",
       "description": "Couple without children at home",
-      "scb_codes": [
+      "reference_codes": [
         "sammanboende utan barn",
         "couple without children",
         "gifts utan barn"
@@ -53,7 +54,7 @@
     "living_alone": {
       "schema_label": "Living Alone",
       "description": "Single person household without children",
-      "scb_codes": [
+      "reference_codes": [
         "ensamstående utan barn",
         "living alone",
         "single without children",
