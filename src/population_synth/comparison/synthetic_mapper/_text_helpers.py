@@ -1,9 +1,9 @@
-"""Generic text helpers for pipeline-label extraction.
+"""Generic, label-free text helpers for the synthetic mapper.
 
 Separator normalisation, UTF-8 double-encoding repair, and fuzzy substring
-match — the three generic helpers used by the config-driven flat-path engine.
-No pipeline label mappings are loaded here; all label -> schema-label
-translation lives in the country mapping JSON files under
+match — the three string primitives the config-driven flat-path engine in
+``base.py`` relies on. They carry no demographic labels or mappings; all
+label -> schema-label translation lives in the country mapping JSON files under
 ``config/mapping/{scb,istat}/``.
 """
 

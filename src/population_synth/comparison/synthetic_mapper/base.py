@@ -40,8 +40,12 @@ from collections.abc import Callable
 from typing import Any, ClassVar
 
 from population_synth._paths import PROJECT_ROOT
-from population_synth.comparison.extract.mappings import _fuzzy_match, _repair_utf8_double_encoding, _sep_norm
 from population_synth.comparison.normalizer import load_mappings
+from population_synth.comparison.synthetic_mapper._text_helpers import (
+    _fuzzy_match,
+    _repair_utf8_double_encoding,
+    _sep_norm,
+)
 
 logger = logging.getLogger(__name__)
 
