@@ -1,3 +1,9 @@
+"""EurostatClient — Eurostat dissemination API wrapper with caching.
+
+Defines ``EurostatClient``, a ``BasePxWebClient`` subclass that fetches
+JSON-stat datasets from the Eurostat statistics API (defaulting to Italian
+geo scope) and caches responses locally with a configurable TTL.
+"""
 from pathlib import Path
 
 import requests
@@ -6,7 +12,7 @@ from population_synth._paths import PROJECT_ROOT
 
 from .pxweb_client import BasePxWebClient
 
-_DEFAULT_CACHE_DIR = PROJECT_ROOT / "config" / "assets" / "eurostat_cache"
+_DEFAULT_CACHE_DIR = PROJECT_ROOT / "config" / "database" / "caches" / "eurostat"
 _BASE_URL = "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/"
 
 

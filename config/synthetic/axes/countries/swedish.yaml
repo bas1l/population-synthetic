@@ -1,0 +1,4 @@
+id: "swedish"
+label: "Sweden"
+parameters:
+  config: "config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json"

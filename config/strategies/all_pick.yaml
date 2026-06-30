@@ -1,4 +1,0 @@
-id: "all_pick"
-label: "All Pick"
-parameters:
-  strategy: "config/assets/identity/configurable/strategies/all_pick.json"

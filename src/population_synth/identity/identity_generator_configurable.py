@@ -1,3 +1,13 @@
+"""DAG-driven, per-category configurable identity generation.
+
+Defines ``IdentityGeneratorConfigurable``, a ``BaseIdentityGenerator``
+that resolves categories in topological order from an explicit dependency
+graph (Kahn's algorithm). Each category is filled via its declared
+method -- pick, generate_pick, generate_evaluate_pick, or
+generate_evaluate_random_pick -- using JSON-constrained LLM calls with
+retry, weight reconciliation, and incremental interaction logging.
+"""
+
 import json
 import logging
 import os
@@ -7,6 +17,7 @@ from collections import deque
 from typing import Any
 
 import numpy as np
+import yaml
 
 from population_synth.clients.call_context import set_correlation
 from population_synth.clients.llm_protocol import LLMClient
@@ -15,6 +26,11 @@ from .base_identity_generator import BaseIdentityGenerator
 from .llm_interaction_log import LLMInteractionEntry
 
 _WEIGHT_COUNT_TOLERANCE_RATIO = 0.1
+
+# Hard ceiling on weight/candidate reconciliation retries. Applies even when
+# ``retry_until_success`` is set, so a model that never returns a valid weight
+# count fails loudly instead of hanging in an unbounded loop.
+_MAX_WEIGHT_RECONCILE_ATTEMPTS = 25
 
 
 class IdentityGeneratorConfigurable(BaseIdentityGenerator):
@@ -42,10 +58,10 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             raise FileNotFoundError(f"Strategy file not found: {filepath}")
         with open(filepath, "r", encoding="utf-8") as f:
             try:
-                data = json.load(f)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON in strategy file: {e}")
-        categories = data.get("categories")
+                data = yaml.safe_load(f)
+            except yaml.YAMLError as e:
+                raise ValueError(f"Invalid YAML in strategy file: {e}")
+        categories = data.get("categories") if isinstance(data, dict) else None
         if not categories or not isinstance(categories, dict):
             raise ValueError(f"Strategy file must contain a 'categories' dict: {filepath}")
         return categories
@@ -490,7 +506,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                 weights = reconciled
                 break
             tolerance = int(len(candidates) * _WEIGHT_COUNT_TOLERANCE_RATIO)
-            if not self.retry_until_success and attempt >= 3:
+            soft_exhausted = not self.retry_until_success and attempt >= 3
+            hard_exhausted = attempt >= _MAX_WEIGHT_RECONCILE_ATTEMPTS
+            if soft_exhausted or hard_exhausted:
                 raise ValueError(
                     f"Weight/candidate count mismatch for '{category_name}' after {attempt} attempts: "
                     f"{len(weights)} weights for {len(candidates)} candidates."
@@ -579,7 +597,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                 weights = reconciled
                 break
             tolerance = int(len(candidates) * _WEIGHT_COUNT_TOLERANCE_RATIO)
-            if not self.retry_until_success and attempt >= 3:
+            soft_exhausted = not self.retry_until_success and attempt >= 3
+            hard_exhausted = attempt >= _MAX_WEIGHT_RECONCILE_ATTEMPTS
+            if soft_exhausted or hard_exhausted:
                 raise ValueError(
                     f"Weight/candidate count mismatch for '{category_name}' after {attempt} attempts: "
                     f"{len(weights)} weights for {len(candidates)} candidates."

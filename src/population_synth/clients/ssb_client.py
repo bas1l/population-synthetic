@@ -24,7 +24,7 @@ from population_synth._paths import PROJECT_ROOT
 
 from .pxweb_client import BasePxWebClient
 
-_DEFAULT_CACHE_DIR = PROJECT_ROOT / "config" / "assets" / "ssb_cache"
+_DEFAULT_CACHE_DIR = PROJECT_ROOT / "config" / "database" / "caches" / "ssb"
 _BASE_URL = "https://data.ssb.no/api/pxwebapi/v2/"
 _CACHE_PREFIX = "ssb"
 _MIN_REQUEST_INTERVAL = 2.1  # seconds between outgoing HTTP calls
@@ -38,7 +38,7 @@ class SSBPxWebClient(BasePxWebClient):
     ----------
     cache_dir:
         Directory for JSON cache files. Defaults to
-        ``config/assets/ssb_cache/`` relative to the project root.
+        ``config/database/caches/ssb/`` relative to the project root.
     cache_ttl_days:
         How long cached responses are considered fresh. Defaults to 90 days.
     """
