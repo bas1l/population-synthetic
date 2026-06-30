@@ -1,3 +1,11 @@
+"""Skip-if-done logic for pipeline tasks.
+
+Defines ``should_process_task``, which decides whether a task should run:
+it returns ``False`` if any input is missing, ``True`` when forced or when
+an output is missing, and otherwise compares modification times so a task
+re-runs only when its inputs are newer than its outputs.
+"""
+
 from __future__ import annotations
 
 import logging

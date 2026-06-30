@@ -1,0 +1,38 @@
+// Sweden  -  SCB synthetic population generation
+// src/population_synth/population/sweden/  |  SampleService.sample_one  (conditional chained sampling, ~14 draws)
+digraph generation {
+  rankdir=TB;
+  bgcolor="white";
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.12,0.07"];
+  edge [fontname="Helvetica"];
+
+  agesex [label="(age, sex)\n(joint draw - age_sex)", fillcolor="#1f3a5f", fontcolor="white"];
+  education [label="education_level\n(| age_group, sex)", fillcolor="#2e6f95", fontcolor="white"];
+  employment [label="employment_status\n(| sex, education)", fillcolor="#2e6f95", fontcolor="white"];
+  industry [label="industry_sector\n(if employed)", fillcolor="#2e6f95", fontcolor="white"];
+  emptype [label="employment_type\n(if employed | age,sex)", fillcolor="#2e6f95", fontcolor="white"];
+  income_source [label="income_source\n(| employment, age)", fillcolor="#2e6f95", fontcolor="white"];
+  socio [label="socioeconomic_class\n(| age_group, sex)", fillcolor="#3aa6a0", fontcolor="white"];
+  civil [label="civil_status\n(| age_group, sex)", fillcolor="#3aa6a0", fontcolor="white"];
+  birthloc [label="birth_location\n(marginal)", fillcolor="#b8c4cc", fontcolor="black"];
+  birthdetail [label="birth_country_detail\n(| birth_loc, age, sex)", fillcolor="#3aa6a0", fontcolor="white"];
+  region [label="region\n(marginal)", fillcolor="#b8c4cc", fontcolor="black"];
+  parental_structure [label="parental_structure\n(marginal)", fillcolor="#b8c4cc", fontcolor="black"];
+  housing_tenure [label="housing_tenure\n(marginal)", fillcolor="#b8c4cc", fontcolor="black"];
+  household_size [label="household_size\n(marginal)", fillcolor="#b8c4cc", fontcolor="black"];
+
+  agesex -> education [color="#2b2b2b"];
+  education -> employment [color="#2b2b2b"];
+  employment -> industry [color="#5a8f3c", label="if employed", fontsize=9, fontcolor="#5a8f3c"];
+  employment -> emptype [color="#5a8f3c", label="if employed", fontsize=9, fontcolor="#5a8f3c"];
+  employment -> income_source [color="#2b2b2b"];
+  agesex -> emptype [color="#888888", style=dashed, label="age,sex", fontsize=9, fontcolor="#888888"];
+  agesex -> income_source [color="#888888", style=dashed, label="age,sex", fontsize=9, fontcolor="#888888"];
+  agesex -> socio [color="#2b2b2b"];
+  agesex -> civil [color="#2b2b2b"];
+  agesex -> birthdetail [color="#888888", style=dashed, label="age,sex", fontsize=9, fontcolor="#888888"];
+  birthloc -> birthdetail [color="#2b2b2b"];
+
+  // independent marginals (no parents)
+  { rank=sink; region parental_structure housing_tenure household_size }
+}

@@ -11,13 +11,13 @@ Each ``fetch_*`` method:
 
 Failure policy
 --------------
-* Critical dimensions (age/sex, education, employment, region, civil status,
-  industry, employment type, housing, household size, birth location, birth
-  country detail, socioeconomic) **raise** loudly on API error or empty parse.
-* Sparse/optional dimensions (parental structure, income source by employment
-  age) log a WARNING and return a documented fallback distribution rather than
-  raising.  This is documented in ``category_mappings/ssb/income_source.json``
-  under the ``fallback_note`` field.
+* Every fetched dimension **raises** loudly on API error or empty parse — there
+  are no synthetic fallback distributions (see the no-synthetic-distributions
+  rule in ``CLAUDE.md``).
+* ``income_source_by_employment_age`` is **dropped** (returned empty): no SSB
+  PxWebApi v2 table provides income-component shares conditioned jointly on
+  employment status and age group, so the field is omitted rather than invented
+  (matching the Italian generator).
 """
 
 from __future__ import annotations
@@ -62,65 +62,6 @@ from .parsers import (
 )
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Fallback distributions for sparse dimensions (Task 3.4)
-# These are used only when the SSB API call fails or returns empty data.
-# All fallbacks are logged as warnings — no silent substitutions.
-# ---------------------------------------------------------------------------
-
-_FALLBACK_PARENTAL_STRUCTURE: dict[str, float] = {
-    "Nuclear Family": 0.30,
-    "Single Parent": 0.10,
-    "Couple without Children": 0.25,
-    "Living Alone": 0.35,
-}
-
-# Income source approximate distributions from category_mappings.json
-# (No SSB PxWebApi v2 table provides income-component shares conditioned
-# jointly on employment status and age group at national level.)
-_INCOME_SOURCE_FALLBACK: dict[str, dict[str, float]] = {
-    "Employed": {
-        "Employment income": 0.85,
-        "Capital income": 0.05,
-        "Social transfers": 0.05,
-        "Pension": 0.03,
-        "Business/self-employment": 0.02,
-    },
-    "Unemployed": {
-        "Social transfers": 0.75,
-        "Employment income": 0.15,
-        "Capital income": 0.05,
-        "Pension": 0.03,
-        "Business/self-employment": 0.02,
-    },
-    "Student": {
-        "Social transfers": 0.70,
-        "Employment income": 0.20,
-        "Capital income": 0.05,
-        "Pension": 0.03,
-        "Business/self-employment": 0.02,
-    },
-    "Retired": {
-        "Pension": 0.80,
-        "Capital income": 0.10,
-        "Social transfers": 0.07,
-        "Employment income": 0.02,
-        "Business/self-employment": 0.01,
-    },
-}
-
-# Age groups used in the income_source_by_employment_age key
-_INCOME_SOURCE_AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85"]
-
-
-def _build_income_source_fallback() -> dict[tuple[str, str], dict[str, float]]:
-    """Construct fallback income_source_by_employment_age dict."""
-    result: dict[tuple[str, str], dict[str, float]] = {}
-    for emp_status, dist in _INCOME_SOURCE_FALLBACK.items():
-        for age_group in _INCOME_SOURCE_AGE_GROUPS:
-            result[(emp_status, age_group)] = dict(dist)
-    return result
 
 
 class SSBFetchService:
@@ -376,27 +317,17 @@ class SSBFetchService:
     def fetch_parental_structure(client: SSBPxWebClient) -> tuple[dict, str]:
         """Fetch family type distribution (table 06083, national).
 
-        Falls back to a simplified 4-category uniform approximation if the API
-        call fails or returns empty data, logging a WARNING.
+        Raises loudly on API error or parse failure — no synthetic fallback.
         """
-        try:
-            query_params = {
-                "Region": [REGION_WHOLE_COUNTRY],
-                "FamilieType": ["001", "002", "003", "004", "005", "006", "007", "008", "009"],
-                "ContentsCode": ["Familier"],
-                "Tid": ["2023"],
-            }
-            raw = client.fetch_table(PARENTAL_STRUCTURE_TABLE, query_params)
-            result = parse_parental_structure(raw)
-            return result, PARENTAL_STRUCTURE_TABLE
-        except Exception as exc:
-            logger.warning(
-                "SSBFetchService.fetch_parental_structure: API call failed (%s). "
-                "Using simplified 4-category fallback distribution. "
-                "This substitution is intentional for sparse SSB dimensions.",
-                exc,
-            )
-            return dict(_FALLBACK_PARENTAL_STRUCTURE), PARENTAL_STRUCTURE_TABLE + "#fallback"
+        query_params = {
+            "Region": [REGION_WHOLE_COUNTRY],
+            "FamilieType": ["001", "002", "003", "004", "005", "006", "007", "008", "009"],
+            "ContentsCode": ["Familier"],
+            "Tid": ["2023"],
+        }
+        raw = client.fetch_table(PARENTAL_STRUCTURE_TABLE, query_params)
+        result = parse_parental_structure(raw)
+        return result, PARENTAL_STRUCTURE_TABLE
 
     @staticmethod
     def fetch_socioeconomic(client: SSBPxWebClient) -> tuple[dict, str]:
@@ -417,26 +348,6 @@ class SSBFetchService:
         raw = client.fetch_table(SOCIOECONOMIC_TABLE, query_params)
         result = parse_socioeconomic(raw)
         return result, SOCIOECONOMIC_TABLE
-
-    @staticmethod
-    def fetch_income_source_by_employment_age(
-        client: SSBPxWebClient,
-    ) -> tuple[dict, str]:
-        """Return approximate income source distributions by employment status and age.
-
-        No SSB PxWebApi v2 table provides income component shares conditioned
-        jointly on employment status and age group at national level. This method
-        always returns the approximate distributions documented in
-        ``config/comparison/category_mappings/ssb/`` and logs a WARNING.
-        """
-        logger.warning(
-            "SSBFetchService.fetch_income_source_by_employment_age: No SSB PxWebApi v2 "
-            "table provides income-source shares conditioned jointly on employment status "
-            "and age group. Returning documented approximate distributions from "
-            "category_mappings.json. This is intentional — not a silent fallback."
-        )
-        result = _build_income_source_fallback()
-        return result, "ssb_income_source#approximate"
 
     @staticmethod
     def fetch_birth_country_detail(client: SSBPxWebClient) -> tuple[dict, str]:
@@ -537,12 +448,10 @@ class SSBFetchService:
         socioeconomic, tag_socioeconomic = SSBFetchService.fetch_socioeconomic(client)
         logger.info("  socioeconomic OK  (%d categories)", len(socioeconomic))
 
-        income_source_by_employment_age, tag_income = (
-            SSBFetchService.fetch_income_source_by_employment_age(client)
-        )
-        logger.info(
-            "  income_source_by_employment_age OK  (%d keys)", len(income_source_by_employment_age)
-        )
+        # income_source_by_employment_age is dropped: no SSB PxWebApi v2 table
+        # provides income-component shares conditioned jointly on employment
+        # status and age group, and the no-synthetic-distributions rule forbids
+        # inventing one. (Italy drops this field identically.)
 
         birth_country_detail, tag_birth_country = SSBFetchService.fetch_birth_country_detail(client)
         logger.info("  birth_country_detail OK  (%d keys)", len(birth_country_detail))
@@ -560,7 +469,6 @@ class SSBFetchService:
             tag_household,
             tag_parental,
             tag_socioeconomic,
-            tag_income,
             tag_birth_country,
         )
 
@@ -579,7 +487,7 @@ class SSBFetchService:
             employment_type_by_age=employment_type_by_age,
             housing_tenure=housing_tenure,
             household_size=household_size,
-            income_source_by_employment_age=income_source_by_employment_age,
+            income_source_by_employment_age={},
             birth_country_detail=birth_country_detail,
             ethnicity_map={},
             tables_used=tables_used,

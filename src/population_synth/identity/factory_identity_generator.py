@@ -1,3 +1,12 @@
+"""Factory for selecting an identity generation strategy at runtime.
+
+Defines ``FactoryIdentityGenerator``, which maps a mode string to a
+concrete ``BaseIdentityGenerator`` subclass via a central registry:
+``batch`` -> ``NarrativeGeneratorBatch`` and ``configurable`` ->
+``IdentityGeneratorConfigurable``. ``create_generator`` instantiates the
+chosen strategy with an injected ``LLMClient``.
+"""
+
 from __future__ import annotations
 
 from population_synth.clients.llm_protocol import LLMClient

@@ -1,0 +1,10 @@
+{
+  "description": "Primary income source. SSB PxWebApi v2 provides no table for income-component shares conditioned jointly on employment status and age group, and the no-synthetic-distributions rule (see CLAUDE.md) forbids inventing one. The Norwegian generator therefore DROPS this field (income_source_by_employment_age is empty), matching the Italian generator. No income_source is emitted for SSB personas, so there is nothing to normalise here.",
+  "output_categories": [
+    "Employment income",
+    "Business/self-employment",
+    "Pension",
+    "Social transfers",
+    "Capital income"
+  ]
+}

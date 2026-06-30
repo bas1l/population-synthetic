@@ -1,0 +1,22 @@
+name: "Claude Sonnet — all_generate_pick"
+
+model_config:
+  provider: "claude"
+  model: "sonnet"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+
+parameters:
+  mode: "configurable"
+  config: "config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json"
+  strategy: "config/synthetic/axes/strategies/all_generate_pick.yaml"
+  log_llm: true
+  output: "identity.json"
+  parallel:
+    n: 100
+    workers: 8
+    output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/01_Raw/seed_023_all_generate_pick_sonnet"
+  comparison_output_dir: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/03_Analysis/seed_023_all_generate_pick_sonnet"

@@ -1,3 +1,11 @@
+"""DagGraphView — interactive view of a strategy's category dependency DAG.
+
+``DagGraphView`` (a ``QGraphicsView``, aliased ``DagGraphWidget``) reads a
+strategy JSON's ``categories``, builds ``DagCategoryNode``/``DagEdge`` items,
+and lays them out per connected component via grandalf's Sugiyama layout. It
+supports zoom, middle-button pan, and persists manual node positions to a
+``.layout.json`` sidecar.
+"""
 import json
 import math
 from pathlib import Path

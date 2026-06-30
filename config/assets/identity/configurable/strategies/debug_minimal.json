@@ -1,7 +1,0 @@
-{
-  "description": "2-category debug strategy. Tests session isolation with minimum calls (2 categorical × 1 LLM call = 2 calls per identity).",
-  "categories": {
-    "biological_sex": { "method": "pick", "depends_on": [] },
-    "birth_location":  { "method": "pick", "depends_on": [] }
-  }
-}

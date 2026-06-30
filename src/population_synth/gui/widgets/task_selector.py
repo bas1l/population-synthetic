@@ -1,3 +1,9 @@
+"""TaskSelector — left-column action chooser with Run/Abort controls.
+
+``TaskSelector`` is a ``QWidget`` presenting launcher actions as grouped
+exclusive ``QRadioButton`` entries under section headers, plus Run and Abort
+buttons. It emits ``action_changed``, ``run_clicked``, and ``abort_clicked``.
+"""
 from __future__ import annotations
 
 from PyQt5.QtCore import pyqtSignal

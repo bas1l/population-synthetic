@@ -203,7 +203,7 @@ FAMILIETYPE_CODES = {
 #                 ContentsCode ("Personar"), Tid (year)
 # Note: No per-employment-status or per-age cross-tab available in SSB PxWebApi v2.
 #       income_source_by_employment_age uses the approximate distributions in
-#       config/comparison/category_mappings/ssb/income_source.json.
+#       config/mapping/ssb/income_source.json.
 # ---------------------------------------------------------------------------
 SOCIOECONOMIC_TABLE = "06655"
 

@@ -1,3 +1,9 @@
+"""Static constants for the Swedish (SCB) population layer.
+
+Holds SCB PxWeb table IDs, county and birth-country code lists, and the
+income-bracket definitions used by the Sweden fetch service and parsers.
+These are structural identifiers only, not probability values.
+"""
 COUNTY_CODES = [
     "01", "03", "04", "05", "06", "07", "08", "09", "10",
     "12", "13", "14", "17", "18", "19", "20", "21", "22", "23", "24", "25",

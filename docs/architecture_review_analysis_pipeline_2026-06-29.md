@@ -1,8 +1,8 @@
 # Engineering Review — `analysis/` Pipeline (LLM Run Analytics)
 
 **Date:** 2026-06-29
-**Scope:** `src/population_synth/analysis/` and its orchestrators (`scripts/analyze_run.py`,
-`scripts/compare_runs.py`, `config/analyze_defaults.yaml`).
+**Scope:** `src/population_synth/analysis/` and its orchestrators (`scripts/analyze/analyze_run.py`,
+`scripts/analyze/compare_runs.py`, `config/analyze_defaults.yaml`).
 **Type:** Engineering review — code architecture and software design, with concrete findings,
 recommendations, and a curated learning list. Not an academic critique.
 
@@ -110,8 +110,8 @@ filesystem.
 | `charts.py` | Render up to 9 per-run analytics PNGs; token-gated charts skipped when no token data. | `plot_run_charts()` (`:460`) dispatching nine `_plot_*` functions | **Tight to matplotlib** (presentation layer — expected). |
 | `run_comparison.py` | Cross-run statistics: load records, run Kruskal–Wallis + Dunn (Holm), build model×method matrix. | `load_run_records()` (`:184`), `build_comparison()` (`:392`), `kruskal_test()` (`:245`), `dunn_posthoc()` (`:276`), `write_comparison_json()` (`:509`) | **Tight to scipy/numpy**; **one domain import** — `identity.manifest_loader.discover_axis_values`. |
 | `comparison_charts.py` | Render cross-run box plots (with significance brackets), mean±SD bars, and model×method heatmaps. | `plot_run_comparison()` (`:293`) | **Tight to matplotlib + numpy**; no internal imports. |
-| `scripts/analyze_run.py` | CLI orchestrator for stages 1–4; single-persona, batch, and `--all` modes; config-derived output paths. | `_compute_run_metrics()` (`:210`), `_process_batch_dir()` (`:168`), `_run_all()` (`:453`) | **Orchestrator** — imports all analysis modules + `yaml`. |
-| `scripts/compare_runs.py` | CLI orchestrator for stage 5. | `main()` (`:86`) | **Orchestrator** — imports `run_comparison`, `comparison_charts`, `yaml`. |
+| `scripts/analyze/analyze_run.py` | CLI orchestrator for stages 1–4; single-persona, batch, and `--all` modes; config-derived output paths. | `_compute_run_metrics()` (`:210`), `_process_batch_dir()` (`:168`), `_run_all()` (`:453`) | **Orchestrator** — imports all analysis modules + `yaml`. |
+| `scripts/analyze/compare_runs.py` | CLI orchestrator for stage 5. | `main()` (`:86`) | **Orchestrator** — imports `run_comparison`, `comparison_charts`, `yaml`. |
 
 **Inline observations.**
 
@@ -211,7 +211,7 @@ percentile convention and document it.
 
 ### 6.3 No automated tests
 
-There is no `tests/` directory; the only `test_*` file in the repo is `scripts/test_istat_discovery.py`,
+There is no `tests/` directory; the only `test_*` file in the repo is `scripts/dev/test_istat_discovery.py`,
 an ISTAT API probe unrelated to `analysis/`. The parse→join→aggregate core is the most testable code
 in the project — pure functions with dict in / dict out — yet the correctness of the statistical
 output (entropy, percentiles, Dunn/Holm p-values) is entirely unverified.
@@ -358,6 +358,6 @@ Good Enough Practices / Turing Way (lock in reproducibility and output provenanc
 - `compute_metrics` length, the triplicated median/percentile, the ±2 s parallel join, and the
   absence of a `tests/` directory were each confirmed against source during review
   (`aggregator.py:164–514`, `aggregator.py:83–103` + `charts.py:29–45`, `analyze_run.py:189–205`;
-  `Glob "tests/**"` → none, only `scripts/test_istat_discovery.py`).
+  `Glob "tests/**"` → none, only `scripts/dev/test_istat_discovery.py`).
 - Line numbers are accurate as of 2026-06-29 on branch `feature/italy-identity-comparison-pipeline`
   and will drift as the files change; treat them as anchors, not guarantees.

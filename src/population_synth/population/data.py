@@ -1,3 +1,11 @@
+"""Shared population distribution data structures.
+
+Defines ``PopulationDistributions``, the frozen dataclass that holds the
+per-attribute and conditional probability distributions sampled during
+population generation, plus ``RawCategory``, a ``TypedDict`` describing a
+raw API category entry. Shared across all country-specific modules.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

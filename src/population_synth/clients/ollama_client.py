@@ -1,3 +1,9 @@
+"""OllamaClient — HTTP client for a self-hosted Ollama server.
+
+Defines ``OllamaClient``, which targets the native POST /api/chat endpoint
+of an Ollama REST server, satisfies the shared LLMClient protocol, and adds
+startup validation, retry with backoff, and per-call provenance metadata.
+"""
 from __future__ import annotations
 
 import copy

@@ -20,7 +20,7 @@ from population_synth._paths import PROJECT_ROOT
 
 from .pxweb_client import BasePxWebClient
 
-_DEFAULT_CACHE_DIR = PROJECT_ROOT / "config" / "assets" / "scb_cache"
+_DEFAULT_CACHE_DIR = PROJECT_ROOT / "config" / "database" / "caches" / "scb"
 _BASE_URL = "https://api.scb.se/OV0104/v1/doris/en/ssd/"
 
 

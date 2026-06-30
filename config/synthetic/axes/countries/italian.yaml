@@ -1,0 +1,4 @@
+id: "italian"
+label: "Italy"
+parameters:
+  config: "config/synthetic/simulation_configs/simulation_config_005_italian_generative.json"

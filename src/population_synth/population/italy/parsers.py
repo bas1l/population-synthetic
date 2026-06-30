@@ -1,3 +1,10 @@
+"""Parsers turning raw ISTAT/Eurostat responses into distributions.
+
+Converts ISTAT SDMX CSV rows and Eurostat JSON-stat 2.0 payloads into the
+normalised probability dictionaries consumed by the Italy fetch service.
+Includes helpers for extracting observation values and selecting the
+latest annual time period from SDMX rows.
+"""
 from __future__ import annotations
 
 import logging
@@ -393,7 +400,7 @@ def parse_education_by_age(rows: list[dict]) -> dict[tuple[str, str], dict[str, 
     if not accumulator:
         raise ValueError(
             "No education data parsed from ISTAT 52_1194 CSV response. "
-            "Clear config/assets/istat_cache/ and re-run to fetch live data."
+            "Clear config/database/caches/istat/ and re-run to fetch live data."
         )
 
     result: dict[tuple[str, str], dict[str, float]] = {}
@@ -483,12 +490,12 @@ def parse_employment_by_sex_education(
     if not total_by_sex_edu:
         raise ValueError(
             "No total population data parsed from ISTAT 52_1194 for employment "
-            "rate derivation. Clear config/assets/istat_cache/ and re-run."
+            "rate derivation. Clear config/database/caches/istat/ and re-run."
         )
     if not employed_by_sex_edu:
         raise ValueError(
             "No employed data parsed from ISTAT 150_938 for employment rate "
-            "derivation. Clear config/assets/istat_cache/ and re-run."
+            "derivation. Clear config/database/caches/istat/ and re-run."
         )
 
     result: dict[str, dict[str, dict[str, float]]] = {}
@@ -558,7 +565,7 @@ def parse_socioeconomic(rows: list[dict]) -> dict[tuple[str, str], dict[str, flo
     if not all_incomes:
         raise ValueError(
             "No income data parsed from ISTAT 32_292 CSV response. "
-            "Clear config/assets/istat_cache/ and re-run to fetch live data."
+            "Clear config/database/caches/istat/ and re-run to fetch live data."
         )
 
     global_median = sorted(all_incomes)[len(all_incomes) // 2]
@@ -737,7 +744,7 @@ def parse_industry_sector(rows: list[dict]) -> dict[str, float]:
     if not found_any:
         raise ValueError(
             "No industry sector data parsed from ISTAT 150_938 OCCUPATION_2011 CSV. "
-            "Clear config/assets/istat_cache/ and re-run to fetch live data."
+            "Clear config/database/caches/istat/ and re-run to fetch live data."
         )
 
     total = sum(accumulator.values()) or 1.0
@@ -827,7 +834,7 @@ def parse_employment_type_by_age(rows: list[dict]) -> dict[tuple[str, str], dict
     if not found_any:
         raise ValueError(
             "No employment type data parsed from ISTAT 150_938 CSV. "
-            "Clear config/assets/istat_cache/ and re-run to fetch live data."
+            "Clear config/database/caches/istat/ and re-run to fetch live data."
         )
 
     normalized: dict[tuple[str, str], dict[str, float]] = {}

@@ -131,8 +131,10 @@ def discover_axis_values(axis: str) -> list[dict]:
     """Return sorted list of parsed YAML dicts for all files in a config axis directory."""
     if axis not in VALID_AXES:
         raise ValueError(f"axis must be one of {VALID_AXES}, got {axis!r}")
-    axis_dir = PROJECT_ROOT / "config" / axis
-    files = sorted(axis_dir.glob("*.yaml"))
+    axis_dir = PROJECT_ROOT / "config" / "synthetic" / "axes" / axis
+    # Files prefixed with "_" are co-located definitions that are not selectable
+    # axis options (e.g. the debug-only and compared-only strategies); skip them.
+    files = sorted(f for f in axis_dir.glob("*.yaml") if not f.name.startswith("_"))
     results = []
     for f in files:
         with open(f, "r", encoding="utf-8") as fh:
@@ -145,10 +147,10 @@ def discover_axis_values(axis: str) -> list[dict]:
 
 def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> ManifestConfig:
     """Compose a ManifestConfig from axis files and experiment defaults."""
-    defaults_path = PROJECT_ROOT / "config" / "experiment_defaults.yaml"
-    model_path = PROJECT_ROOT / "config" / "models" / f"{model_id}.yaml"
-    strategy_path_file = PROJECT_ROOT / "config" / "strategies" / f"{strategy_id}.yaml"
-    country_path = PROJECT_ROOT / "config" / "countries" / f"{country_id}.yaml"
+    defaults_path = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
+    model_path = PROJECT_ROOT / "config" / "synthetic" / "axes" / "models" / f"{model_id}.yaml"
+    strategy_path_file = PROJECT_ROOT / "config" / "synthetic" / "axes" / "strategies" / f"{strategy_id}.yaml"
+    country_path = PROJECT_ROOT / "config" / "synthetic" / "axes" / "countries" / f"{country_id}.yaml"
 
     for label, path in (
         ("experiment_defaults", defaults_path),
@@ -197,7 +199,10 @@ def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> Manife
     parallel_workers = model_data["parameters"]["parallel"]["workers"]
 
     config_path = _resolve_path(country_data["parameters"]["config"])
-    strategy_path = _resolve_path(strategy_data["parameters"]["strategy"])
+    # The axis strategy yaml IS the strategy definition (single source of truth):
+    # it carries the `categories` dict the generator reads, so the file itself is
+    # the strategy path -- there is no separate strategy_defs json to point at.
+    strategy_path = strategy_path_file.resolve()
 
     slug = f"{country_id}_{strategy_id}_{model_id}"
     parallel_output_dir = _resolve_path(f"{output_base}/01_Raw/{slug}")
