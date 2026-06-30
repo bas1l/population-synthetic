@@ -1,3 +1,10 @@
+"""OpenAICompatClient — client for any OpenAI-compatible provider.
+
+Defines ``OpenAICompatClient``, which calls /v1/chat/completions via the
+OpenAI SDK for providers such as Mistral, OVHcloud, and Regolo.ai. Satisfies
+the shared LLMClient protocol with strict JSON-schema support, retry with
+backoff, and per-call provenance metadata.
+"""
 from __future__ import annotations
 
 import copy

@@ -1,3 +1,11 @@
+"""Incremental JSONL logging of LLM interactions during generation.
+
+Defines ``LLMInteractionEntry``, the per-call record (category, method,
+step, prompt, raw response, parsed value, error, and correlation keys),
+and ``LLMInteractionCollector``, which writes each entry to disk as a
+JSONL line immediately so the log survives crashes mid-run.
+"""
+
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime

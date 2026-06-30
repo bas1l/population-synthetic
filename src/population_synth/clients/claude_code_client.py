@@ -1,3 +1,10 @@
+"""ClaudeCodeClient — persistent `claude` CLI subprocess LLM wrapper.
+
+Defines ``ClaudeCodeClient``, which keeps one `claude` process alive per
+instance, streams NDJSON prompts over stdin/stdout, and exposes the shared
+LLMClient protocol interface with retry, provenance metadata, and tool
+lock-down.
+"""
 from __future__ import annotations
 
 import copy

@@ -1,3 +1,12 @@
+"""Shared utilities for population sampling.
+
+Provides the canonical age-group definitions (``VALID_AGE_GROUPS``,
+``AGE_GROUP_BOUNDS``) and helpers used across country modules:
+``age_to_group`` and ``resolve_age_group`` map ages or labels to a group,
+and ``sample_from`` draws a categorical value from a probability dict
+using a NumPy random generator.
+"""
+
 from __future__ import annotations
 
 import numpy as np

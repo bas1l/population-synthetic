@@ -1,3 +1,13 @@
+"""Classify income brackets into four socioeconomic classes.
+
+Maps bracketed income data to Poverty, Working Class, Middle Class, and
+Wealthy using thresholds relative to the median: Eurostat AROP (0.60x)
+and OECD/Pew middle-class bands (1.00x, 2.00x). ``median_from_brackets``
+estimates the median from bracket midpoints and counts, and
+``classify_brackets`` splits straddling brackets proportionally by width
+to return a probability per class.
+"""
+
 from __future__ import annotations
 
 # Thresholds follow Eurostat AROP (0.60) and OECD/Pew middle-class bands (1.00, 2.00).

@@ -1,3 +1,10 @@
+"""CheckableAxisList — scrollable checkbox list for one selection axis.
+
+``CheckableAxisList`` is a ``QWidget`` holding a titled group box of
+``QCheckBox`` items inside a ``QScrollArea``, with All/None buttons. It backs
+one axis (models, strategies, or countries) and emits ``selection_changed``
+with the checked item IDs.
+"""
 from __future__ import annotations
 
 from PyQt5.QtCore import pyqtSignal

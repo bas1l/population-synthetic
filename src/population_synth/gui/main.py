@@ -1,3 +1,9 @@
+"""Entry point for the Population Synth PyQt5 launcher.
+
+Creates the ``QApplication``, parses ``config/gui/launcher.yaml`` via
+``parse_launcher_config``, and shows the ``LauncherWindow``. Run as
+``python -m population_synth.gui.main``.
+"""
 import sys
 
 from PyQt5.QtGui import QFont
@@ -13,7 +19,7 @@ def main():
     app.setApplicationName("Population Synth Launcher")
     app.setFont(QFont(app.font().family(), 12))
 
-    launcher_yaml = PROJECT_ROOT / "config" / "gui_launcher.yaml"
+    launcher_yaml = PROJECT_ROOT / "config" / "gui" / "launcher.yaml"
     config = parse_launcher_config(launcher_yaml)
 
     window = LauncherWindow(config=config)

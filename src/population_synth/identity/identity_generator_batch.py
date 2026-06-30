@@ -1,3 +1,12 @@
+"""Flat, narrative-based identity generation strategy.
+
+Defines ``NarrativeGeneratorBatch``, a ``BaseIdentityGenerator`` that
+generates an identity from a single text prompt file in one LLM call.
+The raw response is returned under a ``narrative`` key and recorded to
+the interaction collector. ``load_identity`` rehydrates a previously
+saved narrative from JSON.
+"""
+
 from __future__ import annotations
 
 import json

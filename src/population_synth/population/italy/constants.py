@@ -1,3 +1,10 @@
+"""Static constants for the Italian (ISTAT/Eurostat) population layer.
+
+Holds Eurostat JSON-stat dataset IDs, ISTAT SDMX dataflow IDs and their
+date-range constraints, NUTS2 region codes, and code-to-label maps used
+by the Italy fetch service and parsers. These are structural identifiers
+only, not probability values.
+"""
 from __future__ import annotations
 
 from population_synth.population.helpers import VALID_AGE_GROUPS as VALID_AGE_GROUPS  # noqa: F401

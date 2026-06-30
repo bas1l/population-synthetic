@@ -1,3 +1,10 @@
+"""Graphics items for the strategy-DAG view: nodes and edges.
+
+``DagCategoryNode`` is a movable ``QGraphicsRectItem`` rendering one category,
+colour-coded by generation method, with a centred label and click/move
+signals. ``DagEdge`` is a ``QGraphicsPathItem`` drawing a cubic-Bezier
+dependency arrow between two nodes.
+"""
 import math
 
 from PyQt5.QtCore import QObject, QPointF, QRectF, Qt, pyqtSignal

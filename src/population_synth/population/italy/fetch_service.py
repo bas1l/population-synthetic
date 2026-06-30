@@ -1,3 +1,11 @@
+"""Fetches Italian demographic dimensions from ISTAT and Eurostat.
+
+Orchestrates calls to the Eurostat JSON-stat client and the ISTAT SDMX
+client, routes each raw response through the Italy parsers, and assembles
+a fully populated ``PopulationDistributions`` dataclass via ``load_all``.
+Every dimension raises loudly on API error or empty parse; there are no
+synthetic fallback distributions.
+"""
 from __future__ import annotations
 
 import logging

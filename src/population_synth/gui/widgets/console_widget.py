@@ -1,3 +1,10 @@
+"""ConsoleWidget — read-only console pane that streams subprocess output.
+
+``ConsoleWidget`` wraps a dark ``QPlainTextEdit`` with auto-scroll and clear
+controls, distinguishing newline appends from carriage-return in-place line
+updates. ``ProcessOutputReader`` (a ``QThread``) reads the subprocess stdout
+byte-by-byte, strips ANSI codes, and emits per-line signals.
+"""
 import re
 import subprocess
 

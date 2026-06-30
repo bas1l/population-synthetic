@@ -1,3 +1,10 @@
+"""ParameterPanel — dynamic form of CLI-override inputs for an action.
+
+``ParameterPanel`` is a ``QWidget`` that builds a ``QFormLayout`` of typed
+widgets (spin box, checkbox, combo, file picker, line edit) from an action's
+``ActionParameter`` list, seeding defaults from the manifest, and collects the
+entered values as a CLI-override dict.
+"""
 from typing import Any
 
 from PyQt5.QtWidgets import (

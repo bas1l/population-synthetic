@@ -1,3 +1,10 @@
+"""Parsers turning raw SCB PxWeb responses into distributions.
+
+Converts SCB PxWeb JSON table payloads into the normalised probability
+dictionaries consumed by the Sweden fetch service. Handles per-dimension
+category labelling and income-bracket classification into socioeconomic
+classes.
+"""
 from __future__ import annotations
 
 from population_synth.population.helpers import VALID_AGE_GROUPS, resolve_age_group

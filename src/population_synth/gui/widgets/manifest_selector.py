@@ -1,3 +1,10 @@
+"""ExperimentSelector — three checkable axis lists plus run options.
+
+``ExperimentSelector`` is a ``QWidget`` composing three ``CheckableAxisList``
+widgets (models, strategies, countries), a force-reprocessing checkbox, and a
+refresh button. It builds an ``ExperimentSelection``, emits
+``selection_changed``, and persists selections to ``config/gui/state.json``.
+"""
 from __future__ import annotations
 
 import json
@@ -15,7 +22,7 @@ from population_synth.gui.manifest_model import ExperimentSelection, ManifestDis
 from population_synth.gui.widgets.checkable_axis_list import CheckableAxisList
 from population_synth.identity.manifest_loader import discover_axis_values
 
-_STATE_FILE = PROJECT_ROOT / "config" / "gui_state.json"
+_STATE_FILE = PROJECT_ROOT / "config" / "gui" / "state.json"
 
 
 class ExperimentSelector(QWidget):

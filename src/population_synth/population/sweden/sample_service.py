@@ -1,3 +1,10 @@
+"""Conditionally samples one individual from Swedish distributions.
+
+Draws a single synthetic person from the ``PopulationDistributions``
+produced by the Sweden fetch service via a deterministic chained
+sampling sequence, where each attribute is conditioned on prior draws
+(e.g. education given age and sex, employment given education).
+"""
 from __future__ import annotations
 
 import numpy as np

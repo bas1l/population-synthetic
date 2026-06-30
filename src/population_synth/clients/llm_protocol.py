@@ -1,3 +1,9 @@
+"""LLMClient — structural protocol shared by all LLM client wrappers.
+
+Defines the ``LLMClient`` runtime-checkable Protocol that GeminiClient,
+ClaudeCodeClient, OllamaClient, and OpenAICompatClient satisfy, covering
+content generation, config updates, and execution-history accessors.
+"""
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
