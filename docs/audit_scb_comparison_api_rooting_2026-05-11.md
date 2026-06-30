@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-11
 **Auditor:** Claude (Opus 4.7)
-**Scope:** Verify that every field, category, and proportion on the SCB-reference side of the comparison pipeline (`scripts/compare_populations.py` + wrapper `scripts/compare_pipeline_to_scb.py`) traces back to a live SCB PxWeb API table — with no hand-curated injection or aggregation.
+**Scope:** Verify that every field, category, and proportion on the SCB-reference side of the comparison pipeline (`scripts/analyze/compare_populations.py` + wrapper `scripts/analyze/compare_pipeline_to_scb.py`) traces back to a live SCB PxWeb API table — with no hand-curated injection or aggregation.
 **Reference population:** `data/scb_api/scb_population_pop-10000_02.json` ("scb02")
 
 ---
@@ -10,7 +10,7 @@
 ## TL;DR
 
 1. **scb02 itself is clean.** All 15 fields are sampled from distributions populated by live SCB PxWeb fetches in `anxiety_synthetic/scb_population/fetch_service.py`. No hardcoded weights, no static substitutions in the generator. The full per-field distributions (every observed value with count and %) are tabulated in [§ Raw scb02 distributions (input side)](#raw-scb02-distributions-input-side) below.
-2. **The comparison pipeline contaminates the SCB side.** `scripts/compare_populations.py::normalize_scb_to_schema` (lines 95–262) transforms each scb02 record before comparison via `config/assets/scb_reference/category_mappings.json` — a hand-curated JSON.
+2. **The comparison pipeline contaminates the SCB side.** `scripts/analyze/compare_populations.py::normalize_scb_to_schema` (lines 95–262) transforms each scb02 record before comparison via `config/assets/scb_reference/category_mappings.json` — a hand-curated JSON.
 3. **Two violation classes were found**:
    - **Category injection** — 2 fields (`current_environment_type`, `ethnicity`) have **zero SCB API source**.
    - **Aggregation** — 8 fields collapse API-native categories into hand-chosen buckets (education, socioeconomic, parental, industry, household_size, employment_type, birth_country_detail, income_source).
@@ -21,8 +21,8 @@
 ## Methodology
 
 - Direct read of `anxiety_synthetic/scb_population/*.py` (generator side — fetch, sample, parsers, constants, data).
-- Direct read of `scripts/compare_populations.py` (comparison-side normalization).
-- Direct read of `scripts/compare_pipeline_to_scb.py` (wrapper that re-uses the same normalizer).
+- Direct read of `scripts/analyze/compare_populations.py` (comparison-side normalization).
+- Direct read of `scripts/analyze/compare_pipeline_to_scb.py` (wrapper that re-uses the same normalizer).
 - Direct read of `config/assets/scb_reference/category_mappings.json` (hand-curated mappings).
 - Inspection of `data/scb_api/scb_population_pop-10000_02.json` metadata header and sample records.
 - Cross-checked against `parsers.py::parse_urbanization_by_county` (orphan code) and `constants.py::URBANIZATION_TABLE` (defined but unused).
@@ -238,7 +238,7 @@ Note: `birth_country_detail` is sampled for every record (denominator = 10,000),
 
 ## Generator Side — Clean (verification)
 
-`scripts/generate_scb_population.py` → `FetchService.load_all()` → `SampleService.sample_one()` produces 15 fields per person. Every field's value is drawn from a `PopulationDistributions` dict populated entirely by live SCB PxWeb API responses:
+`scripts/generate/generate_scb_population.py` → `FetchService.load_all()` → `SampleService.sample_one()` produces 15 fields per person. Every field's value is drawn from a `PopulationDistributions` dict populated entirely by live SCB PxWeb API responses:
 
 | Field in scb02 | SCB Table |
 |---|---|
@@ -267,7 +267,7 @@ Note: `birth_country_detail` is sampled for every record (denominator = 10,000),
 
 ## Comparison Side — Violations
 
-All transformations below happen in `scripts/compare_populations.py::normalize_scb_to_schema` (lines 95–262), driven by `config/assets/scb_reference/category_mappings.json`. The wrapper script `scripts/compare_pipeline_to_scb.py:40` imports the same function, so all violations propagate.
+All transformations below happen in `scripts/analyze/compare_populations.py::normalize_scb_to_schema` (lines 95–262), driven by `config/assets/scb_reference/category_mappings.json`. The wrapper script `scripts/analyze/compare_pipeline_to_scb.py:40` imports the same function, so all violations propagate.
 
 ### Severity 1 — Pure injection (no SCB API source)
 
@@ -442,9 +442,9 @@ The JSON's own description (`category_mappings.json:227`) admits this should com
 
 | File | Role |
 |---|---|
-| `scripts/compare_populations.py` | `normalize_scb_to_schema()` (lines 95–262) — entire contamination surface |
+| `scripts/analyze/compare_populations.py` | `normalize_scb_to_schema()` (lines 95–262) — entire contamination surface |
 | `config/assets/scb_reference/category_mappings.json` | All hand-curated transforms |
-| `scripts/compare_pipeline_to_scb.py:40` | Wrapper that imports the normalizer; auto-inherits any fix |
+| `scripts/analyze/compare_pipeline_to_scb.py:40` | Wrapper that imports the normalizer; auto-inherits any fix |
 | `anxiety_synthetic/scb_population/parsers.py:245` | Orphan `parse_urbanization_by_county()` |
 | `anxiety_synthetic/scb_population/fetch_service.py:282` | `load_all()` — would need a `fetch_urbanization_by_county()` call to back a real env_type |
 | `anxiety_synthetic/scb_population/constants.py:23` | `URBANIZATION_TABLE` defined but unused |
@@ -453,8 +453,8 @@ The JSON's own description (`category_mappings.json:227`) admits this should com
 
 ## Verification procedure for any future remediation
 
-1. Regenerate scb02 if generator changed: `python scripts/generate_scb_population.py --n 10000 --seed 3002120581 --output data/scb_api/scb_population_pop-10000_02.json`.
-2. Run one seed through comparison: `python scripts/compare_pipeline_to_scb.py --seed-root <seed_007 path>` and open the JSON report.
+1. Regenerate scb02 if generator changed: `python scripts/generate/generate_scb_population.py --n 10000 --seed 3002120581 --output data/scb_api/scb_population_pop-10000_02.json`.
+2. Run one seed through comparison: `python scripts/analyze/compare_pipeline_to_scb.py --seed-root <seed_007 path>` and open the JSON report.
 3. For each compared field, the SCB-side category list in the report must equal the raw label set returned by the corresponding SCB query (modulo pure 1-to-1 rewrites). No category may appear that wasn't fetched; no API category may be silently merged with another.
 4. Re-run the comparison loop across seeds 007–013 and confirm no regressions in the statistical tests.
 

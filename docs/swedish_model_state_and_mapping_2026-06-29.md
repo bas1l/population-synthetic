@@ -36,7 +36,7 @@ the swedish axis runs.)
 | Path | Function | Behaviour on an unmapped value |
 |---|---|---|
 | Extractor (pipeline → schema) | `extractor.py::_extract_flat` | Marks value **`"Non-standard label"`**, appends to `unmapped`, logs a warning |
-| Normalizer (raw SCB / re-normalize) | `normalizer.py::normalize_raw_to_schema` | **Passes the raw string through unchanged** (`_ci_get` returns `raw` when no key matches) — never flagged |
+| Normalizer (raw SCB / re-normalize) | `normalizer.py::normalize_raw_to_schema` (facade; impl now `reference_mapper/base.py::BaseReferenceMapper`) | **Passes the raw string through unchanged** (`_ci_get` returns `raw` when no key matches) — never flagged |
 
 **Implication:** comparison reports under-count unmapped values whenever the normalizer path
 is used, because an unmapped label silently becomes a "real" category in the marginals
@@ -190,6 +190,6 @@ This report is reproducible from existing artifacts (read-only):
 - Live unmapped labels: the per-run JSON comparison report for
   `swedish_all_pick_ollama_deepseek_r1_14b` (`unmapped_categories` / `unknown_count_*`
   fields), regenerated via
-  `python scripts/compare_pipeline_to_scb.py --model-id ollama_deepseek_r1_14b --strategy-id all_pick`.
+  `python scripts/analyze/compare_pipeline_to_scb.py --model-id ollama_deepseek_r1_14b --strategy-id all_pick`.
 - Code behaviour: `normalizer.py::normalize_raw_to_schema` (raw pass-through via `_ci_get`)
   vs `extractor.py::_extract_flat` ("Non-standard label" + `unmapped` list).
