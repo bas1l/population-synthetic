@@ -26,7 +26,6 @@ Usage:
         --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml
 
 Modes:
-    batch         Single-prompt narrative-style generation.
     configurable  Configurable strategy with simulation config file (requires --strategy).
 
 Providers:
@@ -69,8 +68,8 @@ def main() -> None:
     parser.add_argument(
         "--mode",
         default=None,
-        choices=["batch", "configurable"],
-        help="Identity generation strategy: batch or configurable",
+        choices=["configurable"],
+        help="Identity generation strategy (currently only 'configurable' is supported)",
     )
     parser.add_argument(
         "--config",

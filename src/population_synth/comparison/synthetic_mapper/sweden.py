@@ -11,10 +11,7 @@ class SwedishSyntheticMapper(BaseSyntheticMapper):
     """Map Swedish (SCB) pipeline identities to the canonical schema.
 
     Country divergence is entirely the mapping directory (``config/mapping/scb/``):
-    every label and keyword cascade lives there.  The only Swedish-specific class
-    signal is narrative/batch support, which the base ``map_individual`` consults.
+    every label and keyword cascade lives there.
     """
 
     MAPPINGS_SUBDIR: ClassVar[str] = "scb"
-
-    SUPPORTS_NARRATIVE: ClassVar[bool] = True

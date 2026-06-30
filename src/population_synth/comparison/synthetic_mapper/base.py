@@ -40,10 +40,12 @@ from collections.abc import Callable
 from typing import Any, ClassVar
 
 from population_synth._paths import PROJECT_ROOT
-from population_synth.comparison.extract.batch import _extract_batch
-from population_synth.comparison.extract.mappings import _repair_utf8_double_encoding, _sep_norm
-from population_synth.comparison.extract.normalizers_se import _fuzzy_match
 from population_synth.comparison.normalizer import load_mappings
+from population_synth.comparison.synthetic_mapper._text_helpers import (
+    _fuzzy_match,
+    _repair_utf8_double_encoding,
+    _sep_norm,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,56 +56,12 @@ _SKIP = object()
 
 
 # ---------------------------------------------------------------------------
-# Shared country-token sets (used by both countries' birth-location logic)
-# ---------------------------------------------------------------------------
-
-_EUROPEAN_COUNTRIES = {
-    "finland", "finl", "norge", "norway", "danmark", "denmark", "island", "iceland",
-    "polen", "poland", "tyskland", "germany", "frankrike", "france", "italien", "italy",
-    "spanien", "spain", "rumänien", "romania", "ungern", "hungary", "tjeckien", "czech",
-    "greece", "grekland", "portugal", "österrike", "austria", "belgien", "belgium",
-    "nederländerna", "netherlands", "holland", "ukraine", "ukraina", "serbien", "serbia",
-    "kroatien", "croatia", "bosnien", "bosnia", "albanien", "albania", "bulgarien", "bulgaria",
-    "slovakien", "slovakia", "litauen", "lithuania", "lettland", "latvia", "estland", "estonia",
-    "kosovo", "nordmakedon", "monteneg", "moldov", "vitryssland", "belarus",
-    "united kingdom", "uk", "england", "scotland", "wales", "ireland", "irland",
-    "schweiz", "switzerland", "slovenien", "slovenia",
-}
-
-_NON_EUROPEAN_COUNTRIES = {
-    "irak", "iraq", "syrien", "syria", "somalia", "iran", "afghanistan",
-    "bagdad", "damaskus", "teheran", "kabul", "mogadishu", "eritrea",
-    "etiopien", "ethiopia", "kina", "china", "indien", "india", "pakistan",
-    "turkiet", "turkey", "libanon", "lebanon", "palestina", "palestine",
-    "marocko", "morocco", "tunisien", "tunisia", "algeriet", "algeria",
-    "nigeria", "kenya", "tanzania", "usa", "united states", "brasil", "brazil",
-    "mexiko", "mexico", "chile", "colombia", "argentina", "vietnam", "thailand",
-    "filippinerna", "philippines", "japan", "sydkorea", "south korea",
-    "middle east", "mellanöstern", "north africa", "nordafrika", "sub-saharan",
-    "yemen", "jemen", "libyen", "libya", "egypten", "egypt", "jordanien", "jordan",
-}
-
-
-# ---------------------------------------------------------------------------
-# Format detection / shared tokens
+# Format detection
 # ---------------------------------------------------------------------------
 
 def is_flat_identity(identity: dict) -> bool:
     """Return True for the flat / configurable identity.json format."""
     return "age" in identity and not any(k.startswith("level_") for k in identity) and "narrative" not in identity
-
-
-def match_common_sex(sex_lower: str) -> str | None:
-    """Resolve the English/Swedish biological-sex tokens shared by both countries."""
-    if any(k in sex_lower for k in ("female", "kvinna", "kvinnlig", "kvinnor", "flicka", "tjej", "hona", "woman")):
-        return "Female"
-    if sex_lower in ("xx", "hon", "f"):
-        return "Female"
-    if any(k in sex_lower for k in ("male", "pojke", "kille", "manlig")):
-        return "Male"
-    if sex_lower in ("man", "xy", "m") or "kön man" in sex_lower or sex_lower == "män":
-        return "Male"
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -408,17 +366,12 @@ class AbstractSyntheticMapper(ABC):
     """Per-country contract for mapping a raw pipeline population to schema.
 
     A subclass supplies :data:`MAPPINGS_SUBDIR` (the mapping directory that drives
-    the whole engine) and, optionally, flips :data:`SUPPORTS_NARRATIVE` on; the
-    per-record orchestration lives entirely in :class:`BaseSyntheticMapper`.
+    the whole engine); the per-record orchestration lives entirely in
+    :class:`BaseSyntheticMapper`.
     """
 
     #: Category-mappings sub-directory under ``config/mapping/`` (e.g. ``"scb"``).
     MAPPINGS_SUBDIR: ClassVar[str]
-
-    #: Whether this country supports the narrative/batch identity format.  Only
-    #: the Swedish mapper sets this; the base ``map_individual`` consults it to
-    #: dispatch a narrative identity (Swedish) or raise (every other country).
-    SUPPORTS_NARRATIVE: ClassVar[bool] = False
 
     @abstractmethod
     def map_individual(self, identity: dict[str, Any], persona_id: str) -> dict[str, Any] | None: ...
@@ -478,15 +431,11 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
     def map_individual(self, identity: dict, persona_id: str) -> dict[str, Any] | None:
         """Map a single raw identity dict to the canonical schema dict.
 
-        Auto-detects the identity format (narrative vs flat) and returns ``None``
-        for unreadable formats or critically-incomplete personas.  A narrative
-        identity is dispatched to the Swedish-only batch parser when the mapper
-        sets :data:`SUPPORTS_NARRATIVE`; otherwise it raises ``NotImplementedError``.
+        Returns ``None`` for unrecognised formats or critically-incomplete
+        personas.  Only the flat configurable identity format is supported;
+        unrecognised formats (including legacy narrative dicts) are logged as a
+        warning and skipped.
         """
-        if "narrative" in identity:
-            if not self.SUPPORTS_NARRATIVE:
-                raise NotImplementedError("narrative identity parsing is not implemented for this mapper")
-            return _extract_batch(identity, persona_id, self.mappings)
         if not is_flat_identity(identity):
             logger.warning("%s: unrecognised identity format (keys: %s) -- skipping", persona_id, list(identity))
             return None

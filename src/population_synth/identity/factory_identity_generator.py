@@ -2,9 +2,9 @@
 
 Defines ``FactoryIdentityGenerator``, which maps a mode string to a
 concrete ``BaseIdentityGenerator`` subclass via a central registry:
-``batch`` -> ``NarrativeGeneratorBatch`` and ``configurable`` ->
-``IdentityGeneratorConfigurable``. ``create_generator`` instantiates the
-chosen strategy with an injected ``LLMClient``.
+``configurable`` -> ``IdentityGeneratorConfigurable``.
+``create_generator`` instantiates the chosen strategy with an injected
+``LLMClient``.
 """
 
 from __future__ import annotations
@@ -12,22 +12,19 @@ from __future__ import annotations
 from population_synth.clients.llm_protocol import LLMClient
 
 from .base_identity_generator import BaseIdentityGenerator
-from .identity_generator_batch import NarrativeGeneratorBatch
 from .identity_generator_configurable import IdentityGeneratorConfigurable
 
 
 class FactoryIdentityGenerator:
     """
-    Factory architecture for instantiating concrete BaseIdentityGenerator implementations.
-    Centralizes the logic for selecting between batch (narrative) and configurable
-    identity generation strategies.
+    Factory for instantiating concrete BaseIdentityGenerator implementations.
+    The only registered strategy is ``configurable``, which drives generation
+    via a simulation config JSON file and a strategy YAML.
     """
 
     # Central registry mapping identifiers to concrete class types.
-    # Note: 'batch' maps to NarrativeGeneratorBatch as defined in identity_generator_batch.py
     _STRATEGY_MAP: dict[str, type[BaseIdentityGenerator]] = {
-        "batch": NarrativeGeneratorBatch,
-        "configurable": IdentityGeneratorConfigurable
+        "configurable": IdentityGeneratorConfigurable,
     }
 
     @staticmethod
@@ -36,7 +33,7 @@ class FactoryIdentityGenerator:
         Instantiates the appropriate identity generator class based on the provided mode string.
 
         Args:
-            mode (str): The strategy identifier (e.g., 'batch', 'configurable').
+            mode (str): The strategy identifier. Currently only ``'configurable'`` is supported.
             client (LLMClient): The API client dependency required by the generator constructors.
 
         Returns:

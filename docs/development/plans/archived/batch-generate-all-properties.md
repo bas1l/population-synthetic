@@ -1,3 +1,5 @@
+> **Archived 2026-06-30:** Superseded by retire-narrative-batch-mapping — narrative batch generation was retired. A future batch generator should emit flat fields through the config-driven engine and would be a fresh plan.
+
 # Plan: Batch Generation — All Properties At Once
 
 **Date:** 2026-06-30

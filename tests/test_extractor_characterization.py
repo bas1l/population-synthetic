@@ -1,11 +1,12 @@
 """Characterization (golden) tests for :func:`extractor.extract_individual`.
 
 The golden snapshot (``tests/data/extractor/expected_extractor.json``) pins the
-*entire* attribute dict returned for three representative fixtures covering both
-identity formats (batch narrative + flat/configurable) and both countries
-(Swedish + Italian).  It is the safety net proving the ``extractor`` ->
-``extract`` subpackage split is behaviour-preserving: this test must stay green
-and the snapshot must not change.
+*entire* attribute dict returned for two representative fixtures covering the
+flat/configurable identity format across both countries (Swedish + Italian).
+It is the safety net proving the ``extractor`` -> ``extract`` subpackage split
+is behaviour-preserving: this test must stay green and the snapshot must not
+change.  The narrative/batch format is retired; a legacy ``{"narrative": ...}``
+identity now returns ``None`` (warn-and-skip) and has no fixture here.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ _FIXTURE_ROOT = Path(__file__).parent / "data" / "extractor"
 _EXPECTED_PATH = _FIXTURE_ROOT / "expected_extractor.json"
 
 _CASES = [
-    ("persona_batch_se", "swedish"),
     ("persona_flat_se", "swedish"),
     ("persona_flat_it", "italian"),
 ]
@@ -41,7 +41,9 @@ def test_extract_individual_matches_golden(persona: str, country: str):
 def test_extract_population_swedish_collects_individuals():
     pop = extract_population(_FIXTURE_ROOT, country="swedish")
     ids = {ind["id"] for ind in pop["individuals"]}
-    # Both Swedish-format fixtures (batch + flat) extract cleanly under swedish.
-    assert {"persona_batch_se", "persona_flat_se"} <= ids
+    # The flat Swedish fixture extracts cleanly; the narrative fixture is absent
+    # (narrative identities now warn-and-skip, returning None).
+    assert "persona_flat_se" in ids
+    assert "persona_batch_se" not in ids
     assert pop["metadata"]["source"] == "pipeline"
     assert pop["metadata"]["n"] == len(pop["individuals"])

@@ -42,15 +42,14 @@ model_config:
 # SECTION 2: GENERATION PARAMETERS
 # ==============================================================================
 parameters:
-  # [MANDATORY] Generation mode. Valid: "batch", "configurable"
+  # [MANDATORY] Generation mode. Valid: "configurable"
   mode: "configurable"
 
-  # [MANDATORY] Path to the simulation config (configurable mode) or
-  # prompt file (batch mode). Relative to project root.
+  # [MANDATORY] Path to the simulation config file. Relative to project root.
   config: "config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json"
 
   # [CONDITIONAL] Path to the strategy definition file.
-  # Required when mode is "configurable". Ignored for "batch".
+  # Required when mode is "configurable".
   strategy: "config/synthetic/axes/strategies/all_pick.yaml"
 
   # [OPTIONAL] Log raw LLM interactions alongside output. Default: true
