@@ -1,0 +1,99 @@
+{
+  "description": "Primary income source from HE/HE0110/HE0110F/TabVX13InkStruktN — percentage share of each income component, conditional on employment status and broad age group. Values are used as sampling weights.",
+  "scb_table": "HE/HE0110/HE0110F/TabVX13InkStruktN",
+  "scb_income_codes": {
+    "300": "wage and business income",
+    "305": "capital income",
+    "310": "pensions",
+    "315": "sickness and activity compensation",
+    "320": "sickness compensation, parental allowance, labour market assistance etc.",
+    "335": "social assistance"
+  },
+  "scb_employment_codes": {
+    "1000": "gainfully employed",
+    "1700": "non gainfully employed",
+    "1800": "students",
+    "1910": "unemployed",
+    "1930": "retired"
+  },
+  "output_categories": [
+    "Wage / Business",
+    "Capital",
+    "Pension",
+    "Insurance / Allowance",
+    "Social Assistance",
+    "Sickness / Activity Compensation"
+  ],
+  "scb_label_mappings": {
+    "wage and business income": "Wage / Business",
+    "capital income": "Capital",
+    "pensions": "Pension",
+    "sickness compensation, parental allowance, labour market assistance etc.": "Insurance / Allowance",
+    "social assistance": "Social Assistance",
+    "sickness and activity compensation": "Sickness / Activity Compensation"
+  },
+  "pipeline_label_mappings": {
+    "Lön": "Wage / Business",
+    "Lön från anställning": "Wage / Business",
+    "Lön och företagsinkomster": "Wage / Business",
+    "Inkomst från egen verksamhet": "Wage / Business",
+    "Inkomst från eget företag": "Wage / Business",
+    "Företagsinkomst": "Wage / Business",
+    "Näringsverksamhet": "Wage / Business",
+    "Frilansinkomst": "Wage / Business",
+    "Kapitalinkomster": "Capital",
+    "Kapitalinkomst": "Capital",
+    "Aktieutdelning": "Capital",
+    "Räntor och utdelningar": "Capital",
+    "Pension": "Pension",
+    "Allmän pension": "Pension",
+    "Tjänstepension": "Pension",
+    "Privat pension": "Pension",
+    "Ålderspension": "Pension",
+    "A-kassa": "Insurance / Allowance",
+    "Arbetslöshetsersättning": "Insurance / Allowance",
+    "Föräldrapenning": "Insurance / Allowance",
+    "Sjukpenning": "Insurance / Allowance",
+    "Studiemedel": "Insurance / Allowance",
+    "Studiebidrag": "Insurance / Allowance",
+    "Bostadsbidrag": "Insurance / Allowance",
+    "Försörjningsstöd": "Social Assistance",
+    "Socialbidrag": "Social Assistance",
+    "Ekonomiskt bistånd": "Social Assistance",
+    "Sjukersättning": "Sickness / Activity Compensation",
+    "Aktivitetsersättning": "Sickness / Activity Compensation",
+    "Sjuk- och aktivitetsersättning": "Sickness / Activity Compensation"
+  },
+  "employment_label_mappings": {
+    "gainfully employed": "Employed",
+    "non gainfully employed": "Retired",
+    "students": "Student",
+    "unemployed": "Unemployed",
+    "retired": "Retired"
+  },
+  "schema_to_employment_key": {
+    "Employed": "Employed",
+    "Unemployed": "Unemployed",
+    "Student": "Student",
+    "Retired": "Retired"
+  },
+  "scb_age_to_group": {
+    "20-29 years": [
+      "18-24",
+      "25-34"
+    ],
+    "30-49 years": [
+      "35-44",
+      "45-54"
+    ],
+    "50-64 years": [
+      "55-64"
+    ],
+    "65-79 years": [
+      "65-74"
+    ],
+    "80- years": [
+      "75-85"
+    ]
+  }
+}

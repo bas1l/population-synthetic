@@ -1,3 +1,10 @@
+"""ManifestOverview — table previewing selected axis combinations.
+
+``ManifestOverview`` is a ``QWidget`` with a ``QTableWidget`` that lists each
+model/strategy/country combination composed from the current selection, with
+provider, mode, worker, and persona-count columns. ``PersonaCountWorker`` (a
+``QThread``) globs each run's output dir off the UI thread to fill counts.
+"""
 from __future__ import annotations
 
 from pathlib import Path

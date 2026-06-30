@@ -1,0 +1,31 @@
+{
+  "description": "Number of persons in household from BE/BE0101/BE0101S/HushallT03. Marginal distribution. No cross-tab with parental_structure is available at national level in this table.",
+  "scb_table": "BE/BE0101/BE0101S/HushallT03",
+  "scb_codes": {
+    "1P": "1 person",
+    "2P": "2 persons",
+    "3P": "3 persons",
+    "4P": "4 persons",
+    "5P": "5 persons",
+    "6P": "6 persons",
+    "7+P": "7 persons or more"
+  },
+  "output_categories": [
+    "1 person",
+    "2 persons",
+    "3 persons",
+    "4 persons",
+    "5 persons",
+    "6 persons",
+    "7+ persons"
+  ],
+  "scb_label_mappings": {
+    "1 person": "1 person",
+    "2 persons": "2 persons",
+    "3 persons": "3 persons",
+    "4 persons": "4 persons",
+    "5 persons": "5 persons",
+    "6 persons": "6 persons",
+    "7 persons or more": "7+ persons"
+  }
+}

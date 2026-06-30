@@ -1,3 +1,10 @@
+"""ConfigurationPanel — middle column combining selector and parameters.
+
+``ConfigurationPanel`` is a ``QWidget`` that stacks an ``ExperimentSelector``
+(model/strategy/country axes) above a ``ParameterPanel`` (per-action CLI
+overrides), toggling the selector's visibility by whether the action requires
+a manifest and re-emitting ``selection_changed``.
+"""
 from __future__ import annotations
 
 from PyQt5.QtCore import pyqtSignal

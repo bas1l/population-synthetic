@@ -1,3 +1,11 @@
+"""Main launcher window wiring the GUI panels and run orchestration.
+
+``LauncherWindow`` (a ``QMainWindow``) composes the TaskSelector,
+ConfigurationPanel, ManifestOverview, DagGraphWidget and ConsoleWidget, and
+launches generation scripts as subprocesses. ``CombinationRunner`` (a
+``QThread``) runs the cartesian product of selected axes sequentially, with
+process-tree kill on abort.
+"""
 from __future__ import annotations
 
 import os

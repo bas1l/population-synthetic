@@ -1,0 +1,19 @@
+id: "compared_only_generate_evaluate_random_pick"
+label: "Compared Only Generate Evaluate Random Pick"
+description: "SCB-compared categories only (15 of 34). Same generate_evaluate_random_pick method as full strategy but limited to fields the comparison pipeline evaluates. Reduces LLM calls and context noise. ethnicity_broad_global_approx and current_environment_type removed — no longer compared."
+categories:
+  age:                  { method: generate_evaluate_random_pick, depends_on: [] }
+  biological_sex:       { method: generate_evaluate_random_pick, depends_on: [] }
+  region:               { method: generate_evaluate_random_pick, depends_on: [] }
+  birth_location:       { method: generate_evaluate_random_pick, depends_on: [] }
+  birth_country_detail: { method: generate_evaluate_random_pick, depends_on: [birth_location] }
+  civil_status:         { method: generate_evaluate_random_pick, depends_on: [age, biological_sex] }
+  household_size:       { method: generate_evaluate_random_pick, depends_on: [civil_status, age] }
+  education_level:      { method: generate_evaluate_random_pick, depends_on: [age, biological_sex] }
+  employment_status:    { method: generate_evaluate_random_pick, depends_on: [age, education_level, civil_status] }
+  employment_type:      { method: generate_evaluate_random_pick, depends_on: [employment_status] }
+  industry_sector:      { method: generate_evaluate_random_pick, depends_on: [employment_status] }
+  socioeconomic_class:  { method: generate_evaluate_random_pick, depends_on: [employment_status, education_level] }
+  income_source:        { method: generate_evaluate_random_pick, depends_on: [employment_status, socioeconomic_class] }
+  housing_tenure:       { method: generate_evaluate_random_pick, depends_on: [socioeconomic_class, civil_status] }
+  parental_structure:   { method: generate_evaluate_random_pick, depends_on: [] }

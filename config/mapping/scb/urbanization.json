@@ -1,0 +1,42 @@
+{
+  "description": "Swedish urbanization classification to schema labels",
+  "scb_variable": "Tatortsgrad",
+  "mappings": {
+    "urban_metropolis": {
+      "schema_label": "Urban Metropolis",
+      "description": "Storstadskommuner (Stockholm, Gothenburg, Malmö municipalities)",
+      "scb_codes": [
+        "1",
+        "storstad",
+        "metropolitan"
+      ]
+    },
+    "suburban": {
+      "schema_label": "Suburban",
+      "description": "Större städer och täta kommuner",
+      "scb_codes": [
+        "2",
+        "3",
+        "storre stad",
+        "dense"
+      ]
+    },
+    "rural": {
+      "schema_label": "Rural/Countryside",
+      "description": "Övriga kommuner och landsbygd",
+      "scb_codes": [
+        "4",
+        "5",
+        "6",
+        "landsbygd",
+        "rural",
+        "sparse"
+      ]
+    }
+  },
+  "degurba_mappings": {
+    "densely populated area": "Urban Metropolis",
+    "intermediate density area": "Suburban",
+    "thinly populated area": "Rural/Countryside"
+  }
+}

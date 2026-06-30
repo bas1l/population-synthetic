@@ -1,3 +1,10 @@
+"""Launcher config dataclasses parsed from ``config/gui/launcher.yaml``.
+
+Defines ``ActionGroup``, ``ActionEntry``, ``ActionParameter`` and the
+``LauncherConfig`` container, plus ``parse_launcher_config`` which reads the
+YAML into these dataclasses. Supplies the action groups, scripts, and
+parameter definitions that the PyQt5 launcher renders.
+"""
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any

@@ -1,6 +1,6 @@
 """population_synth.analysis.per_run — the per-run analytics pipeline.
 
-Pipeline A (entry point: ``scripts/analyze_run.py``): turn one identity
+Pipeline A (entry point: ``scripts/analyze/analyze_run.py``): turn one identity
 generation run into analytics plus a report. Dataflow:
 
     parse → join → aggregate → visualize/report

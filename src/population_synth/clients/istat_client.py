@@ -1,3 +1,10 @@
+"""ISTATSDMXClient — ISTAT SDMX REST API wrapper with rate limiting.
+
+Defines ``ISTATSDMXClient`` for fetching CSV data and JSON datastructures
+from the ISTAT SDMX API, plus ``istat_rate_limit_wait``, a cross-process
+rate limiter enforcing ISTAT's ~5 req/min connection limit. Responses are
+cached locally with a configurable TTL.
+"""
 import csv
 import io
 import logging
@@ -10,7 +17,7 @@ from population_synth._paths import PROJECT_ROOT
 
 from .pxweb_client import BasePxWebClient
 
-_DEFAULT_CACHE_DIR = PROJECT_ROOT / "config" / "assets" / "istat_cache"
+_DEFAULT_CACHE_DIR = PROJECT_ROOT / "config" / "database" / "caches" / "istat"
 _BASE_URL = "https://esploradati.istat.it/SDMXWS/rest"
 _MIN_REQUEST_INTERVAL = 15.0  # ISTAT enforces ~5 req/min hard limit; 15s gives safety margin
 _RATE_LIMIT_FILE = _DEFAULT_CACHE_DIR / ".istat_last_request"

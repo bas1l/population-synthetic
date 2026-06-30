@@ -1,3 +1,10 @@
+"""View-model dataclasses backing the launcher's experiment selection.
+
+``ExperimentSelection`` holds the checked model/strategy/country axis IDs and
+enumerates their cartesian product. ``ManifestDisplayInfo`` resolves a single
+axis combination (or a manifest file) into display fields, strategy DAG path,
+and an existing-persona count for the overview table.
+"""
 from __future__ import annotations
 
 import itertools

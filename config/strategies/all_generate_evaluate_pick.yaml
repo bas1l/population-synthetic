@@ -1,4 +1,0 @@
-id: "all_generate_evaluate_pick"
-label: "All Generate Evaluate Pick"
-parameters:
-  strategy: "config/assets/identity/configurable/strategies/all_generate_evaluate_pick.json"

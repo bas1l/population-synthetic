@@ -1,0 +1,87 @@
+{
+  "description": "Household composition to parental structure schema labels for Italian population data",
+  "istat_source": "Eurostat EU-SILC household composition (HHCOMP)",
+  "mappings": {
+    "living_alone": {
+      "schema_label": "Living Alone",
+      "description": "Single-person household"
+    },
+    "single_parent": {
+      "schema_label": "Single Parent",
+      "description": "One adult with dependent children"
+    },
+    "couple_without_children": {
+      "schema_label": "Couple without Children",
+      "description": "Two adults without dependent children"
+    },
+    "nuclear_family": {
+      "schema_label": "Nuclear Family",
+      "description": "Two adults with dependent children"
+    },
+    "extended_family": {
+      "schema_label": "Extended Family",
+      "description": "Three or more adults, with or without children"
+    }
+  },
+  "output_categories": [
+    "Living Alone",
+    "Single Parent",
+    "Couple without Children",
+    "Nuclear Family",
+    "Extended Family"
+  ],
+  "pipeline_label_mappings": {
+    "Two-parent household": "Nuclear Family",
+    "two-parent household": "Nuclear Family",
+    "Both parents": "Nuclear Family",
+    "both parents": "Nuclear Family",
+    "Two biological parents": "Nuclear Family",
+    "two biological parents": "Nuclear Family",
+    "Two parents": "Nuclear Family",
+    "Two-parent family": "Nuclear Family",
+    "Two-parent biological": "Nuclear Family",
+    "Two biological parents (married)": "Nuclear Family",
+    "Two biological parents married": "Nuclear Family",
+    "Two-parent household (married)": "Nuclear Family",
+    "Both parents (married/together)": "Nuclear Family",
+    "Nuclear family": "Nuclear Family",
+    "nuclear family": "Nuclear Family",
+    "Famiglia nucleare": "Nuclear Family",
+    "famiglia nucleare": "Nuclear Family",
+    "Due genitori": "Nuclear Family",
+    "due genitori": "Nuclear Family",
+    "Entrambi i genitori": "Nuclear Family",
+    "Genitori sposati": "Nuclear Family",
+    "Famiglia tradizionale": "Nuclear Family",
+    "Coppia con figli": "Nuclear Family",
+    "Single Parent": "Single Parent",
+    "single parent": "Single Parent",
+    "Single-parent household": "Single Parent",
+    "Genitore solo": "Single Parent",
+    "genitore solo": "Single Parent",
+    "Famiglia monoparentale": "Single Parent",
+    "Madre sola": "Single Parent",
+    "Padre solo": "Single Parent",
+    "Single mother": "Single Parent",
+    "Single father": "Single Parent",
+    "Couple without Children": "Couple without Children",
+    "couple without children": "Couple without Children",
+    "Childless couple": "Couple without Children",
+    "Coppia senza figli": "Couple without Children",
+    "coppia senza figli": "Couple without Children",
+    "Living Alone": "Living Alone",
+    "living alone": "Living Alone",
+    "Vive solo": "Living Alone",
+    "vive solo": "Living Alone",
+    "Vive da solo": "Living Alone",
+    "Persona sola": "Living Alone",
+    "Solo": "Living Alone",
+    "Single household": "Living Alone",
+    "Extended Family": "Extended Family",
+    "extended family": "Extended Family",
+    "Famiglia estesa": "Extended Family",
+    "famiglia estesa": "Extended Family",
+    "Famiglia allargata": "Extended Family",
+    "Multi-generational": "Extended Family"
+  }
+}

@@ -1,3 +1,9 @@
+"""ActionSelector — exclusive radio-button list of launcher actions.
+
+``ActionSelector`` is a ``QWidget`` wrapping a ``QButtonGroup`` of
+``QRadioButton`` entries (one per ``ActionEntry``) inside an "Action" group
+box, emitting ``action_changed`` when the chosen action changes.
+"""
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QButtonGroup, QGroupBox, QRadioButton, QVBoxLayout, QWidget
 

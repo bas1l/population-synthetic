@@ -1,3 +1,12 @@
+"""Abstract base class for identity generation strategies.
+
+Defines ``BaseIdentityGenerator``, the ABC that fixes the contract for
+all identity generators. It centralizes shared state -- the injected
+``LLMClient`` and ``LLMInteractionCollector`` -- and declares the
+``generate_identity`` and ``load_identity`` abstract methods that each
+concrete strategy must implement.
+"""
+
 from __future__ import annotations
 
 import logging

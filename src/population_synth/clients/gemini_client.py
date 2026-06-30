@@ -1,3 +1,9 @@
+"""GeminiClient — Google Gemini API wrapper with metadata tracking.
+
+Defines ``GeminiClient``, a stateful wrapper around the google-genai SDK
+that generates text completions, maintains persistent generation config,
+and records per-call provenance metadata for the sidecar pattern.
+"""
 from __future__ import annotations
 
 import copy
@@ -188,10 +194,17 @@ class GeminiClient:
                 config=generation_config
             )
 
-            if hasattr(response, 'text'):
-                return response.text
-            else:
-                return str(response)
+            text = getattr(response, 'text', None)
+            if not isinstance(text, str) or not text.strip():
+                # response.text is None when the completion is safety-blocked or
+                # empty. Fail loudly rather than returning a repr of the SDK
+                # object, which would surface downstream as a bogus JSON parse
+                # error far from the real cause.
+                raise RuntimeError(
+                    f"Gemini returned no usable text for model {target_model} "
+                    f"(safety-blocked or empty response): {response!r}"
+                )
+            return text
 
         except Exception as e:
             self.logger.error(f"Generation failed for model {target_model}: {e}")

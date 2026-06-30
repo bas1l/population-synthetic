@@ -1,0 +1,68 @@
+{
+  "description": "Income bracket groups to socioeconomic class labels (relative to country median, Eurostat AROP + OECD/Pew thresholds)",
+  "istat_source": "ISTAT income distribution / Eurostat EU-SILC",
+  "mappings": {
+    "poverty": {
+      "schema_label": "Poverty",
+      "description": "Individual gross income < 60% of national median (Eurostat AROP threshold)"
+    },
+    "working_class": {
+      "schema_label": "Working Class",
+      "description": "Individual gross income 60-100% of national median (OECD lower-middle floor)"
+    },
+    "middle_class": {
+      "schema_label": "Middle Class",
+      "description": "Individual gross income 100-200% of national median (OECD middle band)"
+    },
+    "wealthy": {
+      "schema_label": "Wealthy",
+      "description": "Individual gross income >= 200% of national median (OECD/Pew upper income)"
+    }
+  },
+  "output_categories": [
+    "Poverty",
+    "Working Class",
+    "Middle Class",
+    "Wealthy"
+  ],
+  "pipeline_label_mappings": {
+    "Middle class": "Middle Class",
+    "middle class": "Middle Class",
+    "Middle": "Middle Class",
+    "middle": "Middle Class",
+    "medio": "Middle Class",
+    "Classe media": "Middle Class",
+    "classe media": "Middle Class",
+    "Ceto medio": "Middle Class",
+    "Upper-middle class": "Middle Class",
+    "Upper-middle": "Middle Class",
+    "Upper middle class": "Middle Class",
+    "Lower-middle class": "Working Class",
+    "Lower middle class": "Working Class",
+    "Working class": "Working Class",
+    "working class": "Working Class",
+    "Classe operaia": "Working Class",
+    "classe operaia": "Working Class",
+    "Ceto operaio": "Working Class",
+    "Lower class": "Working Class",
+    "Classe lavoratrice": "Working Class",
+    "Poverty": "Poverty",
+    "poverty": "Poverty",
+    "Povertà": "Poverty",
+    "povertà": "Poverty",
+    "Poor": "Poverty",
+    "Low income": "Poverty",
+    "Basso reddito": "Poverty",
+    "Wealthy": "Wealthy",
+    "wealthy": "Wealthy",
+    "Upper class": "Wealthy",
+    "upper class": "Wealthy",
+    "Classe alta": "Wealthy",
+    "classe alta": "Wealthy",
+    "Ceto alto": "Wealthy",
+    "Rich": "Wealthy",
+    "High income": "Wealthy",
+    "Alto reddito": "Wealthy",
+    "Benestante": "Wealthy"
+  }
+}

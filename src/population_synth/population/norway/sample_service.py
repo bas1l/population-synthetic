@@ -13,7 +13,7 @@ Sampling chain (11 steps, deterministic given ``rng``):
   7. Employment type | (age_group, sex)     — from employment_type_by_age (employed only)
   8. Housing tenure                         — marginal
   9. Household size                         — marginal
- 10. Income source | (employment, age)      — from income_source_by_employment_age
+ 10. Income source | (employment, age)      — dropped (no SSB source); sampled only if present
  11. Birth country detail | (age, sex)      — from birth_country_detail (non-Norway only)
 """
 
@@ -278,31 +278,37 @@ class SSBSampleService:
 
         # ------------------------------------------------------------------
         # Step 10: income source | (employment_status, age_group)
+        # Dropped when no distribution is available — SSB PxWebApi v2 provides
+        # no table for income-component shares, so the field is omitted rather
+        # than invented (see SSBFetchService). Sampled only if a real
+        # distribution is present.
         # ------------------------------------------------------------------
-        inc_emp_key = _SSB_EMP_TO_INCOME_EMP.get(employment_status_label)
-        if inc_emp_key is None:
-            raise ValueError(
-                f"No income_source employment mapping for: {employment_status_label!r}"
-            )
+        income_source_raw: dict | None = None
         inc_emp_dist = distributions.income_source_by_employment_age
-        matched_emp_dist = {
-            age_k: d for (emp_k, age_k), d in inc_emp_dist.items()
-            if emp_k == inc_emp_key
-        }
-        if not matched_emp_dist:
-            for (emp_k, age_k), d in inc_emp_dist.items():
-                if d:
-                    matched_emp_dist = {age_k: d}
-                    break
-        if not matched_emp_dist:
-            raise ValueError(
-                f"No income_source distribution for employment={inc_emp_key!r}"
-            )
-        inc_age_key = _resolve_inc_age_key(age_group, matched_emp_dist)
-        if inc_age_key is None:
-            inc_age_key = next(iter(matched_emp_dist))
-        inc_src_dist = matched_emp_dist[inc_age_key]
-        income_source_label = sample_from(rng, inc_src_dist)
+        if inc_emp_dist:
+            inc_emp_key = _SSB_EMP_TO_INCOME_EMP.get(employment_status_label)
+            if inc_emp_key is None:
+                raise ValueError(
+                    f"No income_source employment mapping for: {employment_status_label!r}"
+                )
+            matched_emp_dist = {
+                age_k: d for (emp_k, age_k), d in inc_emp_dist.items()
+                if emp_k == inc_emp_key
+            }
+            if not matched_emp_dist:
+                for (emp_k, age_k), d in inc_emp_dist.items():
+                    if d:
+                        matched_emp_dist = {age_k: d}
+                        break
+            if not matched_emp_dist:
+                raise ValueError(
+                    f"No income_source distribution for employment={inc_emp_key!r}"
+                )
+            inc_age_key = _resolve_inc_age_key(age_group, matched_emp_dist)
+            if inc_age_key is None:
+                inc_age_key = next(iter(matched_emp_dist))
+            inc_src_dist = matched_emp_dist[inc_age_key]
+            income_source_raw = {"label": sample_from(rng, inc_src_dist)}
 
         # ------------------------------------------------------------------
         # Step 11: birth country detail | (age_group, sex)
@@ -338,7 +344,7 @@ class SSBSampleService:
         # ------------------------------------------------------------------
         # Assemble individual record
         # ------------------------------------------------------------------
-        return {
+        record = {
             "id": individual_id,
             "age": age,
             "biological_sex": (
@@ -356,10 +362,12 @@ class SSBSampleService:
             "employment_type": employment_type_raw,
             "housing_tenure": {"label": housing_tenure_label},
             "household_size": {"label": household_size_label},
-            "income_source": {"label": income_source_label},
             "birth_country_detail": birth_country_raw,
             "parental_structure": {"label": parental_structure_label},
         }
+        if income_source_raw is not None:
+            record["income_source"] = income_source_raw
+        return record
 
     @staticmethod
     def sample_population(

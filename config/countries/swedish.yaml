@@ -1,4 +1,0 @@
-id: "swedish"
-label: "Sweden"
-parameters:
-  config: "config/assets/identity/configurable/simulation_config_004_swedish_generative.json"

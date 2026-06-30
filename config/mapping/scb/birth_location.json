@@ -1,0 +1,70 @@
+{
+  "description": "Country of birth / world region to schema labels",
+  "scb_variable": "Fodelseland",
+  "mappings": {
+    "sweden": {
+      "schema_label": "Sweden",
+      "scb_codes": [
+        "Sverige",
+        "Sweden",
+        "SE"
+      ]
+    },
+    "nordic": {
+      "schema_label": "Nordic Country",
+      "scb_codes": [
+        "Norden exkl. Sverige",
+        "Nordic excl. Sweden",
+        "NO",
+        "DK",
+        "FI",
+        "IS"
+      ]
+    },
+    "europe_other": {
+      "schema_label": "Europe (Other)",
+      "scb_codes": [
+        "Europa exkl. Norden",
+        "Europe excl. Nordic",
+        "EU"
+      ]
+    },
+    "outside_europe": {
+      "schema_label": "Outside Europe",
+      "scb_codes": [
+        "Utom Europa",
+        "Outside Europe",
+        "Asia",
+        "Africa",
+        "Americas",
+        "Oceania"
+      ]
+    }
+  },
+  "region_label_mappings": {
+    "Sverige": "Sweden",
+    "Sweden": "Sweden",
+    "Born in Sweden": "Sweden",
+    "Födda i Sverige": "Sweden",
+    "Norden utom Sverige": "Nordic Country",
+    "Nordic countries except Sweden": "Nordic Country",
+    "EU/EES utom Norden": "Europe (Other)",
+    "EU/EEA excl. Nordic": "Europe (Other)",
+    "Born in another EU Member State": "Europe (Other)",
+    "Födda i annat EU-land": "Europe (Other)",
+    "Europa utom EU/EES": "Europe (Other)",
+    "Europe excl. EU/EEA": "Europe (Other)",
+    "Born outside the EU": "Outside Europe",
+    "Födda utanför EU": "Outside Europe",
+    "Afrika": "Outside Europe",
+    "Africa": "Outside Europe",
+    "Nordamerika": "Outside Europe",
+    "North America": "Outside Europe",
+    "Sydamerika": "Outside Europe",
+    "South America": "Outside Europe",
+    "Asien": "Outside Europe",
+    "Asia": "Outside Europe",
+    "Oceanien": "Outside Europe",
+    "Oceania": "Outside Europe"
+  }
+}

@@ -1,6 +1,6 @@
 """population_synth.analysis.cross_run — the cross-run analytics pipeline.
 
-Pipeline B (entry point: ``scripts/compare_runs.py``): consume many runs'
+Pipeline B (entry point: ``scripts/analyze/compare_runs.py``): consume many runs'
 ``run_analytics.json`` and compare them. Dataflow:
 
     load → test → build → visualize

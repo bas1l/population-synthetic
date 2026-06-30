@@ -3,7 +3,7 @@
 **Date:** 2026-05-11
 **Reference population:** `data/scb_api/scb_population_pop-10000_02.json` ("scb02"), n = 10,000
 **Companion audit:** [`docs/audit_scb_comparison_api_rooting_2026-05-11.md`](audit_scb_comparison_api_rooting_2026-05-11.md)
-**Comparison code:** `scripts/compare_populations.py::normalize_scb_to_schema` (lines 95–262)
+**Comparison code:** `scripts/analyze/compare_populations.py::normalize_scb_to_schema` (lines 95–262)
 **Mapping config:** `config/assets/scb_reference/category_mappings.json`
 
 This document consolidates the audit's three category tables into a single per-field view: for each field scb02 carries, the raw SCB categories (with counts and percentages) and the exact transformation applied by `normalize_scb_to_schema` before comparison with the pipeline.

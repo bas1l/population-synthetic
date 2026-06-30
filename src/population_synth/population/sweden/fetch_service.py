@@ -1,3 +1,11 @@
+"""Fetches Swedish demographic dimensions from the SCB PxWeb API.
+
+Orchestrates calls to ``SCBPxWebClient``, routes each raw table response
+through the Sweden parsers, and assembles a fully populated
+``PopulationDistributions`` dataclass via ``load_all``. Every dimension
+raises loudly on API error or empty parse; there are no synthetic
+fallback distributions.
+"""
 from __future__ import annotations
 
 from population_synth.clients.scb_client import SCBPxWebClient
