@@ -5,7 +5,7 @@ Each function takes a raw API response dict (json-stat2 format) and returns a
 normalised distribution matching the ``PopulationDistributions`` field schema.
 
 Label normalisation translates raw SSB codes and Norwegian strings to the
-schema-level labels defined in ``config/comparison/category_mappings/ssb/``.
+schema-level labels defined in ``config/mapping/ssb/``.
 """
 
 from __future__ import annotations
