@@ -6,13 +6,13 @@ the ``llm_metrics`` master folder, groups metrics by **model** and by
 **method/strategy** (country held fixed), runs Kruskal-Wallis + Dunn post-hoc
 tests, and writes a comparison report (JSON) plus box / bar / heatmap charts.
 
-Prerequisite: run ``python scripts/analyze_run.py --all`` first to populate the
+Prerequisite: run ``python scripts/analyze/analyze_run.py --all`` first to populate the
 per-run analytics under ``{output_base}/03_Analysis/llm_metrics/{slug}/``.
 
 Usage:
-    python scripts/compare_runs.py
-    python scripts/compare_runs.py --root path/to/llm_metrics --country swedish
-    python scripts/compare_runs.py --metrics retry_rate wall_clock --output cmp.json
+    python scripts/analyze/compare_runs.py
+    python scripts/analyze/compare_runs.py --root path/to/llm_metrics --country swedish
+    python scripts/analyze/compare_runs.py --metrics retry_rate wall_clock --output cmp.json
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from population_synth.analysis.cross_run.run_comparison import (
     write_comparison_json,
 )
 
-_CONFIG_PATH = PROJECT_ROOT / "config" / "analyze_defaults.yaml"
+_CONFIG_PATH = PROJECT_ROOT / "config" / "analysis" / "analyze_defaults.yaml"
 
 # If at least this fraction of *analysed* runs (those that had a run_analytics.json)
 # fail to decompose into known axis IDs, treat it as a configuration error rather
@@ -126,7 +126,7 @@ def main() -> None:
         sys.exit(1)
     if not root.is_dir():
         print(f"Error: llm_metrics root not found: {root}\n"
-              "Run 'python scripts/analyze_run.py --all' first to populate it.",
+              "Run 'python scripts/analyze/analyze_run.py --all' first to populate it.",
               file=sys.stderr)
         sys.exit(1)
 
@@ -162,7 +162,7 @@ def main() -> None:
         print(
             f"\nWARNING: {len(decomp_skips)} analysed run(s) ({frac:.0%} of {eligible}) were "
             "EXCLUDED because their slug no longer matches the current model/strategy/country "
-            "axis IDs under config/{models,strategies,countries}/:",
+            "axis IDs under config/synthetic/axes/{models,strategies,countries}/:",
             file=sys.stderr,
         )
         for name, reason in decomp_skips:
@@ -179,7 +179,7 @@ def main() -> None:
 
     if len(records) < 2:
         print(f"\nError: need at least 2 decodable runs to compare, found {len(records)}.\n"
-              "Run 'python scripts/analyze_run.py --all' to populate more runs.",
+              "Run 'python scripts/analyze/analyze_run.py --all' to populate more runs.",
               file=sys.stderr)
         sys.exit(1)
 

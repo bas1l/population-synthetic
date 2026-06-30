@@ -12,13 +12,13 @@ This script tests both formats and confirms the CSV workaround works for
 all critical dataflows.
 
 Usage:
-    python scripts/test_istat_discovery.py                 # full discovery
-    python scripts/test_istat_discovery.py --cache-only     # only use cached responses
-    python scripts/test_istat_discovery.py --field education # single field
-    python scripts/test_istat_discovery.py --field all --max-per-field 5
-    python scripts/test_istat_discovery.py --keyword "marital status"
-    python scripts/test_istat_discovery.py --skip-probes    # catalog search only
-    python scripts/test_istat_discovery.py --csv-only       # only test CSV format
+    python scripts/dev/test_istat_discovery.py                 # full discovery
+    python scripts/dev/test_istat_discovery.py --cache-only     # only use cached responses
+    python scripts/dev/test_istat_discovery.py --field education # single field
+    python scripts/dev/test_istat_discovery.py --field all --max-per-field 5
+    python scripts/dev/test_istat_discovery.py --keyword "marital status"
+    python scripts/dev/test_istat_discovery.py --skip-probes    # catalog search only
+    python scripts/dev/test_istat_discovery.py --csv-only       # only test CSV format
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ from pathlib import Path
 
 import requests
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_CACHE_DIR = _PROJECT_ROOT / "config" / "assets" / "istat_cache"
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_CACHE_DIR = _PROJECT_ROOT / "config" / "database" / "caches" / "istat"
 _CATALOG_FILE = _CACHE_DIR / "dataflow_IT1.txt"
 
 ISTAT_BASE = "https://esploradati.istat.it/SDMXWS/rest"
@@ -1035,7 +1035,7 @@ def main() -> None:
 
     if not _CATALOG_FILE.exists():
         print(f"\nERROR: Catalog file not found: {_CATALOG_FILE}")
-        print("Run `python scripts/prototype_istat_api.py` first to fetch the catalog.")
+        print("Run `python scripts/dev/prototype_istat_api.py` first to fetch the catalog.")
         return
 
     catalog = parse_catalog(_CATALOG_FILE)

@@ -5,12 +5,12 @@ Discovers all model × strategy × country axis combinations, runs the statistic
 for each one that has pipeline output, and aggregates results into a summary table and JSON file.
 
 Usage:
-    python scripts/compare_all_pipelines.py
-    python scripts/compare_all_pipelines.py --country swedish
-    python scripts/compare_all_pipelines.py --country swedish --country italian
-    python scripts/compare_all_pipelines.py --model claude_haiku --model gemini_flash
-    python scripts/compare_all_pipelines.py --strategy all_pick --no-charts
-    python scripts/compare_all_pipelines.py --model claude_haiku --strategy all_pick --radar-tv-only
+    python scripts/analyze/compare_all_pipelines.py
+    python scripts/analyze/compare_all_pipelines.py --country swedish
+    python scripts/analyze/compare_all_pipelines.py --country swedish --country italian
+    python scripts/analyze/compare_all_pipelines.py --model claude_haiku --model gemini_flash
+    python scripts/analyze/compare_all_pipelines.py --strategy all_pick --no-charts
+    python scripts/analyze/compare_all_pipelines.py --model claude_haiku --strategy all_pick --radar-tv-only
 
 --country        Country axis ID to include (default: swedish). May be repeated.
 --model          Model axis ID filter (e.g. claude_haiku). May be repeated. Default: all models.
@@ -31,8 +31,8 @@ from population_synth.comparison.charts import (
     plot_radar_grid,
 )
 from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
-from population_synth.comparison.extractor import extract_population
-from population_synth.comparison.normalizer import load_mappings, normalize_if_raw
+from population_synth.comparison.reference_mapper import load_reference_population, normalize_population
+from population_synth.comparison.synthetic_mapper import load_raw_population, map_population
 from population_synth.identity.manifest_loader import compose_manifest, discover_axis_values
 
 _COUNTRY_REFERENCES = {
@@ -41,8 +41,8 @@ _COUNTRY_REFERENCES = {
 }
 
 _COUNTRY_MAPPINGS = {
-    "swedish": PROJECT_ROOT / "config" / "comparison" / "category_mappings" / "scb",
-    "italian": PROJECT_ROOT / "config" / "comparison" / "category_mappings" / "istat",
+    "swedish": PROJECT_ROOT / "config" / "mapping" / "scb",
+    "italian": PROJECT_ROOT / "config" / "mapping" / "istat",
 }
 
 
@@ -171,11 +171,8 @@ def main() -> None:
             print(f"ERROR: No category mappings configured for country {country_id!r}", file=sys.stderr)
             sys.exit(1)
 
-        with open(reference_path, "r", encoding="utf-8") as f:
-            reference_pop_raw = json.load(f)
-
-        mappings = load_mappings(path=mappings_path)
-        reference_pop = normalize_if_raw(reference_pop_raw, mappings, country=country_id)
+        database_pop_raw = load_reference_population(reference_path)
+        database_pop = normalize_population(database_pop_raw, country=country_id, mappings_path=mappings_path)
 
         print(f"=== {country_id.upper()} (reference: {reference_path.name}) ===")
         print()
@@ -205,17 +202,21 @@ def main() -> None:
                 print(f"  SKIP: no persona_*/identity.json files found under {seed_root}")
                 continue
 
+            # Step 1: load the synthetic population as it is on the harddrive.
             try:
-                pipeline_pop = extract_population(seed_root, country=country_id)
+                raw_synthetic = load_raw_population(seed_root)
             except ValueError as exc:
                 print(f"  SKIP: {exc}")
                 continue
 
-            n_pipeline = pipeline_pop["metadata"]["n"]
-            if n_pipeline < 5:
-                print(f"  WARNING: only {n_pipeline} extracted individuals -- statistical tests unreliable")
+            # Step 2: map the raw identities to the canonical comparison schema.
+            synthetic_pop = map_population(raw_synthetic, country=country_id)
 
-            evaluator = StatisticalEvaluator(reference_pop, pipeline_pop)
+            n_synthetic = synthetic_pop["metadata"]["n"]
+            if n_synthetic < 5:
+                print(f"  WARNING: only {n_synthetic} extracted individuals -- statistical tests unreliable")
+
+            evaluator = StatisticalEvaluator(database_pop, synthetic_pop)
             report = evaluator.generate_report()
 
             comparison_output_dir = manifest.comparison_output_dir
@@ -239,8 +240,8 @@ def main() -> None:
             if not args.no_charts:
                 charts_dir = comparison_output_dir / slug
                 plot_comparison_charts(
-                    reference_pop,
-                    pipeline_pop,
+                    database_pop,
+                    synthetic_pop,
                     charts_dir,
                     pop_a_label=reference_path.stem,
                     pop_b_label=slug,
@@ -267,7 +268,7 @@ def main() -> None:
                 "model": model_id,
                 "strategy": strategy_id,
                 "country": country_id,
-                "n": n_pipeline,
+                "n": n_synthetic,
                 "mean_tv_distance": round(mean_tv, 4),
                 "coherence_score": coherence_score,
             })

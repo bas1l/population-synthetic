@@ -5,7 +5,7 @@ Before each scheduled run, any still-running previous generation process
 is terminated (SIGTERM → SIGKILL fallback) as a safety measure.
 
 Usage:
-    python scripts/scheduled_generate.py
+    python scripts/generate/scheduled_generate.py
 
 Edit SCHEDULED_TIMES and MANIFEST below to change the configuration.
 """
@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # ── Configuration ───────────────────────────────────────────────────
-MANIFEST = "config/seed_manifests/identity_manifest_022_claude_sonnet.yaml"
+MANIFEST = "config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml"
 
 # Each entry is an (hour, minute) tuple.
 SCHEDULED_TIMES = [
@@ -59,9 +59,10 @@ def kill_previous(proc: subprocess.Popen | None) -> None:
 
 def launch(manifest: str) -> subprocess.Popen:
     """Start a new generation subprocess."""
+    target = Path(__file__).resolve().parent / "generate_identities_parallel.py"
     cmd = [
         sys.executable,
-        "scripts/generate_identities_parallel.py",
+        str(target),
         "--manifest", manifest,
     ]
     log.info("Launching: %s", " ".join(cmd))

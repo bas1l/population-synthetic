@@ -4,9 +4,9 @@ Benchmark: One-Shot vs Persistent ClaudeCodeClient latency.
 Runs N simple pings through both architectures and reports latency distributions.
 
 Usage:
-    python scripts/benchmark_claude_latency.py --n 100 --model haiku --mode both
-    python scripts/benchmark_claude_latency.py --n 5 --model haiku --mode both       # quick sanity check
-    python scripts/benchmark_claude_latency.py --n 100 --model haiku --mode both --output data/benchmark_results.json
+    python scripts/dev/benchmark_claude_latency.py --n 100 --model haiku --mode both
+    python scripts/dev/benchmark_claude_latency.py --n 5 --model haiku --mode both       # quick sanity check
+    python scripts/dev/benchmark_claude_latency.py --n 100 --model haiku --mode both --output data/benchmark_results.json
 """
 
 import argparse

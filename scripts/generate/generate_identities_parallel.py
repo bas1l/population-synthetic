@@ -3,22 +3,22 @@ generate_identities_parallel.py -- Generate N persona identities in parallel.
 
 Usage:
     # Via manifest (recommended):
-    python scripts/generate_identities_parallel.py \
-        --manifest config/seed_manifests/identity_manifest_014_claude_haiku.yaml
+    python scripts/generate/generate_identities_parallel.py \
+        --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml
 
     # Via manifest with CLI overrides:
-    python scripts/generate_identities_parallel.py \
-        --manifest config/seed_manifests/identity_manifest_014_claude_haiku.yaml \
+    python scripts/generate/generate_identities_parallel.py \
+        --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml \
         --n 10 --workers 4
 
     # Via axis IDs (composable experiment config):
-    python scripts/generate_identities_parallel.py \
+    python scripts/generate/generate_identities_parallel.py \
         --model-id claude_haiku \
         --strategy-id all_pick \
         --country-id swedish
 
     # Via axis IDs with overrides and force regeneration:
-    python scripts/generate_identities_parallel.py \
+    python scripts/generate/generate_identities_parallel.py \
         --model-id ollama_llama33_70b \
         --strategy-id all_generate_evaluate_pick \
         --country-id swedish \
@@ -27,19 +27,19 @@ Usage:
         --force
 
     # Via explicit CLI args:
-    python scripts/generate_identities_parallel.py \
+    python scripts/generate/generate_identities_parallel.py \
         --mode configurable \
-        --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json \
-        --strategy config/assets/identity/configurable/strategies/compared_only_generate_evaluate_random_pick.json \
+        --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json \
+        --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml \
         --n 100 \
         --workers 8 \
         --output-dir data/identity/config_004_n100
 
-    python scripts/generate_identities_parallel.py \
+    python scripts/generate/generate_identities_parallel.py \
         --provider claude \
         --mode configurable \
-        --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json \
-        --strategy config/assets/identity/configurable/strategies/compared_only_generate_evaluate_random_pick.json \
+        --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json \
+        --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml \
         --n 100 \
         --workers 8 \
         --output-dir data/identity/config_004_n100_claude

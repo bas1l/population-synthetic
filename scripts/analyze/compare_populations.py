@@ -2,7 +2,7 @@
 compare_populations.py -- Statistical comparison of two demographic population files.
 
 Usage:
-    python scripts/compare_populations.py <pop_a.json> <pop_b.json> [--output data/comparison_report.json]
+    python scripts/analyze/compare_populations.py <pop_a.json> <pop_b.json> [--output data/comparison_report.json]
 
 pop_a is the reference population (treated as "expected" for chi-squared).
 pop_b is the population to evaluate (treated as "observed").
@@ -19,7 +19,7 @@ from pathlib import Path
 from population_synth._paths import PROJECT_ROOT
 from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
 from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
-from population_synth.comparison.normalizer import load_mappings, normalize_if_raw
+from population_synth.comparison.reference_mapper import normalize_population
 
 
 def _load_population(path: str) -> dict:
@@ -56,10 +56,8 @@ def main() -> None:
     pop_a = _load_population(args.pop_a)
     pop_b = _load_population(args.pop_b)
 
-    mappings = load_mappings()
-
-    pop_a = normalize_if_raw(pop_a, mappings)
-    pop_b = normalize_if_raw(pop_b, mappings)
+    pop_a = normalize_population(pop_a, country="swedish")
+    pop_b = normalize_population(pop_b, country="swedish")
 
     evaluator = StatisticalEvaluator(pop_a, pop_b)
     evaluator.print_summary(args.pop_a, args.pop_b)

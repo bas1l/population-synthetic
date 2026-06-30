@@ -7,9 +7,9 @@ sample data for each dataflow. Used as a prerequisite investigation before commi
 to a full Italy country implementation.
 
 Usage:
-    python scripts/prototype_istat_api.py
-    python scripts/prototype_istat_api.py --cache-only
-    python scripts/prototype_istat_api.py --no-cache
+    python scripts/dev/prototype_istat_api.py
+    python scripts/dev/prototype_istat_api.py --cache-only
+    python scripts/dev/prototype_istat_api.py --no-cache
 """
 
 import argparse
@@ -22,8 +22,8 @@ import requests
 ISTAT_BASE = "https://esploradati.istat.it/SDMXWS/rest"
 EUROSTAT_BASE = "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0"
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_CACHE_DIR = _PROJECT_ROOT / "config" / "assets" / "istat_cache"
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_CACHE_DIR = _PROJECT_ROOT / "config" / "database" / "caches" / "istat"
 
 _RATE_LIMIT_SECONDS = 12.0
 _last_istat_request: float = 0.0

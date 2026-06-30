@@ -1,9 +1,9 @@
 """Compare marginal distributions across Sweden, Norway, and Italy populations.
 
 Usage:
-    python scripts/compare_countries.py
-    python scripts/compare_countries.py --sweden <path> --norway <path> --italy <path>
-    python scripts/compare_countries.py --output report.json --no-charts
+    python scripts/analyze/compare_countries.py
+    python scripts/analyze/compare_countries.py --sweden <path> --norway <path> --italy <path>
+    python scripts/analyze/compare_countries.py --output report.json --no-charts
 """
 
 import argparse

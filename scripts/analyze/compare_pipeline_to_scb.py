@@ -1,29 +1,29 @@
 """
-compare_pipeline_to_istat.py -- Extract pipeline persona identities and compare them against
-an ISTAT reference population in a single step.
+compare_pipeline_to_scb.py -- Extract pipeline persona identities and compare them against
+an SCB reference population in a single step.
 
 Usage:
-    python scripts/compare_pipeline_to_istat.py \\
-        --manifest config/seed_manifests/identity_manifest_xxx.yaml \\
-        [--reference <istat_population.json>] \\
+    python scripts/analyze/compare_pipeline_to_scb.py \\
+        --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml \\
+        [--reference <scb_population.json>] \\
         [--output comparison_report.json] \\
-        [--save-extracted pipeline_population.json] \\
+        [--save-extracted synthetic_population.json] \\
         [--charts-dir <dir>] \\
         [--no-charts] \\
         [--radar-tv-only]
 
-    python scripts/compare_pipeline_to_istat.py \\
+    python scripts/analyze/compare_pipeline_to_scb.py \\
         --seed-root <path> \\
-        [--reference <istat_population.json>] \\
+        [--reference <scb_population.json>] \\
         [--output comparison_report.json] \\
-        [--save-extracted pipeline_population.json] \\
+        [--save-extracted synthetic_population.json] \\
         [--charts-dir <dir>] \\
         [--no-charts] \\
         [--radar-tv-only]
 
 --manifest       Seed manifest YAML; derives --seed-root from parallel.output_dir.
 --seed-root      Directory containing persona_XXXXX/identity.json files (pipeline output).
---reference      ISTAT reference population file (default: data/istat_api/istat_population.json).
+--reference      SCB reference population file (default: data/scb_api/scb_population_pop-10000_02.json).
 --output         Path for the JSON comparison report (default: data/comparison_report.json).
 --save-extracted If provided, also save the flattened pipeline population to this path.
 """
@@ -36,11 +36,10 @@ from pathlib import Path
 from population_synth._paths import PROJECT_ROOT
 from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
 from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
-from population_synth.comparison.extractor import extract_population
-from population_synth.comparison.normalizer import load_mappings, normalize_if_raw
+from population_synth.comparison.reference_mapper import load_reference_population, normalize_population
+from population_synth.comparison.synthetic_mapper import load_raw_population, map_population
 
-_DEFAULT_REFERENCE = PROJECT_ROOT / "data" / "istat_api" / "istat_population.json"
-_ISTAT_MAPPINGS_PATH = PROJECT_ROOT / "config" / "comparison" / "category_mappings" / "istat"
+_DEFAULT_REFERENCE = PROJECT_ROOT / "data" / "scb_api" / "scb_population_pop-10000_02.json"
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +48,7 @@ _ISTAT_MAPPINGS_PATH = PROJECT_ROOT / "config" / "comparison" / "category_mappin
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Extract pipeline identities and compare against an ISTAT reference population"
+        description="Extract pipeline identities and compare against an SCB reference population"
     )
     parser.add_argument(
         "--manifest", default=None,
@@ -57,15 +56,15 @@ def main() -> None:
     )
     parser.add_argument(
         "--model-id", default=None,
-        help="Axis model ID (e.g., 'claude_haiku') -- mutually exclusive with --manifest",
+        help="Axis model ID (e.g., 'claude_haiku') — mutually exclusive with --manifest",
     )
     parser.add_argument(
         "--strategy-id", default=None,
-        help="Axis strategy ID (e.g., 'all_pick') -- mutually exclusive with --manifest",
+        help="Axis strategy ID (e.g., 'all_pick') — mutually exclusive with --manifest",
     )
     parser.add_argument(
         "--country-id", default=None,
-        help="Axis country ID (e.g., 'italian') -- mutually exclusive with --manifest",
+        help="Axis country ID (e.g., 'swedish') — mutually exclusive with --manifest",
     )
     parser.add_argument(
         "--seed-root", default=None,
@@ -74,11 +73,11 @@ def main() -> None:
     parser.add_argument(
         "--reference",
         default=str(_DEFAULT_REFERENCE),
-        help=f"ISTAT reference population JSON file (default: {_DEFAULT_REFERENCE.name})",
+        help=f"SCB reference population JSON file (default: {_DEFAULT_REFERENCE.name})",
     )
     parser.add_argument(
         "--output", default=None,
-        help="Output JSON report path (default: data/analysis/compare_with_istat/<name>.json)",
+        help="Output JSON report path (default: data/analysis/compare_with_scb02/<name>.json)",
     )
     parser.add_argument(
         "--save-extracted",
@@ -133,38 +132,40 @@ def main() -> None:
     elif m is not None and m.comparison_output_dir is not None:
         output_path = m.comparison_output_dir / f"{seed_root.name}.json"
     else:
-        output_path = PROJECT_ROOT / "data" / "analysis" / "compare_with_istat" / f"{seed_root.name}.json"
+        output_path = PROJECT_ROOT / "data" / "analysis" / "compare_with_scb02" / f"{seed_root.name}.json"
 
     reference_path = Path(args.reference)
     if not reference_path.exists():
         print(f"ERROR: Reference file not found: {reference_path}", file=sys.stderr)
         sys.exit(1)
 
+    # Step 1: load the synthetic population as it is on the harddrive.
     try:
-        pipeline_pop = extract_population(seed_root, country="italian")
+        raw_synthetic = load_raw_population(seed_root)
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    # Step 2: map the raw identities to the canonical comparison schema.
+    synthetic_pop = map_population(raw_synthetic, country="swedish")
+
     if args.save_extracted:
-        save_path = Path(args.save_extracted)
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        save_path.write_text(json.dumps(pipeline_pop, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"Extracted population saved to {save_path}")
+        synthetic_save_path = Path(args.save_extracted)
+        synthetic_save_path.parent.mkdir(parents=True, exist_ok=True)
+        synthetic_save_path.write_text(json.dumps(synthetic_pop, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Extracted population saved to {synthetic_save_path}")
 
-    with open(reference_path, "r", encoding="utf-8") as f:
-        reference_pop = json.load(f)
+    # Reference side: load the population as it is on disk, then normalize (mirrors
+    # the synthetic load_raw_population -> map_population two-step above).
+    database_pop = load_reference_population(reference_path)
+    database_pop = normalize_population(database_pop, country="swedish")
 
-    mappings = load_mappings(path=_ISTAT_MAPPINGS_PATH)
-
-    reference_pop = normalize_if_raw(reference_pop, mappings, country="italian")
-
-    if pipeline_pop["metadata"]["n"] < 5:
-        n = pipeline_pop["metadata"]["n"]
-        print(f"WARNING: Pipeline population has only {n} individuals"
+    if synthetic_pop["metadata"]["n"] < 5:
+        n = synthetic_pop["metadata"]["n"]
+        print(f"WARNING: Synthetic population has only {n} individuals"
               " -- statistical tests will be unreliable.\n")
 
-    evaluator = StatisticalEvaluator(reference_pop, pipeline_pop)
+    evaluator = StatisticalEvaluator(database_pop, synthetic_pop)
     evaluator.print_summary(args.reference, args.seed_root)
 
     report = evaluator.generate_report()
@@ -186,8 +187,8 @@ def main() -> None:
         if charts_dir.exists():
             shutil.rmtree(charts_dir)
         plot_comparison_charts(
-            reference_pop,
-            pipeline_pop,
+            database_pop,
+            synthetic_pop,
             charts_dir,
             pop_a_label=Path(args.reference).stem,
             pop_b_label=seed_root.name,

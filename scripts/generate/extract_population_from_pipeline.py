@@ -3,7 +3,7 @@ extract_population_from_pipeline.py -- Extract demographic profiles from existin
 identity.json files and output them in the same format as scb_population.json.
 
 Usage:
-    python scripts/extract_population_from_pipeline.py --seed-root <path> [--output data/pipeline_population.json]
+    python scripts/generate/extract_population_from_pipeline.py --seed-root <path> [--output data/pipeline_population.json]
 
 This is a thin CLI wrapper that delegates extraction logic to
 population_synth.comparison.extractor.

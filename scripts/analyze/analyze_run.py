@@ -15,8 +15,8 @@ Batch dir
     single-persona dir.
 
 Usage:
-    python scripts/analyze_run.py <run_dir> [--output run_analytics.json] [--verbose] [--charts DIR]
-    python scripts/analyze_run.py --all [--verbose]
+    python scripts/analyze/analyze_run.py <run_dir> [--output run_analytics.json] [--verbose] [--charts DIR]
+    python scripts/analyze/analyze_run.py --all [--verbose]
 
     <run_dir>         Path to a single-persona or batch run directory.
     --output PATH     Write the full analytics dict to this JSON file.
@@ -70,7 +70,7 @@ from population_synth.analysis.per_run.log_parser import (
 # Config loading
 # ---------------------------------------------------------------------------
 
-_CONFIG_PATH = PROJECT_ROOT / "config" / "analyze_defaults.yaml"
+_CONFIG_PATH = PROJECT_ROOT / "config" / "analysis" / "analyze_defaults.yaml"
 
 
 def _load_config() -> dict:
@@ -248,7 +248,7 @@ def _run_all(cfg: dict) -> None:
     """Analyse every run under {output_base}/01_Raw/ into llm_metrics/{slug}/."""
     output_base = cfg.get("output_base")
     if not output_base:
-        print("Error: --all requires 'output_base' in config/analyze_defaults.yaml", file=sys.stderr)
+        print("Error: --all requires 'output_base' in config/analysis/analyze_defaults.yaml", file=sys.stderr)
         sys.exit(1)
 
     raw_dir = Path(output_base) / "01_Raw"

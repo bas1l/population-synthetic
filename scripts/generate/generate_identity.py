@@ -3,32 +3,27 @@ generate_identity.py -- Standalone CLI entry point for generating a single perso
 
 Usage:
     # Via manifest (recommended):
-    python scripts/generate_identity.py \\
-        --manifest config/seed_manifests/identity_manifest_014_claude_haiku.yaml
+    python scripts/generate/generate_identity.py \\
+        --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml
 
     # Via axis IDs (composable experiment config):
-    python scripts/generate_identity.py \\
+    python scripts/generate/generate_identity.py \\
         --model-id claude_haiku \\
         --strategy-id all_pick \\
         --country-id swedish
 
     # Via explicit CLI args:
-    python scripts/generate_identity.py \\
-        --mode batch \\
-        --config config/assets/identity/batch/identity_landscape.json \\
-        [--output identity.json]
-
-    python scripts/generate_identity.py \\
+    python scripts/generate/generate_identity.py \\
         --mode configurable \\
-        --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json \\
-        --strategy config/assets/identity/configurable/strategies/compared_only_generate_evaluate_random_pick.json \\
+        --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json \\
+        --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml \\
         [--output identity.json]
 
-    python scripts/generate_identity.py \\
+    python scripts/generate/generate_identity.py \\
         --provider claude \\
         --mode configurable \\
-        --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json \\
-        --strategy config/assets/identity/configurable/strategies/compared_only_generate_evaluate_random_pick.json
+        --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json \\
+        --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml
 
 Modes:
     batch         Single-prompt narrative-style generation.
@@ -59,8 +54,8 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  python scripts/generate_identity.py --mode configurable \\\n"
-            "      --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json\n"
+            "  python scripts/generate/generate_identity.py --mode configurable \\\n"
+            "      --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json\n"
         ),
     )
     parser.add_argument(
@@ -203,7 +198,9 @@ def main() -> None:
     if args.log_llm is None:
         args.log_llm = True
     if args.output is None:
-        args.output = "identity.json"
+        # Default under the git-ignored data/ dir so ad-hoc single runs don't
+        # litter the repo root with identity.json / logs / run_metadata.json.
+        args.output = "data/single_run/identity.json"
     if args.structured_output is None:
         args.structured_output = False
 
