@@ -1,7 +1,7 @@
 # scripts/
 
 Command-line entry points for the project. Every script is a thin CLI wrapper —
-all real logic lives in the `population_synth.*` package (installed via
+all real logic lives in the `population_synthetic.*` package (installed via
 `pip install -e .`). Scripts are run by path, e.g.
 `python scripts/generate/generate_scb_population.py --n 1000`.
 
@@ -38,7 +38,7 @@ all real logic lives in the `population_synth.*` package (installed via
 | `benchmark_claude_latency.py` | Benchmark one-shot vs persistent Claude CLI subprocess latency |
 
 ### Root
-- `launch_gui.py` — launches the PyQt5 GUI (`python -m population_synth.gui.main`).
+- `launch_gui.py` — launches the PyQt5 GUI (`python -m population_synthetic.gui.main`).
 
 ## Pipeline chains
 

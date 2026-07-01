@@ -36,10 +36,10 @@ from pathlib import Path
 
 import yaml
 
-from population_synth._paths import PROJECT_ROOT
-from population_synth.analysis.comparison.charts import plot_comparison_charts, plot_radar_comparison
-from population_synth.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
-from population_synth.analysis.comparison.scheme import load_scheme
+from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.comparison.charts import plot_comparison_charts, plot_radar_comparison
+from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+from population_synthetic.analysis.comparison.scheme import load_scheme
 
 _COUNTRY = "italian"
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
@@ -156,14 +156,14 @@ def main() -> None:
     manifest = None
     seed_name: str | None = None
     if args.manifest:
-        from population_synth.identity.manifest_loader import load_manifest
+        from population_synthetic.generators.synthetic.manifest_loader import load_manifest
         manifest = load_manifest(args.manifest)
         if manifest.parallel_output_dir is not None:
             seed_name = manifest.parallel_output_dir.name
     elif args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
-        from population_synth.identity.manifest_loader import compose_manifest
+        from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
         manifest = compose_manifest(args.model_id, args.strategy_id, args.country_id)
         if manifest.parallel_output_dir is not None:
             seed_name = manifest.parallel_output_dir.name

@@ -7,7 +7,7 @@
 How identity generation is configured via three orthogonal axes instead of a monolithic manifest.
 
 Identity generation can be configured via three orthogonal axes instead of a monolithic manifest.
-`compose_manifest` in `src/population_synth/identity/manifest_loader.py` merges YAML from four
+`compose_manifest` in `src/population_synthetic/generators/synthetic/manifest_loader.py` merges YAML from four
 layers:
 
 1. `config/synthetic/experiment_defaults.yaml` -- base parameters (mode, output_base, parallel settings)

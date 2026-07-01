@@ -1,7 +1,7 @@
 """Shared in-memory mapping config for the mapper base-class tests.
 
 Both ``BaseReferenceMapper`` and ``BaseSyntheticMapper`` are now thin loaders over
-the shared :mod:`population_synth.analysis.mapping.mapping_engine`, driven by the unified
+the shared :mod:`population_synthetic.analysis.mapping.mapping_engine`, driven by the unified
 symmetric per-attribute config (``values`` / ``database`` / ``synthetic``) plus an
 ``_index.json`` master. :func:`new_shape_mappings` returns a small, self-contained
 config in exactly the shape :func:`load_mappings` produces (one entry per file stem,

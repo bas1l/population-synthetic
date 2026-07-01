@@ -124,14 +124,14 @@ form to override inference.
 New:
 - `config/analysis/comparison_targets.yaml` — completeness list (manifest paths).
 - `scripts/analyze/map_populations.py` — the map stage.
-- `src/population_synth/comparison/country_config.py` — `REFERENCE_FOR_COUNTRY`,
+- `src/population_synthetic/comparison/country_config.py` — `REFERENCE_FOR_COUNTRY`,
   `MAPPINGS_FOR_COUNTRY`, `infer_country(config_path)`.
 
 Modified:
 - `scripts/analyze/compare_all_pipelines.py` — consume mapped index; write to `comparison/`.
 - `scripts/analyze/compare_pipeline_to_scb.py` — load pre-mapped files; write to `comparison/{slug}/`.
 - `scripts/analyze/compare_pipeline_to_istat.py` — same.
-- `src/population_synth/identity/manifest_loader.py` — `compose_manifest` `comparison_output_dir`
+- `src/population_synthetic/identity/manifest_loader.py` — `compose_manifest` `comparison_output_dir`
   from `03_Analysis/{slug}` → `03_Analysis/comparison/{slug}` (line ~209).
 
 Reused unchanged: `comparison/synthetic_mapper` (`load_raw_population`, `map_population`),
@@ -152,7 +152,7 @@ the map stage and any consumer share one source.
 - [x] Fail loudly for unknown/ambiguous country.
 
 **Files Modified:**
-- `src/population_synth/comparison/country_config.py` — new module.
+- `src/population_synthetic/comparison/country_config.py` — new module.
 
 **Dependencies:** None
 
@@ -190,7 +190,7 @@ the map stage and any consumer share one source.
 - `scripts/analyze/compare_all_pipelines.py`
 - `scripts/analyze/compare_pipeline_to_scb.py`
 - `scripts/analyze/compare_pipeline_to_istat.py`
-- `src/population_synth/identity/manifest_loader.py`
+- `src/population_synthetic/identity/manifest_loader.py`
 
 **Dependencies:** Phase 2
 
@@ -295,5 +295,5 @@ the map stage and any consumer share one source.
 - scripts/analyze/compare_pipeline_to_istat.py
 - scripts/analyze/compare_pipeline_to_scb.py
 - scripts/analyze/map_populations.py
-- src/population_synth/comparison/country_config.py
-- src/population_synth/identity/manifest_loader.py
+- src/population_synthetic/comparison/country_config.py
+- src/population_synthetic/identity/manifest_loader.py

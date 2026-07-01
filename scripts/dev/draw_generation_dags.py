@@ -12,7 +12,7 @@ The figure has two parts: a top ETL band (clients/APIs -> load_all -> parsers ->
 PopulationDistributions -> sampler) and the conditional chained-sampling DAG below
 it (the order in which ``sample_one`` draws each attribute and what each draw is
 conditioned on). Data is hand-derived from the source modules under
-``src/population_synth/population/{sweden,norway,italy}/``.
+``src/population_synthetic/generators/reference/{sweden,norway,italy}/``.
 
 Run: ``python scripts/dev/draw_generation_dags.py``
 """
@@ -102,7 +102,7 @@ def sweden_spec():
     return dict(
         key="sweden",
         title="Sweden  -  SCB synthetic population generation",
-        subtitle="src/population_synth/population/sweden/  |  SampleService.sample_one  "
+        subtitle="src/population_synthetic/generators/reference/sweden/  |  SampleService.sample_one  "
                  "(conditional chained sampling, ~14 draws)",
         etl=[
             ("SCBPxWebClient", "PxWeb\njson-stat2 (POST)", C_SRC),
@@ -132,7 +132,7 @@ def norway_spec():
     return dict(
         key="norway",
         title="Norway  -  SSB synthetic population generation",
-        subtitle="src/population_synth/population/norway/  |  SSBSampleService.sample_one  "
+        subtitle="src/population_synthetic/generators/reference/norway/  |  SSBSampleService.sample_one  "
                  "(11-step chain, income_source omitted)",
         etl=[
             ("SSBPxWebClient", "PxWebApi v2\nGET (>=2.1s limit)", C_SRC),
@@ -165,7 +165,7 @@ def italy_spec():
     return dict(
         key="italy",
         title="Italy  -  ISTAT + Eurostat synthetic population generation",
-        subtitle="src/population_synth/population/italy/  |  ISTATSampleService.sample_one  "
+        subtitle="src/population_synthetic/generators/reference/italy/  |  ISTATSampleService.sample_one  "
                  "(10-step chain, no income_source)",
         etl=[
             ("EurostatClient", "JSON-stat 2.0", C_SRC),

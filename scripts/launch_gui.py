@@ -1,3 +1,3 @@
-from population_synth.gui.main import main
+from population_synthetic.gui.main import main
 
 main()

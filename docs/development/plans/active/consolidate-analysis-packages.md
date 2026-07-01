@@ -1,4 +1,4 @@
-# Plan: Consolidate analysis packages under `population_synth.analysis`
+# Plan: Consolidate analysis packages under `population_synthetic.analysis`
 
 **Date:** 2026-07-01
 **Author:** Basil
@@ -10,7 +10,7 @@
 
 ## Overview
 
-Introduce a single `population_synth.analysis` parent package with **one
+Introduce a single `population_synthetic.analysis` parent package with **one
 subpackage per process** — `mapping/`, `comparison/`, `llm_metrics/`, plus a
 small `utils/` for shared infra. Today the mapping and population-comparison
 processes are entangled inside one `comparison/` package, and `llm_metrics/`
@@ -28,8 +28,8 @@ directory layout hides that:
    against a reference.
 3. **LLM metrics** — post-run analytics on identity-generation LLM calls.
 
-Processes (1) and (2) are mixed inside `src/population_synth/comparison/`, and
-(3) lives in a sibling `src/population_synth/llm_metrics/`. Nothing signals that
+Processes (1) and (2) are mixed inside `src/population_synthetic/comparison/`, and
+(3) lives in a sibling `src/population_synthetic/llm_metrics/`. Nothing signals that
 these three form the "analysis" family, and the mapping-vs-comparison split is
 invisible from the listing. This impedes navigation and blurs the
 `comparison → mapping` dependency boundary.
@@ -37,7 +37,7 @@ invisible from the listing. This impedes navigation and blurs the
 ## Goals
 
 ### In Scope
-1. Create `src/population_synth/analysis/` as the parent of all three processes.
+1. Create `src/population_synthetic/analysis/` as the parent of all three processes.
 2. Split the current `comparison/` package into `analysis/mapping/` and
    `analysis/comparison/`.
 3. Move `llm_metrics/` wholesale to `analysis/llm_metrics/`.
@@ -57,9 +57,9 @@ invisible from the listing. This impedes navigation and blurs the
 
 ## Success Criteria
 
-- [x] `src/population_synth/analysis/` contains exactly four subpackages
+- [x] `src/population_synthetic/analysis/` contains exactly four subpackages
       (`mapping`, `comparison`, `llm_metrics`, `utils`) plus a top-level
-      `__init__.py`; no analysis module remains at `population_synth/` top level.
+      `__init__.py`; no analysis module remains at `population_synthetic/` top level.
 - [x] `python -m pytest tests/` passes unchanged, including the aggregator
       golden snapshot (`tests/data/expected_metrics.json` **not** edited).
 - [x] `ruff check src/ scripts/` introduces no new lint (the move left no import
@@ -78,9 +78,9 @@ invisible from the listing. This impedes navigation and blurs the
 Mechanical Move-Module + import rewrite done as **one atomic restructure** so the
 suite is green at the end (a half-moved package does not import). Use `git mv` to
 preserve history. The repo convention is fully-qualified absolute imports
-(`population_synth.analysis.<sub>.<module>`), so all rewritten imports use the new
+(`population_synthetic.analysis.<sub>.<module>`), so all rewritten imports use the new
 absolute paths — including same-subpackage siblings that currently use an
-absolute `population_synth.comparison.*` / `population_synth.llm_metrics.*`
+absolute `population_synthetic.comparison.*` / `population_synthetic.llm_metrics.*`
 prefix. Existing **relative** imports inside `reference_mapper/` and
 `synthetic_mapper/` (`.base`, `.factory`, …) are unaffected.
 
@@ -103,7 +103,7 @@ This reuses the exact methodology proven in
 ### Architecture Changes
 
 ```
-src/population_synth/analysis/
+src/population_synthetic/analysis/
 ├── __init__.py                 # NEW — parent docstring: the three analysis processes
 ├── mapping/                    # raw -> canonical schema (process 1)
 │   ├── __init__.py             # NEW — docstring
@@ -144,15 +144,15 @@ src/population_synth/analysis/
 
 | Old | New |
 |-----|-----|
-| `population_synth.comparison.{mapping_engine,flatten_raw,extractor,normalizer}` | `population_synth.analysis.mapping.<m>` |
-| `population_synth.comparison.{reference_mapper,synthetic_mapper}` | `population_synth.analysis.mapping.<pkg>` |
-| `population_synth.comparison.{evaluator,charts,scheme}` | `population_synth.analysis.comparison.<m>` |
-| `population_synth.comparison.country_config` | `population_synth.analysis.utils.country_config` |
-| `population_synth.llm_metrics.*` | `population_synth.analysis.llm_metrics.*` |
+| `population_synthetic.comparison.{mapping_engine,flatten_raw,extractor,normalizer}` | `population_synthetic.analysis.mapping.<m>` |
+| `population_synthetic.comparison.{reference_mapper,synthetic_mapper}` | `population_synthetic.analysis.mapping.<pkg>` |
+| `population_synthetic.comparison.{evaluator,charts,scheme}` | `population_synthetic.analysis.comparison.<m>` |
+| `population_synthetic.comparison.country_config` | `population_synthetic.analysis.utils.country_config` |
+| `population_synthetic.llm_metrics.*` | `population_synthetic.analysis.llm_metrics.*` |
 
 Unchanged cross-package imports (keep as-is):
-`llm_metrics/cross_run/comparison_loader.py` → `population_synth.identity.manifest_loader`;
-`utils/country_config.py` → `population_synth.identity.manifest_loader`, `population_synth._paths`.
+`llm_metrics/cross_run/comparison_loader.py` → `population_synthetic.identity.manifest_loader`;
+`utils/country_config.py` → `population_synthetic.identity.manifest_loader`, `population_synthetic._paths`.
 
 ---
 
@@ -193,7 +193,7 @@ intermediate state is committed.
 
 **Files Modified:**
 - ~20 moved modules (paths change; ~13 also get import edits) under
-  `src/population_synth/analysis/{mapping,comparison,llm_metrics,utils}/`
+  `src/population_synthetic/analysis/{mapping,comparison,llm_metrics,utils}/`
 - Scripts: `scripts/analyze/{map_populations,compare_populations,compare_countries,compare_pipeline_to_scb,compare_pipeline_to_istat,compare_all_pipelines,analyze_run,compare_runs}.py`,
   `scripts/generate/extract_population_from_pipeline.py`
 - Tests: `tests/{test_mapping_engine,test_reference_mapper_base,test_synthetic_mapper_base,test_mapper_delegation,test_extractor_characterization,test_scheme_index,test_evaluator,test_synthetic_reference_vocab_subset,test_aggregator,test_call_context,test_joiner,test_log_parser,test_run_comparison,test_stats}.py`
@@ -234,10 +234,10 @@ intermediate state is committed.
 ### Manual Verification
 - [x] Import smoke test (editable install picks up new subpackages, no reinstall):
       ```bash
-      python -c "import population_synth.analysis.mapping.mapping_engine, \
-        population_synth.analysis.comparison.evaluator, \
-        population_synth.analysis.llm_metrics.per_run.aggregator, \
-        population_synth.analysis.utils.country_config"
+      python -c "import population_synthetic.analysis.mapping.mapping_engine, \
+        population_synthetic.analysis.comparison.evaluator, \
+        population_synthetic.analysis.llm_metrics.per_run.aggregator, \
+        population_synthetic.analysis.utils.country_config"
       ```
 - [x] `python scripts/analyze/map_populations.py --help`,
       `compare_pipeline_to_scb.py --help`, `analyze_run.py --help`,
@@ -245,7 +245,7 @@ intermediate state is committed.
 
 ### Edge Cases
 - [x] `__file__`-relative path math: confirm moved modules derive paths from
-      `population_synth._paths.PROJECT_ROOT` (not local `Path(__file__).parents[N]`),
+      `population_synthetic._paths.PROJECT_ROOT` (not local `Path(__file__).parents[N]`),
       so deeper nesting shifts no resolved path. (Exploration found none — verify.)
 
 ---
@@ -320,17 +320,17 @@ Pure structural refactor on a feature branch; nothing deployed or migrated.
 - scripts/analyze/compare_runs.py
 - scripts/analyze/map_populations.py
 - scripts/generate/extract_population_from_pipeline.py
-- src/population_synth/analysis/__init__.py
-- src/population_synth/analysis/comparison/__init__.py
-- src/population_synth/analysis/comparison/charts.py
-- src/population_synth/analysis/comparison/evaluator.py
-- src/population_synth/analysis/comparison/scheme.py
-- src/population_synth/analysis/llm_metrics/ (moved wholesale from src/population_synth/llm_metrics/)
-- src/population_synth/analysis/mapping/ (mapping_engine, flatten_raw, extractor, normalizer, reference_mapper/, synthetic_mapper/ — moved from comparison/)
-- src/population_synth/analysis/mapping/__init__.py
-- src/population_synth/analysis/utils/__init__.py
-- src/population_synth/analysis/utils/country_config.py
-- src/population_synth/comparison/ (deleted — old __init__.py removed, package emptied)
+- src/population_synthetic/analysis/__init__.py
+- src/population_synthetic/analysis/comparison/__init__.py
+- src/population_synthetic/analysis/comparison/charts.py
+- src/population_synthetic/analysis/comparison/evaluator.py
+- src/population_synthetic/analysis/comparison/scheme.py
+- src/population_synthetic/analysis/llm_metrics/ (moved wholesale from src/population_synthetic/llm_metrics/)
+- src/population_synthetic/analysis/mapping/ (mapping_engine, flatten_raw, extractor, normalizer, reference_mapper/, synthetic_mapper/ — moved from comparison/)
+- src/population_synthetic/analysis/mapping/__init__.py
+- src/population_synthetic/analysis/utils/__init__.py
+- src/population_synthetic/analysis/utils/country_config.py
+- src/population_synthetic/comparison/ (deleted — old __init__.py removed, package emptied)
 - tests/ (14 affected test files + _mapping_fixtures.py — import paths rewritten)
 
 ---

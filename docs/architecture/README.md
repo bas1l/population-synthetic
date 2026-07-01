@@ -4,12 +4,12 @@
 > [Design principles](design-principles.md) · [Axis composition](axis-composition.md) ·
 > [Configuration](configuration.md) · [Commands](commands.md)
 
-The reference for how **population-synth** is put together. This area is organised as a small
+The reference for how **population-synthetic** is put together. This area is organised as a small
 **wiki**: `CLAUDE.md` at the repo root is the lean hub (overview, quick-start, hard-rule
 one-liners, secrets); the pages here hold the depth it links to. Every page opens with the
 navigation line above and closes with a *See also* section — start here, then follow the links.
 
-**population-synth** is a standalone extraction from the `anxiety-synthetic` monorepo providing
+**population-synthetic** is a standalone extraction from the `anxiety-synthetic` monorepo providing
 three capabilities: **population generation** (real demographic distributions from national
 statistical APIs, sampled via conditional chained sampling), **identity generation** (LLM-based
 persona creation), and **population comparison** (statistical evaluation of any two populations).
@@ -18,7 +18,7 @@ persona creation), and **population comparison** (statistical evaluation of any 
 
 | File | What it covers |
 |------|----------------|
-| [`sub-packages.md`](sub-packages.md) | Full per-package breakdown of `src/population_synth/` (`population`, `identity`, `comparison`, `gui`, `llm_metrics`, `utils`, `clients`) plus `_paths.py` path resolution. |
+| [`sub-packages.md`](sub-packages.md) | Full per-package breakdown of `src/population_synthetic/` (`generators/reference`, `generators/synthetic`, `comparison`, `gui`, `llm_metrics`, `utils`, `clients`) plus `_paths.py` path resolution. |
 | [`comparison-mapping.md`](comparison-mapping.md) | The densest subsystem: the unified symmetric mapping config, the `mapping_engine` tiered resolver, and the reference/synthetic mapper hierarchies. |
 | [`design-principles.md`](design-principles.md) | Recurring patterns **and** the hard behavioral rules (no synthetic distributions, config-is-the-single-source-of-truth, full comparison output) in full — the rationale behind the one-liners in `CLAUDE.md`. |
 | [`axis-composition.md`](axis-composition.md) | How `--model-id` / `--strategy-id` / `--country-id` compose a run manifest from four YAML layers, and the resulting output slug. |
