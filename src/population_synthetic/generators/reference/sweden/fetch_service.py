@@ -9,7 +9,7 @@ fallback distributions.
 from __future__ import annotations
 
 from population_synthetic.clients.scb_client import SCBPxWebClient
-from population_synthetic.population.data import PopulationDistributions
+from population_synthetic.generators.reference.data import PopulationDistributions
 
 from .constants import (
     AGE_SEX_TABLE,

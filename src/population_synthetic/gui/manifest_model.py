@@ -11,7 +11,7 @@ import itertools
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from population_synthetic.identity.manifest_loader import ManifestConfig, load_manifest
+from population_synthetic.generators.synthetic.manifest_loader import ManifestConfig, load_manifest
 
 
 @dataclass
@@ -70,7 +70,7 @@ class ManifestDisplayInfo:
 
     @classmethod
     def from_axis(cls, model_id: str, strategy_id: str, country_id: str) -> "ManifestDisplayInfo":
-        from population_synthetic.identity.manifest_loader import compose_manifest
+        from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
         config = compose_manifest(model_id, strategy_id, country_id)
         output_dir = config.parallel_output_dir
         count = None

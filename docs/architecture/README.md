@@ -18,7 +18,7 @@ persona creation), and **population comparison** (statistical evaluation of any 
 
 | File | What it covers |
 |------|----------------|
-| [`sub-packages.md`](sub-packages.md) | Full per-package breakdown of `src/population_synthetic/` (`population`, `identity`, `comparison`, `gui`, `llm_metrics`, `utils`, `clients`) plus `_paths.py` path resolution. |
+| [`sub-packages.md`](sub-packages.md) | Full per-package breakdown of `src/population_synthetic/` (`generators/reference`, `generators/synthetic`, `comparison`, `gui`, `llm_metrics`, `utils`, `clients`) plus `_paths.py` path resolution. |
 | [`comparison-mapping.md`](comparison-mapping.md) | The densest subsystem: the unified symmetric mapping config, the `mapping_engine` tiered resolver, and the reference/synthetic mapper hierarchies. |
 | [`design-principles.md`](design-principles.md) | Recurring patterns **and** the hard behavioral rules (no synthetic distributions, config-is-the-single-source-of-truth, full comparison output) in full — the rationale behind the one-liners in `CLAUDE.md`. |
 | [`axis-composition.md`](axis-composition.md) | How `--model-id` / `--strategy-id` / `--country-id` compose a run manifest from four YAML layers, and the resulting output slug. |

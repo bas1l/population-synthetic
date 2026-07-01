@@ -13,7 +13,7 @@ import time
 
 from population_synthetic.clients.eurostat_client import EurostatClient
 from population_synthetic.clients.istat_client import ISTATSDMXClient
-from population_synthetic.population.data import PopulationDistributions
+from population_synthetic.generators.reference.data import PopulationDistributions
 
 from .constants import (
     EUROSTAT_AGE_SEX_DATASET,

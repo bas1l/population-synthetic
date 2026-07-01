@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from population_synthetic.population.helpers import VALID_AGE_GROUPS, resolve_age_group  # noqa: F401
+from population_synthetic.generators.reference.helpers import VALID_AGE_GROUPS, resolve_age_group  # noqa: F401
 
 from .constants import (
     CIVIL_STATUS_MAP,

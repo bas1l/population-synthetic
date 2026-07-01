@@ -7,8 +7,8 @@ classes.
 """
 from __future__ import annotations
 
-from population_synthetic.population.helpers import VALID_AGE_GROUPS, resolve_age_group
-from population_synthetic.population.income_class import classify_brackets, median_from_brackets
+from population_synthetic.generators.reference.helpers import VALID_AGE_GROUPS, resolve_age_group
+from population_synthetic.generators.reference.income_class import classify_brackets, median_from_brackets
 
 from .constants import SCB_INCOME_BRACKETS
 

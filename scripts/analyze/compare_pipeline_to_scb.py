@@ -155,14 +155,14 @@ def resolve_slug(args: argparse.Namespace, parser: argparse.ArgumentParser):
     manifest = None
     seed_name: str | None = None
     if args.manifest:
-        from population_synthetic.identity.manifest_loader import load_manifest
+        from population_synthetic.generators.synthetic.manifest_loader import load_manifest
         manifest = load_manifest(args.manifest)
         if manifest.parallel_output_dir is not None:
             seed_name = manifest.parallel_output_dir.name
     elif args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
-        from population_synthetic.identity.manifest_loader import compose_manifest
+        from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
         manifest = compose_manifest(args.model_id, args.strategy_id, args.country_id)
         if manifest.parallel_output_dir is not None:
             seed_name = manifest.parallel_output_dir.name

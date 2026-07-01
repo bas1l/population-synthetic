@@ -18,9 +18,9 @@ from PyQt5.QtWidgets import (
 )
 
 from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 from population_synthetic.gui.manifest_model import ExperimentSelection, ManifestDisplayInfo
 from population_synthetic.gui.widgets.checkable_axis_list import CheckableAxisList
-from population_synthetic.identity.manifest_loader import discover_axis_values
 
 _STATE_FILE = PROJECT_ROOT / "config" / "gui" / "state.json"
 

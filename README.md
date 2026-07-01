@@ -151,21 +151,21 @@ python -m population_synthetic.gui.main
 
 ```
 src/population_synthetic/
-    population/           Shared population layer
-        data.py           PopulationDistributions dataclass
-        helpers.py        age_to_group, sample_from, normalize, VALID_AGE_GROUPS, AGE_GROUP_BOUNDS
-        income_class.py   Income bracket classification (Eurostat AROP / OECD thresholds)
-        sweden/           SCB-specific constants, fetch service, parsers, sample service
-        norway/           SSB-specific constants, fetch service, parsers, sample service
-        italy/            ISTAT/Eurostat-specific constants, parsers (SDMX + JSON-stat), fetch service, sample service
+    generators/           Data producers: reference (statistical) + synthetic (LLM)
+        reference/        Shared population layer (per-country, over a shared parent)
+            data.py           PopulationDistributions dataclass
+            helpers.py        age_to_group, sample_from, normalize, VALID_AGE_GROUPS, AGE_GROUP_BOUNDS
+            income_class.py   Income bracket classification (Eurostat AROP / OECD thresholds)
+            sweden/           SCB-specific constants, fetch service, parsers, sample service
+            norway/           SSB-specific constants, fetch service, parsers, sample service
+            italy/            ISTAT/Eurostat-specific constants, parsers (SDMX + JSON-stat), fetch service, sample service
 
-    identity/             LLM-based persona identity generation
-        base_identity_generator.py        Abstract base class
-        identity_generator_batch.py
-        identity_generator_configurable.py
-        factory_identity_generator.py     Factory for selecting strategy at runtime
-        manifest_loader.py                Manifest + axis-composition loader
-        llm_interaction_log.py            Incremental JSONL interaction logging
+        synthetic/        LLM-based persona identity generation
+            base_identity_generator.py        Abstract base class
+            identity_generator_configurable.py
+            factory_identity_generator.py     Factory for selecting strategy at runtime
+            manifest_loader.py                Manifest + axis-composition loader
+            llm_interaction_log.py            Incremental JSONL interaction logging
 
     comparison/           Statistical evaluation and charting (population quality vs reference)
         evaluator.py      StatisticalEvaluator (chi-squared, TV distance)
@@ -195,11 +195,11 @@ src/population_synthetic/
         llm_protocol.py        LLMClient Protocol shared by the LLM clients
 ```
 
-The `population/` layer breaks the cross-dependency between country modules. Each country sub-package imports shared code from its parent `population/` package -- never from another country.
+The `generators/reference/` layer breaks the cross-dependency between country modules. Each country sub-package imports shared code from its parent `generators/reference/` package -- never from another country.
 
 ## Axis Composition
 
-Identity generation can be configured via three orthogonal axes instead of a monolithic manifest. `compose_manifest` (`identity/manifest_loader.py`) merges YAML from four layers:
+Identity generation can be configured via three orthogonal axes instead of a monolithic manifest. `compose_manifest` (`generators/synthetic/manifest_loader.py`) merges YAML from four layers:
 
 1. `config/synthetic/experiment_defaults.yaml` -- base parameters
 2. `config/synthetic/axes/models/{model_id}.yaml` -- provider, model name, API key env var

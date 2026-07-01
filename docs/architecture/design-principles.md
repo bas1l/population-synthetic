@@ -10,7 +10,7 @@ holds the full rationale. When a rule here conflicts with convenience, the rule 
 
 ## Key design patterns
 
-- **Shared population layer** -- Breaks the SCB<->SSB cross-dependency. Both `sweden/` and `norway/` import from the shared `population/` parent, never from each other
+- **Shared population layer** -- Breaks the SCB<->SSB cross-dependency. Both `sweden/` and `norway/` import from the shared `generators/reference/` parent, never from each other
 - **Factory + Strategy** -- `FactoryIdentityGenerator` selects generation strategy at runtime based on mode string
 - **Conditional chained sampling** -- Population sampling conditions each attribute on prior draws (e.g., education given age/sex, employment given education)
 - **Local file caching** -- PxWeb clients cache API responses as JSON files in `config/database/caches/{scb,ssb}/` to avoid redundant API calls
@@ -60,5 +60,5 @@ must appear.
 
 - [Comparison & mapping](comparison-mapping.md) — where the "config is the single source of truth"
   and "full comparison output" rules are enforced.
-- [Sub-packages](sub-packages.md) — the packages these patterns shape (`population/`, `identity/`,
-  `analysis/`).
+- [Sub-packages](sub-packages.md) — the packages these patterns shape
+  (`generators/reference/`, `generators/synthetic/`, `analysis/`).

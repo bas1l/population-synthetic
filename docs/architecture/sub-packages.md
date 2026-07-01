@@ -9,7 +9,12 @@ the short architecture map in `CLAUDE.md`.
 
 ## Sub-packages (`src/population_synthetic/`)
 
-**`population/`** -- Shared population layer with country-specific sub-modules:
+**`generators/`** -- The two data producers, grouped under one parent (this is where cohorts
+are created). Its two sub-packages are the reference side and the synthetic side of the
+comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `reference_mapper/` vs
+`synthetic_mapper/` split.
+
+**`generators/reference/`** (formerly `population/`) -- Shared population layer with country-specific sub-modules:
 - `data.py` -- `PopulationDistributions` dataclass (shared by both countries)
 - `helpers.py` -- Shared utilities: `age_to_group`, `sample_from`, `normalize`, `VALID_AGE_GROUPS`, `AGE_GROUP_BOUNDS`
 - `income_class.py` -- Income bracket classification using Eurostat AROP (0.60x median) and OECD/Pew (1.00x, 2.00x) thresholds
@@ -17,7 +22,7 @@ the short architecture map in `CLAUDE.md`.
 - `norway/` -- SSB-specific: constants (table IDs, label maps), fetch service, parsers, sample service
 - `italy/` -- ISTAT/Eurostat-specific: constants (dataflow IDs, NUTS2 codes, label maps), parsers (SDMX + JSON-stat), fetch service (dual-client `load_all`), sample service
 
-**`identity/`** -- LLM-based persona identity generation:
+**`generators/synthetic/`** (formerly `identity/`) -- LLM-based persona identity generation:
 - Factory + Strategy pattern: `FactoryIdentityGenerator` selects the generation strategy at runtime
 - Base class defines the generation interface; each strategy implements `generate_identity()`
 - Mode semantics:

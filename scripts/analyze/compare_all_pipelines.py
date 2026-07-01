@@ -40,7 +40,7 @@ from population_synthetic.analysis.comparison.charts import (
 from population_synthetic.analysis.utils.country_config import mappings_for_country
 from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
 from population_synthetic.analysis.comparison.scheme import load_scheme
-from population_synthetic.identity.manifest_loader import discover_axis_values
+from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 

@@ -44,7 +44,7 @@ Both use the identical `pick` method (1 LLM call). They differ **only** in
 arbitrary topological order), while `all_pick_dag` declares the dependency edges
 that force parents to resolve before children.
 
-Source: `src/population_synthetic/identity/identity_generator_configurable.py` and
+Source: `src/population_synthetic/generators/synthetic/identity_generator_configurable.py` and
 the strategy definitions under
 `config/synthetic/axes/strategies/` (layout coordinates under
 `config/gui/layouts/`).
