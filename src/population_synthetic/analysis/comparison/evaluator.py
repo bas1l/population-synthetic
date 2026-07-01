@@ -18,7 +18,7 @@ import numpy as np
 from scipy.stats import chi2_contingency, chisquare
 
 from population_synthetic.analysis.comparison.scheme import ComparisonScheme
-from population_synthetic.population.helpers import age_to_group
+from population_synthetic.generators.reference.helpers import age_to_group
 
 # The comparison axis (attributes, categories, joint pairs, coherence attributes,
 # coherence threshold) is not defined here: it is the single source of truth in the

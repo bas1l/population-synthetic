@@ -21,8 +21,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from population_synthetic.generators.synthetic.manifest_loader import compose_manifest, discover_axis_values
 from population_synthetic.gui.manifest_model import ExperimentSelection
-from population_synthetic.identity.manifest_loader import compose_manifest, discover_axis_values
 
 _DASH = "—"
 _PENDING = "…"

@@ -9,7 +9,7 @@ import math
 
 import pytest
 
-from population_synthetic.population.income_class import (
+from population_synthetic.generators.reference.income_class import (
     classify_brackets,
     median_from_brackets,
 )

@@ -45,7 +45,7 @@ from population_synthetic.analysis.utils.country_config import (
 )
 from population_synthetic.analysis.mapping.reference_mapper import load_reference_population, normalize_population
 from population_synthetic.analysis.mapping.synthetic_mapper import load_raw_population, map_population
-from population_synthetic.identity.manifest_loader import load_manifest
+from population_synthetic.generators.synthetic.manifest_loader import load_manifest
 
 _DEFAULT_TARGETS = PROJECT_ROOT / "config" / "analysis" / "comparison_targets.yaml"
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"

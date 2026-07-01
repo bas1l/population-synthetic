@@ -5,7 +5,7 @@ Table IDs and variable codes are verified against the SSB PxWebApi v2 endpoint
 https://data.ssb.no/api/pxwebapi/v2/tables/{table_id}/metadata as of 2026-05.
 """
 
-from population_synthetic.population.helpers import AGE_GROUP_BOUNDS, VALID_AGE_GROUPS  # noqa: F401
+from population_synthetic.generators.reference.helpers import AGE_GROUP_BOUNDS, VALID_AGE_GROUPS  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Age-sex (main population table — annual, by single year of age, by fylke)

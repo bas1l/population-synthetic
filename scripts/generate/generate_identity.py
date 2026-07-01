@@ -40,8 +40,8 @@ import sys
 import time
 from pathlib import Path
 
-from population_synthetic.identity.factory_identity_generator import FactoryIdentityGenerator
-from population_synthetic.identity.llm_interaction_log import LLMInteractionCollector
+from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
+from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -141,7 +141,7 @@ def main() -> None:
     _composed_manifest = None
 
     if args.manifest:
-        from population_synthetic.identity.manifest_loader import load_manifest
+        from population_synthetic.generators.synthetic.manifest_loader import load_manifest
         m = load_manifest(args.manifest)
         logger.info("Loaded manifest: %s", m.name)
         if args.provider is None:
@@ -167,7 +167,7 @@ def main() -> None:
     elif args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
-        from population_synthetic.identity.manifest_loader import compose_manifest
+        from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
         m = compose_manifest(args.model_id, args.strategy_id, args.country_id)
         _composed_manifest = m
         logger.info("Composed manifest: %s", m.name)
@@ -235,7 +235,7 @@ def main() -> None:
     logger.info("Config: %s", config_path)
 
     if _composed_manifest is not None:
-        from population_synthetic.identity.manifest_loader import serialize_manifest
+        from population_synthetic.generators.synthetic.manifest_loader import serialize_manifest
         snapshot_path = output_path.parent / "manifest_snapshot.yaml"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         snapshot_path.write_text(serialize_manifest(_composed_manifest), encoding="utf-8")

@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import (
 
 from population_synthetic.gui.launcher_config import ActionEntry, LauncherConfig
 from population_synthetic.gui.manifest_model import ExperimentSelection, ManifestDisplayInfo
-from population_synthetic.identity.manifest_loader import discover_axis_values
+from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 from population_synthetic.gui.widgets.configuration_panel import ConfigurationPanel
 from population_synthetic.gui.widgets.console_widget import ConsoleWidget, ProcessOutputReader
 from population_synthetic.gui.widgets.dag_graph_widget import DagGraphWidget

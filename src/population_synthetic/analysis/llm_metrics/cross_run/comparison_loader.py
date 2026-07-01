@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from population_synthetic.identity.manifest_loader import discover_axis_values
+from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 # ---------------------------------------------------------------------------
 # Metric specifications

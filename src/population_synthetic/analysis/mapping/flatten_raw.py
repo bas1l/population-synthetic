@@ -14,7 +14,7 @@ sex vocabulary comes from config.
 from __future__ import annotations
 
 from population_synthetic.analysis.mapping import mapping_engine
-from population_synthetic.population.helpers import age_to_group
+from population_synthetic.generators.reference.helpers import age_to_group
 
 #: Keys handled explicitly by :func:`flatten_individual`; every other key is
 #: unwrapped generically from the record itself (no hardcoded field list).

@@ -18,7 +18,7 @@ the axis config files instead of searching `data/`:
 - **Axis-composed runs** (`--model-id` / `--strategy-id` / `--country-id`): the slug is
   `{country_id}_{strategy_id}_{model_id}` and the run dir is `{output_base}/01_Raw/{slug}`
   (comparison output at `{output_base}/03_Analysis/{slug}`). See `compose_manifest` in
-  `src/population_synthetic/identity/manifest_loader.py`. The axis IDs are the YAML filenames (without
+  `src/population_synthetic/generators/synthetic/manifest_loader.py`. The axis IDs are the YAML filenames (without
   extension) under `config/synthetic/axes/models/`, `config/synthetic/axes/strategies/`, and
   `config/synthetic/axes/countries/` -- e.g. model `ollama_lucie_7b` + strategy `all_pick` +
   country `swedish` resolves to `{output_base}/01_Raw/swedish_all_pick_ollama_lucie_7b/`.
@@ -40,5 +40,5 @@ When a persona generation fails, look at these files in the output directory (e.
 ## Logging infrastructure
 
 Key implementation files for the logging infrastructure:
-- `src/population_synthetic/identity/llm_interaction_log.py` -- `LLMInteractionEntry` dataclass and `LLMInteractionCollector` (incremental JSONL writer)
-- `src/population_synthetic/identity/identity_generator_configurable.py` -- `_call_llm_json()` handles JSON parse retries (3 attempts); `generate_identity()` logs category-level errors before re-raising
+- `src/population_synthetic/generators/synthetic/llm_interaction_log.py` -- `LLMInteractionEntry` dataclass and `LLMInteractionCollector` (incremental JSONL writer)
+- `src/population_synthetic/generators/synthetic/identity_generator_configurable.py` -- `_call_llm_json()` handles JSON parse retries (3 attempts); `generate_identity()` logs category-level errors before re-raising

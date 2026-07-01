@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 
 from population_synthetic.clients.ssb_client import SSBPxWebClient
-from population_synthetic.population.data import PopulationDistributions
+from population_synthetic.generators.reference.data import PopulationDistributions
 
 from .constants import (
     AGE_SEX_REGION_WHOLE_COUNTRY,

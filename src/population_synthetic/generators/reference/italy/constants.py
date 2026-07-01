@@ -7,7 +7,7 @@ only, not probability values.
 """
 from __future__ import annotations
 
-from population_synthetic.population.helpers import VALID_AGE_GROUPS as VALID_AGE_GROUPS  # noqa: F401
+from population_synthetic.generators.reference.helpers import VALID_AGE_GROUPS as VALID_AGE_GROUPS  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Eurostat dataset IDs (JSON-stat 2.0)

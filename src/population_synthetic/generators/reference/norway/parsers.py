@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import logging
 
-from population_synthetic.population.helpers import VALID_AGE_GROUPS, resolve_age_group
-from population_synthetic.population.income_class import classify_brackets, median_from_brackets
+from population_synthetic.generators.reference.helpers import VALID_AGE_GROUPS, resolve_age_group
+from population_synthetic.generators.reference.income_class import classify_brackets, median_from_brackets
 
 from .constants import (
     AGE_SEX_KJONN_CODES,
@@ -1122,7 +1122,7 @@ def parse_birth_country_detail(
                 except (ValueError, IndexError):
                     continue
             age_group = None
-            from population_synthetic.population.helpers import age_to_group
+            from population_synthetic.generators.reference.helpers import age_to_group
             try:
                 age_group = age_to_group(age)
             except ValueError:

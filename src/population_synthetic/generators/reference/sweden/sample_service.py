@@ -10,8 +10,8 @@ from __future__ import annotations
 import numpy as np
 from numpy.random import Generator
 
-from population_synthetic.population.data import PopulationDistributions
-from population_synthetic.population.helpers import VALID_AGE_GROUPS, age_to_group, sample_from
+from population_synthetic.generators.reference.data import PopulationDistributions
+from population_synthetic.generators.reference.helpers import VALID_AGE_GROUPS, age_to_group, sample_from
 
 _SEX_CODES: dict[str, str] = {"men": "1", "women": "2"}
 

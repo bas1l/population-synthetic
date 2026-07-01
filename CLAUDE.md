@@ -41,9 +41,9 @@ pytest                                # test suite (covers llm_metrics/ and clie
 The project uses `src/` layout. The `pyproject.toml` configures `setuptools` to find packages under `src/`, so after `pip install -e .`, the `population_synthetic` namespace is available:
 
 ```python
-from population_synthetic.population.sweden.fetch_service import FetchService
+from population_synthetic.generators.reference.sweden.fetch_service import FetchService
 from population_synthetic.clients.scb_client import SCBPxWebClient
-from population_synthetic.identity.factory_identity_generator import FactoryIdentityGenerator
+from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
 ```
 
 All imports use the fully-qualified `population_synthetic.*` package namespace. Scripts in `scripts/` depend on the editable install.
@@ -60,8 +60,9 @@ These are enforced guardrails, not suggestions. Full rationale in
 
 ## Architecture
 
-`src/` layout; the `population_synthetic` namespace holds sub-packages `population/` (per-country
-data layers over a shared parent), `identity/` (LLM persona generation), `analysis/` (the
+`src/` layout; the `population_synthetic` namespace holds the two data producers under
+`generators/` -- `generators/reference/` (per-country data layers over a shared parent) and
+`generators/synthetic/` (LLM persona generation) -- plus `analysis/` (the
 post-generation family, one subpackage per process: `mapping/` raw -> canonical schema,
 `comparison/` two-stage map -> compare statistical scoring + charts, `llm_metrics/` post-run
 LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a

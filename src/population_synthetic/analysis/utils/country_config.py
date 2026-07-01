@@ -19,7 +19,7 @@ directories stay consistent across the pipeline.
 from pathlib import Path
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.identity.manifest_loader import discover_axis_values
+from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 
 def _load_country_axes() -> dict[str, dict[str, Path]]:
