@@ -1,27 +1,30 @@
 {
-  "reference_handler": "label",
-  "pipeline_handler": "cross_field_coded",
-  "pipeline_primary_field": "birth_location",
-  "pipeline_refine_from": "birth_country_detail",
-  "pipeline_domestic_label": "Italy",
-  "pipeline_refine_source": "raw",
-  "pipeline_membership": false,
-  "pipeline_fuzzy": false,
-  "pipeline_keyword_rules": [
-    {
-      "match": "contains",
-      "any_of": [
-        "domestic",
-        "italy",
-        "italia",
-        "nato in italia",
-        "italian"
-      ],
-      "label": "Italy"
+  "values": [
+    "Italy",
+    "Europe (Other)",
+    "Outside Europe"
+  ],
+  "database": {
+    "Italy": {
+      "equals": [
+        "Italy"
+      ]
     },
-    {
-      "match": "equals",
-      "any_of": [
+    "Europe (Other)": {
+      "equals": [
+        "Europe (Other)"
+      ]
+    },
+    "Outside Europe": {
+      "equals": [
+        "Outside Europe"
+      ]
+    }
+  },
+  "synthetic": {
+    "Italy": {
+      "equals": [
+        "Italy",
         "roma",
         "milano",
         "napoli",
@@ -61,13 +64,7 @@
         "turin",
         "florence",
         "venice",
-        "genoa"
-      ],
-      "label": "Italy"
-    },
-    {
-      "match": "equals",
-      "any_of": [
+        "genoa",
         "piemonte",
         "valle d'aosta",
         "liguria",
@@ -89,81 +86,19 @@
         "sicilia",
         "sardegna"
       ],
-      "label": "Italy"
+      "contains": [
+        "domestic",
+        "italy",
+        "italia",
+        "nato in italia",
+        "italian"
+      ]
     },
-    {
-      "match": "contains",
-      "any_of": [
-        "afghanistan",
-        "algeria",
-        "algeriet",
-        "argentina",
-        "bagdad",
-        "brasil",
-        "brazil",
-        "chile",
-        "china",
-        "colombia",
-        "damaskus",
-        "egypt",
-        "egypten",
-        "eritrea",
-        "ethiopia",
-        "etiopien",
-        "filippinerna",
-        "india",
-        "indien",
-        "irak",
-        "iran",
-        "iraq",
-        "japan",
-        "jemen",
-        "jordan",
-        "jordanien",
-        "kabul",
-        "kenya",
-        "kina",
-        "lebanon",
-        "libanon",
-        "libya",
-        "libyen",
-        "marocko",
-        "mellanöstern",
-        "mexico",
-        "mexiko",
-        "middle east",
-        "mogadishu",
-        "morocco",
-        "nigeria",
-        "nordafrika",
-        "north africa",
-        "pakistan",
-        "palestina",
-        "palestine",
-        "philippines",
-        "somalia",
-        "south korea",
-        "sub-saharan",
-        "sydkorea",
-        "syria",
-        "syrien",
-        "tanzania",
-        "teheran",
-        "thailand",
-        "tunisia",
-        "tunisien",
-        "turkey",
-        "turkiet",
-        "united states",
-        "usa",
-        "vietnam",
-        "yemen"
+    "Europe (Other)": {
+      "equals": [
+        "Europe (Other)"
       ],
-      "label": "Outside Europe"
-    },
-    {
-      "match": "contains",
-      "any_of": [
+      "contains": [
         "albania",
         "albanien",
         "austria",
@@ -234,201 +169,90 @@
         "united kingdom",
         "vitryssland",
         "wales",
-        "österrike"
-      ],
-      "label": "Europe (Other)"
-    },
-    {
-      "match": "contains",
-      "any_of": [
+        "österrike",
         "europe",
         "europa",
         "eu ",
         "european"
-      ],
-      "label": "Europe (Other)"
+      ]
     },
-    {
-      "match": "contains",
-      "any_of": [
+    "Outside Europe": {
+      "equals": [
+        "Outside Europe"
+      ],
+      "contains": [
+        "afghanistan",
+        "algeria",
+        "algeriet",
+        "argentina",
+        "bagdad",
+        "brasil",
+        "brazil",
+        "chile",
+        "china",
+        "colombia",
+        "damaskus",
+        "egypt",
+        "egypten",
+        "eritrea",
+        "ethiopia",
+        "etiopien",
+        "filippinerna",
+        "india",
+        "indien",
+        "irak",
+        "iran",
+        "iraq",
+        "japan",
+        "jemen",
+        "jordan",
+        "jordanien",
+        "kabul",
+        "kenya",
+        "kina",
+        "lebanon",
+        "libanon",
+        "libya",
+        "libyen",
+        "marocko",
+        "mellanöstern",
+        "mexico",
+        "mexiko",
+        "middle east",
+        "mogadishu",
+        "morocco",
+        "nigeria",
+        "nordafrika",
+        "north africa",
+        "pakistan",
+        "palestina",
+        "palestine",
+        "philippines",
+        "somalia",
+        "south korea",
+        "sub-saharan",
+        "sydkorea",
+        "syria",
+        "syrien",
+        "tanzania",
+        "teheran",
+        "thailand",
+        "tunisia",
+        "tunisien",
+        "turkey",
+        "turkiet",
+        "united states",
+        "usa",
+        "vietnam",
+        "yemen",
         "outside",
         "non-eu",
         "extra",
         "abroad",
         "estero",
         "fuori"
-      ],
-      "label": "Outside Europe"
-    }
-  ],
-  "pipeline_refine_buckets": [
-    {
-      "match": "contains",
-      "any_of": [
-        "albania",
-        "albanien",
-        "austria",
-        "belarus",
-        "belgien",
-        "belgium",
-        "bosnia",
-        "bosnien",
-        "bulgaria",
-        "bulgarien",
-        "croatia",
-        "czech",
-        "danmark",
-        "denmark",
-        "england",
-        "estland",
-        "estonia",
-        "finl",
-        "finland",
-        "france",
-        "frankrike",
-        "germany",
-        "greece",
-        "grekland",
-        "holland",
-        "hungary",
-        "iceland",
-        "ireland",
-        "irland",
-        "island",
-        "italien",
-        "italy",
-        "kosovo",
-        "kroatien",
-        "latvia",
-        "lettland",
-        "litauen",
-        "lithuania",
-        "moldov",
-        "monteneg",
-        "nederländerna",
-        "netherlands",
-        "nordmakedon",
-        "norge",
-        "norway",
-        "poland",
-        "polen",
-        "portugal",
-        "romania",
-        "rumänien",
-        "schweiz",
-        "scotland",
-        "serbia",
-        "serbien",
-        "slovakia",
-        "slovakien",
-        "slovenia",
-        "slovenien",
-        "spain",
-        "spanien",
-        "switzerland",
-        "tjeckien",
-        "tyskland",
-        "uk",
-        "ukraina",
-        "ukraine",
-        "ungern",
-        "united kingdom",
-        "vitryssland",
-        "wales",
-        "österrike"
-      ],
-      "label": "Europe (Other)"
+      ]
     },
-    {
-      "match": "contains",
-      "any_of": [
-        "afghanistan",
-        "algeria",
-        "algeriet",
-        "argentina",
-        "bagdad",
-        "brasil",
-        "brazil",
-        "chile",
-        "china",
-        "colombia",
-        "damaskus",
-        "egypt",
-        "egypten",
-        "eritrea",
-        "ethiopia",
-        "etiopien",
-        "filippinerna",
-        "india",
-        "indien",
-        "irak",
-        "iran",
-        "iraq",
-        "japan",
-        "jemen",
-        "jordan",
-        "jordanien",
-        "kabul",
-        "kenya",
-        "kina",
-        "lebanon",
-        "libanon",
-        "libya",
-        "libyen",
-        "marocko",
-        "mellanöstern",
-        "mexico",
-        "mexiko",
-        "middle east",
-        "mogadishu",
-        "morocco",
-        "nigeria",
-        "nordafrika",
-        "north africa",
-        "pakistan",
-        "palestina",
-        "palestine",
-        "philippines",
-        "somalia",
-        "south korea",
-        "sub-saharan",
-        "sydkorea",
-        "syria",
-        "syrien",
-        "tanzania",
-        "teheran",
-        "thailand",
-        "tunisia",
-        "tunisien",
-        "turkey",
-        "turkiet",
-        "united states",
-        "usa",
-        "vietnam",
-        "yemen"
-      ],
-      "label": "Outside Europe"
-    }
-  ],
-  "description": "Birth location classification for Italian population data",
-  "istat_source": "ISTAT/Eurostat migration statistics",
-  "mappings": {
-    "italy": {
-      "schema_label": "Italy",
-      "description": "Born in Italy"
-    },
-    "europe_other": {
-      "schema_label": "Europe (Other)",
-      "description": "Born in a European country other than Italy"
-    },
-    "outside_europe": {
-      "schema_label": "Outside Europe",
-      "description": "Born outside Europe"
-    }
-  },
-  "output_categories": [
-    "Italy",
-    "Europe (Other)",
-    "Outside Europe"
-  ]
+    "refine_from": "birth_country_detail"
+  }
 }

@@ -23,28 +23,27 @@ fundamentally different shapes and require fundamentally different work.
 | | reference_mapper (database) | synthetic_mapper (pipeline) |
 |---|---|---|
 | Input | already-coded `{code,label}` dicts from a stats API | free-text LLM values (Swedish/Italian/English), multiple formats, mojibake |
-| Work | a single case-insensitive dictionary lookup per attribute | fuzzy matching, keyword cascades, encoding repair, narrative parsing |
-| Country divergence | **data** — one class attribute (the mapping directory) | **behaviour** — ~12 per-attribute methods reimplemented per country |
+| Rules block consulted | each attribute file's `database` block | each attribute file's `synthetic` block |
+| Typical matchers | `equals`, composite (attachment×hours), decile-as-`equals` | `contains`, `all_of`/`none_of`, numeric (`int`/`int_gte`), `refine_from` |
+| Extra work | flatten nested `RawCategory` dicts; `id` passthrough | encoding repair, narrative-format skip, persona-skip `age` gate |
+| Country divergence | **data** — one class attribute (the mapping directory) | **data** — one class attribute (the mapping directory) |
 | Output | the shared canonical schema | the shared canonical schema |
 
-The reference side is thin *because the statistics agency already did the hard
-categorisation work*. SCB/ISTAT emit a small, closed set of coded categories;
-turning them into canonical labels is a rename, so one mappings-driven loop in
-`BaseReferenceMapper` serves every country and each subclass
-(`SwedishReferenceMapper`, `ItalianReferenceMapper`) holds only its mapping
-directory (`MAPPINGS_SUBDIR`). `BaseReferenceMapper` is both **field-agnostic** and **label-agnostic**. Field-agnosticism
-is achieved by *self-declaration*: the field set is not a column in the code but lives in
-config — each per-attribute mapping JSON declares its own `reference_handler` (the generic
-algorithm to run: `passthrough`/`label`/`composite`/`decile_coded`/`substring_coded`) and an
-optional `reference_attr` (its output schema key). At construction the base scans the loaded
-mappings for blocks carrying a `reference_handler` and registers one generic handler each, so
-the class contains zero field-name literals and adding/removing a comparison field is a
-config-only edit (it fails fast on an unknown handler kind or when no block declares one).
-Label-agnosticism follows the same discipline: it contains no canonical category string —
-every output label, including the domestic-birth collapse, is an ordinary entry in the
-country's mapping tables, read through role-based sub-keys like `reference_label_mappings`.
-Keeping it apart from the synthetic side stops the messy free-text heuristics from
-contaminating the clean coded-reference path.
+Both sides are now **thin loaders over one shared resolver**,
+`comparison/mapping_engine.py` (`resolve`). Each per-country subclass
+(`SwedishReferenceMapper`/`ItalianReferenceMapper`,
+`SwedishSyntheticMapper`/`ItalianSyntheticMapper`) holds only its mapping directory
+(`MAPPINGS_SUBDIR`); all algorithm and label knowledge lives in the JSON config. The
+reference side is thin *because the statistics agency already did the hard
+categorisation work* (a coded value resolves with plain `equals`); the synthetic side
+does the same tiered value-walk but leans on the richer matchers (`contains`,
+`all_of`/`none_of`, numeric, `refine_from`) to tame free text. Neither base class contains a single field-name or category
+literal: the comparison attributes come from the per-country `_index.json` master
+(attribute → filename, in axis order) and every label comes from the matched
+attribute file's `values`. Adding or removing a comparison field is a config-only
+edit — add the file and list it in `_index.json`. The two packages stay separate so
+the messy free-text path (encoding repair, narrative skip) never contaminates the
+clean coded-reference path, even though they share the resolver.
 
 ## What the mapping actually does — relabel *and* collapse
 
@@ -84,38 +83,60 @@ This is the same discipline as the project-wide *no synthetic distributions* rul
 applied to categories: just as every probability must come from a real API
 response, every comparison category must come from real reference data.
 
-> One subtlety: the reference mapper passes an unrecognised value through unchanged
-> rather than erroring. So if the database ever emits a label outside the curated
-> tables, it lands in the output verbatim — quietly, not loudly. Curated category
-> lists are validated against the real reference file precisely to catch this.
+> One subtlety: when a raw value matches no matcher, the reference side resolves it
+> to `None` (dropped from the comparison) rather than erroring or passing it through.
+> So if the database ever emits a label outside the curated `database` matchers, that
+> mass silently disappears from the axis. A golden diff of the mapper over the real
+> reference file is how this is caught — every value the DB emits must be claimed by
+> some matcher.
 
-## The comparison scheme — where the principle lives
+## The comparison scheme — no longer a separate filter
 
-The principle is made explicit in a per-country **scheme** file:
-`config/mapping/{scb,istat}/_scheme.json`, loaded by
-`comparison/scheme.py` (`ComparisonScheme` / `load_scheme`). Each scheme declares:
+Earlier, the principle lived in a second file — a per-country `_scheme.json` whose
+only job was to *filter out* the looser labels the mappers could emit (the mappers
+had a broad `output_categories`; the scheme narrowed it back to the DB-grounded
+axis). That dual-list arrangement is gone. The per-attribute file is now the **single
+symmetric source of truth**, and because both mappers emit *only* the labels they
+declare, the scored axis simply **is** each file's `values` — there is nothing left
+to filter.
 
-- `attributes` — the in-scope properties for that country (Sweden: 15; Italy: 14,
-  no `income_source`);
-- `categories` — the DB-exact category set per attribute, **built empirically** by
-  enumerating the distinct non-None values the reference mapper produces over that
-  country's real reference population — *not* copied from the mapper's broader
-  `output_categories` (which is the looser set of labels the mappers may emit).
-- `joint_pairs` / `coherence_attributes` — the cross-attribute tests.
+Each attribute file (e.g. `config/mapping/scb/biological_sex.json`) declares:
 
-`StatisticalEvaluator` takes the scheme and uses `categories[attr]` as the scored
-axis. This is what enforces "no empty buckets" and "no DB-absent properties" at the
-point of comparison. The scheme is the single source of truth for *what the
-comparison scores*; it is deliberately distinct from the per-attribute mapping
-files (which govern *what the mappers translate*).
+- `values` — the unified category set **and** the chart/axis order. This is the
+  DB-grounded scored axis for the attribute;
+- `database` — unified value → matcher, resolving a raw national-statistics value;
+- `synthetic` — unified value → matcher, resolving a raw `identity.json` value.
 
-### Regenerating a scheme
+A per-country `_index.json` master lists the in-scope attributes (`attribute →
+filename`, key order = axis order) — pure *mapping scope*. Country scope is therefore
+data-driven with no code branch: Italy's `_index.json` simply omits `income_source`
+(ISTAT provides no such field), so it never appears in Italy's axis.
 
-When a reference population file changes, rebuild the `categories` lists by running
-the reference mapper over the new file and collecting, per attribute,
-`sorted({ind[attr] for ind in individuals} - {None})`. Every value the reference
-emits must appear in the scheme — a missing value would silently drop that
-reference mass from the comparison.
+The cross-attribute statistics — `joint_pairs`, `coherence_attributes` and
+`coherence_threshold` — are evaluator tuning rather than mapping, so they live in a
+**separate comparison-analysis config**, `config/analysis/comparison/{scb,istat}.json`,
+one file per country. Keeping them out of `_index.json` means the mapping index says
+only *which attributes exist*, while the analysis config says *which cross-attribute
+tests the evaluator runs and at what threshold*.
+
+`comparison/scheme.py` (`ComparisonScheme` / `load_scheme`) is unchanged in
+*interface* — `StatisticalEvaluator`, `charts.py`, and the compare scripts still
+receive one `ComparisonScheme` — but it now **sources** the marginal axis from
+`_index.json` + each file's `values`, and the cross-attribute fields
+(`joint_pairs`/`coherence_attributes`/`coherence_threshold`) from the analysis config,
+rather than from a single standalone scheme file. This still enforces "no empty
+buckets" and "no DB-absent properties", because the axis is exactly the values both
+mappers are constrained to emit.
+
+### Changing the category axis
+
+To add, drop, or rename a category, edit that attribute file's `values` (and the
+matcher entries that resolve to it) — one file, both sides. Because the mappers can
+only emit declared `values`, there is no separate scheme to keep in sync. When a
+reference population file changes and a new coded label appears, add it to the
+matching value's `database` matcher; a label the DB emits but no matcher catches
+resolves to `None` (dropped from the comparison), so a golden diff over the real
+reference file is the check that the config is complete.
 
 ## Age: a derived dimension, not a stored field
 
@@ -131,8 +152,8 @@ not pretend the database provided them.
 ## Why not merge the two mappers
 
 You could fold both sides into one class, but you would gain nothing: they share no
-transformation logic (a dictionary lookup vs a fuzzy-NLP toolbox), and the merged
-code would just be `if input_is_clean: lookup else: fuzzy_match`. The two packages
+transformation logic (a clean coded lookup vs a richer free-text matcher toolbox), and
+the merged code would just be `if input_is_clean: lookup else: free_text_match`. The two packages
 are deliberately built as mirror images —
 `load_reference_population → normalize_population` vs
 `load_raw_population → map_population` — so the symmetry is visible at every call

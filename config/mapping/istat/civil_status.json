@@ -1,111 +1,97 @@
 {
-  "reference_handler": "label",
-  "pipeline_handler": "text_coded",
-  "pipeline_fuzzy": false,
-  "pipeline_on_miss": "passthrough",
-  "pipeline_keyword_rules": [
-    {"match": "contains", "any_of": ["single", "celibe", "nubile", "unmarried"], "label": "Single"},
-    {"match": "contains", "any_of": ["married", "coniugat", "sposat"], "label": "Married"},
-    {"match": "contains", "any_of": ["divorced", "divorziat"], "label": "Divorced"},
-    {"match": "contains", "any_of": ["widowed", "vedov"], "label": "Widowed"},
-    {"match": "contains", "any_of": ["separated", "separat"], "label": "Separated"},
-    {"match": "contains", "any_of": ["civil partnership", "unione civile", "convivente"], "label": "Civil Partnership"}
-  ],
-  "description": "Civil/marital status codes to schema labels for Italian population data",
-  "istat_source": "ISTAT civil status classification",
-  "mappings": {
-    "single": {
-      "schema_label": "Single",
-      "istat_codes": [
-        "celibe/nubile",
-        "1"
-      ]
-    },
-    "married": {
-      "schema_label": "Married",
-      "istat_codes": [
-        "coniugato/a",
-        "2"
-      ]
-    },
-    "divorced": {
-      "schema_label": "Divorced",
-      "istat_codes": [
-        "divorziato/a",
-        "4"
-      ]
-    },
-    "widowed": {
-      "schema_label": "Widowed",
-      "istat_codes": [
-        "vedovo/a",
-        "3"
-      ]
-    },
-    "separated": {
-      "schema_label": "Separated",
-      "istat_codes": [
-        "separato/a",
-        "5"
-      ]
-    },
-    "civil_partnership": {
-      "schema_label": "Civil Partnership",
-      "istat_codes": [
-        "unione civile",
-        "6"
-      ]
-    }
-  },
-  "output_categories": [
+  "values": [
     "Single",
     "Married",
     "Divorced",
-    "Widowed",
-    "Separated",
-    "Civil Partnership"
+    "Widowed"
   ],
-  "pipeline_label_mappings": {
-    "Married": "Married",
-    "married": "Married",
-    "coniugato/a": "Married",
-    "Coniugato": "Married",
-    "Coniugata": "Married",
-    "Sposato": "Married",
-    "Sposata": "Married",
-    "Sposato/a": "Married",
-    "sposato/a": "Married",
-    "Single": "Single",
-    "single": "Single",
-    "Celibe": "Single",
-    "Nubile": "Single",
-    "celibe": "Single",
-    "nubile": "Single",
-    "Celibe/Nubile": "Single",
-    "Divorced": "Divorced",
-    "divorced": "Divorced",
-    "Divorziato": "Divorced",
-    "Divorziata": "Divorced",
-    "divorziato": "Divorced",
-    "Divorziato/a": "Divorced",
-    "Widowed": "Widowed",
-    "widowed": "Widowed",
-    "Vedovo": "Widowed",
-    "Vedova": "Widowed",
-    "vedovo": "Widowed",
-    "Vedovo/a": "Widowed",
-    "Separated": "Separated",
-    "separated": "Separated",
-    "Separato": "Separated",
-    "Separata": "Separated",
-    "separato": "Separated",
-    "Separato/a": "Separated",
-    "Civil Partnership": "Civil Partnership",
-    "Unione civile": "Civil Partnership",
-    "unione civile": "Civil Partnership",
-    "Convivente": "Civil Partnership",
-    "convivente": "Civil Partnership",
-    "Cohabitating": "Married",
-    "Unmarried": "Single"
+  "database": {
+    "Single": {
+      "equals": [
+        "Single"
+      ]
+    },
+    "Married": {
+      "equals": [
+        "Married"
+      ]
+    },
+    "Divorced": {
+      "equals": [
+        "Divorced"
+      ]
+    },
+    "Widowed": {
+      "equals": [
+        "Widowed"
+      ]
+    }
+  },
+  "synthetic": {
+    "Single": {
+      "equals": [
+        "Single",
+        "single",
+        "Celibe",
+        "Nubile",
+        "celibe",
+        "nubile",
+        "Celibe/Nubile",
+        "Unmarried"
+      ],
+      "contains": [
+        "single",
+        "celibe",
+        "nubile",
+        "unmarried"
+      ]
+    },
+    "Married": {
+      "equals": [
+        "Married",
+        "married",
+        "coniugato/a",
+        "Coniugato",
+        "Coniugata",
+        "Sposato",
+        "Sposata",
+        "Sposato/a",
+        "sposato/a",
+        "Cohabitating"
+      ],
+      "contains": [
+        "married",
+        "coniugat",
+        "sposat"
+      ]
+    },
+    "Divorced": {
+      "equals": [
+        "Divorced",
+        "divorced",
+        "Divorziato",
+        "Divorziata",
+        "divorziato",
+        "Divorziato/a"
+      ],
+      "contains": [
+        "divorced",
+        "divorziat"
+      ]
+    },
+    "Widowed": {
+      "equals": [
+        "Widowed",
+        "widowed",
+        "Vedovo",
+        "Vedova",
+        "vedovo",
+        "Vedovo/a"
+      ],
+      "contains": [
+        "widowed",
+        "vedov"
+      ]
+    }
   }
 }

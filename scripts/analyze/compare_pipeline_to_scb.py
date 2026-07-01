@@ -1,31 +1,32 @@
 """
-compare_pipeline_to_scb.py -- Extract pipeline persona identities and compare them against
-an SCB reference population in a single step.
+compare_pipeline_to_scb.py -- Compare a pre-mapped synthetic population against a pre-mapped
+SCB reference population (Sweden).
+
+This script performs NO mapping. It consumes the mapped files produced by the map stage
+(scripts/analyze/map_populations.py): the mapped synthetic population {mapped-dir}/{slug}.json
+and the shared mapped reference {mapped-dir}/database_swedish.json. Run map_populations.py first.
 
 Usage:
     python scripts/analyze/compare_pipeline_to_scb.py \\
         --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml \\
-        [--reference <scb_population.json>] \\
+        [--mapped-dir <dir>] \\
         [--output comparison_report.json] \\
-        [--save-extracted synthetic_population.json] \\
-        [--charts-dir <dir>] \\
-        [--no-charts] \\
-        [--radar-tv-only]
+        [--charts-dir <dir>] [--no-charts] [--radar-tv-only]
 
     python scripts/analyze/compare_pipeline_to_scb.py \\
         --seed-root <path> \\
-        [--reference <scb_population.json>] \\
-        [--output comparison_report.json] \\
-        [--save-extracted synthetic_population.json] \\
-        [--charts-dir <dir>] \\
-        [--no-charts] \\
-        [--radar-tv-only]
+        [--mapped-dir <dir>] [--output comparison_report.json] ...
 
---manifest       Seed manifest YAML; derives --seed-root from parallel.output_dir.
---seed-root      Directory containing persona_XXXXX/identity.json files (pipeline output).
---reference      SCB reference population file (default: data/scb_api/scb_population_pop-10000_02.json).
---output         Path for the JSON comparison report (default: data/comparison_report.json).
---save-extracted If provided, also save the flattened pipeline population to this path.
+    python scripts/analyze/compare_pipeline_to_scb.py \\
+        --mapped-synthetic <dir>/seed_022_all_pick_sonnet.json \\
+        --mapped-database <dir>/database_swedish.json
+
+--manifest         Seed manifest YAML; derives the slug from parallel.output_dir basename.
+--seed-root        Pipeline seed output directory; the slug is its basename.
+--mapped-dir       Directory holding the mapped files (default: {output_base}/03_Analysis/mapped).
+--mapped-synthetic Explicit path to the mapped synthetic population JSON (overrides --mapped-dir/{slug}).
+--mapped-database  Explicit path to the mapped reference population JSON (overrides database_swedish.json).
+--output           Path for the JSON comparison report (default: 03_Analysis/comparison/{slug}/{slug}.json).
 """
 
 import argparse
@@ -33,30 +34,15 @@ import json
 import sys
 from pathlib import Path
 
-from population_synth._paths import PROJECT_ROOT
-from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
-from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+import yaml
 
-# Database (reference) population mappers -- renamed on import to make their
-# population membership explicit at every call site in this script.
-from population_synth.comparison.reference_mapper import (
-    load_reference_population as load_raw_database_population,
-)
-from population_synth.comparison.reference_mapper import (
-    normalize_population as normalize_database_population,
-)
-from population_synth.comparison.scheme import load_scheme
+from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.comparison.charts import plot_comparison_charts, plot_radar_comparison
+from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+from population_synthetic.analysis.comparison.scheme import load_scheme
 
-# Synthetic (pipeline) population mappers -- likewise renamed to mark them as
-# operating on the synthetic side.
-from population_synth.comparison.synthetic_mapper import (
-    load_raw_population as load_raw_synthetic_population,
-)
-from population_synth.comparison.synthetic_mapper import (
-    map_population as map_synthetic_population,
-)
-
-_DEFAULT_REFERENCE = PROJECT_ROOT / "data" / "scb_api" / "scb_population_pop-10000_02.json"
+_COUNTRY = "swedish"
+_DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -66,11 +52,11 @@ _DEFAULT_REFERENCE = PROJECT_ROOT / "data" / "scb_api" / "scb_population_pop-100
 def build_parser() -> argparse.ArgumentParser:
     """Construct the CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description="Extract pipeline identities and compare against an SCB reference population"
+        description="Compare a pre-mapped synthetic population against a pre-mapped SCB reference"
     )
     parser.add_argument(
         "--manifest", default=None,
-        help="Seed manifest YAML; derives --seed-root from parallel.output_dir",
+        help="Seed manifest YAML; derives the slug from parallel.output_dir basename",
     )
     parser.add_argument(
         "--model-id", default=None,
@@ -86,26 +72,42 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--seed-root", default=None,
-        help="Pipeline seed output directory",
+        help="Pipeline seed output directory; the slug is its basename",
+    )
+    parser.add_argument(
+        "--output-base",
+        default=None,
+        help="Base output directory (the 03_Analysis parent). "
+        "Default: output_base from config/synthetic/experiment_defaults.yaml.",
+    )
+    parser.add_argument(
+        "--mapped-dir",
+        default=None,
+        help="Directory holding the mapped files (default: {output_base}/03_Analysis/mapped).",
+    )
+    parser.add_argument(
+        "--mapped-synthetic",
+        default=None,
+        help="Explicit path to the mapped synthetic population JSON (overrides --mapped-dir/{slug}.json).",
+    )
+    parser.add_argument(
+        "--mapped-database",
+        default=None,
+        help="Explicit path to the mapped reference population JSON (overrides database_swedish.json).",
     )
     parser.add_argument(
         "--reference",
-        default=str(_DEFAULT_REFERENCE),
-        help=f"SCB reference population JSON file (default: {_DEFAULT_REFERENCE.name})",
+        default=None,
+        help="Display label for the reference population (default: mapped database file stem).",
     )
     parser.add_argument(
         "--output", default=None,
-        help="Output JSON report path (default: data/analysis/compare_with_scb02/<name>.json)",
-    )
-    parser.add_argument(
-        "--save-extracted",
-        default=None,
-        help="Optional: save the flattened pipeline population to this path",
+        help="Output JSON report path (default: 03_Analysis/comparison/{slug}/{slug}.json)",
     )
     parser.add_argument(
         "--charts-dir",
         default=None,
-        help="Directory to write comparison chart PNGs. Defaults to data/analysis/<output_stem>/",
+        help="Directory to write comparison chart PNGs. Defaults to <output_parent>/<output_stem>/.",
     )
     parser.add_argument(
         "--no-charts",
@@ -120,83 +122,86 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def resolve_seed_root(args: argparse.Namespace, parser: argparse.ArgumentParser):
-    """Resolve the pipeline seed root and (optional) manifest from the parsed args.
+def _resolve_output_base(cli_value: str | None) -> Path:
+    """Resolve output_base from the CLI flag or experiment_defaults.yaml."""
+    if cli_value:
+        return Path(cli_value)
+    with open(_DEFAULTS_PATH, "r", encoding="utf-8") as f:
+        defaults = yaml.safe_load(f) or {}
+    output_base = (defaults.get("parameters") or {}).get("output_base")
+    if not output_base:
+        print(
+            f"ERROR: no output_base in {_DEFAULTS_PATH} and --output-base not given",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return Path(output_base)
 
-    Handles the mutually-exclusive --manifest / axis-id / --seed-root inputs and
-    validates that the resulting directory exists.
+
+def resolve_slug(args: argparse.Namespace, parser: argparse.ArgumentParser):
+    """Resolve the run slug (and optional manifest) from the parsed args.
+
+    The slug names the mapped synthetic file ({mapped-dir}/{slug}.json). It comes from
+    --seed-root's basename, the manifest's parallel.output_dir basename, or -- when an
+    explicit --mapped-synthetic path is given -- that file's stem.
 
     Returns:
-        (seed_root, manifest) where manifest is None unless --manifest or the
-        axis IDs were supplied.
+        (slug, manifest) where manifest is None unless --manifest or the axis IDs were supplied.
     """
     axis_ids = [args.model_id, args.strategy_id, args.country_id]
     if args.manifest and any(x is not None for x in axis_ids):
         parser.error("--manifest is mutually exclusive with --model-id, --strategy-id, and --country-id")
 
     manifest = None
+    seed_name: str | None = None
     if args.manifest:
-        from population_synth.identity.manifest_loader import load_manifest
+        from population_synthetic.generators.synthetic.manifest_loader import load_manifest
         manifest = load_manifest(args.manifest)
-        if args.seed_root is None and manifest.parallel_output_dir is not None:
-            args.seed_root = str(manifest.parallel_output_dir)
+        if manifest.parallel_output_dir is not None:
+            seed_name = manifest.parallel_output_dir.name
     elif args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
-        from population_synth.identity.manifest_loader import compose_manifest
+        from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
         manifest = compose_manifest(args.model_id, args.strategy_id, args.country_id)
-        if args.seed_root is None and manifest.parallel_output_dir is not None:
-            args.seed_root = str(manifest.parallel_output_dir)
+        if manifest.parallel_output_dir is not None:
+            seed_name = manifest.parallel_output_dir.name
 
-    if not args.seed_root:
-        parser.error("Either --manifest (with parallel.output_dir) or --seed-root is required")
+    if args.seed_root:
+        seed_name = Path(args.seed_root).name
 
-    seed_root = Path(args.seed_root)
-    if not seed_root.exists():
-        print(f"ERROR: Seed root does not exist: {seed_root}", file=sys.stderr)
+    if seed_name is None:
+        if args.mapped_synthetic:
+            seed_name = Path(args.mapped_synthetic).stem
+        else:
+            parser.error(
+                "Cannot determine the run slug: provide --manifest, the axis IDs, --seed-root, "
+                "or an explicit --mapped-synthetic path."
+            )
+
+    return seed_name, manifest
+
+
+def _load_mapped(path: Path, label: str) -> dict:
+    """json.load a pre-mapped population file, with a clear error if it is absent."""
+    if not path.exists():
+        print(
+            f"ERROR: Mapped {label} file not found: {path}. "
+            "Run scripts/analyze/map_populations.py first.",
+            file=sys.stderr,
+        )
         sys.exit(1)
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-    return seed_root, manifest
 
-
-def resolve_output_path(args: argparse.Namespace, manifest, seed_root: Path) -> Path:
-    """Determine the JSON report output path from args, manifest, or default."""
+def resolve_output_path(args: argparse.Namespace, manifest, slug: str, output_base: Path) -> Path:
+    """Determine the JSON report output path from args, manifest, or the comparison default."""
     if args.output:
         return Path(args.output)
     if manifest is not None and manifest.comparison_output_dir is not None:
-        return manifest.comparison_output_dir / f"{seed_root.name}.json"
-    return PROJECT_ROOT / "data" / "analysis" / "compare_with_scb02" / f"{seed_root.name}.json"
-
-
-# ---------------------------------------------------------------------------
-# Data loading
-# ---------------------------------------------------------------------------
-
-def load_synthetic_population(seed_root: Path) -> dict:
-    """Load the synthetic pipeline population from disk, then map it to the schema.
-
-    Two-step (load -> map) mirroring the database side; raises ValueError if the
-    seed root holds no usable identities.
-    """
-    raw_synthetic = load_raw_synthetic_population(seed_root)
-    return map_synthetic_population(raw_synthetic, country="swedish")
-
-
-def load_database_population(reference_path: Path) -> dict:
-    """Load the SCB reference population from disk, then normalize it to the schema.
-
-    Two-step (load -> normalize) mirroring the synthetic side; an already-flat
-    population passes through normalization unchanged.
-    """
-    raw_database = load_raw_database_population(reference_path)
-    return normalize_database_population(raw_database, country="swedish")
-
-
-def save_extracted_population(synthetic_pop: dict, save_path: Path) -> None:
-    """Write the flattened synthetic population to disk."""
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-    save_path.write_text(json.dumps(synthetic_pop, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"Extracted population saved to {save_path}")
+        return manifest.comparison_output_dir / f"{slug}.json"
+    return output_base / "03_Analysis" / "comparison" / slug / f"{slug}.json"
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +213,8 @@ def compare_populations(
     synthetic_pop: dict,
     output_path: Path,
     args: argparse.Namespace,
-    seed_root: Path,
+    slug: str,
+    reference_label: str,
 ) -> None:
     """Score the synthetic population against the database reference and emit artifacts.
 
@@ -220,9 +226,9 @@ def compare_populations(
         print(f"WARNING: Synthetic population has only {n} individuals"
               " -- statistical tests will be unreliable.\n")
 
-    scheme = load_scheme("swedish")
+    scheme = load_scheme(_COUNTRY)
     evaluator = StatisticalEvaluator(database_pop, synthetic_pop, scheme=scheme)
-    evaluator.print_summary(args.reference, args.seed_root)
+    evaluator.print_summary(reference_label, slug)
 
     report = evaluator.generate_report()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -235,7 +241,7 @@ def compare_populations(
     print(f"CSV summary written to {csv_path}")
 
     if not args.no_charts:
-        _write_charts(database_pop, synthetic_pop, report, output_path, args, seed_root, scheme)
+        _write_charts(database_pop, synthetic_pop, report, output_path, args, slug, reference_label, scheme)
 
 
 def _write_charts(
@@ -244,7 +250,8 @@ def _write_charts(
     report: dict,
     output_path: Path,
     args: argparse.Namespace,
-    seed_root: Path,
+    slug: str,
+    reference_label: str,
     scheme,
 ) -> None:
     """Render the per-attribute bar charts and the radar chart into the charts dir."""
@@ -261,9 +268,9 @@ def _write_charts(
         database_pop,
         synthetic_pop,
         charts_dir,
-        pop_a_label=Path(args.reference).stem,
-        pop_b_label=seed_root.name,
-        prefix=seed_root.name,
+        pop_a_label=reference_label,
+        pop_b_label=slug,
+        prefix=slug,
         attributes=scheme.attributes,
         categories=scheme.categories,
     )
@@ -272,10 +279,10 @@ def _write_charts(
     radar_path = plot_radar_comparison(
         report["marginals"],
         charts_dir,
-        pop_a_label=Path(args.reference).stem,
-        pop_b_label=seed_root.name,
+        pop_a_label=reference_label,
+        pop_b_label=slug,
         show_chi_sq=not args.radar_tv_only,
-        prefix=seed_root.name,
+        prefix=slug,
         attributes=scheme.attributes,
     )
     if radar_path is not None:
@@ -290,28 +297,20 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    seed_root, manifest = resolve_seed_root(args, parser)
-    output_path = resolve_output_path(args, manifest, seed_root)
+    slug, manifest = resolve_slug(args, parser)
+    output_base = _resolve_output_base(args.output_base)
+    mapped_dir = Path(args.mapped_dir) if args.mapped_dir else output_base / "03_Analysis" / "mapped"
 
-    reference_path = Path(args.reference)
-    if not reference_path.exists():
-        print(f"ERROR: Reference file not found: {reference_path}", file=sys.stderr)
-        sys.exit(1)
+    synthetic_path = Path(args.mapped_synthetic) if args.mapped_synthetic else mapped_dir / f"{slug}.json"
+    database_path = Path(args.mapped_database) if args.mapped_database else mapped_dir / f"database_{_COUNTRY}.json"
 
-    try:
-        # Synthetic side: load as-on-disk, then map raw identities to the canonical schema.
-        synthetic_pop = load_synthetic_population(seed_root)
-        if args.save_extracted:
-            save_extracted_population(synthetic_pop, Path(args.save_extracted))
+    synthetic_pop = _load_mapped(synthetic_path, "synthetic")
+    database_pop = _load_mapped(database_path, "reference")
 
-        # Database side: load as-on-disk, then normalize (mirrors the synthetic two-step above).
-        database_pop = load_database_population(reference_path)
+    reference_label = Path(args.reference).stem if args.reference else database_path.stem
+    output_path = resolve_output_path(args, manifest, slug, output_base)
 
-    except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    compare_populations(database_pop, synthetic_pop, output_path, args, seed_root)
+    compare_populations(database_pop, synthetic_pop, output_path, args, slug, reference_label)
 
 
 if __name__ == "__main__":

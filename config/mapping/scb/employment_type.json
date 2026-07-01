@@ -1,53 +1,5 @@
 {
-  "reference_handler": "composite",
-  "pipeline_handler": "text_coded",
-  "pipeline_fuzzy": false,
-  "pipeline_keyword_rules": [
-    {"match": "contains", "any_of": ["not applicable", "n/a", "ej tillämpligt", "ej relevant", "ingen anställning", "volontär", "arbetsträning"], "label": "Not Applicable"},
-    {"match": "contains", "any_of": ["self-employed", "freelance", "egenföretagare", "enskild firma", "konsultanställning", "egenanställd", "aktiebolag"], "label": "Self-Employed"},
-    {"match": "contains", "any_of": ["projektanställning", "visstidsanställning", "provanställning", "praktik", "vikarie", "pensionsåldern"], "label": "Temporary Full-time"},
-    {"match": "contains", "all_of": [["permanent", "tillsvidare"], ["full", "heltid"]], "label": "Permanent Full-time"},
-    {"match": "contains", "all_of": [["permanent", "tillsvidare"], ["part", "deltid"]], "label": "Permanent Part-time"},
-    {"match": "contains", "all_of": [["temporary", "tillfällig", "visstid"], ["full", "heltid"]], "label": "Temporary Full-time"},
-    {"match": "contains", "all_of": [["temporary", "tillfällig", "visstid"], ["part", "deltid"]], "label": "Temporary Part-time"},
-    {"match": "contains", "any_of": ["tillsvidareanställning", "heltidsanställning"], "label": "Permanent Full-time"},
-    {"match": "equals", "any_of": ["not applicable", "ej tillämpbart", "n/a"], "label": "Not Applicable"},
-    {"match": "contains", "any_of": ["self-employ", "self employ", "freelan", "egenföretagare", "konsult", "egenanställd", "aktiebolag"], "label": "Self-Employed"},
-    {"match": "contains", "all_of": [["temp", "fixed", "visstid", "project", "probation", "allmän visstid", "tidkontrakt", "tidsbegräns", "timanställ", "internship", "seasonal"], ["full", "heltid", "100%"]], "label": "Temporary Full-time"},
-    {"match": "contains", "all_of": [["temp", "fixed", "visstid", "project", "probation", "allmän visstid", "tidkontrakt", "tidsbegräns", "timanställ", "internship", "seasonal"], ["part", "deltid", "50%", "75%"]], "label": "Temporary Part-time"},
-    {"match": "contains", "any_of": ["temp", "fixed", "visstid", "project", "probation", "allmän visstid", "tidkontrakt", "tidsbegräns", "timanställ", "internship", "seasonal"], "label": "Temporary Full-time"},
-    {"match": "contains", "any_of": ["part", "deltid", "50%", "75%"], "label": "Permanent Part-time"},
-    {"match": "contains", "any_of": ["permanent", "tillsvidare", "fast", "open-ended"], "label": "Permanent Full-time"},
-    {"match": "contains", "any_of": ["vikarie"], "label": "Temporary Full-time"},
-    {"match": "contains", "any_of": ["volontär", "arbetsträning"], "label": "Not Applicable"},
-    {"match": "contains", "any_of": ["pensionsåldern"], "label": "Temporary Full-time"},
-    {"match": "contains", "any_of": ["student"], "none_of": ["jobb", "job", "arbet", "assistant", "anställ", "worker", "intern"], "label": "Not Applicable"},
-    {"match": "contains", "any_of": ["pension", "pensionär", "pensioner"], "label": "Not Applicable"},
-    {"match": "contains", "any_of": ["full", "heltid", "100%"], "label": "Permanent Full-time"}
-  ],
-  "description": "Employment contract type, combining attachment (permanent/temporary/self-employed) from AM/AM0401/AM0401I/AKURLSysAnkAr and working-hours (full-time/part-time) from AM/AM0401/AM0401S/NAKUSysselOkArbtidAr. Both conditional on age_group. Non-employed get 'Not Applicable'.",
-  "attachment_table": "AM/AM0401/AM0401I/AKURLSysAnkAr",
-  "hours_table": "AM/AM0401/AM0401S/NAKUSysselOkArbtidAr",
-  "reference_none_default": "Not Applicable",
-  "reference_composite_mappings": {
-    "permanent|full_time": "Permanent Full-time",
-    "permanent|part_time": "Permanent Part-time",
-    "temporary|full_time": "Temporary Full-time",
-    "temporary|part_time": "Temporary Part-time",
-    "self_employed": "Self-Employed"
-  },
-  "reference_attachment_mappings": {
-    "permanent employees": "permanent",
-    "temporary employees": "temporary",
-    "self-employed + family workers": "self_employed",
-    "self-employed + family workers (fa+mh)": "self_employed"
-  },
-  "reference_hours_mappings": {
-    "1-19 hours": "part_time",
-    "20-34 hours": "part_time",
-    "35+ hours": "full_time"
-  },
-  "output_categories": [
+  "values": [
     "Permanent Full-time",
     "Permanent Part-time",
     "Temporary Full-time",
@@ -55,96 +7,276 @@
     "Self-Employed",
     "Not Applicable"
   ],
-  "pipeline_label_mappings": {
-    "Tillsvidareanställning": "Permanent Full-time",
-    "Tillsvidareanställning, heltid": "Permanent Full-time",
-    "Heltidsanställning": "Permanent Full-time",
-    "Fast anställning": "Permanent Full-time",
-    "Obegränsad anställning": "Permanent Full-time",
-    "Tillsvidareanställning, deltid": "Permanent Part-time",
-    "Deltidsanställning": "Permanent Part-time",
-    "Visstidsanställning": "Temporary Full-time",
-    "Visstidsanställning, heltid": "Temporary Full-time",
-    "Tidsbegränsad anställning": "Temporary Full-time",
-    "Projektanställning": "Temporary Full-time",
-    "Vikariat": "Temporary Full-time",
-    "Säsongsanställning": "Temporary Full-time",
-    "Allmän visstid": "Temporary Full-time",
-    "Provanställning": "Temporary Full-time",
-    "Praktikantanställning": "Temporary Full-time",
-    "Praktik": "Temporary Full-time",
-    "Visstidsanställning, deltid": "Temporary Part-time",
-    "Timanställning": "Temporary Part-time",
-    "Behovsanställning": "Temporary Part-time",
-    "Egenföretagare": "Self-Employed",
-    "Eget företag": "Self-Employed",
-    "Enskild firma": "Self-Employed",
-    "Konsultanställning": "Self-Employed",
-    "Frilansare": "Self-Employed",
-    "Frilansuppdrag": "Self-Employed",
-    "Frilans": "Self-Employed",
-    "Företagare": "Self-Employed",
-    "Enskild näringsverksamhet": "Self-Employed",
-    "Näringsverksamhet": "Self-Employed",
-    "Värnplikt": "Temporary Full-time",
-    "Värnpliktstjänstgöring": "Temporary Full-time",
-    "Militärtjänst": "Temporary Full-time",
-    "Ingen anställning": "Not Applicable",
-    "Ingen": "Not Applicable",
-    "Ej anställd": "Not Applicable",
-    "Ej tillämpligt": "Not Applicable",
-    "Ej tillämpbart": "Not Applicable",
-    "Ej förvärvsarbetande": "Not Applicable",
-    "Förvärvsarbetslös": "Not Applicable",
-    "Pensionerad": "Not Applicable",
-    "Pensionär": "Not Applicable",
-    "Retired": "Not Applicable",
-    "Student": "Not Applicable",
-    "Studerande": "Not Applicable",
-    "Aktiebolag (ägare)": "Self-Employed",
-    "Aktiebolag (AB)": "Self-Employed",
-    "Anställd i eget aktiebolag": "Self-Employed",
-    "Ägare och anställd i eget aktiebolag": "Self-Employed",
-    "Egenanställd": "Self-Employed",
-    "Vikarie": "Temporary Full-time",
-    "Volontärarbete": "Not Applicable",
-    "Arbetsträning": "Not Applicable",
-    "Anställning för viss tid då arbetstagaren uppnått pensionsåldern": "Temporary Full-time",
-    "Anställd": "Permanent Full-time",
-    "Anställning": "Permanent Full-time",
-    "Anställningsavtal": "Permanent Full-time",
-    "Anställningskontrakt": "Permanent Full-time",
-    "Tillfällig anställning": "Temporary Full-time",
-    "Tillfälligt anställd": "Temporary Full-time",
-    "Tillfällig anställd": "Temporary Full-time",
-    "Timanställd": "Temporary Part-time",
-    "Kontrakt": "Permanent Full-time",
-    "Tjänsteman": "Permanent Full-time",
-    "Tjänstemannajobb": "Permanent Full-time",
-    "Full-time": "Permanent Full-time",
-    "full_time": "Permanent Full-time",
-    "Heltid": "Permanent Full-time",
-    "Daglig arbete": "Permanent Full-time",
-    "Salaried": "Permanent Full-time",
-    "Tidlönare": "Permanent Full-time",
-    "Timlönare": "Temporary Part-time",
-    "Förordnad anställning": "Permanent Full-time",
-    "Förordnad tjänst": "Permanent Full-time",
-    "Tidskontrakt": "Temporary Full-time",
-    "Tidsavtal": "Temporary Full-time",
-    "Egen näringsverksamhet": "Self-Employed",
-    "Studiestipendiat": "Not Applicable",
-    "Studiestipendium": "Not Applicable",
-    "Studentarbete": "Not Applicable",
-    "Arbetslös": "Not Applicable",
-    "Arbetssökande": "Not Applicable",
-    "Hemarbete": "Not Applicable",
-    "Ideellt arbete": "Not Applicable",
-    "Permanent Full-Time": "Permanent Full-time",
-    "Permanent Part-Time": "Permanent Part-time",
-    "Temporary Full-Time": "Temporary Full-time",
-    "Temporary Part-Time": "Temporary Part-time",
-    "Self-Employed/Freelance": "Self-Employed",
-    "Not Applicable": "Not Applicable"
+  "database": {
+    "Permanent Full-time": {
+      "attachment": {
+        "contains": [
+          "permanent employees"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "35+ hours"
+        ]
+      }
+    },
+    "Permanent Part-time": {
+      "attachment": {
+        "contains": [
+          "permanent employees"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "1-19 hours",
+          "20-34 hours"
+        ]
+      }
+    },
+    "Temporary Full-time": {
+      "attachment": {
+        "contains": [
+          "temporary employees"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "35+ hours"
+        ]
+      }
+    },
+    "Temporary Part-time": {
+      "attachment": {
+        "contains": [
+          "temporary employees"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "1-19 hours",
+          "20-34 hours"
+        ]
+      }
+    },
+    "Self-Employed": {
+      "attachment": {
+        "contains": [
+          "self-employed"
+        ]
+      }
+    },
+    "absent": "Not Applicable"
+  },
+  "synthetic": {
+    "Permanent Full-time": {
+      "all_of": [
+        [
+          "permanent",
+          "tillsvidare"
+        ],
+        [
+          "full",
+          "heltid",
+          "100%"
+        ]
+      ],
+      "equals": [
+        "tillsvidareanställning",
+        "tillsvidareanställning, heltid",
+        "heltidsanställning",
+        "fast anställning",
+        "obegränsad anställning",
+        "anställd",
+        "anställning",
+        "anställningsavtal",
+        "anställningskontrakt",
+        "kontrakt",
+        "tjänsteman",
+        "tjänstemannajobb",
+        "full-time",
+        "full_time",
+        "heltid",
+        "daglig arbete",
+        "salaried",
+        "tidlönare",
+        "förordnad anställning",
+        "förordnad tjänst",
+        "permanent full-time"
+      ],
+      "contains": [
+        "tillsvidareanställning",
+        "heltidsanställning",
+        "permanent",
+        "tillsvidare",
+        "fast",
+        "open-ended",
+        "full",
+        "heltid",
+        "100%"
+      ]
+    },
+    "Permanent Part-time": {
+      "all_of": [
+        [
+          "permanent",
+          "tillsvidare"
+        ],
+        [
+          "part",
+          "deltid",
+          "50%",
+          "75%"
+        ]
+      ],
+      "equals": [
+        "tillsvidareanställning, deltid",
+        "deltidsanställning",
+        "timlönare",
+        "permanent part-time"
+      ],
+      "contains": [
+        "part",
+        "deltid",
+        "50%",
+        "75%"
+      ]
+    },
+    "Temporary Full-time": {
+      "equals": [
+        "visstidsanställning",
+        "visstidsanställning, heltid",
+        "tidsbegränsad anställning",
+        "projektanställning",
+        "vikariat",
+        "säsongsanställning",
+        "allmän visstid",
+        "provanställning",
+        "praktikantanställning",
+        "praktik",
+        "värnplikt",
+        "värnpliktstjänstgöring",
+        "militärtjänst",
+        "vikarie",
+        "anställning för viss tid då arbetstagaren uppnått pensionsåldern",
+        "tillfällig anställning",
+        "tillfälligt anställd",
+        "tillfällig anställd",
+        "tidskontrakt",
+        "tidsavtal",
+        "temporary full-time"
+      ],
+      "contains": [
+        "projektanställning",
+        "visstidsanställning",
+        "provanställning",
+        "praktik",
+        "vikarie",
+        "pensionsåldern",
+        "temp",
+        "fixed",
+        "visstid",
+        "project",
+        "probation",
+        "allmän visstid",
+        "tidkontrakt",
+        "tidsbegräns",
+        "timanställ",
+        "internship",
+        "seasonal"
+      ]
+    },
+    "Temporary Part-time": {
+      "equals": [
+        "visstidsanställning, deltid",
+        "timanställning",
+        "behovsanställning",
+        "timanställd",
+        "temporary part-time"
+      ],
+      "contains": [
+        "timanställ"
+      ]
+    },
+    "Self-Employed": {
+      "equals": [
+        "egenföretagare",
+        "eget företag",
+        "enskild firma",
+        "konsultanställning",
+        "frilansare",
+        "frilansuppdrag",
+        "frilans",
+        "företagare",
+        "enskild näringsverksamhet",
+        "näringsverksamhet",
+        "aktiebolag (ägare)",
+        "aktiebolag (ab)",
+        "anställd i eget aktiebolag",
+        "ägare och anställd i eget aktiebolag",
+        "egenanställd",
+        "egen näringsverksamhet",
+        "self-employed/freelance"
+      ],
+      "contains": [
+        "self-employed",
+        "freelance",
+        "egenföretagare",
+        "enskild firma",
+        "konsultanställning",
+        "egenanställd",
+        "aktiebolag",
+        "self-employ",
+        "self employ",
+        "freelan",
+        "konsult"
+      ]
+    },
+    "Not Applicable": {
+      "none_of": [
+        "jobb",
+        "job",
+        "arbet",
+        "assistant",
+        "anställ",
+        "worker",
+        "intern"
+      ],
+      "equals": [
+        "not applicable",
+        "ej tillämpbart",
+        "n/a",
+        "ingen anställning",
+        "ingen",
+        "ej anställd",
+        "ej tillämpligt",
+        "ej förvärvsarbetande",
+        "förvärvsarbetslös",
+        "pensionerad",
+        "pensionär",
+        "retired",
+        "student",
+        "studerande",
+        "volontärarbete",
+        "arbetsträning",
+        "studiestipendiat",
+        "studiestipendium",
+        "studentarbete",
+        "arbetslös",
+        "arbetssökande",
+        "hemarbete",
+        "ideellt arbete",
+        "not applicable"
+      ],
+      "contains": [
+        "ej tillämpligt",
+        "ej relevant",
+        "volontär",
+        "arbetsträning",
+        "student",
+        "pension",
+        "pensionär",
+        "pensioner"
+      ]
+    }
   }
 }

@@ -1,70 +1,124 @@
 {
-  "reference_handler": "label",
-  "reference_attr": "employment_status",
-  "pipeline_handler": "text_coded",
-  "pipeline_attr": "employment_status",
-  "pipeline_fuzzy": false,
-  "pipeline_keyword_rules": [
-    {"match": "contains", "any_of": ["not employed", "disoccupat", "pensionat", "pensione", "ritirat", "student", "casaling", "inattiv", "inoccupat", "unemploy", "retire", "neo-laureat", "neolaureato", "neolaureata", "in cerca", "cerca lavoro", "senza occupazione", "job search", "recently graduated", "stagista", "tirocinante", "apprendista", "borsista", "stage", "homemaker", "casalinga", "stay-at-home", "materne", "nessun impiego"], "label": "Not Employed"},
-    {"match": "contains", "any_of": ["employ", "occupat", "lavora", "impiegat", "dipendente", "manager", "dirigent", "responsabil", "docente", "professore", "professionista", "imprendit", "artigian", "tecnic", "ingegner", "commerc", "consulen", "amministrat", "autonomo", "freelance", "libero", "fulltime", "part-time", "parttime", "a tempo", "in carriera", "in occupazione", "titolar", "costrutt"], "label": "Employed"}
-  ],
-  "description": "ILO employment status codes to schema labels for Italian population data",
-  "istat_source": "150_938_DF_DCCV_OCCUPATIT1_17",
-  "mappings": {
-    "employed": {
-      "schema_label": "Employed",
-      "ilo_codes": [
-        "employed",
-        "occupato"
-      ]
-    },
-    "not_employed": {
-      "schema_label": "Not Employed",
-      "ilo_codes": [
-        "not_employed",
-        "disoccupato",
-        "inattivo"
-      ]
-    }
-  },
-  "output_categories": [
+  "values": [
     "Employed",
     "Not Employed"
   ],
-  "pipeline_label_mappings": {
-    "Employed": "Employed",
-    "employed": "Employed",
-    "Occupato": "Employed",
-    "occupato": "Employed",
-    "Occupata": "Employed",
-    "Employed (full-time)": "Employed",
-    "Employed full-time": "Employed",
-    "Full-time employed": "Employed",
-    "Lavoratore": "Employed",
-    "Lavoratrice": "Employed",
-    "Impiegato": "Employed",
-    "Impiegata": "Employed",
-    "Impiegato/a": "Employed",
-    "Occupato/a": "Employed",
-    "Lavora": "Employed",
-    "Not Employed": "Not Employed",
-    "not employed": "Not Employed",
-    "Disoccupato": "Not Employed",
-    "disoccupato": "Not Employed",
-    "Disoccupata": "Not Employed",
-    "Disoccupato/a": "Not Employed",
-    "Inoccupato": "Not Employed",
-    "Pensionato": "Not Employed",
-    "Pensionata": "Not Employed",
-    "Pensionato/a": "Not Employed",
-    "Studente": "Not Employed",
-    "Studentessa": "Not Employed",
-    "Casalinga": "Not Employed",
-    "Casalingo": "Not Employed",
-    "Unemployed": "Not Employed",
-    "Retired": "Not Employed",
-    "Student": "Not Employed",
-    "Inattivo": "Not Employed",
-    "Non occupato": "Not Employed"
+  "database": {
+    "Employed": {
+      "equals": [
+        "Employed"
+      ]
+    },
+    "Not Employed": {
+      "equals": [
+        "Not Employed"
+      ]
+    }
+  },
+  "synthetic": {
+    "Employed": {
+      "equals": [
+        "Employed",
+        "employed",
+        "Occupato",
+        "occupato",
+        "Occupata",
+        "Employed (full-time)",
+        "Employed full-time",
+        "Full-time employed",
+        "Lavoratore",
+        "Lavoratrice",
+        "Impiegato",
+        "Impiegata",
+        "Impiegato/a",
+        "Occupato/a",
+        "Lavora"
+      ],
+      "contains": [
+        "employ",
+        "occupat",
+        "lavora",
+        "impiegat",
+        "dipendente",
+        "manager",
+        "dirigent",
+        "responsabil",
+        "docente",
+        "professore",
+        "professionista",
+        "imprendit",
+        "artigian",
+        "tecnic",
+        "ingegner",
+        "commerc",
+        "consulen",
+        "amministrat",
+        "autonomo",
+        "freelance",
+        "libero",
+        "fulltime",
+        "part-time",
+        "parttime",
+        "a tempo",
+        "in carriera",
+        "in occupazione",
+        "titolar",
+        "costrutt"
+      ]
+    },
+    "Not Employed": {
+      "equals": [
+        "Not Employed",
+        "not employed",
+        "Disoccupato",
+        "disoccupato",
+        "Disoccupata",
+        "Disoccupato/a",
+        "Inoccupato",
+        "Pensionato",
+        "Pensionata",
+        "Pensionato/a",
+        "Studente",
+        "Studentessa",
+        "Casalinga",
+        "Casalingo",
+        "Unemployed",
+        "Retired",
+        "Student",
+        "Inattivo",
+        "Non occupato"
+      ],
+      "contains": [
+        "not employed",
+        "disoccupat",
+        "pensionat",
+        "pensione",
+        "ritirat",
+        "student",
+        "casaling",
+        "inattiv",
+        "inoccupat",
+        "unemploy",
+        "retire",
+        "neo-laureat",
+        "neolaureato",
+        "neolaureata",
+        "in cerca",
+        "cerca lavoro",
+        "senza occupazione",
+        "job search",
+        "recently graduated",
+        "stagista",
+        "tirocinante",
+        "apprendista",
+        "borsista",
+        "stage",
+        "homemaker",
+        "casalinga",
+        "stay-at-home",
+        "materne",
+        "nessun impiego"
+      ]
+    }
   }
 }

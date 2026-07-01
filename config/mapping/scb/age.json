@@ -1,5 +1,11 @@
 {
-  "reference_handler": "passthrough",
-  "pipeline_handler": "numeric_gate",
-  "pipeline_gate": true
+  "values": [
+    "18-24",
+    "25-34",
+    "35-44",
+    "45-54",
+    "55-64",
+    "65-74",
+    "75-85"
+  ]
 }

@@ -7,8 +7,8 @@ is omitted, matching Italy) when no API-derived distribution is available.
 
 import numpy as np
 
-from population_synth.population.data import PopulationDistributions
-from population_synth.population.norway.sample_service import SSBSampleService
+from population_synthetic.generators.reference.data import PopulationDistributions
+from population_synthetic.generators.reference.norway.sample_service import SSBSampleService
 
 
 def _make_distributions(income_source=None) -> PopulationDistributions:

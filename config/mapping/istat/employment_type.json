@@ -1,103 +1,81 @@
 {
-  "reference_handler": "composite",
-  "pipeline_handler": "text_coded",
-  "pipeline_passthrough_on_separator": "|",
-  "pipeline_empty_raw": "Not Applicable",
-  "pipeline_on_miss": "Not Applicable",
-  "pipeline_keyword_rules": [
-    {"match": "equals", "any_of": ["not applicable", "n/a", "non applicabile"], "label": "Not Applicable"}
-  ],
-  "description": "Contract type and work schedule composite labels for Italian population data",
-  "istat_source": "ISTAT labour force survey (contract type + work schedule)",
-  "reference_none_default": "Not Applicable",
-  "mappings": {
-    "permanent_fulltime": {
-      "schema_label": "Permanent|Full-time",
-      "description": "Tempo indeterminato, tempo pieno"
-    },
-    "permanent_parttime": {
-      "schema_label": "Permanent|Part-time",
-      "description": "Tempo indeterminato, tempo parziale"
-    },
-    "temporary_fulltime": {
-      "schema_label": "Temporary|Full-time",
-      "description": "Tempo determinato, tempo pieno"
-    },
-    "temporary_parttime": {
-      "schema_label": "Temporary|Part-time",
-      "description": "Tempo determinato, tempo parziale"
-    },
-    "unspecified_fulltime": {
-      "schema_label": "Unspecified|Full-time",
-      "description": "Contract type unspecified, tempo pieno (e.g. self-employed)"
-    },
-    "unspecified_parttime": {
-      "schema_label": "Unspecified|Part-time",
-      "description": "Contract type unspecified, tempo parziale"
-    }
-  },
-  "output_categories": [
-    "Permanent|Full-time",
-    "Permanent|Part-time",
-    "Temporary|Full-time",
-    "Temporary|Part-time",
-    "Unspecified|Full-time",
-    "Unspecified|Part-time",
+  "values": [
+    "Unspecified/Full-time",
+    "Unspecified/Part-time",
     "Not Applicable"
   ],
-  "pipeline_label_mappings": {
-    "Dipendente": "Permanent|Full-time",
-    "dipendente": "Permanent|Full-time",
-    "Tempo indeterminato": "Permanent|Full-time",
-    "tempo indeterminato": "Permanent|Full-time",
-    "Tempo Indeterminato": "Permanent|Full-time",
-    "Dipendente a tempo indeterminato": "Permanent|Full-time",
-    "dipendente a tempo indeterminato": "Permanent|Full-time",
-    "Dipendente a Tempo Indeterminato": "Permanent|Full-time",
-    "Contratto a tempo indeterminato": "Permanent|Full-time",
-    "contratto a tempo indeterminato": "Permanent|Full-time",
-    "Contratto indeterminato": "Permanent|Full-time",
-    "contratto indeterminato": "Permanent|Full-time",
-    "Lavoro dipendente a tempo indeterminato": "Permanent|Full-time",
-    "Permanent contract": "Permanent|Full-time",
-    "Permanent Contract": "Permanent|Full-time",
-    "permanent contract": "Permanent|Full-time",
-    "Permanent": "Permanent|Full-time",
-    "permanent": "Permanent|Full-time",
-    "Permanente": "Permanent|Full-time",
-    "permanente": "Permanent|Full-time",
-    "Permanent full-time": "Permanent|Full-time",
-    "Full-time permanent": "Permanent|Full-time",
-    "Permanent employee": "Permanent|Full-time",
-    "permanent employee": "Permanent|Full-time",
-    "Impiegato": "Permanent|Full-time",
-    "impiegato": "Permanent|Full-time",
-    "Impiegato/a": "Permanent|Full-time",
-    "Impiego": "Permanent|Full-time",
-    "impiego": "Permanent|Full-time",
-    "Employed": "Permanent|Full-time",
-    "indeterminate": "Permanent|Full-time",
-    "Tempo determinato": "Temporary|Full-time",
-    "tempo determinato": "Temporary|Full-time",
-    "Contratto a tempo determinato": "Temporary|Full-time",
-    "contratto a tempo determinato": "Temporary|Full-time",
-    "Temporary": "Temporary|Full-time",
-    "temporary": "Temporary|Full-time",
-    "Temporary contract": "Temporary|Full-time",
-    "Part-time": "Permanent|Part-time",
-    "part-time": "Permanent|Part-time",
-    "Tempo parziale": "Permanent|Part-time",
-    "tempo parziale": "Permanent|Part-time",
-    "Part time": "Permanent|Part-time",
-    "Lavoro autonomo": "Unspecified|Full-time",
-    "Autonomo": "Unspecified|Full-time",
-    "autonomo": "Unspecified|Full-time",
-    "Libero professionista": "Unspecified|Full-time",
-    "libero professionista": "Unspecified|Full-time",
-    "Freelance": "Unspecified|Full-time",
-    "freelance": "Unspecified|Full-time",
-    "Self-employed": "Unspecified|Full-time",
-    "self-employed": "Unspecified|Full-time",
-    "Not Applicable": "Not Applicable"
+  "database": {
+    "Unspecified/Full-time": {
+      "attachment": {
+        "contains": [
+          "unspecified"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "full-time"
+        ]
+      }
+    },
+    "Unspecified/Part-time": {
+      "attachment": {
+        "contains": [
+          "unspecified"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "part-time"
+        ]
+      }
+    },
+    "absent": "Not Applicable"
+  },
+  "synthetic": {
+    "Unspecified/Full-time": {
+      "none_of": [
+        "part-time",
+        "part time",
+        "parziale",
+        "tempo parziale"
+      ],
+      "contains": [
+        "tempo indeterminato",
+        "indeterminato",
+        "tempo determinato",
+        "determinato",
+        "permanent",
+        "permanente",
+        "temporary",
+        "full-time",
+        "full time",
+        "tempo pieno",
+        "dipendente",
+        "impiegato",
+        "impiego",
+        "autonomo",
+        "libero professionista",
+        "freelance",
+        "self-employed",
+        "employed",
+        "contratto"
+      ]
+    },
+    "Unspecified/Part-time": {
+      "contains": [
+        "part-time",
+        "part time",
+        "tempo parziale",
+        "parziale"
+      ]
+    },
+    "Not Applicable": {
+      "equals": [
+        "not applicable",
+        "n/a",
+        "non applicabile"
+      ]
+    },
+    "on_miss": "Not Applicable"
   }
 }

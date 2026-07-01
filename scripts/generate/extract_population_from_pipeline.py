@@ -6,7 +6,7 @@ Usage:
     python scripts/generate/extract_population_from_pipeline.py --seed-root <path> [--output data/pipeline_population.json]
 
 This is a thin CLI wrapper that delegates extraction logic to
-population_synth.comparison.extractor.
+population_synthetic.analysis.mapping.extractor.
 """
 
 import argparse
@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from population_synth.comparison.extractor import extract_individual
+from population_synthetic.analysis.mapping.extractor import extract_individual
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)

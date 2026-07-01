@@ -1,53 +1,72 @@
 {
-  "reference_handler": "label",
-  "pipeline_handler": "numeric_bucket",
-  "pipeline_numeric_buckets": {
-    "1": "1", "2": "2", "3": "3", "4": "4", "5": "5"
-  },
-  "pipeline_bucket_overflow": {"threshold": 6, "label": "GE6"},
-  "description": "Household size categories for Italian population data",
-  "istat_source": "Eurostat EU-SILC household composition",
-  "mappings": {
-    "1": {
-      "schema_label": "1",
-      "description": "Single-person household"
+  "values": [
+    "1 person",
+    "2 persons",
+    "3 persons",
+    "4 persons",
+    "5 persons",
+    "6 persons or more"
+  ],
+  "database": {
+    "1 person": {
+      "equals": [
+        "1 person"
+      ]
     },
-    "2": {
-      "schema_label": "2",
-      "description": "Two-person household"
+    "2 persons": {
+      "equals": [
+        "2 persons"
+      ]
     },
-    "3": {
-      "schema_label": "3",
-      "description": "Three-person household"
+    "3 persons": {
+      "equals": [
+        "3 persons"
+      ]
     },
-    "4": {
-      "schema_label": "4",
-      "description": "Four-person household"
+    "4 persons": {
+      "equals": [
+        "4 persons"
+      ]
     },
-    "5": {
-      "schema_label": "5",
-      "description": "Five-person household"
+    "5 persons": {
+      "equals": [
+        "5 persons"
+      ]
     },
-    "GE6": {
-      "schema_label": "GE6",
-      "description": "Six or more person household"
+    "6 persons or more": {
+      "equals": [
+        "6 persons or more"
+      ]
     }
   },
-  "eurostat_label_mappings": {
-    "1 person": "1",
-    "2 persons": "2",
-    "3 persons": "3",
-    "4 persons": "4",
-    "5 persons": "5",
-    "6 or more persons": "GE6",
-    "6 persons or more": "GE6"
-  },
-  "output_categories": [
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "GE6"
-  ]
+  "synthetic": {
+    "1 person": {
+      "int": [
+        1
+      ]
+    },
+    "2 persons": {
+      "int": [
+        2
+      ]
+    },
+    "3 persons": {
+      "int": [
+        3
+      ]
+    },
+    "4 persons": {
+      "int": [
+        4
+      ]
+    },
+    "5 persons": {
+      "int": [
+        5
+      ]
+    },
+    "6 persons or more": {
+      "int_gte": 6
+    }
+  }
 }

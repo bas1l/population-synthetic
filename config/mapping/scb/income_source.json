@@ -1,33 +1,5 @@
 {
-  "reference_handler": "label",
-  "pipeline_handler": "text_coded",
-  "pipeline_on_miss": "Wage / Business",
-  "pipeline_keyword_rules": [
-    {"match": "contains", "any_of": ["sickness", "activity compensation", "sjukersättning", "aktivitetsersättning"], "label": "Sickness / Activity Compensation"},
-    {"match": "contains", "any_of": ["social assistance", "försörjningsstöd", "socialbidrag"], "label": "Social Assistance"},
-    {"match": "contains", "any_of": ["insurance", "allowance", "a-kassa", "sjukpenning", "föräldrapenning", "allowan", "ersättning", "transfer", "benefit"], "label": "Insurance / Allowance"},
-    {"match": "contains", "any_of": ["pension"], "label": "Pension"},
-    {"match": "contains", "any_of": ["capital", "kapital", "dividend", "interest", "ränta", "aktieutdelning"], "label": "Capital"},
-    {"match": "contains", "any_of": ["wage", "business", "employment", "self-employ", "lön", "företag", "egenföretagare", "freelan", "frilans", "work"], "label": "Wage / Business"}
-  ],
-  "description": "Primary income source from HE/HE0110/HE0110F/TabVX13InkStruktN — percentage share of each income component, conditional on employment status and broad age group. Values are used as sampling weights.",
-  "scb_table": "HE/HE0110/HE0110F/TabVX13InkStruktN",
-  "scb_income_codes": {
-    "300": "wage and business income",
-    "305": "capital income",
-    "310": "pensions",
-    "315": "sickness and activity compensation",
-    "320": "sickness compensation, parental allowance, labour market assistance etc.",
-    "335": "social assistance"
-  },
-  "scb_employment_codes": {
-    "1000": "gainfully employed",
-    "1700": "non gainfully employed",
-    "1800": "students",
-    "1910": "unemployed",
-    "1930": "retired"
-  },
-  "output_categories": [
+  "values": [
     "Wage / Business",
     "Capital",
     "Pension",
@@ -35,76 +7,187 @@
     "Social Assistance",
     "Sickness / Activity Compensation"
   ],
-  "reference_label_mappings": {
-    "wage and business income": "Wage / Business",
-    "capital income": "Capital",
-    "pensions": "Pension",
-    "sickness compensation, parental allowance, labour market assistance etc.": "Insurance / Allowance",
-    "social assistance": "Social Assistance",
-    "sickness and activity compensation": "Sickness / Activity Compensation"
+  "database": {
+    "Wage / Business": {
+      "equals": [
+        "Wage / Business",
+        "wage and business income"
+      ]
+    },
+    "Capital": {
+      "equals": [
+        "Capital",
+        "capital income"
+      ]
+    },
+    "Pension": {
+      "equals": [
+        "Pension",
+        "pensions"
+      ]
+    },
+    "Insurance / Allowance": {
+      "equals": [
+        "Insurance / Allowance",
+        "sickness compensation, parental allowance, labour market assistance etc."
+      ]
+    },
+    "Social Assistance": {
+      "equals": [
+        "Social Assistance",
+        "social assistance"
+      ]
+    },
+    "Sickness / Activity Compensation": {
+      "equals": [
+        "Sickness / Activity Compensation",
+        "sickness and activity compensation"
+      ]
+    }
   },
-  "pipeline_label_mappings": {
-    "Lön": "Wage / Business",
-    "Lön från anställning": "Wage / Business",
-    "Lön och företagsinkomster": "Wage / Business",
-    "Inkomst från egen verksamhet": "Wage / Business",
-    "Inkomst från eget företag": "Wage / Business",
-    "Företagsinkomst": "Wage / Business",
-    "Näringsverksamhet": "Wage / Business",
-    "Frilansinkomst": "Wage / Business",
-    "Kapitalinkomster": "Capital",
-    "Kapitalinkomst": "Capital",
-    "Aktieutdelning": "Capital",
-    "Räntor och utdelningar": "Capital",
-    "Pension": "Pension",
-    "Allmän pension": "Pension",
-    "Tjänstepension": "Pension",
-    "Privat pension": "Pension",
-    "Ålderspension": "Pension",
-    "A-kassa": "Insurance / Allowance",
-    "Arbetslöshetsersättning": "Insurance / Allowance",
-    "Föräldrapenning": "Insurance / Allowance",
-    "Sjukpenning": "Insurance / Allowance",
-    "Studiemedel": "Insurance / Allowance",
-    "Studiebidrag": "Insurance / Allowance",
-    "Bostadsbidrag": "Insurance / Allowance",
-    "Försörjningsstöd": "Social Assistance",
-    "Socialbidrag": "Social Assistance",
-    "Ekonomiskt bistånd": "Social Assistance",
-    "Sjukersättning": "Sickness / Activity Compensation",
-    "Aktivitetsersättning": "Sickness / Activity Compensation",
-    "Sjuk- och aktivitetsersättning": "Sickness / Activity Compensation"
-  },
-  "employment_label_mappings": {
-    "gainfully employed": "Employed",
-    "non gainfully employed": "Retired",
-    "students": "Student",
-    "unemployed": "Unemployed",
-    "retired": "Retired"
-  },
-  "schema_to_employment_key": {
-    "Employed": "Employed",
-    "Unemployed": "Unemployed",
-    "Student": "Student",
-    "Retired": "Retired"
-  },
-  "scb_age_to_group": {
-    "20-29 years": [
-      "18-24",
-      "25-34"
-    ],
-    "30-49 years": [
-      "35-44",
-      "45-54"
-    ],
-    "50-64 years": [
-      "55-64"
-    ],
-    "65-79 years": [
-      "65-74"
-    ],
-    "80- years": [
-      "75-85"
-    ]
+  "synthetic": {
+    "Wage / Business": {
+      "none_of": [
+        "unemploy",
+        "arbetslös",
+        "arbetssökande"
+      ],
+      "equals": [
+        "Wage / Business",
+        "Lön",
+        "Lön från anställning",
+        "Lön och företagsinkomster",
+        "Inkomst från egen verksamhet",
+        "Inkomst från eget företag",
+        "Företagsinkomst",
+        "Näringsverksamhet",
+        "Frilansinkomst"
+      ],
+      "contains": [
+        "wage",
+        "business",
+        "employment",
+        "self-employ",
+        "lön",
+        "företag",
+        "egenföretagare",
+        "freelan",
+        "frilans",
+        "work"
+      ]
+    },
+    "Capital": {
+      "equals": [
+        "Capital",
+        "Kapitalinkomster",
+        "Kapitalinkomst",
+        "Aktieutdelning",
+        "Räntor och utdelningar"
+      ],
+      "contains": [
+        "capital",
+        "kapital",
+        "dividend",
+        "interest",
+        "ränta",
+        "räntor",
+        "ränte",
+        "rente",
+        "aktieutdelning",
+        "utdelning",
+        "investment",
+        "stocks",
+        "avkastning",
+        "real estate",
+        "property income",
+        "rental income",
+        "rental/property",
+        "hyresintäkt",
+        "hyresinkomst",
+        "hyresintäkter"
+      ]
+    },
+    "Pension": {
+      "equals": [
+        "Pension",
+        "Allmän pension",
+        "Tjänstepension",
+        "Privat pension",
+        "Ålderspension"
+      ],
+      "contains": [
+        "pension"
+      ]
+    },
+    "Insurance / Allowance": {
+      "equals": [
+        "Insurance / Allowance",
+        "A-kassa",
+        "Arbetslöshetsersättning",
+        "Föräldrapenning",
+        "Sjukpenning",
+        "Studiemedel",
+        "Studiebidrag",
+        "Bostadsbidrag"
+      ],
+      "contains": [
+        "insurance",
+        "allowance",
+        "a-kassa",
+        "sjukpenning",
+        "föräldrapenning",
+        "allowan",
+        "ersättning",
+        "transfer",
+        "benefit",
+        "student loan",
+        "student aid",
+        "student grant",
+        "student finance",
+        "studielån",
+        "studiestöd",
+        "studiemedel",
+        "studiebidrag",
+        "study grant",
+        "scholarship",
+        "stipend",
+        "csn",
+        "grant from",
+        "grants from",
+        "försäkringskassa",
+        "dagpenning",
+        "bidrag",
+        "unemploy",
+        "arbetslöshet"
+      ]
+    },
+    "Social Assistance": {
+      "equals": [
+        "Social Assistance",
+        "Försörjningsstöd",
+        "Socialbidrag",
+        "Ekonomiskt bistånd"
+      ],
+      "contains": [
+        "social assistance",
+        "försörjningsstöd",
+        "socialbidrag"
+      ]
+    },
+    "Sickness / Activity Compensation": {
+      "equals": [
+        "Sickness / Activity Compensation",
+        "Sjukersättning",
+        "Aktivitetsersättning",
+        "Sjuk- och aktivitetsersättning"
+      ],
+      "contains": [
+        "sickness",
+        "activity compensation",
+        "sjukersättning",
+        "aktivitetsersättning"
+      ]
+    },
+    "on_miss": "Wage / Business"
   }
 }

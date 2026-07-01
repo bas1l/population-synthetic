@@ -51,5 +51,5 @@ Two stacked parts:
   `income_source` step at all; `employment_status` is binary (Employed / Not Employed,
   rate-derived); 20 NUTS2 regions with a `demo_r_d2jan` fallback.
 
-Source modules: `src/population_synth/population/{sweden,norway,italy}/{constants,fetch_service,parsers,sample_service}.py`
-and the shared layer `population/{data,helpers,income_class}.py`.
+Source modules: `src/population_synthetic/generators/reference/{sweden,norway,italy}/{constants,fetch_service,parsers,sample_service}.py`
+and the shared layer `generators/reference/{data,helpers,income_class}.py`.

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from population_synth.comparison.extractor import extract_individual, extract_population
+from population_synthetic.analysis.mapping.extractor import extract_individual, extract_population
 
 _FIXTURE_ROOT = Path(__file__).parent / "data" / "extractor"
 _EXPECTED_PATH = _FIXTURE_ROOT / "expected_extractor.json"

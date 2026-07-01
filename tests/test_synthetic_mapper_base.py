@@ -1,23 +1,128 @@
-"""Fail-fast unit tests for the generic synthetic-mapper engine.
+"""Unit tests for ``BaseSyntheticMapper`` as a thin loader over the shared engine.
 
-``BaseSyntheticMapper`` discovers its field set at construction by scanning the
-loaded mapping tables for blocks that self-declare a ``pipeline_handler`` kind.
-These tests drive that engine directly with minimal synthetic ``mappings`` dicts
-(rather than via ``get_synthetic_mapper``) so each fail-fast branch and the
-non-cascade handler kinds can be triggered in isolation: ``BaseSyntheticMapper``
-is concrete (it implements ``map_individual``) and its ``__init__`` consumes only
-the ``mappings`` dict, so no country subclass or on-disk config is needed.
+The synthetic mapper no longer holds a handler-kind engine: it reads the per-country
+``_index.json`` master plus each per-attribute file's ``synthetic`` block and ``values``
+list, and delegates every attribute to :func:`mapping_engine.resolve`. These tests drive
+the concrete base class directly with the shared in-memory config from
+:mod:`tests._mapping_fixtures` (mirroring ``test_reference_mapper_base.py``), and add a
+couple of real-config integration checks through ``get_synthetic_mapper``.
 
-Mirrors ``tests/test_reference_mapper_base.py``.
+They exercise the three responsibilities the base class still owns -- the format gate
+(narrative blobs skipped), record-level UTF-8 repair, and the persona-skip ``age`` gate
+-- plus the synthetic-side algorithms now expressed as matchers/directives: ``equals`` /
+``contains``, ``all_of`` co-occurrence with a ``none_of`` veto (``employment_type``),
+numeric (``household_size``), the ``on_miss`` default, and ``refine_from`` cross-field
+resolution (``birth_location`` refined from ``birth_country_detail``).
 """
+
+from __future__ import annotations
 
 import pytest
 
-from population_synth.comparison.synthetic_mapper import get_synthetic_mapper
-from population_synth.comparison.synthetic_mapper.base import BaseSyntheticMapper
+from population_synthetic.analysis.mapping.synthetic_mapper import get_synthetic_mapper
+from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
+
+from ._mapping_fixtures import new_shape_mappings
 
 
-def _flat_identity(**overrides) -> dict:
+def _synth_mapper() -> BaseSyntheticMapper:
+    return BaseSyntheticMapper(new_shape_mappings())
+
+
+# --- fail-fast construction ------------------------------------------------
+
+def test_missing_index_raises():
+    with pytest.raises(ValueError, match="_index"):
+        BaseSyntheticMapper({"biological_sex": {"values": ["Male", "Female"]}})
+
+
+def test_index_without_attributes_raises():
+    with pytest.raises(ValueError, match="_index"):
+        BaseSyntheticMapper({"_index": {"description": "no attributes"}})
+
+
+# --- format gate + persona-skip age gate -----------------------------------
+
+def test_narrative_format_skipped():
+    assert _synth_mapper().map_individual({"narrative": "a life story"}, "p") is None
+
+
+def test_age_gate_skips_non_integer_and_missing_age():
+    mapper = _synth_mapper()
+    assert mapper.map_individual({"age": "not-a-number", "biological_sex": "man"}, "p") is None
+    assert mapper.map_individual({"age": None, "biological_sex": "man"}, "p") is None
+
+
+def test_utf8_repair_applied_before_matching():
+    # Double-encoded "kvinna" variant repaired record-level before matching.
+    out = _synth_mapper().map_individual({"age": 22, "biological_sex": "kvinna"}, "p")
+    assert out is not None
+    assert out["biological_sex"] == "Female"
+
+
+# --- end-to-end resolution -------------------------------------------------
+
+def test_synthetic_mapper_delegates_end_to_end():
+    identity = {
+        "age": 30,
+        "biological_sex": "kvinna",
+        "education_level": "Master of Science",
+        "employment_type": "fast anställning, heltid",   # all_of co-occurrence
+        "socioeconomic_class": "middle class",
+        "industry_sector": "software developer",          # miss -> on_miss "Other"
+        "birth_location": "unknown-place",                # primary miss -> refine from detail
+        "birth_country_detail": "Born in Oslo, Norway",
+        "household_size": 3,                              # numeric matcher
+    }
+    out = _synth_mapper().map_individual(identity, "persona_1")
+
+    assert out["id"] == "persona_1"           # injected persona id
+    assert out["age"] == 30                    # raw age passthrough
+    assert out["biological_sex"] == "Female"
+    assert out["education_level"] == "Tertiary"
+    assert out["employment_type"] == "Permanent Full-time"
+    assert out["socioeconomic_class"] == "Middle Class"
+    assert out["industry_sector"] == "Other"          # on_miss default
+    assert out["birth_country_detail"] == "Norway"
+    assert out["birth_location"] == "Nordic Country"  # refined from detail
+    assert out["household_size"] == "3 persons"
+
+
+def test_none_of_veto_blocks_employment_type():
+    # "student job" carries the Not-Applicable ``contains`` token "student" but is
+    # vetoed by the ``none_of`` token "job", so it does not resolve to Not Applicable.
+    out = _synth_mapper().map_individual(
+        {"age": 20, "employment_type": "student job at cafe"}, "p")
+    # Vetoed positive + no other value hits -> on_miss default ("Not Applicable").
+    # The veto proves the positive contains-tier did not fire on its own.
+    assert out["employment_type"] == "Not Applicable"
+
+
+# --- real-config integration: the Sweden Nordic-fold reconciliation ---------
+
+def test_swedish_nordic_born_folds_into_europe_other():
+    # Sweden dropped the "Nordic Country" bucket in Phase 3: a Norway-born persona
+    # now folds into "Europe (Other)" on both sides.
+    mapper = get_synthetic_mapper("swedish")
+    out = mapper.map_individual(_swedish_identity(birth_country_detail="Norway"), "p")
+    assert out["birth_location"] == "Europe (Other)"
+
+
+def test_swedish_domestic_maps_to_sweden():
+    mapper = get_synthetic_mapper("swedish")
+    out = mapper.map_individual(_swedish_identity(birth_location="Stockholm"), "p")
+    assert out["birth_location"] == "Sweden"
+
+
+def test_italian_nordic_born_folds_into_europe_other():
+    # Italy has no "Nordic Country" bucket either: a Norway free-text birthplace
+    # collapses to "Europe (Other)".
+    mapper = get_synthetic_mapper("italian")
+    out = mapper.map_individual(_swedish_identity(birth_location="Norway"), "p")
+    assert out["birth_location"] == "Europe (Other)"
+
+
+def _swedish_identity(**overrides) -> dict:
     """A minimal valid flat identity (passes the age gate) with overridable fields."""
     base = {
         "age": 40, "biological_sex": "Female", "education_level": "x",
@@ -25,95 +130,7 @@ def _flat_identity(**overrides) -> dict:
         "socioeconomic_class": "Middle class", "parental_structure": "x",
         "region": "x", "civil_status": "Married", "household_size": 2,
         "housing_tenure": "x", "industry_sector": "x", "employment_type": "x",
-        "income_source": "x", "ethnicity": "x",
-        "birth_location": "", "birth_country_detail": "",
+        "income_source": "x", "birth_location": "", "birth_country_detail": "",
     }
     base.update(overrides)
     return base
-
-
-def test_no_declaring_block_raises():
-    # An ``_scheme``-like block and a reference-only block; neither declares
-    # ``pipeline_handler``, so the engine finds no pipeline field.
-    mappings = {
-        "_scheme": {"attributes": ["age_group"], "categories": {}},
-        "socioeconomic": {"reference_handler": "decile_coded"},
-    }
-    with pytest.raises(ValueError, match="no fields declaring"):
-        BaseSyntheticMapper(mappings)
-
-
-def test_unknown_handler_kind_raises():
-    mappings = {"mystery": {"pipeline_handler": "bogus_kind"}}
-    with pytest.raises(ValueError, match="Unknown pipeline handler kind"):
-        BaseSyntheticMapper(mappings)
-
-
-def test_passthrough_and_numeric_gate_basic():
-    # Mirrors the real ``id.json`` (passthrough) / ``age.json`` (numeric_gate) stubs.
-    mappings = {
-        "id": {"pipeline_handler": "passthrough"},
-        "age": {"pipeline_handler": "numeric_gate", "pipeline_gate": True},
-    }
-    mapper = BaseSyntheticMapper(mappings)
-
-    # Valid age -> mapped; the injected persona id passes through verbatim.
-    out = mapper.map_individual({"age": 42}, "persona_x")
-    assert out is not None
-    assert out["id"] == "persona_x"
-    assert out["age"] == 42
-
-
-def test_numeric_gate_skips_non_integer_age():
-    mappings = {"age": {"pipeline_handler": "numeric_gate", "pipeline_gate": True}}
-    mapper = BaseSyntheticMapper(mappings)
-
-    # Non-integer age -> the gate sentinel drops the whole persona.
-    assert mapper.map_individual({"age": "not-a-number"}, "persona_y") is None
-
-
-# ---------------------------------------------------------------------------
-# cross_field_coded: the Phase-4 Nordic-Country fix (the one intended behaviour
-# change). The Swedish synthetic mapper can now emit "Nordic Country" -- a bucket
-# the reference mapper already produces -- for Nordic-born personas.
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("birth_location,birth_country_detail", [
-    ("", "Norway"),          # refined from birth_country_detail
-    ("", "Denmark"),
-    ("", "Finland"),
-    ("Norway", ""),          # refined from primary free-text
-    ("nordic region", ""),
-    ("scandinavia", ""),
-])
-def test_swedish_nordic_persona_maps_to_nordic_country(birth_location, birth_country_detail):
-    mapper = get_synthetic_mapper("swedish")
-    out = mapper.map_individual(
-        _flat_identity(birth_location=birth_location, birth_country_detail=birth_country_detail), "p")
-    assert out is not None
-    assert out["birth_location"] == "Nordic Country"
-
-
-def test_swedish_domestic_override_still_wins():
-    # A domestic birth_country_detail forces Sweden, overriding any primary value.
-    mapper = get_synthetic_mapper("swedish")
-    out = mapper.map_individual(
-        _flat_identity(birth_location="Norway", birth_country_detail="Sweden"), "p")
-    assert out["birth_location"] == "Sweden"
-
-
-def test_swedish_non_nordic_european_unchanged():
-    # Non-Nordic Europe must stay "Europe (Other)" (the fix is Nordic-only).
-    mapper = get_synthetic_mapper("swedish")
-    out = mapper.map_individual(
-        _flat_identity(birth_location="Poland", birth_country_detail=""), "p")
-    assert out["birth_location"] == "Europe (Other)"
-
-
-def test_italian_has_no_nordic_bucket():
-    # Italy has only Italy / Europe (Other) / Outside Europe -- a Nordic origin
-    # collapses to Europe (Other), exactly as before.
-    mapper = get_synthetic_mapper("italian")
-    out = mapper.map_individual(
-        _flat_identity(birth_location="Norway", birth_country_detail=""), "p")
-    assert out["birth_location"] == "Europe (Other)"

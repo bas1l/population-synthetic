@@ -1,171 +1,419 @@
 {
-  "reference_handler": "label",
-  "pipeline_handler": "text_coded",
-  "pipeline_silent_unmapped": true,
-  "pipeline_empty_raw": "Non-standard label",
-  "pipeline_city_region": {
-    "stockholm": "Stockholm", "solna": "Stockholm", "sundbyberg": "Stockholm",
-    "nacka": "Stockholm", "lidingö": "Stockholm", "danderyd": "Stockholm",
-    "täby": "Stockholm", "sollentuna": "Stockholm", "huddinge": "Stockholm",
-    "botkyrka": "Stockholm", "södertälje": "Stockholm", "haninge": "Stockholm",
-    "tumba": "Stockholm", "sigtuna": "Stockholm", "norrtälje": "Stockholm",
-    "göteborg": "Västra Götaland", "borås": "Västra Götaland",
-    "trollhättan": "Västra Götaland", "skövde": "Västra Götaland",
-    "uddevalla": "Västra Götaland", "lidköping": "Västra Götaland",
-    "alingsås": "Västra Götaland", "mölndal": "Västra Götaland",
-    "kungälv": "Västra Götaland", "partille": "Västra Götaland",
-    "mariestad": "Västra Götaland", "vänersborg": "Västra Götaland",
-    "malmö": "Skåne", "lund": "Skåne", "helsingborg": "Skåne",
-    "kristianstad": "Skåne", "landskrona": "Skåne", "trelleborg": "Skåne",
-    "ystad": "Skåne", "ängelholm": "Skåne",
-    "linköping": "Östergötland", "norrköping": "Östergötland", "motala": "Östergötland",
-    "mjölby": "Östergötland",
-    "uppsala": "Uppsala", "enköping": "Uppsala",
-    "västerås": "Västmanland",
-    "örebro": "Örebro", "kumla": "Örebro", "hallsberg": "Örebro",
-    "umeå": "Västerbotten", "skellefteå": "Västerbotten",
-    "robertsfors": "Västerbotten", "sorsele": "Västerbotten", "lycksele": "Västerbotten",
-    "vilhelmina": "Västerbotten", "storuman": "Västerbotten", "norsjö": "Västerbotten",
-    "sundsvall": "Västernorrland", "härnösand": "Västernorrland",
-    "örnsköldsvik": "Västernorrland", "kramfors": "Västernorrland",
-    "gävle": "Gävleborg", "sandviken": "Gävleborg", "bollnäs": "Gävleborg",
-    "hudiksvall": "Gävleborg",
-    "halmstad": "Halland", "varberg": "Halland", "falkenberg": "Halland",
-    "jönköping": "Jönköping", "värnamo": "Jönköping", "nässjö": "Jönköping",
-    "vetlanda": "Jönköping",
-    "växjö": "Kronoberg",
-    "kalmar": "Kalmar", "västervik": "Kalmar", "oskarshamn": "Kalmar",
-    "nybro": "Kalmar", "vimmerby": "Kalmar", "hultsfred": "Kalmar",
-    "visby": "Gotland",
-    "karlskrona": "Blekinge",
-    "karlstad": "Värmland", "arvika": "Värmland",
-    "eskilstuna": "Södermanland", "nyköping": "Södermanland",
-    "strängnäs": "Södermanland", "katrineholm": "Södermanland",
-    "falun": "Dalarna", "borlänge": "Dalarna", "mora": "Dalarna",
-    "hedemora": "Dalarna", "avesta": "Dalarna", "ludvika": "Dalarna",
-    "malung": "Dalarna", "leksand": "Dalarna", "rättvik": "Dalarna",
-    "östersund": "Jämtland",
-    "luleå": "Norrbotten", "kiruna": "Norrbotten", "piteå": "Norrbotten",
-    "boden": "Norrbotten", "gällivare": "Norrbotten", "kalix": "Norrbotten",
-    "haparanda": "Norrbotten", "arvidsjaur": "Norrbotten", "arjeplog": "Norrbotten"
-  },
-  "description": "Swedish counties (Län) — population distribution from BE/BE0101/BE0101A/BefolkningNy; env_type derived from locality urbanization share (MI/MI0810/MI0810A/BefLandInvKvmTO, 2023)",
-  "scb_variable": "Region",
-  "counties": [
+  "values": [
     "Stockholm",
-    "Uppsala",
-    "Södermanland",
-    "Östergötland",
-    "Jönköping",
-    "Kronoberg",
-    "Kalmar",
-    "Gotland",
-    "Blekinge",
+    "Västra Götaland",
     "Skåne",
+    "Östergötland",
+    "Uppsala",
     "Halland",
-    "Västra Götaland",
-    "Värmland",
     "Örebro",
-    "Västmanland",
-    "Dalarna",
+    "Jönköping",
     "Gävleborg",
-    "Västernorrland",
-    "Jämtland",
+    "Södermanland",
+    "Värmland",
+    "Dalarna",
     "Västerbotten",
-    "Norrbotten"
-  ],
-  "reference_label_mappings": {
-    "Stockholm county": "Stockholm",
-    "Uppsala county": "Uppsala",
-    "Södermanland county": "Södermanland",
-    "Östergötland county": "Östergötland",
-    "Jönköping county": "Jönköping",
-    "Kronoberg county": "Kronoberg",
-    "Kalmar county": "Kalmar",
-    "Gotland county": "Gotland",
-    "Blekinge county": "Blekinge",
-    "Skåne county": "Skåne",
-    "Halland county": "Halland",
-    "Västra Götaland county": "Västra Götaland",
-    "Värmland county": "Värmland",
-    "Örebro county": "Örebro",
-    "Västmanland county": "Västmanland",
-    "Dalarna county": "Dalarna",
-    "Gävleborg county": "Gävleborg",
-    "Västernorrland county": "Västernorrland",
-    "Jämtland county": "Jämtland",
-    "Västerbotten county": "Västerbotten",
-    "Norrbotten county": "Norrbotten"
-  },
-  "output_categories": [
-    "Stockholm",
-    "Västra Götaland",
-    "Skåne",
-    "Östergötland",
-    "Uppsala",
-    "Örebro",
-    "Västernorrland",
     "Norrbotten",
-    "Dalarna",
-    "Gävleborg",
-    "Halland",
-    "Jönköping",
-    "Kronoberg",
     "Kalmar",
-    "Gotland",
-    "Blekinge",
-    "Värmland",
+    "Västernorrland",
     "Västmanland",
-    "Södermanland",
-    "Västerbotten",
-    "Jämtland"
+    "Kronoberg",
+    "Jämtland",
+    "Blekinge",
+    "Gotland"
   ],
-  "pipeline_label_mappings": {
-    "Stockholms län": "Stockholm",
-    "Uppsala län": "Uppsala",
-    "Södermanlands län": "Södermanland",
-    "Östergötlands län": "Östergötland",
-    "Jönköpings län": "Jönköping",
-    "Kronobergs län": "Kronoberg",
-    "Kalmar län": "Kalmar",
-    "Gotlands län": "Gotland",
-    "Blekinge län": "Blekinge",
-    "Skåne län": "Skåne",
-    "Hallands län": "Halland",
-    "Västra Götalands län": "Västra Götaland",
-    "Värmlands län": "Värmland",
-    "Örebro län": "Örebro",
-    "Västmanlands län": "Västmanland",
-    "Dalarnas län": "Dalarna",
-    "Gävleborgs län": "Gävleborg",
-    "Västernorrlands län": "Västernorrland",
-    "Jämtlands län": "Jämtland",
-    "Västerbottens län": "Västerbotten",
-    "Norrbottens län": "Norrbotten",
-    "Göteborg": "Västra Götaland",
-    "Malmö": "Skåne",
-    "Linköping": "Östergötland",
-    "Norrköping": "Östergötland",
-    "Helsingborg": "Skåne",
-    "Örebro": "Örebro",
-    "Västerås": "Västmanland",
-    "Umeå": "Västerbotten",
-    "Lund": "Skåne",
-    "Sundsvall": "Västernorrland",
-    "Gävle": "Gävleborg",
-    "Borås": "Västra Götaland",
-    "Eskilstuna": "Södermanland",
-    "Karlstad": "Värmland",
-    "Växjö": "Kronoberg",
-    "Halmstad": "Halland",
-    "Luleå": "Norrbotten",
-    "Kalmar": "Kalmar",
-    "Jönköping": "Jönköping",
-    "Visby": "Gotland",
-    "Falun": "Dalarna",
-    "Borlänge": "Dalarna",
-    "Karlskrona": "Blekinge",
-    "Stockholm County": "Stockholm",
-    "Stockholm län": "Stockholm"
+  "database": {
+    "Stockholm": {
+      "equals": [
+        "Stockholm",
+        "Stockholm county"
+      ]
+    },
+    "Västra Götaland": {
+      "equals": [
+        "Västra Götaland",
+        "Västra Götaland county"
+      ]
+    },
+    "Skåne": {
+      "equals": [
+        "Skåne",
+        "Skåne county"
+      ]
+    },
+    "Östergötland": {
+      "equals": [
+        "Östergötland",
+        "Östergötland county"
+      ]
+    },
+    "Uppsala": {
+      "equals": [
+        "Uppsala",
+        "Uppsala county"
+      ]
+    },
+    "Halland": {
+      "equals": [
+        "Halland",
+        "Halland county"
+      ]
+    },
+    "Örebro": {
+      "equals": [
+        "Örebro",
+        "Örebro county"
+      ]
+    },
+    "Jönköping": {
+      "equals": [
+        "Jönköping",
+        "Jönköping county"
+      ]
+    },
+    "Gävleborg": {
+      "equals": [
+        "Gävleborg",
+        "Gävleborg county"
+      ]
+    },
+    "Södermanland": {
+      "equals": [
+        "Södermanland",
+        "Södermanland county"
+      ]
+    },
+    "Värmland": {
+      "equals": [
+        "Värmland",
+        "Värmland county"
+      ]
+    },
+    "Dalarna": {
+      "equals": [
+        "Dalarna",
+        "Dalarna county"
+      ]
+    },
+    "Västerbotten": {
+      "equals": [
+        "Västerbotten",
+        "Västerbotten county"
+      ]
+    },
+    "Norrbotten": {
+      "equals": [
+        "Norrbotten",
+        "Norrbotten county"
+      ]
+    },
+    "Kalmar": {
+      "equals": [
+        "Kalmar",
+        "Kalmar county"
+      ]
+    },
+    "Västernorrland": {
+      "equals": [
+        "Västernorrland",
+        "Västernorrland county"
+      ]
+    },
+    "Västmanland": {
+      "equals": [
+        "Västmanland",
+        "Västmanland county"
+      ]
+    },
+    "Kronoberg": {
+      "equals": [
+        "Kronoberg",
+        "Kronoberg county"
+      ]
+    },
+    "Jämtland": {
+      "equals": [
+        "Jämtland",
+        "Jämtland county"
+      ]
+    },
+    "Blekinge": {
+      "equals": [
+        "Blekinge",
+        "Blekinge county"
+      ]
+    },
+    "Gotland": {
+      "equals": [
+        "Gotland",
+        "Gotland county"
+      ]
+    }
+  },
+  "synthetic": {
+    "Stockholm": {
+      "equals": [
+        "Stockholm",
+        "Stockholms län",
+        "Stockholm County",
+        "Stockholm län"
+      ],
+      "contains": [
+        "stockholm",
+        "sthlm",
+        "solna",
+        "nacka",
+        "södertälje",
+        "huddinge",
+        "täby",
+        "lidingö",
+        "sollentuna",
+        "danderyd",
+        "sundbyberg",
+        "botkyrka",
+        "haninge",
+        "järfälla",
+        "tumba"
+      ]
+    },
+    "Västra Götaland": {
+      "equals": [
+        "Västra Götaland",
+        "Västra Götalands län",
+        "Göteborg",
+        "Borås"
+      ],
+      "contains": [
+        "västra götaland",
+        "göteborg",
+        "gothenburg",
+        "borås",
+        "mölndal",
+        "trollhättan",
+        "skövde",
+        "uddevalla"
+      ]
+    },
+    "Skåne": {
+      "equals": [
+        "Skåne",
+        "Skåne län",
+        "Malmö",
+        "Helsingborg",
+        "Lund"
+      ],
+      "contains": [
+        "skåne",
+        "scania",
+        "malmö",
+        "malmöhus",
+        "helsingborg",
+        "lunds",
+        "kristianstad"
+      ]
+    },
+    "Östergötland": {
+      "equals": [
+        "Östergötland",
+        "Östergötlands län",
+        "Linköping",
+        "Norrköping"
+      ],
+      "contains": [
+        "östergötland",
+        "linköping",
+        "norrköping"
+      ]
+    },
+    "Uppsala": {
+      "equals": [
+        "Uppsala",
+        "Uppsala län"
+      ],
+      "contains": [
+        "uppsala"
+      ]
+    },
+    "Halland": {
+      "equals": [
+        "Halland",
+        "Hallands län",
+        "Halmstad"
+      ],
+      "contains": [
+        "halland",
+        "halmstad",
+        "varberg"
+      ]
+    },
+    "Örebro": {
+      "equals": [
+        "Örebro",
+        "Örebro län"
+      ],
+      "contains": [
+        "örebro"
+      ]
+    },
+    "Jönköping": {
+      "equals": [
+        "Jönköping",
+        "Jönköpings län"
+      ],
+      "contains": [
+        "jönköping"
+      ]
+    },
+    "Gävleborg": {
+      "equals": [
+        "Gävleborg",
+        "Gävleborgs län",
+        "Gävle"
+      ],
+      "contains": [
+        "gävleborg",
+        "gävle"
+      ]
+    },
+    "Södermanland": {
+      "equals": [
+        "Södermanland",
+        "Södermanlands län",
+        "Eskilstuna"
+      ],
+      "contains": [
+        "södermanland",
+        "sörmland",
+        "eskilstuna",
+        "nyköping",
+        "katrineholm"
+      ]
+    },
+    "Värmland": {
+      "equals": [
+        "Värmland",
+        "Värmlands län",
+        "Karlstad"
+      ],
+      "contains": [
+        "värmland",
+        "karlstad"
+      ]
+    },
+    "Dalarna": {
+      "equals": [
+        "Dalarna",
+        "Dalarnas län",
+        "Falun",
+        "Borlänge"
+      ],
+      "contains": [
+        "dalarna",
+        "falun",
+        "borlänge"
+      ]
+    },
+    "Västerbotten": {
+      "equals": [
+        "Västerbotten",
+        "Västerbottens län",
+        "Umeå"
+      ],
+      "contains": [
+        "västerbotten",
+        "umeå",
+        "skellefteå"
+      ]
+    },
+    "Norrbotten": {
+      "equals": [
+        "Norrbotten",
+        "Norrbottens län",
+        "Luleå"
+      ],
+      "contains": [
+        "norrbotten",
+        "luleå",
+        "kiruna"
+      ]
+    },
+    "Kalmar": {
+      "equals": [
+        "Kalmar",
+        "Kalmar län"
+      ],
+      "contains": [
+        "kalmar"
+      ]
+    },
+    "Västernorrland": {
+      "equals": [
+        "Västernorrland",
+        "Västernorrlands län",
+        "Sundsvall"
+      ],
+      "contains": [
+        "västernorrland",
+        "sundsvall",
+        "härnösand",
+        "örnsköldsvik"
+      ]
+    },
+    "Västmanland": {
+      "equals": [
+        "Västmanland",
+        "Västmanlands län",
+        "Västerås"
+      ],
+      "contains": [
+        "västmanland",
+        "västerås"
+      ]
+    },
+    "Kronoberg": {
+      "equals": [
+        "Kronoberg",
+        "Kronobergs län",
+        "Växjö"
+      ],
+      "contains": [
+        "kronoberg",
+        "växjö"
+      ]
+    },
+    "Jämtland": {
+      "equals": [
+        "Jämtland",
+        "Jämtlands län"
+      ],
+      "contains": [
+        "jämtland",
+        "härjedal",
+        "östersund"
+      ]
+    },
+    "Blekinge": {
+      "equals": [
+        "Blekinge",
+        "Blekinge län",
+        "Karlskrona"
+      ],
+      "contains": [
+        "blekinge",
+        "karlskrona",
+        "karlshamn"
+      ]
+    },
+    "Gotland": {
+      "equals": [
+        "Gotland",
+        "Gotlands län",
+        "Visby"
+      ],
+      "contains": [
+        "gotland",
+        "visby"
+      ]
+    }
   }
 }
