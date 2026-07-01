@@ -6,8 +6,8 @@ This ties the emit side (:mod:`clients.call_context`) to the parse side
 
 from __future__ import annotations
 
-from population_synth.analysis.llm_metrics.per_run.log_parser import _try_parse_call
-from population_synth.clients.call_context import format_corr_token, set_correlation
+from population_synthetic.analysis.llm_metrics.per_run.log_parser import _try_parse_call
+from population_synthetic.clients.call_context import format_corr_token, set_correlation
 
 _TS = "2026-05-21 10:00:00"
 

@@ -1,7 +1,7 @@
 # Engineering Review — `llm_metrics/` Pipeline (LLM Run Analytics)
 
 **Date:** 2026-06-29 (package renamed `analysis/` → `llm_metrics/` on 2026-07-01)
-**Scope:** `src/population_synth/llm_metrics/` and its orchestrators (`scripts/analyze/analyze_run.py`,
+**Scope:** `src/population_synthetic/llm_metrics/` and its orchestrators (`scripts/analyze/analyze_run.py`,
 `scripts/analyze/compare_runs.py`, `config/analyze_defaults.yaml`).
 **Type:** Engineering review — code architecture and software design, with concrete findings,
 recommendations, and a curated learning list. Not an academic critique.
@@ -256,7 +256,7 @@ table from the same metrics dict via a single renderer, and using `logging` for 
 ## 7. Cross-Cutting Concerns
 
 - **Configuration & path resolution.** `config/analyze_defaults.yaml` supplies `output_base` and the
-  analytics layout; `_paths.PROJECT_ROOT` (`parents[2]` from `src/population_synth/`) anchors
+  analytics layout; `_paths.PROJECT_ROOT` (`parents[2]` from `src/population_synthetic/`) anchors
   everything else. `analyze_run.py._derive_output_defaults` maps a run slug under `01_Raw/` to its
   `03_Analysis/llm_metrics/{slug}/` outputs, so the on-disk taxonomy is convention-driven, not
   hardcoded.

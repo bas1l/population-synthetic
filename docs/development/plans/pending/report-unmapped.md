@@ -138,5 +138,5 @@ scripts/report_unmapped.py
 ## References
 
 - Existing script: `scripts/compare_all_pipelines.py` (axis discovery + `_split_csv` pattern)
-- Report format: `src/population_synth/comparison/evaluator.py` (`generate_report()`, `_marginal_metrics()`)
+- Report format: `src/population_synthetic/comparison/evaluator.py` (`generate_report()`, `_marginal_metrics()`)
 - Output location: `config/experiment_defaults.yaml` → `output_base/03_Analysis/{slug}/{slug}.json`

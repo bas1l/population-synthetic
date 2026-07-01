@@ -30,17 +30,17 @@ from pathlib import Path
 
 import yaml
 
-from population_synth._paths import PROJECT_ROOT
-from population_synth.analysis.llm_metrics.cross_run.comparison_loader import decompose_slug
-from population_synth.analysis.comparison.charts import (
+from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.llm_metrics.cross_run.comparison_loader import decompose_slug
+from population_synthetic.analysis.comparison.charts import (
     plot_comparison_charts,
     plot_radar_comparison,
     plot_radar_grid,
 )
-from population_synth.analysis.utils.country_config import mappings_for_country
-from population_synth.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
-from population_synth.analysis.comparison.scheme import load_scheme
-from population_synth.identity.manifest_loader import discover_axis_values
+from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+from population_synthetic.analysis.comparison.scheme import load_scheme
+from population_synthetic.identity.manifest_loader import discover_axis_values
 
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 

@@ -8,9 +8,9 @@ from pathlib import Path
 
 import numpy as np
 
-from population_synth.clients.scb_client import SCBPxWebClient
-from population_synth.population.sweden.fetch_service import FetchService
-from population_synth.population.sweden.sample_service import SampleService
+from population_synthetic.clients.scb_client import SCBPxWebClient
+from population_synthetic.population.sweden.fetch_service import FetchService
+from population_synthetic.population.sweden.sample_service import SampleService
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)

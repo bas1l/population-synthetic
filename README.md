@@ -1,4 +1,4 @@
-# population-synth
+# population-synthetic
 
 Standalone toolkit for generating synthetic population profiles from real national demographic data (SCB/SSB/ISTAT) and LLM-based identity personas.
 
@@ -15,7 +15,7 @@ Standalone toolkit for generating synthetic population profiles from real nation
 ## Installation
 
 ```bash
-cd population-synth
+cd population-synthetic
 pip install -e .
 ```
 
@@ -134,7 +134,7 @@ python scripts/analyze/compare_runs.py
 ### Launch the GUI
 
 ```bash
-python -m population_synth.gui.main
+python -m population_synthetic.gui.main
 ```
 
 ## Environment
@@ -150,7 +150,7 @@ python -m population_synth.gui.main
 ## Architecture
 
 ```
-src/population_synth/
+src/population_synthetic/
     population/           Shared population layer
         data.py           PopulationDistributions dataclass
         helpers.py        age_to_group, sample_from, normalize, VALID_AGE_GROUPS, AGE_GROUP_BOUNDS

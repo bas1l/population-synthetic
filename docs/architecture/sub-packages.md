@@ -4,10 +4,10 @@
 > [Comparison & mapping](comparison-mapping.md) · [Design principles](design-principles.md) ·
 > [Axis composition](axis-composition.md) · [Configuration](configuration.md) · [Commands](commands.md)
 
-The full per-package breakdown of `src/population_synth/`. This is the reference companion to
+The full per-package breakdown of `src/population_synthetic/`. This is the reference companion to
 the short architecture map in `CLAUDE.md`.
 
-## Sub-packages (`src/population_synth/`)
+## Sub-packages (`src/population_synthetic/`)
 
 **`population/`** -- Shared population layer with country-specific sub-modules:
 - `data.py` -- `PopulationDistributions` dataclass (shared by both countries)
@@ -74,7 +74,7 @@ the short architecture map in `CLAUDE.md`.
 
 `_paths.py` provides a single `PROJECT_ROOT` constant:
 ```python
-PROJECT_ROOT = Path(__file__).resolve().parents[2]  # src/population_synth/ -> population-synth/
+PROJECT_ROOT = Path(__file__).resolve().parents[2]  # src/population_synthetic/ -> population-synthetic/
 ```
 All cache and config paths derive from this.
 

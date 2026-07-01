@@ -8,10 +8,10 @@ from pathlib import Path
 
 import numpy as np
 
-from population_synth.clients.eurostat_client import EurostatClient
-from population_synth.clients.istat_client import ISTATSDMXClient
-from population_synth.population.italy.fetch_service import ISTATFetchService
-from population_synth.population.italy.sample_service import ISTATSampleService
+from population_synthetic.clients.eurostat_client import EurostatClient
+from population_synthetic.clients.istat_client import ISTATSDMXClient
+from population_synthetic.population.italy.fetch_service import ISTATFetchService
+from population_synthetic.population.italy.sample_service import ISTATSampleService
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)

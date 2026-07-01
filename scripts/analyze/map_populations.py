@@ -36,16 +36,16 @@ from typing import Any
 
 import yaml
 
-from population_synth._paths import PROJECT_ROOT
-from population_synth.analysis.utils.country_config import (
+from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.utils.country_config import (
     infer_country,
     known_country_ids,
     mappings_for_country,
     reference_for_country,
 )
-from population_synth.analysis.mapping.reference_mapper import load_reference_population, normalize_population
-from population_synth.analysis.mapping.synthetic_mapper import load_raw_population, map_population
-from population_synth.identity.manifest_loader import load_manifest
+from population_synthetic.analysis.mapping.reference_mapper import load_reference_population, normalize_population
+from population_synthetic.analysis.mapping.synthetic_mapper import load_raw_population, map_population
+from population_synthetic.identity.manifest_loader import load_manifest
 
 _DEFAULT_TARGETS = PROJECT_ROOT / "config" / "analysis" / "comparison_targets.yaml"
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"

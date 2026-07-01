@@ -6,7 +6,7 @@ depth lives in the [architecture wiki](docs/architecture/README.md).
 
 ## Project Overview
 
-**population-synth** is a standalone extraction from the `anxiety-synthetic` monorepo. It provides three capabilities:
+**population-synthetic** is a standalone extraction from the `anxiety-synthetic` monorepo. It provides three capabilities:
 
 1. **Population Generation** -- Fetch real demographic distributions from national statistical APIs (SCB for Sweden, SSB for Norway, ISTAT/Eurostat for Italy) and sample statistically realistic population profiles via conditional chained sampling
 2. **Identity Generation** -- LLM-based persona identity creation using Gemini models with configurable strategy mode
@@ -29,7 +29,7 @@ python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet
 python scripts/analyze/map_populations.py
 python scripts/analyze/compare_pipeline_to_scb.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
 
-python -m population_synth.gui.main   # GUI launcher (requires ".[gui]")
+python -m population_synthetic.gui.main   # GUI launcher (requires ".[gui]")
 ruff check src/                       # lint (line-length 120, rules E/F/W/I)
 pytest                                # test suite (covers llm_metrics/ and clients/call_context)
 ```
@@ -38,15 +38,15 @@ pytest                                # test suite (covers llm_metrics/ and clie
 
 ## Import Convention
 
-The project uses `src/` layout. The `pyproject.toml` configures `setuptools` to find packages under `src/`, so after `pip install -e .`, the `population_synth` namespace is available:
+The project uses `src/` layout. The `pyproject.toml` configures `setuptools` to find packages under `src/`, so after `pip install -e .`, the `population_synthetic` namespace is available:
 
 ```python
-from population_synth.population.sweden.fetch_service import FetchService
-from population_synth.clients.scb_client import SCBPxWebClient
-from population_synth.identity.factory_identity_generator import FactoryIdentityGenerator
+from population_synthetic.population.sweden.fetch_service import FetchService
+from population_synthetic.clients.scb_client import SCBPxWebClient
+from population_synthetic.identity.factory_identity_generator import FactoryIdentityGenerator
 ```
 
-All imports use the fully-qualified `population_synth.*` package namespace. Scripts in `scripts/` depend on the editable install.
+All imports use the fully-qualified `population_synthetic.*` package namespace. Scripts in `scripts/` depend on the editable install.
 
 ## Core Invariants (hard rules)
 
@@ -60,7 +60,7 @@ These are enforced guardrails, not suggestions. Full rationale in
 
 ## Architecture
 
-`src/` layout; the `population_synth` namespace holds sub-packages `population/` (per-country
+`src/` layout; the `population_synthetic` namespace holds sub-packages `population/` (per-country
 data layers over a shared parent), `identity/` (LLM persona generation), `analysis/` (the
 post-generation family, one subpackage per process: `mapping/` raw -> canonical schema,
 `comparison/` two-stage map -> compare statistical scoring + charts, `llm_metrics/` post-run
