@@ -47,6 +47,11 @@
   },
   "synthetic": {
     "Wage / Business": {
+      "none_of": [
+        "unemploy",
+        "arbetslös",
+        "arbetssökande"
+      ],
       "equals": [
         "Wage / Business",
         "Lön",
@@ -85,7 +90,21 @@
         "dividend",
         "interest",
         "ränta",
-        "aktieutdelning"
+        "räntor",
+        "ränte",
+        "rente",
+        "aktieutdelning",
+        "utdelning",
+        "investment",
+        "stocks",
+        "avkastning",
+        "real estate",
+        "property income",
+        "rental income",
+        "rental/property",
+        "hyresintäkt",
+        "hyresinkomst",
+        "hyresintäkter"
       ]
     },
     "Pension": {
@@ -120,7 +139,26 @@
         "allowan",
         "ersättning",
         "transfer",
-        "benefit"
+        "benefit",
+        "student loan",
+        "student aid",
+        "student grant",
+        "student finance",
+        "studielån",
+        "studiestöd",
+        "studiemedel",
+        "studiebidrag",
+        "study grant",
+        "scholarship",
+        "stipend",
+        "csn",
+        "grant from",
+        "grants from",
+        "försäkringskassa",
+        "dagpenning",
+        "bidrag",
+        "unemploy",
+        "arbetslöshet"
       ]
     },
     "Social Assistance": {

@@ -5,7 +5,7 @@ Kruskal-Wallis omnibus test, an inline Dunn post-hoc with Holm step-down
 correction, and the descriptive :func:`summarize` of a sample list.
 
 These carry the ``scipy``/``numpy`` dependency surface and are kept separate from
-the stdlib-only numeric primitives in :mod:`population_synth.analysis.shared._stats`.
+the stdlib-only numeric primitives in :mod:`population_synth.llm_metrics.shared._stats`.
 The Kruskal-Wallis H-test and Dunn post-hoc are chosen over parametric ANOVA
 because per-group sample sizes are small and the metrics are not expected to be
 normally distributed; Dunn's test is implemented here (rather than via
@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 from scipy import stats
 
-from population_synth.analysis.shared import _stats
+from population_synth.llm_metrics.shared import _stats
 
 
 def _nonempty_groups(groups: dict[str, list[float]]) -> dict[str, list[float]]:
@@ -124,7 +124,7 @@ def summarize(samples: list[float]) -> dict[str, Any]:
         return {"n": 0, "median": None, "mean": None, "std": None,
                 "q1": None, "q3": None, "min": None, "max": None}
     arr = np.asarray(samples, dtype=float)
-    # Percentiles use the project-wide nearest-rank convention (analysis._stats),
+    # Percentiles use the project-wide nearest-rank convention (llm_metrics.shared._stats),
     # so a metric's q1/q3 here match its per-run chart.  Mean/std stay on numpy.
     return {
         "n": int(arr.size),

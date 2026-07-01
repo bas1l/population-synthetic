@@ -80,6 +80,21 @@
         "Fiske",
         "Jord- och skogsbruk",
         "Agriculture/Forestry/Fishing"
+      ],
+      "contains": [
+        "agricultur",
+        "farming",
+        "forestry",
+        "fishing",
+        "fisher",
+        "jordbruk",
+        "lantbruk",
+        "skogsbruk",
+        "skogs",
+        "fiske",
+        "naturbruk",
+        "timber",
+        "agrifood"
       ]
     },
     "Manufacturing & Industry": {
@@ -98,7 +113,29 @@
         "bygg",
         "construction",
         "tillverkning",
-        "industri"
+        "industri",
+        "manufactur",
+        "heavy industry",
+        "industrial",
+        "factory",
+        "fabrik",
+        "automotive",
+        "fordon",
+        "gruv",
+        "mining",
+        "verkstad",
+        "energy",
+        "energi",
+        "utilities",
+        "metal",
+        "maskin",
+        "machinery",
+        "wood processing",
+        "paper and pulp",
+        "pharmaceutical",
+        "biotech",
+        "installation",
+        "el, vvs"
       ]
     },
     "Retail & Service": {
@@ -115,7 +152,33 @@
       ],
       "contains": [
         "detaljhandel",
-        "handel"
+        "handel",
+        "partihandel",
+        "retail",
+        "wholesale",
+        "trade",
+        "sales",
+        "butik",
+        "shop",
+        "hospitality",
+        "hotel",
+        "hotell",
+        "restaurant",
+        "restaurang",
+        "catering",
+        "food service",
+        "accommodation",
+        "transport",
+        "logistic",
+        "logistik",
+        "freight",
+        "courier",
+        "warehouse",
+        "lager",
+        "delivery",
+        "tourism",
+        "turism",
+        "travel"
       ]
     },
     "IT & Technology": {
@@ -138,9 +201,40 @@
         "finansiell",
         "bank",
         "finans",
+        "financ",
+        "insurance",
+        "försäkring",
         "teknik",
-        " it",
-        "information"
+        "information",
+        "it-",
+        "it/",
+        "it och",
+        "it and",
+        "it service",
+        "it-tjänst",
+        "it support",
+        "ict",
+        "technolog",
+        "teknolog",
+        "tech",
+        "software",
+        "mjukvar",
+        "programvar",
+        "systemutveckl",
+        "digital",
+        "telekom",
+        "telecom",
+        "kommunikation",
+        "communication",
+        "data analy",
+        "datavetenskap",
+        "consult",
+        "konsult",
+        "business service",
+        "professional service",
+        "affärstjänst",
+        "real estate",
+        "fastighet"
       ]
     },
     "Public Administration": {
@@ -152,7 +246,26 @@
         "Public Administration/Defense"
       ],
       "contains": [
-        "offentlig förvaltning"
+        "offentlig förvaltning",
+        "offentlig sektor",
+        "offentlig verksamhet",
+        "public administration",
+        "public sector",
+        "public services",
+        "public policy",
+        "government",
+        "municipal",
+        "kommunal",
+        "kommun",
+        "landsting",
+        "myndighet",
+        "statlig",
+        "staten",
+        "förvaltning",
+        "civil service",
+        "defence",
+        "defense",
+        "försvar"
       ]
     },
     "Education": {
@@ -163,7 +276,20 @@
       ],
       "contains": [
         "utbildning",
-        "forskning"
+        "forskning",
+        "education",
+        "academ",
+        "universit",
+        "högskola",
+        "lärosäte",
+        "skola",
+        "school",
+        "teaching",
+        "training",
+        "edtech",
+        "pedagog",
+        "research",
+        "tuition"
       ]
     },
     "Healthcare & Social": {
@@ -180,7 +306,25 @@
         "vård",
         "sjukvård",
         "omsorg",
-        "healthcare"
+        "healthcare",
+        "health",
+        " care",
+        "social care",
+        "social work",
+        "social services",
+        "socialtjänst",
+        "hälsa",
+        "hälso",
+        "sjukhus",
+        "hospital",
+        "nursing",
+        "medical",
+        "elderly",
+        "äldre",
+        "childcare",
+        "welfare",
+        "välfärd",
+        "disability"
       ]
     },
     "Other": {
@@ -199,6 +343,21 @@
     "Not Applicable": {
       "equals": [
         "Not Applicable"
+      ],
+      "contains": [
+        "not applicable",
+        "n/a",
+        "ej tillämpligt",
+        "ej tillämpbart",
+        "ej relevant",
+        "not employed",
+        "not currently employed",
+        "no current sector",
+        "inte i arbete",
+        "retired",
+        "pensionär",
+        "unemployed",
+        "arbetslös"
       ]
     },
     "on_miss": "Other"

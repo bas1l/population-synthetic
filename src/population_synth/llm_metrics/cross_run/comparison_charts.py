@@ -1,7 +1,7 @@
 """comparison_charts.py -- Charts for the cross-run scientific comparison.
 
 Consumes the in-memory structure from
-:func:`population_synth.analysis.cross_run.run_comparison.build_comparison` and renders, per
+:func:`population_synth.llm_metrics.cross_run.run_comparison.build_comparison` and renders, per
 metric and per factor (model / method):
 
 * a grouped **box plot** with individual points overlaid, the Kruskal-Wallis

@@ -2,7 +2,7 @@
 charts.py -- Visualization tools for run analytics metrics.
 
 Generates PNG charts from the metrics dict produced by
-:func:`population_synth.analysis.per_run.aggregator.compute_metrics`.
+:func:`population_synth.llm_metrics.per_run.aggregator.compute_metrics`.
 
 Entry point: :func:`plot_run_charts`.
 """
@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from population_synth.analysis.shared._stats import median as _median
-from population_synth.analysis.shared._stats import percentile as _percentile
+from population_synth.llm_metrics.shared._stats import median as _median
+from population_synth.llm_metrics.shared._stats import percentile as _percentile
 
 # ------------------------------------------------------------------
 # Chart styling constants

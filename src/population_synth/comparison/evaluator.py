@@ -20,37 +20,11 @@ from scipy.stats import chi2_contingency, chisquare
 from population_synth.comparison.scheme import ComparisonScheme
 from population_synth.population.helpers import age_to_group
 
-# ------------------------------------------------------------------
-# Shared constants used across the comparison package
-# ------------------------------------------------------------------
-
-DEMOGRAPHIC_ATTRIBUTES = [
-    "age_group",
-    "biological_sex",
-    "education_level",
-    "employment_status",
-    "birth_location",
-    "socioeconomic_class",
-    "parental_structure",
-    "region",
-    "civil_status",
-    "industry_sector",
-    "employment_type",
-    "housing_tenure",
-    "household_size",
-    "income_source",
-    "birth_country_detail",
-]
-
-JOINT_PAIRS = [
-    ("age_group", "education_level"),
-    ("age_group", "employment_status"),
-    ("education_level", "employment_status"),
-]
-
-COHERENCE_ATTRIBUTES = ("age_group", "education_level", "employment_status")
-
-COHERENCE_THRESHOLD = 0.001
+# The comparison axis (attributes, categories, joint pairs, coherence attributes,
+# coherence threshold) is not defined here: it is the single source of truth in the
+# per-country config, loaded into a ``ComparisonScheme`` (see ``scheme.load_scheme``).
+# There is deliberately no in-code default to fall back to -- ``StatisticalEvaluator``
+# requires a scheme and fails loudly without one (config is authoritative).
 
 
 # ------------------------------------------------------------------
@@ -86,7 +60,12 @@ def attr_value(ind: dict, attr: str) -> Any:
 # ------------------------------------------------------------------
 
 class StatisticalEvaluator:
-    def __init__(self, pop_a: dict, pop_b: dict, scheme: ComparisonScheme | None = None):
+    def __init__(self, pop_a: dict, pop_b: dict, scheme: ComparisonScheme):
+        if scheme is None:
+            raise ValueError(
+                "StatisticalEvaluator requires a ComparisonScheme (the comparison axis "
+                "lives in config, loaded via scheme.load_scheme); there is no in-code default."
+            )
         self.pop_a = pop_a
         self.pop_b = pop_b
         self.scheme = scheme
@@ -109,7 +88,7 @@ class StatisticalEvaluator:
         counts_a = self._freq_table(self.individuals_a, attr)
         counts_b = self._freq_table(self.individuals_b, attr)
 
-        if self.scheme is not None and attr in self.scheme.categories:
+        if attr in self.scheme.categories:
             # Scheme-driven: the comparison axis is exactly the DB-grounded category
             # set, so values the reference never emits cannot appear, and synthetic-only
             # values fall outside the axis (reported as unmapped, not silently scored).
@@ -178,7 +157,7 @@ class StatisticalEvaluator:
         }
 
     def compute_marginals(self) -> dict[str, dict[str, Any]]:
-        attrs = self.scheme.attributes if self.scheme is not None else DEMOGRAPHIC_ATTRIBUTES
+        attrs = self.scheme.attributes
         return {attr: self._marginal_metrics(attr) for attr in attrs}
 
     # --- Joint chi-squared -------------------------------------------------
@@ -209,7 +188,7 @@ class StatisticalEvaluator:
         return float(p)
 
     def compute_joint_chi_sq(self) -> dict[str, float]:
-        pairs = self.scheme.joint_pairs if self.scheme is not None else JOINT_PAIRS
+        pairs = self.scheme.joint_pairs
         result = {}
         for attr_x, attr_y in pairs:
             key = f"{attr_x}_x_{attr_y}"
@@ -221,8 +200,8 @@ class StatisticalEvaluator:
     def compute_coherence(self) -> dict[str, Any]:
         # Build joint probability table from pop_a for
         # (age_group, education_level, employment_status)
-        coherence_attrs = self.scheme.coherence_attributes if self.scheme is not None else COHERENCE_ATTRIBUTES
-        threshold = self.scheme.coherence_threshold if self.scheme is not None else COHERENCE_THRESHOLD
+        coherence_attrs = self.scheme.coherence_attributes
+        threshold = self.scheme.coherence_threshold
         tuple_counts: Counter = Counter()
         for ind in self.individuals_a:
             key = tuple(attr_value(ind, a) for a in coherence_attrs)

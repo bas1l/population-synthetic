@@ -110,16 +110,30 @@ def normalize(value: Any) -> str:
     return _UNDERSCORE_RE.sub(" ", text.lower())
 
 
+_LEADING_INT_RE = re.compile(r"-?\d+")
+
+
 def _to_int(value: Any) -> int | None:
-    """Return *value* as an int (accepting int or integer-valued string), else None."""
+    """Return *value* as an int, else None.
+
+    Accepts a real int, a pure-integer string, or a string that *begins* with an
+    integer -- so LLM household-size answers like ``"2 people"``,
+    ``"1 person (living alone)"``, ``"2.0"`` (leading ``2``) or ``"10+"`` resolve
+    to their leading count. Strings with no leading digit (``"Three"``,
+    ``"Nuclear family"``) still yield None. Only the ``int`` / ``int_gte`` matchers
+    consume this (household_size on the synthetic side), so widening it here does
+    not affect any other attribute.
+    """
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
         return value
+    if isinstance(value, float):
+        return int(value)
     if isinstance(value, str):
-        s = value.strip()
-        if s and (s.lstrip("-").isdigit()):
-            return int(s)
+        m = _LEADING_INT_RE.match(value.strip())
+        if m is not None:
+            return int(m.group())
     return None
 
 

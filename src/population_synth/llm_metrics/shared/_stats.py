@@ -1,4 +1,4 @@
-"""Shared numeric primitives for the analysis pipeline.
+"""Shared numeric primitives for the llm_metrics pipeline.
 
 A single home for ``median`` / ``percentile`` / ``shannon_entropy`` so the
 per-run aggregator, the per-run charts, and the cross-run comparison all use the

@@ -31,7 +31,7 @@ from pathlib import Path
 import yaml
 
 from population_synth._paths import PROJECT_ROOT
-from population_synth.analysis.cross_run.comparison_loader import decompose_slug
+from population_synth.llm_metrics.cross_run.comparison_loader import decompose_slug
 from population_synth.comparison.charts import (
     plot_comparison_charts,
     plot_radar_comparison,

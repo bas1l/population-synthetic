@@ -1,7 +1,7 @@
-# Engineering Review — `analysis/` Pipeline (LLM Run Analytics)
+# Engineering Review — `llm_metrics/` Pipeline (LLM Run Analytics)
 
-**Date:** 2026-06-29
-**Scope:** `src/population_synth/analysis/` and its orchestrators (`scripts/analyze/analyze_run.py`,
+**Date:** 2026-06-29 (package renamed `analysis/` → `llm_metrics/` on 2026-07-01)
+**Scope:** `src/population_synth/llm_metrics/` and its orchestrators (`scripts/analyze/analyze_run.py`,
 `scripts/analyze/compare_runs.py`, `config/analyze_defaults.yaml`).
 **Type:** Engineering review — code architecture and software design, with concrete findings,
 recommendations, and a curated learning list. Not an academic critique.
@@ -10,15 +10,15 @@ recommendations, and a curated learning list. Not an academic critique.
 
 ## 1. Executive Summary
 
-The `analysis/` package is the project's **LLM run-behaviour** analytics pipeline. It ingests the
+The `llm_metrics/` package is the project's **LLM run-behaviour** analytics pipeline. It ingests the
 raw artifacts a generation run leaves on disk (`llm_interactions.jsonl` + `logs/run_*.log`), joins
 them, aggregates roughly a dozen metric families, renders per-run charts, and runs cross-run
 non-parametric statistics (Kruskal–Wallis with Holm-corrected Dunn post-hoc).
 
-> **Not to be confused with `comparison/`.** The `comparison/` package scores *population quality*
-> (how closely generated demographics match an SCB/ISTAT reference). `analysis/` scores *run
+> **Distinct from `comparison/`.** The `comparison/` package scores *population quality*
+> (how closely generated demographics match an SCB/ISTAT reference). `llm_metrics/` scores *run
 > behaviour* (token usage, latency, retry/error rates, value diversity per LLM call category). The
-> two pipelines share neither code nor data; this report covers `analysis/` only.
+> two pipelines share neither code nor data; this report covers `llm_metrics/` only.
 
 **Overall verdict.** This is a well-structured pipeline. Its core is a chain of small, I/O-free,
 single-purpose functions that are individually easy to read and would be trivial to unit-test. The
@@ -212,7 +212,7 @@ percentile convention and document it.
 ### 6.3 No automated tests
 
 There is no `tests/` directory; the only `test_*` file in the repo is `scripts/dev/test_istat_discovery.py`,
-an ISTAT API probe unrelated to `analysis/`. The parse→join→aggregate core is the most testable code
+an ISTAT API probe unrelated to `llm_metrics/`. The parse→join→aggregate core is the most testable code
 in the project — pure functions with dict in / dict out — yet the correctness of the statistical
 output (entropy, percentiles, Dunn/Holm p-values) is entirely unverified.
 

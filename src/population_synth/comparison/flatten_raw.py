@@ -1,20 +1,24 @@
 """Generic raw-to-flat normalizer for population JSON files.
 
-Converts nested ``{"label": "...", "code": "..."}`` dicts to flat strings.
-Works for all three country pipelines (Sweden, Norway, Italy) without
-country-specific category mappings.
+Converts nested ``{"label": "...", "code": "..."}`` dicts to flat strings, works
+for all three country pipelines (Sweden, Norway, Italy). It does **not** canonicalize
+category labels -- it unwraps them -- with two exceptions that are computed, not
+guessed: ``age_group`` is derived from the integer ``age`` (numeric binning), and
+``biological_sex`` is harmonized through the caller-supplied biological-sex mapping
+config (``config/mapping/{scb,istat}/biological_sex.json``) via the shared
+:func:`mapping_engine.resolve`. There are deliberately no in-code attribute-name or
+sex-value literals: the fields flattened come from each record's own keys, and the
+sex vocabulary comes from config.
 """
 
 from __future__ import annotations
 
+from population_synth.comparison import mapping_engine
 from population_synth.population.helpers import age_to_group
 
-_SEX_HARMONIZE: dict[str, str] = {
-    "men": "Male",
-    "women": "Female",
-    "male": "Male",
-    "female": "Female",
-}
+#: Keys handled explicitly by :func:`flatten_individual`; every other key is
+#: unwrapped generically from the record itself (no hardcoded field list).
+_SPECIAL_KEYS = frozenset({"id", "age", "age_group", "biological_sex", "employment_type"})
 
 
 def _extract_label(value: object) -> str | None:
@@ -40,24 +44,23 @@ def _flatten_employment_type(value: object) -> str | None:
     return attachment or hours
 
 
-_SIMPLE_FIELDS = (
-    "education_level",
-    "employment_status",
-    "socioeconomic_class",
-    "birth_location",
-    "region",
-    "civil_status",
-    "industry_sector",
-    "housing_tenure",
-    "household_size",
-    "income_source",
-    "birth_country_detail",
-    "parental_structure",
-)
+def _harmonize_sex(sex_raw: str, sex_config: dict) -> str:
+    """Resolve a raw sex token to the canonical value via the biological-sex config.
+
+    Uses the config's ``database`` rules (raw national-statistics side). Falls back to
+    the raw label when the token is outside the config's vocabulary, mirroring how the
+    other fields keep their native label rather than inventing a value.
+    """
+    resolved = mapping_engine.resolve(sex_raw, sex_config["database"], sex_config["values"])
+    return resolved if resolved is not None else sex_raw
 
 
-def flatten_individual(raw: dict) -> dict:
-    """Convert one raw individual record to flat-string format."""
+def flatten_individual(raw: dict, *, sex_config: dict) -> dict:
+    """Convert one raw individual record to flat-string format.
+
+    *sex_config* is the ``biological_sex`` mapping block (``values`` + ``database``),
+    supplied by the caller so the sex vocabulary lives in config, not in code.
+    """
     flat: dict = {"id": raw.get("id")}
 
     age = raw.get("age")
@@ -71,29 +74,32 @@ def flatten_individual(raw: dict) -> dict:
         flat["age_group"] = None
 
     sex_raw = _extract_label(raw.get("biological_sex"))
-    if sex_raw:
-        flat["biological_sex"] = _SEX_HARMONIZE.get(sex_raw.lower(), sex_raw)
-    else:
-        flat["biological_sex"] = None
-
-    for field in _SIMPLE_FIELDS:
-        flat[field] = _extract_label(raw.get(field))
+    flat["biological_sex"] = _harmonize_sex(sex_raw, sex_config) if sex_raw else None
 
     flat["employment_type"] = _flatten_employment_type(raw.get("employment_type"))
+
+    # Every remaining field is unwrapped generically -- the field set comes from the
+    # record itself, not a hardcoded attribute list.
+    for key, value in raw.items():
+        if key in _SPECIAL_KEYS:
+            continue
+        flat[key] = _extract_label(value)
 
     return flat
 
 
-def flatten_raw_population(pop: dict, *, country_label: str = "Unknown") -> dict:
+def flatten_raw_population(pop: dict, *, sex_config: dict, country_label: str = "Unknown") -> dict:
     """Flatten an entire raw population dict to flat-string format.
 
-    Returns a new dict with the same ``metadata`` plus flattened ``individuals``.
+    *sex_config* is the ``biological_sex`` mapping block used to harmonize the sex
+    field (see :func:`flatten_individual`). Returns a new dict with the same
+    ``metadata`` plus flattened ``individuals``.
     """
     individuals = pop.get("individuals", [])
-    flat_individuals = [flatten_individual(ind) for ind in individuals]
+    flat_individuals = [flatten_individual(ind, sex_config=sex_config) for ind in individuals]
 
     metadata = dict(pop.get("metadata", {}))
     metadata["country_label"] = country_label
-    metadata["flatten_note"] = "generic raw-to-flat (no category mapping)"
+    metadata["flatten_note"] = "generic raw-to-flat (labels unwrapped; sex harmonized via config)"
 
     return {"metadata": metadata, "individuals": flat_individuals}

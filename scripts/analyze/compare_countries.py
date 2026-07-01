@@ -13,8 +13,11 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from population_synth.comparison.evaluator import DEMOGRAPHIC_ATTRIBUTES, StatisticalEvaluator
+from population_synth.comparison.country_config import mappings_for_country
+from population_synth.comparison.evaluator import StatisticalEvaluator
 from population_synth.comparison.flatten_raw import flatten_raw_population
+from population_synth.comparison.reference_mapper.mappings import load_mappings
+from population_synth.comparison.scheme import load_scheme
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -55,6 +58,7 @@ def _pairwise_report(evaluator: StatisticalEvaluator) -> dict:
 def _print_summary(
     populations: dict[str, dict],
     pairwise: dict[str, dict],
+    attributes: list[str],
 ) -> None:
     print("\n==== Cross-Country Population Comparison ====")
     for label, pop in populations.items():
@@ -70,7 +74,7 @@ def _print_summary(
     print("   Note")
     print("-" * (28 + 14 * len(pair_names) + 8))
 
-    for attr in DEMOGRAPHIC_ATTRIBUTES:
+    for attr in attributes:
         note = "comparable" if attr in COMPARABLE_FIELDS else "labels differ"
         print(f"{attr:<28s}", end="")
         for pn in pair_names:
@@ -105,6 +109,7 @@ def _build_json_report(
     populations: dict[str, dict],
     pairwise: dict[str, dict],
     paths: dict[str, str],
+    attributes: list[str],
 ) -> dict:
     pop_meta = {}
     for label, pop in populations.items():
@@ -116,7 +121,7 @@ def _build_json_report(
         }
 
     marginals: dict[str, dict] = {}
-    for attr in DEMOGRAPHIC_ATTRIBUTES:
+    for attr in attributes:
         attr_data: dict[str, dict[str, float]] = {}
         for label, pop in populations.items():
             attr_data[label] = _marginal(pop["individuals"], attr)
@@ -127,7 +132,7 @@ def _build_json_report(
     for pn, metrics in pairwise.items():
         comp_tvs, comp_kls = [], []
         all_tvs, all_kls = [], []
-        for attr in DEMOGRAPHIC_ATTRIBUTES:
+        for attr in attributes:
             m = metrics.get(attr, {})
             tv = m.get("tv_distance")
             kl = m.get("kl_divergence")
@@ -178,7 +183,20 @@ def main() -> None:
     parser.add_argument("--output", type=str, default="data/cross_country/cross_country_report.json")
     parser.add_argument("--charts-dir", type=str, default="data/cross_country/charts")
     parser.add_argument("--no-charts", action="store_true", help="Skip chart generation")
+    parser.add_argument(
+        "--reference-country",
+        choices=("swedish", "italian"),
+        default="swedish",
+        help="Country whose comparison scheme (config/mapping/{scb,istat}) supplies the "
+             "shared comparison axis for this cross-country run. The canonical attribute "
+             "names are country-independent; category sets come from this scheme.",
+    )
     args = parser.parse_args()
+
+    scheme = load_scheme(args.reference_country)
+    # Sex vocabulary for the generic flattener comes from the reference country's
+    # biological_sex config (not a hardcoded map).
+    sex_config = load_mappings(mappings_for_country(args.reference_country))["biological_sex"]
 
     logger.info("Loading populations...")
     swe_raw = _load_json(args.sweden)
@@ -186,9 +204,9 @@ def main() -> None:
     ita_raw = _load_json(args.italy)
 
     logger.info("Flattening raw records...")
-    swe = flatten_raw_population(swe_raw, country_label="Sweden")
-    nor = flatten_raw_population(nor_raw, country_label="Norway")
-    ita = flatten_raw_population(ita_raw, country_label="Italy")
+    swe = flatten_raw_population(swe_raw, sex_config=sex_config, country_label="Sweden")
+    nor = flatten_raw_population(nor_raw, sex_config=sex_config, country_label="Norway")
+    ita = flatten_raw_population(ita_raw, sex_config=sex_config, country_label="Italy")
 
     populations = {"Sweden": swe, "Norway": nor, "Italy": ita}
     paths = {"Sweden": args.sweden, "Norway": args.norway, "Italy": args.italy}
@@ -202,14 +220,14 @@ def main() -> None:
     logger.info("Running pairwise statistical comparisons...")
     pairwise: dict[str, dict] = {}
     for pair_name, pop_a, pop_b in pairs:
-        evaluator = StatisticalEvaluator(pop_a, pop_b)
+        evaluator = StatisticalEvaluator(pop_a, pop_b, scheme=scheme)
         pairwise[pair_name] = _pairwise_report(evaluator)
 
-    _print_summary(populations, pairwise)
+    _print_summary(populations, pairwise, scheme.attributes)
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    report = _build_json_report(populations, pairwise, paths)
+    report = _build_json_report(populations, pairwise, paths, scheme.attributes)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
     logger.info("JSON report written to %s", output_path)
@@ -226,12 +244,14 @@ def main() -> None:
             swe, nor, ita,
             labels=("Sweden", "Norway", "Italy"),
             output_dir=charts_dir,
+            attributes=scheme.attributes,
             prefix="cross_country",
         )
         plot_3way_radar(
             pairwise,
             labels=("SWE vs NOR", "SWE vs ITA", "NOR vs ITA"),
             output_dir=charts_dir,
+            attributes=scheme.attributes,
             prefix="cross_country",
         )
         logger.info("Charts written to %s", charts_dir)

@@ -1,4 +1,4 @@
-"""population_synth.analysis — two-level post-run analytics for identity runs.
+"""population_synth.llm_metrics — two-level post-run analytics for identity runs.
 
 The package is a two-level analytics pipeline whose two levels map 1:1 to the
 two entry-point scripts. The folder layout mirrors that workflow:

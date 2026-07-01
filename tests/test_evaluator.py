@@ -27,6 +27,29 @@ def _person(i, **attrs):
     return base
 
 
+def _scheme(attributes, categories, *, joint_pairs=None, coherence_attributes=(), coherence_threshold=0.001):
+    return ComparisonScheme(
+        attributes=attributes,
+        categories=categories,
+        joint_pairs=joint_pairs or [],
+        coherence_attributes=coherence_attributes,
+        coherence_threshold=coherence_threshold,
+    )
+
+
+# Shared scheme for the coherence tests (the coherence tuple is age x education x
+# employment; categories are irrelevant to coherence, which keys on attr_value tuples).
+_COHERENCE_SCHEME = _scheme(
+    ["age_group", "education_level", "employment_status"],
+    {
+        "age_group": _AGE_GROUPS,
+        "education_level": ["University Degree", "No Formal Education"],
+        "employment_status": ["Employed"],
+    },
+    coherence_attributes=("age_group", "education_level", "employment_status"),
+)
+
+
 # --- marginal metrics ----------------------------------------------------
 
 
@@ -35,7 +58,11 @@ def test_identical_populations_have_zero_distance():
         _person(0, age_group="25-34", education_level="University Degree"),
         _person(1, age_group="35-44", education_level="High School"),
     ]
-    ev = StatisticalEvaluator(_pop(inds), _pop([dict(p) for p in inds]))
+    scheme = _scheme(
+        ["age_group", "education_level"],
+        {"age_group": _AGE_GROUPS, "education_level": ["University Degree", "High School"]},
+    )
+    ev = StatisticalEvaluator(_pop(inds), _pop([dict(p) for p in inds]), scheme=scheme)
     metrics = ev.compute_marginals()["age_group"]
     assert metrics["tv_distance"] == 0.0
     assert metrics["max_diff"] == 0.0
@@ -45,7 +72,8 @@ def test_identical_populations_have_zero_distance():
 def test_disjoint_populations_have_unit_tv_distance():
     a = [_person(i, age_group="25-34") for i in range(4)]
     b = [_person(i, age_group="65-74") for i in range(4)]
-    ev = StatisticalEvaluator(_pop(a), _pop(b))
+    scheme = _scheme(["age_group"], {"age_group": _AGE_GROUPS})
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=scheme)
     metrics = ev.compute_marginals()["age_group"]
     # Completely non-overlapping single-category distributions -> TV = 1.
     assert metrics["tv_distance"] == 1.0
@@ -58,7 +86,8 @@ def test_half_overlap_tv_distance():
         [_person(i, age_group="25-34") for i in range(2)]
         + [_person(i, age_group="65-74") for i in range(2)]
     )
-    ev = StatisticalEvaluator(_pop(a), _pop(b))
+    scheme = _scheme(["age_group"], {"age_group": _AGE_GROUPS})
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=scheme)
     metrics = ev.compute_marginals()["age_group"]
     # A: {25-34:1.0}; B: {25-34:0.5, 65-74:0.5}; TV = 0.5*(0.5+0.5)=0.5.
     assert math.isclose(metrics["tv_distance"], 0.5)
@@ -67,16 +96,19 @@ def test_half_overlap_tv_distance():
 def test_unmapped_categories_detected_in_b():
     a = [_person(i, region="Stockholm") for i in range(3)]
     b = [_person(0, region="Stockholm"), _person(1, region="Atlantis")]
-    ev = StatisticalEvaluator(_pop(a), _pop(b))
+    scheme = _scheme(["region"], {"region": ["Stockholm"]})
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=scheme)
     metrics = ev.compute_marginals()["region"]
     assert "Atlantis" in metrics["unmapped"]
     assert "Stockholm" not in metrics["unmapped"]
 
 
 def test_empty_attribute_yields_nan_metrics():
-    # Neither population carries 'income_source' -> no categories.
+    # Neither population carries 'income_source' and the scheme declares no
+    # categories for it -> no scored categories -> NaN metrics.
     a = [_person(i, age_group="25-34") for i in range(2)]
-    ev = StatisticalEvaluator(_pop(a), _pop([dict(p) for p in a]))
+    scheme = _scheme(["income_source"], {"income_source": []})
+    ev = StatisticalEvaluator(_pop(a), _pop([dict(p) for p in a]), scheme=scheme)
     metrics = ev.compute_marginals()["income_source"]
     assert math.isnan(metrics["tv_distance"])
     assert metrics["categories"] == []
@@ -96,7 +128,7 @@ def test_coherence_perfect_when_b_matches_a_joint():
         for i in range(10)
     ]
     b = [dict(p) for p in a]
-    ev = StatisticalEvaluator(_pop(a), _pop(b))
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=_COHERENCE_SCHEME)
     coherence = ev.compute_coherence()
     assert coherence["score"] == 1.0
     assert coherence["n_plausible"] == coherence["n_total"] == 10
@@ -122,7 +154,7 @@ def test_coherence_flags_unseen_combination():
             employment_status="Employed",
         )
     ]
-    ev = StatisticalEvaluator(_pop(a), _pop(b))
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=_COHERENCE_SCHEME)
     coherence = ev.compute_coherence()
     assert coherence["score"] == 0.0
     assert len(coherence["flagged"]) == 1
@@ -135,8 +167,15 @@ def test_coherence_flags_unseen_combination():
 def test_generate_report_structure():
     a = [_person(i, age_group="25-34", education_level="University Degree",
                  employment_status="Employed") for i in range(5)]
+    scheme = _scheme(
+        ["age_group", "education_level", "employment_status"],
+        {"age_group": _AGE_GROUPS, "education_level": ["University Degree"],
+         "employment_status": ["Employed"]},
+        joint_pairs=[("age_group", "education_level")],
+        coherence_attributes=("age_group", "education_level", "employment_status"),
+    )
     ev = StatisticalEvaluator(_pop(a, source="scb"), _pop([dict(p) for p in a],
-                              source="pipeline"))
+                              source="pipeline"), scheme=scheme)
     report = ev.generate_report()
     assert set(report) == {"metadata", "marginals", "joint_chi_sq", "coherence"}
     assert report["metadata"]["population_a"]["source"] == "scb"
@@ -148,7 +187,8 @@ def test_generate_report_structure():
 
 def test_write_csv_summary_one_row_per_attribute(tmp_path):
     a = [_person(i, age_group="25-34") for i in range(3)]
-    ev = StatisticalEvaluator(_pop(a), _pop([dict(p) for p in a]))
+    scheme = _scheme(["age_group"], {"age_group": _AGE_GROUPS})
+    ev = StatisticalEvaluator(_pop(a), _pop([dict(p) for p in a]), scheme=scheme)
     report = ev.generate_report()
     out = tmp_path / "summary.csv"
     write_csv_summary(report, out)
@@ -161,16 +201,6 @@ def test_write_csv_summary_one_row_per_attribute(tmp_path):
 
 
 # --- scheme-driven comparison --------------------------------------------
-
-
-def _scheme(attributes, categories, *, joint_pairs=None, coherence_attributes=(), coherence_threshold=0.001):
-    return ComparisonScheme(
-        attributes=attributes,
-        categories=categories,
-        joint_pairs=joint_pairs or [],
-        coherence_attributes=coherence_attributes,
-        coherence_threshold=coherence_threshold,
-    )
 
 
 def test_scheme_restricts_axis_and_flags_synthetic_only_category():

@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from population_synth.comparison.evaluator import DEMOGRAPHIC_ATTRIBUTES, attr_value
+from population_synth.comparison.evaluator import attr_value
 
 # ------------------------------------------------------------------
 # Chart styling constants
@@ -78,15 +78,16 @@ def plot_comparison_charts(
     pop_b_label: str = "Population B",
     *,
     prefix: str | None = None,
-    attributes: list[str] | None = None,
+    attributes: list[str],
     categories: dict[str, list[str]] | None = None,
 ) -> None:
     """Generate side-by-side bar charts for each demographic attribute.
 
-    When *attributes*/*categories* are supplied (from a per-country comparison
-    scheme), only those attributes are charted and each uses the scheme's
-    DB-grounded category set so no synthetic-only bar appears with a zero
-    reference. Otherwise categories fall back to the observed union.
+    *attributes* (required) is the comparison axis from a per-country
+    ``ComparisonScheme`` -- the charted attributes come from config, never an
+    in-code default. When *categories* is supplied each attribute uses the
+    scheme's DB-grounded category set so no synthetic-only bar appears with a
+    zero reference; otherwise categories fall back to the observed union.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -98,7 +99,7 @@ def plot_comparison_charts(
     individuals_a: list[dict] = pop_a_data.get("individuals", [])
     individuals_b: list[dict] = pop_b_data.get("individuals", [])
 
-    for attr in (attributes or DEMOGRAPHIC_ATTRIBUTES):
+    for attr in attributes:
         props_a = _compute_proportions(individuals_a, attr)
         props_b = _compute_proportions(individuals_b, attr)
 
@@ -175,14 +176,17 @@ def plot_radar_comparison(
     *,
     show_chi_sq: bool = True,
     prefix: str | None = None,
-    attributes: list[str] | None = None,
+    attributes: list[str],
 ) -> Path | None:
-    """Generate a radar chart of TV-similarity (and optionally chi-sq p-values)."""
+    """Generate a radar chart of TV-similarity (and optionally chi-sq p-values).
+
+    *attributes* (required) is the config-sourced comparison axis.
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    attrs = [a for a in (attributes or DEMOGRAPHIC_ATTRIBUTES) if a in marginals]
+    attrs = [a for a in attributes if a in marginals]
     if len(attrs) < 3:
         print(f"Skipping radar: needs >=3 attributes (got {len(attrs)})", file=sys.stderr)
         return None
@@ -282,6 +286,7 @@ def plot_3way_comparison_charts(
     labels: tuple[str, str, str],
     output_dir: Path,
     *,
+    attributes: list[str],
     prefix: str | None = None,
 ) -> None:
     """Generate grouped bar charts comparing three populations per attribute."""
@@ -297,7 +302,7 @@ def plot_3way_comparison_charts(
     inds_c: list[dict] = pop_c.get("individuals", [])
     all_inds = (inds_a, inds_b, inds_c)
 
-    for attr in DEMOGRAPHIC_ATTRIBUTES:
+    for attr in attributes:
         props = [_compute_proportions(ind, attr) for ind in all_inds]
         all_categories = sorted((set().union(*[set(p) for p in props])) - {None})
         if not all_categories:
@@ -367,6 +372,7 @@ def plot_3way_radar(
     labels: tuple[str, ...],
     output_dir: Path,
     *,
+    attributes: list[str],
     prefix: str | None = None,
 ) -> Path | None:
     """Generate a radar chart with overlaid TV-similarity polygons for each pair."""
@@ -379,7 +385,7 @@ def plot_3way_radar(
         return None
 
     first_metrics = pairwise[pair_names[0]]
-    attrs = [a for a in DEMOGRAPHIC_ATTRIBUTES if a in first_metrics]
+    attrs = [a for a in attributes if a in first_metrics]
     if len(attrs) < 3:
         print(f"Skipping 3-way radar: needs >=3 attributes (got {len(attrs)})", file=sys.stderr)
         return None
@@ -451,9 +457,12 @@ def plot_radar_grid(
     *,
     strategy_order: list[str] | None = None,
     prefix: str | None = None,
-    attributes: list[str] | None = None,
+    attributes: list[str],
 ) -> Path | None:
-    """Grid of radar subplots: rows = models, columns = strategies (by complexity)."""
+    """Grid of radar subplots: rows = models, columns = strategies (by complexity).
+
+    *attributes* (required) is the config-sourced comparison axis.
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -470,7 +479,7 @@ def plot_radar_grid(
     if not strategies:
         return None
 
-    attrs = [a for a in (attributes or DEMOGRAPHIC_ATTRIBUTES)
+    attrs = [a for a in attributes
              if any(a in marg for marg in results.values())]
     if len(attrs) < 3:
         print(f"Skipping radar grid: needs >=3 attributes (got {len(attrs)})",
