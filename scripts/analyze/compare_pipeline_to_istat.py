@@ -37,9 +37,9 @@ from pathlib import Path
 import yaml
 
 from population_synth._paths import PROJECT_ROOT
-from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
-from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
-from population_synth.comparison.scheme import load_scheme
+from population_synth.analysis.comparison.charts import plot_comparison_charts, plot_radar_comparison
+from population_synth.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+from population_synth.analysis.comparison.scheme import load_scheme
 
 _COUNTRY = "italian"
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"

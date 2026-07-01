@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import pytest
 
-from population_synth.comparison.synthetic_mapper import get_synthetic_mapper
-from population_synth.comparison.synthetic_mapper.base import BaseSyntheticMapper
+from population_synth.analysis.mapping.synthetic_mapper import get_synthetic_mapper
+from population_synth.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
 
 from ._mapping_fixtures import new_shape_mappings
 

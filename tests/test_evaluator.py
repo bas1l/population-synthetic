@@ -8,11 +8,11 @@ the CSV summary export.
 import csv
 import math
 
-from population_synth.comparison.evaluator import (
+from population_synth.analysis.comparison.evaluator import (
     StatisticalEvaluator,
     write_csv_summary,
 )
-from population_synth.comparison.scheme import ComparisonScheme, load_scheme
+from population_synth.analysis.comparison.scheme import ComparisonScheme, load_scheme
 
 _AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85"]
 

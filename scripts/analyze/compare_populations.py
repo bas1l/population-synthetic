@@ -8,7 +8,8 @@ pop_a is the reference population (treated as "expected" for chi-squared).
 pop_b is the population to evaluate (treated as "observed").
 
 This is a thin CLI wrapper that delegates all heavy lifting to
-population_synth.comparison.{evaluator, normalizer, charts}.
+population_synth.analysis.comparison.{evaluator, charts} and
+population_synth.analysis.mapping.normalizer.
 """
 
 import argparse
@@ -17,10 +18,10 @@ import sys
 from pathlib import Path
 
 from population_synth._paths import PROJECT_ROOT
-from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
-from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
-from population_synth.comparison.reference_mapper import normalize_population
-from population_synth.comparison.scheme import load_scheme
+from population_synth.analysis.comparison.charts import plot_comparison_charts, plot_radar_comparison
+from population_synth.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+from population_synth.analysis.mapping.reference_mapper import normalize_population
+from population_synth.analysis.comparison.scheme import load_scheme
 
 
 def _load_population(path: str) -> dict:

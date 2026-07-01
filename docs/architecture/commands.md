@@ -98,7 +98,7 @@ python -m population_synth.gui.main
 ruff check src/
 ```
 
-A pytest suite lives under `tests/` (covers the `llm_metrics/` layer and `clients/call_context`).
+A pytest suite lives under `tests/` (covers the `analysis/llm_metrics/` layer and `clients/call_context`).
 Run it with `pytest` (requires `pip install -e ".[dev]"`).
 
 ## See also

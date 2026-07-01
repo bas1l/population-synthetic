@@ -6,7 +6,7 @@ matcher tier, directive, and precedence rule can be exercised in isolation --
 before any production config is rewritten.
 """
 
-from population_synth.comparison.mapping_engine import normalize, resolve
+from population_synth.analysis.mapping.mapping_engine import normalize, resolve
 
 # --- equals / contains precedence and first-match-by-order -----------------
 

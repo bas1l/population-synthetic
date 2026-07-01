@@ -23,15 +23,27 @@ the short architecture map in `CLAUDE.md`.
 - Mode semantics:
   - `configurable` -- strategy-driven generation controlled by a simulation config JSON file with pluggable strategy definitions
 
-**`comparison/`** -- Statistical evaluation and charting (population quality vs a reference):
-- `StatisticalEvaluator` computes per-field chi-squared tests and total variation distances
-- `charts` generates bar-chart and radar-chart PNGs via matplotlib
-- **Unified symmetric mapping config** and the reference/synthetic mapper hierarchies are
-  documented on their own page — see [Comparison & mapping](comparison-mapping.md).
+**`analysis/`** -- The post-generation analysis family, one subpackage per process
+(`mapping/`, `comparison/`, `llm_metrics/`, plus a shared `utils/`):
+
+- **`mapping/`** -- Transforms raw population data (national-statistics records *or* LLM-pipeline
+  identities) into the canonical comparable schema. Holds the shared resolver `mapping_engine.py`,
+  `flatten_raw.py`, the `reference_mapper/` and `synthetic_mapper/` class hierarchies, and the thin
+  `extractor.py` / `normalizer.py` facades. The **unified symmetric mapping config** and the
+  reference/synthetic mapper hierarchies are documented on their own page — see
+  [Comparison & mapping](comparison-mapping.md).
+- **`comparison/`** -- Statistical evaluation and charting (population quality vs a reference):
+  - `StatisticalEvaluator` (`evaluator.py`) computes per-field chi-squared tests and total variation distances
+  - `charts` generates bar-chart and radar-chart PNGs via matplotlib
+  - `scheme.py` -- the comparison-purpose bridge that reads the mapping config
+- **`utils/`** -- cross-process shared infra: `country_config.py`, the shared country resolver
+  (`reference_for_country`, `mappings_for_country`, `known_country_ids`, `infer_country`) consumed
+  by both the map stage and the comparison consumers.
+- **`llm_metrics/`** -- post-run LLM-call analytics; detailed below.
 
 **`gui/`** -- PyQt5 desktop launcher for running generation and comparison tasks. `LauncherWindow` presents action groups (Generate, Compare) defined in `config/gui/launcher.yaml`. Axis selection uses checkbox lists (`CheckableAxisList` x3 inside `ExperimentSelector`) rather than dropdowns, so a single launch runs the full **cartesian product** of selected models x strategies x countries -- `ExperimentSelection.combinations()` enumerates the tuples via `itertools.product`, `ManifestOverview` previews them in a table, and `CombinationRunner` (QThread) runs each as a `--model-id/--strategy-id/--country-id` subprocess with live console streaming and process-tree abort. Selections persist to `config/gui/state.json`.
 
-**`llm_metrics/`** -- Post-processing analytics for identity generation runs (LLM call behaviour, distinct from `comparison/` which scores population quality). Named for its output subdir `03_Analysis/llm_metrics/`. Organised as a **two-level pipeline** split across three subpackages: `per_run/` (pipeline A, driven by `analyze_run.py`) turns one run into per-persona analytics + a report; `cross_run/` (pipeline B, driven by `compare_runs.py`) consumes many runs' analytics and produces a cross-run comparison; `shared/` holds the numeric primitives both pipelines use. `per_run/` and `cross_run/` never import each other -- only through `shared/`.
+**`analysis/llm_metrics/`** -- Post-processing analytics for identity generation runs (LLM call behaviour, distinct from `analysis/comparison/` which scores population quality). Named for its output subdir `03_Analysis/llm_metrics/`. Organised as a **two-level pipeline** split across three subpackages: `per_run/` (pipeline A, driven by `analyze_run.py`) turns one run into per-persona analytics + a report; `cross_run/` (pipeline B, driven by `compare_runs.py`) consumes many runs' analytics and produces a cross-run comparison; `shared/` holds the numeric primitives both pipelines use. `per_run/` and `cross_run/` never import each other -- only through `shared/`.
 
 - **`shared/`** -- `_stats.py` -- stdlib numeric primitives (median, percentile, Shannon entropy) used by both pipelines; no external dep.
 - **`per_run/`** -- single-run pipeline (parse -> join -> aggregate -> visualize/report):
@@ -46,7 +58,7 @@ the short architecture map in `CLAUDE.md`.
   - `run_comparison.py` (`build_comparison`, `METRIC_SPECS`, `decompose_slug`) -- Cross-run statistics: groups runs by model and strategy (country fixed) and assembles the comparison
   - `comparison_charts.py` (`plot_run_comparison`) -- Box plots (with significance brackets), mean±SD bars, and model×method heatmaps per metric
 
-**`utils/`** -- Minimal pipeline utilities (`should_process_task()` for skip-if-done logic)
+**`utils/`** (top-level) -- Minimal pipeline utilities (`should_process_task()` for skip-if-done logic). Distinct from `analysis/utils/`, which holds the comparison country resolver.
 
 **`clients/`** -- API clients:
 - `BasePxWebClient` -- Shared HTTP client with local JSON file caching
@@ -68,7 +80,7 @@ All cache and config paths derive from this.
 
 ## See also
 
-- [Comparison & mapping](comparison-mapping.md) — the `comparison/` mapping config and the
+- [Comparison & mapping](comparison-mapping.md) — the `analysis/mapping/` config and the
   reference/synthetic mapper hierarchies in full.
 - [Design principles](design-principles.md) — the patterns (shared population layer,
   factory + strategy, conditional chained sampling) that shape these packages.

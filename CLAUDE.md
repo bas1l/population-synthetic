@@ -61,9 +61,11 @@ These are enforced guardrails, not suggestions. Full rationale in
 ## Architecture
 
 `src/` layout; the `population_synth` namespace holds sub-packages `population/` (per-country
-data layers over a shared parent), `identity/` (LLM persona generation), `comparison/`
-(two-stage map -> compare with statistical scoring), `llm_metrics/` (post-run LLM-call analytics),
-plus `gui/`, `clients/`, and `utils/`. The full breakdown and the design patterns live in the wiki:
+data layers over a shared parent), `identity/` (LLM persona generation), `analysis/` (the
+post-generation family, one subpackage per process: `mapping/` raw -> canonical schema,
+`comparison/` two-stage map -> compare statistical scoring + charts, `llm_metrics/` post-run
+LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
+top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
 | Topic | Page |
 |-------|------|

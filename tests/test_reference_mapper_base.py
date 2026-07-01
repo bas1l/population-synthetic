@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from population_synth.comparison.reference_mapper.base import BaseReferenceMapper
+from population_synth.analysis.mapping.reference_mapper.base import BaseReferenceMapper
 
 from ._mapping_fixtures import new_shape_mappings
 

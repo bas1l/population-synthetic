@@ -40,7 +40,7 @@ list. This applies to *values and names*, not to structural numeric primitives (
 integer parsing) or format sentinels. Reference migrations (the pattern in practice):
 `StatisticalEvaluator` dropped its `DEMOGRAPHIC_ATTRIBUTES` / `JOINT_PAIRS` /
 `COHERENCE_ATTRIBUTES` fallbacks and now *requires* a `ComparisonScheme` (raises without one); the
-chart functions take a required `attributes` axis; `comparison/flatten_raw.py` derives its field
+chart functions take a required `attributes` axis; `analysis/mapping/flatten_raw.py` derives its field
 set from each record's own keys and harmonizes sex through the `biological_sex` mapping config
 instead of a hardcoded map.
 
@@ -61,4 +61,4 @@ must appear.
 - [Comparison & mapping](comparison-mapping.md) — where the "config is the single source of truth"
   and "full comparison output" rules are enforced.
 - [Sub-packages](sub-packages.md) — the packages these patterns shape (`population/`, `identity/`,
-  `comparison/`).
+  `analysis/`).
