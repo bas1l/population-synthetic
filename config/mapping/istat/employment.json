@@ -13,8 +13,7 @@
       "equals": [
         "Not Employed"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "Employed": {
@@ -120,7 +119,6 @@
         "materne",
         "nessun impiego"
       ]
-    },
-    "fuzzy": false
+    }
   }
 }

@@ -30,8 +30,6 @@ _INDEX = {
         "birth_country_detail": "birth_country_detail.json",
         "household_size": "household_size.json",
     },
-    "joint_pairs": [],
-    "coherence_attributes": [],
 }
 
 
@@ -40,8 +38,6 @@ def new_shape_mappings() -> dict:
     return {
         "_index": {
             "attributes": dict(_INDEX["attributes"]),
-            "joint_pairs": [],
-            "coherence_attributes": [],
         },
         "age": {"values": ["18-24", "25-44", "45-64", "65+"]},
         "biological_sex": {
@@ -49,18 +45,14 @@ def new_shape_mappings() -> dict:
             "database": {"Male": {"equals": ["men", "1"]}, "Female": {"equals": ["women", "2"]}},
             "synthetic": {
                 "Male": {"contains": ["male", "pojke"], "equals": ["man", "m"]},
-                "Female": {"contains": ["female", "kvinna"], "equals": ["f"]},
-                "fuzzy": False,
-            },
+                "Female": {"contains": ["female", "kvinna"], "equals": ["f"]},            },
         },
         "education": {
             "values": ["Primary", "Secondary", "Tertiary"],
             "database": {
                 "Primary": {"equals": ["grundskola"]},
                 "Secondary": {"equals": ["gymnasium"]},
-                "Tertiary": {"equals": ["universitet"]},
-                "fuzzy": False,
-            },
+                "Tertiary": {"equals": ["universitet"]},            },
             "synthetic": {
                 "Primary": {"contains": ["primary", "grundskola"]},
                 "Secondary": {"contains": ["secondary", "gymnasium", "high school"]},
@@ -78,16 +70,12 @@ def new_shape_mappings() -> dict:
                     "attachment": {"contains": ["permanent employees"]},
                     "hours": {"contains": ["1-19 hours", "20-34 hours"]},
                 },
-                "absent": "Not Applicable",
-                "fuzzy": False,
-            },
+                "absent": "Not Applicable",            },
             "synthetic": {
                 "Permanent Full-time": {"all_of": [["permanent", "fast"], ["full", "heltid"]]},
                 "Permanent Part-time": {"all_of": [["permanent", "fast"], ["part", "deltid"]]},
                 "Not Applicable": {"none_of": ["job", "arbet"], "contains": ["student", "pensionär"]},
-                "on_miss": "Not Applicable",
-                "fuzzy": False,
-            },
+                "on_miss": "Not Applicable",            },
         },
         "socioeconomic": {
             "values": ["Poverty", "Working Class", "Middle Class", "Upper Class"],
@@ -95,9 +83,7 @@ def new_shape_mappings() -> dict:
                 "Poverty": {"equals": ["Decile 1", "Decile 2"]},
                 "Working Class": {"equals": ["Decile 3", "Decile 4", "Decile 5"]},
                 "Middle Class": {"equals": ["Decile 6", "Decile 7", "Decile 8"]},
-                "Upper Class": {"equals": ["Decile 9", "Decile 10"]},
-                "fuzzy": False,
-            },
+                "Upper Class": {"equals": ["Decile 9", "Decile 10"]},            },
             "synthetic": {
                 "Poverty": {"contains": ["poverty", "poor"]},
                 "Working Class": {"contains": ["working class"]},
@@ -110,9 +96,7 @@ def new_shape_mappings() -> dict:
             "database": {
                 "Health": {"equals": ["q"]},
                 "Education": {"equals": ["p"]},
-                "absent": "Not Applicable",
-                "fuzzy": False,
-            },
+                "absent": "Not Applicable",            },
             "synthetic": {
                 "Health": {"contains": ["health", "nurse", "hospital"]},
                 "Education": {"contains": ["teacher", "school", "education"]},
@@ -123,17 +107,13 @@ def new_shape_mappings() -> dict:
             "values": ["Sweden", "Nordic Country", "Europe (Other)", "Outside Europe"],
             "database": {
                 "Sweden": {"equals": ["sweden", "sverige"]},
-                "Nordic Country": {"equals": ["norway", "denmark"]},
-                "fuzzy": False,
-            },
+                "Nordic Country": {"equals": ["norway", "denmark"]},            },
             "synthetic": {
                 "Sweden": {"contains": ["stockholm", "sweden", "sverige"]},
                 "Nordic Country": {"contains": ["norway", "denmark", "finland"]},
                 "Europe (Other)": {"contains": ["germany", "poland"]},
                 "Outside Europe": {"contains": ["syria", "somalia"]},
-                "refine_from": "birth_country_detail",
-                "fuzzy": False,
-            },
+                "refine_from": "birth_country_detail",            },
         },
         "birth_country_detail": {
             "values": ["Sweden", "Norway", "Germany", "Syria"],
@@ -141,9 +121,7 @@ def new_shape_mappings() -> dict:
                 "Sweden": {"equals": ["sweden"]},
                 "Norway": {"equals": ["norway"]},
                 "Germany": {"equals": ["germany"]},
-                "Syria": {"equals": ["syria"]},
-                "fuzzy": False,
-            },
+                "Syria": {"equals": ["syria"]},            },
             "synthetic": {
                 "Sweden": {"contains": ["sweden", "stockholm"]},
                 "Norway": {"contains": ["norway", "oslo"]},
@@ -157,15 +135,11 @@ def new_shape_mappings() -> dict:
                 "1 person": {"equals": ["1"]},
                 "2 persons": {"equals": ["2"]},
                 "3 persons": {"equals": ["3"]},
-                "4+ persons": {"equals": ["4", "5", "6"]},
-                "fuzzy": False,
-            },
+                "4+ persons": {"equals": ["4", "5", "6"]},            },
             "synthetic": {
                 "1 person": {"int": [1]},
                 "2 persons": {"int": [2]},
                 "3 persons": {"int": [3]},
-                "4+ persons": {"int_gte": 4},
-                "fuzzy": False,
-            },
+                "4+ persons": {"int_gte": 4},            },
         },
     }

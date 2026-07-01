@@ -20,18 +20,21 @@ axis simply *is* the ``values`` list.
 
 Resolution model
 ----------------
-:func:`resolve` walks ``values`` **in declared order** and returns the first
-value whose matcher hits; a miss yields ``None`` (or the attribute-level
-``on_miss`` literal). Key order in ``values`` is therefore match priority.
+:func:`resolve` matches ``values`` with a **global tiered sweep** and returns the
+first value that hits; a miss yields ``None`` (or the attribute-level ``on_miss``
+literal). Each tier is swept across *all* values before the next tier is tried, so
+a later value's ``equals`` beats an earlier value's ``contains``. Within a single
+tier, ``values`` declared order breaks ties.
 
-Matcher precedence *within* a single value (first hit wins, ``none_of`` vetoes):
+Tier order (first hit wins; ``none_of`` vetoes its value in every tier):
 
-1. ``none_of`` — veto: if any token is present in the (normalized) raw, this value
-   is rejected outright, regardless of the positive matchers.
-2. ``equals`` — exact match: the normalized+stripped raw equals a normalized token.
-3. ``all_of`` — AND-of-ORs: the raw contains at least one token from *every* group.
-4. ``contains`` — substring: the raw contains any token.
-5. ``int`` / ``int_gte`` — numeric: ``int(raw)`` is in the list / ``>=`` the bound.
+1. ``equals`` — exact match: the normalized+stripped raw equals a normalized token.
+2. ``all_of`` — AND-of-ORs: the raw contains at least one token from *every* group.
+3. ``contains`` — substring: the raw contains any token.
+4. ``int`` / ``int_gte`` — numeric: ``int(raw)`` is in the list / ``>=`` the bound.
+
+``none_of`` is a veto, not a tier: if any token is present in the (normalized) raw,
+that value is rejected in every tier regardless of its positive matchers.
 
 A **composite** matcher (used by ``employment_type`` database, whose raw record has
 ``attachment`` + ``hours`` sub-fields) keys sub-fields of a dict raw value instead
@@ -41,6 +44,9 @@ of the reserved matcher keys above; every sub-field matcher must hit::
       "attachment": {"contains": ["permanent employees"]},
       "hours":      {"contains": ["35+ hours"]}
     }
+
+Composite values are swept in their own pass after the scalar tiers (composite and
+scalar values never coexist within one attribute side, so the pass order is moot).
 
 Attribute-level directives (reserved keys on the ``database`` / ``synthetic`` block,
 never confused with value keys because the walk is driven by ``values``):
@@ -52,9 +58,6 @@ never confused with value keys because the walk is driven by ``values``):
   replaces the old ``cross_field_coded`` handler.
 - ``on_miss`` — literal default when everything misses (default ``None``); e.g.
   synthetic ``industry_sector`` → ``"Other"``.
-- ``fuzzy`` — after explicit matchers miss, substring-match the raw against the
-  ``values`` *labels* themselves (default ``True``; disabled for attributes such as
-  ``biological_sex`` / ``civil_status`` / ``employment_type`` / ``birth_country_detail``).
 """
 
 from __future__ import annotations
@@ -63,7 +66,6 @@ import re
 from typing import Any
 
 from population_synth.comparison.synthetic_mapper._text_helpers import (
-    _fuzzy_match,
     _repair_utf8_double_encoding,
 )
 
@@ -80,7 +82,10 @@ _MATCHER_KEYS: frozenset[str] = frozenset(
 
 #: Attribute-level directive keys on a ``database`` / ``synthetic`` rules block.
 #: These are never treated as values (the value-walk is driven by ``values``).
-_DIRECTIVE_KEYS: frozenset[str] = frozenset({"absent", "refine_from", "on_miss", "fuzzy"})
+_DIRECTIVE_KEYS: frozenset[str] = frozenset({"absent", "refine_from", "on_miss"})
+
+#: Scalar matcher tiers, swept in this order globally across all values.
+_SCALAR_TIERS: tuple[str, ...] = ("equals", "all_of", "contains", "numeric")
 
 _UNDERSCORE_RE = re.compile(r"_")
 
@@ -136,49 +141,66 @@ def _is_composite(matcher: dict) -> bool:
     return any(key not in _MATCHER_KEYS for key in matcher)
 
 
-def _match_scalar(raw: Any, matcher: dict) -> bool:
-    """Evaluate a scalar matcher against *raw* following the documented precedence.
-
-    ``none_of`` veto → ``equals`` → ``all_of`` → ``contains`` → ``int`` / ``int_gte``.
-    Returns True on the first positive tier that hits (unless vetoed), else False.
-    """
-    norm = normalize(raw)
-
-    # 1. none_of veto -- blocks the value even if a positive tier would match.
+def _vetoed(raw: Any, matcher: dict) -> bool:
+    """True when the matcher's ``none_of`` veto is triggered by *raw*."""
     none_of = matcher.get("none_of")
-    if none_of and any(normalize(tok) in norm for tok in none_of):
+    if none_of:
+        norm = normalize(raw)
+        return any(normalize(tok) in norm for tok in none_of)
+    return False
+
+
+def _match_tier(raw: Any, matcher: dict, tier: str) -> bool:
+    """Evaluate a single scalar matcher *tier* against *raw* (no ``none_of`` veto).
+
+    The veto is applied separately by the caller so it can gate every tier. Tier
+    keys: ``equals`` (exact on stripped/normalized forms), ``all_of`` (AND-of-ORs),
+    ``contains`` (substring), ``numeric`` (``int`` / ``int_gte``).
+    """
+    if tier == "equals":
+        equals = matcher.get("equals")
+        if equals is not None:
+            norm_stripped = normalize(raw).strip()
+            return any(norm_stripped == normalize(tok).strip() for tok in equals)
         return False
 
-    # 2. equals -- exact match on stripped, normalized forms.
-    equals = matcher.get("equals")
-    if equals is not None:
-        norm_stripped = norm.strip()
-        if any(norm_stripped == normalize(tok).strip() for tok in equals):
-            return True
+    if tier == "all_of":
+        all_of = matcher.get("all_of")
+        if all_of is not None:
+            norm = normalize(raw)
+            return all(any(normalize(tok) in norm for tok in group) for group in all_of)
+        return False
 
-    # 3. all_of -- the raw contains at least one token from every group (AND-of-ORs).
-    all_of = matcher.get("all_of")
-    if all_of is not None:
-        if all(any(normalize(tok) in norm for tok in group) for group in all_of):
-            return True
+    if tier == "contains":
+        contains = matcher.get("contains")
+        if contains is not None:
+            norm = normalize(raw)
+            return any(normalize(tok) in norm for tok in contains)
+        return False
 
-    # 4. contains -- the raw contains any token (substring).
-    contains = matcher.get("contains")
-    if contains is not None:
-        if any(normalize(tok) in norm for tok in contains):
-            return True
-
-    # 5. numeric.
-    raw_int = _to_int(raw)
-    if raw_int is not None:
-        int_list = matcher.get("int")
-        if int_list is not None and raw_int in int_list:
-            return True
-        int_gte = matcher.get("int_gte")
-        if int_gte is not None and raw_int >= int_gte:
-            return True
+    if tier == "numeric":
+        raw_int = _to_int(raw)
+        if raw_int is not None:
+            int_list = matcher.get("int")
+            if int_list is not None and raw_int in int_list:
+                return True
+            int_gte = matcher.get("int_gte")
+            if int_gte is not None and raw_int >= int_gte:
+                return True
+        return False
 
     return False
+
+
+def _match_scalar(raw: Any, matcher: dict) -> bool:
+    """Evaluate a scalar matcher as a whole (all tiers, first hit), honouring ``none_of``.
+
+    Used for composite sub-field matchers, where the sub-field is a single matcher
+    resolved in isolation. The top-level value-walk instead sweeps tiers globally.
+    """
+    if _vetoed(raw, matcher):
+        return False
+    return any(_match_tier(raw, matcher, tier) for tier in _SCALAR_TIERS)
 
 
 def _match_composite(raw: Any, matcher: dict) -> bool:
@@ -205,13 +227,31 @@ def _match_value(raw: Any, matcher: dict) -> bool:
 
 
 def _walk(raw: Any, rules_block: dict, values: list[str]) -> str | None:
-    """Return the first value (in declared order) whose matcher hits *raw*, else None."""
+    """Return the matching value via a global tiered sweep, else None.
+
+    Each scalar tier (``equals`` → ``all_of`` → ``contains`` → ``numeric``) is swept
+    across *all* values before the next tier is tried, so a later value's ``equals``
+    beats an earlier value's ``contains``. Within a tier, declared ``values`` order
+    breaks ties. Composite values are swept in a final pass (they never coexist with
+    scalar values on one attribute side). ``none_of`` vetoes its value in every tier.
+    """
+    for tier in _SCALAR_TIERS:
+        for value in values:
+            matcher = rules_block.get(value)
+            if matcher is None or _is_composite(matcher):
+                continue
+            if _vetoed(raw, matcher):
+                continue
+            if _match_tier(raw, matcher, tier):
+                return value
+
     for value in values:
         matcher = rules_block.get(value)
-        if matcher is None:
+        if matcher is None or not _is_composite(matcher):
             continue
-        if _match_value(raw, matcher):
+        if _match_composite(raw, matcher):
             return value
+
     return None
 
 
@@ -237,7 +277,7 @@ def resolve(
     rules_block:
         The per-attribute ``database`` or ``synthetic`` block: unified value →
         matcher entries plus the optional attribute-level directives ``absent`` /
-        ``refine_from`` / ``on_miss`` / ``fuzzy``.
+        ``refine_from`` / ``on_miss``.
     values:
         The unified value set in declared (priority) order. The walk only ever
         considers keys present in this list, so directive keys never collide with
@@ -254,7 +294,6 @@ def resolve(
     """
     absent = rules_block.get("absent")
     on_miss = rules_block.get("on_miss")  # default None
-    use_fuzzy = rules_block.get("fuzzy", True)
     refine_from = rules_block.get("refine_from")
 
     # Absent input -> the declared literal (e.g. "Not Applicable"). When no
@@ -274,13 +313,5 @@ def resolve(
         if hit is not None:
             return hit
 
-    # 3. Fuzzy tier: substring-match the raw against the value labels themselves.
-    if use_fuzzy:
-        raw_str = "" if isinstance(raw_value, dict) or raw_value is None else str(raw_value)
-        if raw_str.strip():
-            fuzzy = _fuzzy_match(_repair_utf8_double_encoding(raw_str), values)
-            if fuzzy is not None:
-                return fuzzy
-
-    # 4. Total miss -> the on_miss literal (default None).
+    # 3. Total miss -> the on_miss literal (default None).
     return on_miss

@@ -153,8 +153,7 @@
         "China",
         "CN"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "Sweden": {
@@ -278,7 +277,6 @@
         "China",
         "Kina"
       ]
-    },
-    "fuzzy": false
+    }
   }
 }

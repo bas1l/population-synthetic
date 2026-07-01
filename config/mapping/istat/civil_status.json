@@ -25,8 +25,7 @@
       "equals": [
         "Widowed"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "Single": {
@@ -93,7 +92,6 @@
         "widowed",
         "vedov"
       ]
-    },
-    "fuzzy": false
+    }
   }
 }

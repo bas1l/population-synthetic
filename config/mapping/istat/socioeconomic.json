@@ -25,8 +25,7 @@
       "equals": [
         "Wealthy"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "Poverty": {

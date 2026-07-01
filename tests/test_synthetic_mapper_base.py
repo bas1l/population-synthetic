@@ -38,7 +38,7 @@ def test_missing_index_raises():
 
 def test_index_without_attributes_raises():
     with pytest.raises(ValueError, match="_index"):
-        BaseSyntheticMapper({"_index": {"joint_pairs": [], "coherence_attributes": []}})
+        BaseSyntheticMapper({"_index": {"description": "no attributes"}})
 
 
 # --- format gate + persona-skip age gate -----------------------------------

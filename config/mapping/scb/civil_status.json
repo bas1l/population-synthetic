@@ -29,8 +29,7 @@
         "Widowed",
         "widowers/widows"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "Single/Never Married": {
@@ -121,7 +120,6 @@
         "änkeman",
         "widow"
       ]
-    },
-    "fuzzy": false
+    }
   }
 }

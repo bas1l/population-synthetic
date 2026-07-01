@@ -37,8 +37,7 @@
       "equals": [
         "6 persons or more"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "1 person": {

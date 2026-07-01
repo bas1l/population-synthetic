@@ -19,8 +19,7 @@
       "equals": [
         "University Degree"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "No Formal Education": {
@@ -116,7 +115,6 @@
         "post-graduate",
         "postgraduate"
       ]
-    },
-    "fuzzy": false
+    }
   }
 }

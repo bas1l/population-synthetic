@@ -19,8 +19,7 @@
       "equals": [
         "Outside Europe"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "Italy": {
@@ -254,7 +253,6 @@
         "fuori"
       ]
     },
-    "fuzzy": false,
     "refine_from": "birth_country_detail"
   }
 }

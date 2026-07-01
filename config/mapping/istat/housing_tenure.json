@@ -13,8 +13,7 @@
       "equals": [
         "Rental"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "Owner-occupied": {
@@ -77,7 +76,6 @@
         "locazione",
         "canone"
       ]
-    },
-    "fuzzy": false
+    }
   }
 }

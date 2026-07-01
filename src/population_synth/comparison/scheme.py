@@ -8,13 +8,16 @@ each category list is the distinct non-None values the reference mapper produces
 over that country's real reference population -- so the comparison axis has no
 empty buckets, no DB-absent properties, and no mapper-synthesized categories.
 
-The scheme is sourced from the unified per-attribute ``config/mapping/{scb,istat}``
-config: the ``_index.json`` master lists the in-scope attributes (ordered) plus the
-joint pairs and coherence attributes, and each per-attribute file's ``values`` list
+The scheme is sourced from two config trees. The mapping side --
+``config/mapping/{scb,istat}`` -- supplies the scored axis: the ``_index.json`` master
+lists the in-scope attributes (ordered) and each per-attribute file's ``values`` list
 *is* that attribute's comparison category set. Because both mappers now emit only
 declared ``values``, the scored axis equals the ``values`` and no separate filter is
-needed. A directory still carrying the legacy ``_scheme.json`` (pre-migration) is read
-through the unchanged legacy path.
+needed. The cross-attribute statistics -- ``joint_pairs``, ``coherence_attributes`` and
+``coherence_threshold`` -- come from a separate comparison-analysis config,
+``config/analysis/comparison/{country}.json``, which is pure evaluator tuning and has
+nothing to do with mapping. A directory still carrying the legacy ``_scheme.json``
+(pre-migration) is read through the unchanged legacy path, which bundles all four.
 
 ``age_group`` appears as a comparison dimension even though populations store only
 the raw integer ``age``; the evaluator derives the age bin on the fly (see
@@ -33,17 +36,25 @@ from population_synth.comparison.reference_mapper.factory import _mapper_class
 from population_synth.comparison.reference_mapper.mappings import index_path, load_index
 
 _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
+_ANALYSIS_ROOT = PROJECT_ROOT / "config" / "analysis" / "comparison"
 _SCHEME_FILENAME = "_scheme.json"
+_DEFAULT_COHERENCE_THRESHOLD = 0.001
 
 
 @dataclass(frozen=True)
 class ComparisonScheme:
-    """In-scope attributes and DB-exact category sets for one country."""
+    """In-scope attributes and DB-exact category sets for one country.
+
+    ``attributes``/``categories`` describe the scored marginal axis (sourced from the
+    mapping config); ``joint_pairs``/``coherence_attributes``/``coherence_threshold``
+    are the cross-attribute evaluator tuning (sourced from the analysis config).
+    """
 
     attributes: list[str]
     categories: dict[str, list[str]]
     joint_pairs: list[tuple[str, str]]
     coherence_attributes: tuple[str, ...]
+    coherence_threshold: float
 
 
 def _scheme_dir(country: str, mappings_path: Path | None) -> Path:
@@ -54,31 +65,69 @@ def _scheme_dir(country: str, mappings_path: Path | None) -> Path:
     return _MAPPINGS_ROOT / subdir
 
 
-def load_scheme(country: str = "swedish", mappings_path: Path | None = None) -> ComparisonScheme:
+def _analysis_path(country: str, analysis_path: Path | None) -> Path:
+    if analysis_path is not None:
+        return analysis_path
+    # Filename stem == the mapper's MAPPINGS_SUBDIR (scb.json / istat.json).
+    subdir = _mapper_class(country).MAPPINGS_SUBDIR
+    return _ANALYSIS_ROOT / f"{subdir}.json"
+
+
+def _load_analysis_config(path: Path) -> tuple[list[tuple[str, str]], tuple[str, ...], float]:
+    """Read the comparison-analysis config for one country.
+
+    Returns ``(joint_pairs, coherence_attributes, coherence_threshold)``. Fails loudly
+    on a missing file or a missing ``joint_pairs``/``coherence_attributes`` key;
+    ``coherence_threshold`` defaults to :data:`_DEFAULT_COHERENCE_THRESHOLD` when absent.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"No comparison-analysis config found: {path} not found")
+
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = json.load(fh)
+
+    for key in ("joint_pairs", "coherence_attributes"):
+        if key not in raw:
+            raise KeyError(f"Comparison-analysis config {path} is missing required key {key!r}")
+
+    joint_pairs = [tuple(pair) for pair in raw["joint_pairs"]]
+    coherence_attributes = tuple(raw["coherence_attributes"])
+    coherence_threshold = float(raw.get("coherence_threshold", _DEFAULT_COHERENCE_THRESHOLD))
+    return joint_pairs, coherence_attributes, coherence_threshold
+
+
+def load_scheme(
+    country: str = "swedish",
+    mappings_path: Path | None = None,
+    analysis_path: Path | None = None,
+) -> ComparisonScheme:
     """Load the comparison scheme for *country* (``"swedish"`` or ``"italian"``).
 
-    The scheme is sourced from the unified per-attribute mapping config: the
-    ``_index.json`` master supplies the in-scope attributes (ordered) plus the
-    joint pairs and coherence attributes, and each per-attribute file's ``values``
-    list supplies that attribute's DB-grounded category set (``age_group``'s
-    categories are the age-bin labels declared as ``values`` in ``age.json``).
+    The scored marginal axis is sourced from the mapping config: the ``_index.json``
+    master supplies the in-scope attributes (ordered) and each per-attribute file's
+    ``values`` list supplies that attribute's DB-grounded category set (``age_group``'s
+    categories are the age-bin labels declared as ``values`` in ``age.json``). The
+    cross-attribute statistics (``joint_pairs``/``coherence_attributes``/
+    ``coherence_threshold``) are sourced from the comparison-analysis config
+    ``config/analysis/comparison/{country}.json``.
 
     A country directory that still ships the legacy ``_scheme.json`` (and no
-    ``_index.json``) is read through the pre-migration path unchanged, so the
-    interface stays identical while the config is migrated. Fails loudly on a
-    missing master/legacy file, a missing required key, or a per-attribute file
-    that omits ``values``.
+    ``_index.json``) is read through the pre-migration path unchanged -- there the
+    cross-attribute statistics come from that same file. Fails loudly on a missing
+    master/legacy/analysis file, a missing required key, or a per-attribute file that
+    omits ``values``. *analysis_path* overrides the analysis-config location (for tests).
     """
     directory = _scheme_dir(country, mappings_path)
 
     if index_path(directory).is_file():
-        return _scheme_from_index(directory)
+        return _scheme_from_index(directory, _analysis_path(country, analysis_path))
 
     return _scheme_from_legacy(country, directory)
 
 
-def _scheme_from_index(directory: Path) -> ComparisonScheme:
-    """Build a :class:`ComparisonScheme` from ``_index.json`` + per-file ``values``."""
+def _scheme_from_index(directory: Path, analysis_path: Path) -> ComparisonScheme:
+    """Build a :class:`ComparisonScheme` from ``_index.json`` + per-file ``values``
+    (marginal axis) and the comparison-analysis config (cross-attribute statistics)."""
     index = load_index(directory)
 
     attributes: list[str] = list(index["attributes"].keys())  # key order = axis order
@@ -95,14 +144,14 @@ def _scheme_from_index(directory: Path) -> ComparisonScheme:
             raise KeyError(f"Mapping file {attr_path} is missing required key 'values'")
         categories[attr] = list(block["values"])
 
-    joint_pairs = [tuple(pair) for pair in index["joint_pairs"]]
-    coherence_attributes = tuple(index["coherence_attributes"])
+    joint_pairs, coherence_attributes, coherence_threshold = _load_analysis_config(analysis_path)
 
     return ComparisonScheme(
         attributes=attributes,
         categories=categories,
         joint_pairs=joint_pairs,
         coherence_attributes=coherence_attributes,
+        coherence_threshold=coherence_threshold,
     )
 
 
@@ -128,10 +177,12 @@ def _scheme_from_legacy(country: str, directory: Path) -> ComparisonScheme:
 
     joint_pairs = [tuple(pair) for pair in raw["joint_pairs"]]
     coherence_attributes = tuple(raw["coherence_attributes"])
+    coherence_threshold = float(raw.get("coherence_threshold", _DEFAULT_COHERENCE_THRESHOLD))
 
     return ComparisonScheme(
         attributes=attributes,
         categories=categories,
         joint_pairs=joint_pairs,
         coherence_attributes=coherence_attributes,
+        coherence_threshold=coherence_threshold,
     )

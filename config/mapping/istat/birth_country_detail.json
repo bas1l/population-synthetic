@@ -166,8 +166,7 @@
       "equals": [
         "France"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "Italy": {
@@ -331,7 +330,6 @@
         "France",
         "Francia"
       ]
-    },
-    "fuzzy": false
+    }
   }
 }

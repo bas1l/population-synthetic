@@ -135,7 +135,6 @@ def test_refine_from_resolves_from_sibling_when_primary_misses():
     values = ["Sweden", "Europe (Other)", "Outside Europe"]
     block = {
         "refine_from": "birth_country_detail",
-        "fuzzy": False,
         "Sweden": {"contains": ["sweden", "sverige"]},
         "Europe (Other)": {"contains": ["germany", "poland", "norway"]},
         "Outside Europe": {"contains": ["syria", "somalia"]},
@@ -144,11 +143,11 @@ def test_refine_from_resolves_from_sibling_when_primary_misses():
     assert resolve("", block, values, refine_value="Germany") == "Europe (Other)"
     # Primary hits directly -> refine not needed.
     assert resolve("born in Sweden", block, values, refine_value="Germany") == "Sweden"
-    # No refine value and primary misses -> None (fuzzy disabled).
+    # No refine value and primary misses -> None.
     assert resolve("", block, values) is None
 
 
-# --- absent / on_miss / fuzzy ---------------------------------------------
+# --- absent / on_miss ------------------------------------------------------
 
 def test_absent_literal_for_missing_raw():
     block = {"absent": "Not Applicable", "Manufacturing": {"contains": ["factory"]}}
@@ -165,28 +164,52 @@ def test_on_miss_default_none_vs_literal():
         "Pension": {"contains": ["pension"]},
     }
     # Default on_miss -> None.
-    block_none = {"fuzzy": False, **matchers}
-    assert resolve("lottery winnings", block_none, values) is None
+    assert resolve("lottery winnings", matchers, values) is None
     # Literal on_miss default.
-    block_default = {"fuzzy": False, "on_miss": "Wage / Business", **matchers}
+    block_default = {"on_miss": "Wage / Business", **matchers}
     assert resolve("lottery winnings", block_default, values) == "Wage / Business"
 
 
-def test_fuzzy_matches_value_labels_when_enabled():
+def test_unmatched_raw_returns_none_without_fuzzy_fallback():
+    # There is no fuzzy tier: a raw that substring-matches a value *label* but hits
+    # no declared matcher must miss.
     values = ["Middle Class", "Working Class"]
     block = {"Middle Class": {"equals": ["mc"]}, "Working Class": {"equals": ["wc"]}}
-    # No explicit matcher hits, but the raw substring-matches a value label.
-    assert resolve("solidly middle class household", block, values) == "Middle Class"
-    # Disable fuzzy -> the same raw misses.
-    block_nofuzzy = {"fuzzy": False, **block}
-    assert resolve("solidly middle class household", block_nofuzzy, values) is None
+    assert resolve("solidly middle class household", block, values) is None
 
 
-def test_empty_raw_does_not_fuzzy_match():
+# --- global tiered precedence (equals -> all_of -> contains -> numeric) -----
+
+def test_equals_beats_contains_across_values_globally():
+    # Regression for the biological_sex bug: raw "female" must NOT resolve to Male via
+    # Male's contains ["male"] (substring of "female"); Female's exact equals wins first.
     values = ["Male", "Female"]
-    block = {"Male": {"equals": ["m"]}, "Female": {"equals": ["f"]}}
-    assert resolve("", block, values) is None
-    assert resolve("   ", block, values) is None
+    block = {
+        "Male": {"equals": ["male", "man"], "contains": ["male", "pojke"]},
+        "Female": {"equals": ["female"], "contains": ["female", "kvinna"]},
+    }
+    assert resolve("female", block, values) == "Female"
+    # And an unambiguous raw still resolves to Male.
+    assert resolve("male", block, values) == "Male"
+
+
+def test_equals_on_later_value_beats_contains_on_earlier_value():
+    # Earlier value would match by contains, later value by equals -> equals wins.
+    values = ["First", "Second"]
+    block = {"First": {"contains": ["abc"]}, "Second": {"equals": ["abcd"]}}
+    assert resolve("abcd", block, values) == "Second"
+
+
+def test_all_of_beats_contains_across_values_globally():
+    values = ["Broad", "Specific"]
+    block = {
+        "Broad": {"contains": ["permanent"]},
+        "Specific": {"all_of": [["permanent"], ["full"]]},
+    }
+    # Both could match, but all_of is a higher tier -> Specific wins.
+    assert resolve("permanent full-time", block, values) == "Specific"
+    # Only the contains token present -> falls to Broad.
+    assert resolve("permanent contract", block, values) == "Broad"
 
 
 # --- normalization primitive ----------------------------------------------

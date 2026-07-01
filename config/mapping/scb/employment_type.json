@@ -65,8 +65,7 @@
         ]
       }
     },
-    "absent": "Not Applicable",
-    "fuzzy": false
+    "absent": "Not Applicable"
   },
   "synthetic": {
     "Permanent Full-time": {
@@ -278,7 +277,6 @@
         "pensionär",
         "pensioner"
       ]
-    },
-    "fuzzy": false
+    }
   }
 }

@@ -163,12 +163,13 @@ def test_write_csv_summary_one_row_per_attribute(tmp_path):
 # --- scheme-driven comparison --------------------------------------------
 
 
-def _scheme(attributes, categories, *, joint_pairs=None, coherence_attributes=()):
+def _scheme(attributes, categories, *, joint_pairs=None, coherence_attributes=(), coherence_threshold=0.001):
     return ComparisonScheme(
         attributes=attributes,
         categories=categories,
         joint_pairs=joint_pairs or [],
         coherence_attributes=coherence_attributes,
+        coherence_threshold=coherence_threshold,
     )
 
 

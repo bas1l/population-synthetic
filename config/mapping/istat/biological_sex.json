@@ -19,8 +19,7 @@
         "female",
         "2"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "Male": {
@@ -62,7 +61,6 @@
         "femminile",
         "donna"
       ]
-    },
-    "fuzzy": false
+    }
   }
 }

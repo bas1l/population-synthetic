@@ -19,8 +19,7 @@
         "female",
         "2"
       ]
-    },
-    "fuzzy": false
+    }
   },
   "synthetic": {
     "Male": {
@@ -56,7 +55,6 @@
         "hona",
         "woman"
       ]
-    },
-    "fuzzy": false
+    }
   }
 }

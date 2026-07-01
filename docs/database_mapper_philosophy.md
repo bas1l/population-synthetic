@@ -24,7 +24,7 @@ fundamentally different shapes and require fundamentally different work.
 |---|---|---|
 | Input | already-coded `{code,label}` dicts from a stats API | free-text LLM values (Swedish/Italian/English), multiple formats, mojibake |
 | Rules block consulted | each attribute file's `database` block | each attribute file's `synthetic` block |
-| Typical matchers | `equals`, composite (attachment×hours), decile-as-`equals` | `contains`, `all_of`/`none_of`, numeric (`int`/`int_gte`), `refine_from`, `fuzzy` |
+| Typical matchers | `equals`, composite (attachment×hours), decile-as-`equals` | `contains`, `all_of`/`none_of`, numeric (`int`/`int_gte`), `refine_from` |
 | Extra work | flatten nested `RawCategory` dicts; `id` passthrough | encoding repair, narrative-format skip, persona-skip `age` gate |
 | Country divergence | **data** — one class attribute (the mapping directory) | **data** — one class attribute (the mapping directory) |
 | Output | the shared canonical schema | the shared canonical schema |
@@ -36,8 +36,8 @@ Both sides are now **thin loaders over one shared resolver**,
 (`MAPPINGS_SUBDIR`); all algorithm and label knowledge lives in the JSON config. The
 reference side is thin *because the statistics agency already did the hard
 categorisation work* (a coded value resolves with plain `equals`); the synthetic side
-does the same ordered value-walk but leans on the richer matchers and the `fuzzy`
-tier to tame free text. Neither base class contains a single field-name or category
+does the same tiered value-walk but leans on the richer matchers (`contains`,
+`all_of`/`none_of`, numeric, `refine_from`) to tame free text. Neither base class contains a single field-name or category
 literal: the comparison attributes come from the per-country `_index.json` master
 (attribute → filename, in axis order) and every label comes from the matched
 attribute file's `values`. Adding or removing a comparison field is a config-only
@@ -108,17 +108,25 @@ Each attribute file (e.g. `config/mapping/scb/biological_sex.json`) declares:
 - `synthetic` — unified value → matcher, resolving a raw `identity.json` value.
 
 A per-country `_index.json` master lists the in-scope attributes (`attribute →
-filename`, key order = axis order) plus `joint_pairs` and `coherence_attributes`.
-Country scope is therefore data-driven with no code branch: Italy's `_index.json`
-simply omits `income_source` (ISTAT provides no such field), so it never appears in
-Italy's axis.
+filename`, key order = axis order) — pure *mapping scope*. Country scope is therefore
+data-driven with no code branch: Italy's `_index.json` simply omits `income_source`
+(ISTAT provides no such field), so it never appears in Italy's axis.
+
+The cross-attribute statistics — `joint_pairs`, `coherence_attributes` and
+`coherence_threshold` — are evaluator tuning rather than mapping, so they live in a
+**separate comparison-analysis config**, `config/analysis/comparison/{scb,istat}.json`,
+one file per country. Keeping them out of `_index.json` means the mapping index says
+only *which attributes exist*, while the analysis config says *which cross-attribute
+tests the evaluator runs and at what threshold*.
 
 `comparison/scheme.py` (`ComparisonScheme` / `load_scheme`) is unchanged in
 *interface* — `StatisticalEvaluator`, `charts.py`, and the compare scripts still
-receive the same four fields — but it now **sources** them from `_index.json` + each
-file's `values` rather than from a standalone scheme file. This still enforces "no
-empty buckets" and "no DB-absent properties", because the axis is exactly the values
-both mappers are constrained to emit.
+receive one `ComparisonScheme` — but it now **sources** the marginal axis from
+`_index.json` + each file's `values`, and the cross-attribute fields
+(`joint_pairs`/`coherence_attributes`/`coherence_threshold`) from the analysis config,
+rather than from a single standalone scheme file. This still enforces "no empty
+buckets" and "no DB-absent properties", because the axis is exactly the values both
+mappers are constrained to emit.
 
 ### Changing the category axis
 
@@ -144,8 +152,8 @@ not pretend the database provided them.
 ## Why not merge the two mappers
 
 You could fold both sides into one class, but you would gain nothing: they share no
-transformation logic (a dictionary lookup vs a fuzzy-NLP toolbox), and the merged
-code would just be `if input_is_clean: lookup else: fuzzy_match`. The two packages
+transformation logic (a clean coded lookup vs a richer free-text matcher toolbox), and
+the merged code would just be `if input_is_clean: lookup else: free_text_match`. The two packages
 are deliberately built as mirror images —
 `load_reference_population → normalize_population` vs
 `load_raw_population → map_population` — so the symmetry is visible at every call

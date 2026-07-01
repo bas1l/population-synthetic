@@ -222,6 +222,7 @@ class StatisticalEvaluator:
         # Build joint probability table from pop_a for
         # (age_group, education_level, employment_status)
         coherence_attrs = self.scheme.coherence_attributes if self.scheme is not None else COHERENCE_ATTRIBUTES
+        threshold = self.scheme.coherence_threshold if self.scheme is not None else COHERENCE_THRESHOLD
         tuple_counts: Counter = Counter()
         for ind in self.individuals_a:
             key = tuple(attr_value(ind, a) for a in coherence_attrs)
@@ -240,7 +241,7 @@ class StatisticalEvaluator:
             else:
                 prob = joint_probs.get(key, 0.0)
 
-            if prob >= COHERENCE_THRESHOLD:
+            if prob >= threshold:
                 n_plausible += 1
             else:
                 flagged.append({

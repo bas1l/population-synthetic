@@ -12,7 +12,7 @@ They exercise the two responsibilities the base class still owns -- ``id`` passt
 and the raw ``age`` passthrough (``age_group`` is derived at scoring time) -- plus the
 DB-side algorithms now expressed purely as matchers: composite ``employment_type``
 (attachment x hours), decile-as-``equals`` ``socioeconomic``, the ``absent`` directive
-for a missing field, and a total miss resolving to ``None`` (fuzzy disabled).
+for a missing field, and a total miss resolving to ``None``.
 """
 
 from __future__ import annotations
@@ -53,13 +53,12 @@ def test_missing_index_raises():
 
 def test_index_without_attributes_raises():
     with pytest.raises(ValueError, match="_index"):
-        BaseReferenceMapper({"_index": {"joint_pairs": [], "coherence_attributes": []}})
+        BaseReferenceMapper({"_index": {"description": "no attributes"}})
 
 
 def test_missing_config_block_for_attribute_raises():
     # The master references ``age.json`` but no ``age`` block is present.
-    mappings = {"_index": {"attributes": {"employment_type": "employment_type.json"},
-                           "joint_pairs": [], "coherence_attributes": []}}
+    mappings = {"_index": {"attributes": {"employment_type": "employment_type.json"}}}
     mapper = BaseReferenceMapper(mappings)
     with pytest.raises(ValueError, match="missing config block"):
         mapper.normalize_individual({"id": "x", "employment_type": {"attachment": {"label": "z"}}})
@@ -91,7 +90,7 @@ def test_reference_absent_field_uses_absent_directive():
 
 
 def test_reference_total_miss_resolves_to_none():
-    # An unmatched token with fuzzy disabled and no on_miss -> None.
+    # An unmatched token with no on_miss -> None.
     mapper = BaseReferenceMapper(new_shape_mappings())
     out = mapper.normalize_individual({"id": "r", "age": 40, "biological_sex": {"label": "unmatched"}})
     assert out["biological_sex"] is None

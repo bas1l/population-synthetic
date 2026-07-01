@@ -20,28 +20,33 @@ Each per-attribute file is symmetric across the two mapper sides:
   "values":    ["Italy", "Europe (Other)", "Outside Europe"],
   "database":  { "Italy": {"equals": ["Italy"]}, ... },
   "synthetic": { "Italy": {"contains": ["italia", "roma", ...]}, ...,
-                 "refine_from": "birth_country_detail", "fuzzy": false }
+                 "refine_from": "birth_country_detail" }
 }
 ```
 
 - `values` — the unified category set **and** the scored axis / chart order (both
   sides emit only these labels or `None`; there is no separate scheme/filter).
 - `database` — resolves a raw ISTAT value; `synthetic` — resolves a raw
-  `identity.json` free-text value. Keyed by unified value → matcher; **key order =
-  match priority**.
+  `identity.json` free-text value. Keyed by unified value → matcher; the resolver
+  uses a **global tiered sweep**, with `values` declared order breaking ties within a
+  tier.
 - `age.json` is values-only: `age_group` is derived from raw `age` at scoring time.
 
 ## Matcher vocabulary & directives (summary)
 
 - Matchers: `equals`, `contains`, `all_of`, `none_of`, `int`, `int_gte`, plus the
   composite sub-field matcher (`employment_type`).
-- Precedence within a value: `none_of` → `equals` → `all_of` → `contains` → numeric.
-- Directives: `absent`, `refine_from`, `on_miss`, `fuzzy` (default `true`).
+- Precedence: a global tiered sweep `equals` → `all_of` → `contains` → numeric
+  (composite in a final pass), each tier swept across all values before the next;
+  `none_of` vetoes its value in every tier; `values` order breaks ties within a tier.
+- Directives: `absent`, `refine_from`, `on_miss`.
 
 ## `_index.json` master
 
-Lists the in-scope attributes (`attribute → filename`, key order = axis order) plus
-`joint_pairs` and `coherence_attributes`. Only files listed here are read.
+Lists the in-scope attributes (`attribute → filename`, key order = axis order) — pure
+mapping scope. Only files listed here are read. The cross-attribute statistics
+(`joint_pairs`, `coherence_attributes`, `coherence_threshold`) live in the separate
+comparison-analysis config `config/analysis/comparison/istat.json`, not here.
 
 ## Source-key convention
 

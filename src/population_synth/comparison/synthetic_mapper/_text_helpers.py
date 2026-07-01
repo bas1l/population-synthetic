@@ -1,10 +1,9 @@
 """Generic, label-free text helpers for the synthetic mapper.
 
-Separator normalisation, UTF-8 double-encoding repair, and fuzzy substring
-match — the three string primitives the config-driven flat-path engine in
-``base.py`` relies on. They carry no demographic labels or mappings; all
-label -> schema-label translation lives in the country mapping JSON files under
-``config/mapping/{scb,istat}/``.
+Separator normalisation and UTF-8 double-encoding repair — the string primitives
+the config-driven flat-path engine in ``base.py`` relies on. They carry no
+demographic labels or mappings; all label -> schema-label translation lives in the
+country mapping JSON files under ``config/mapping/{scb,istat}/``.
 """
 
 from __future__ import annotations
@@ -36,12 +35,3 @@ def _repair_utf8_double_encoding(text: str) -> str:
     for bad, good in _UTF8_DOUBLE_ENCODING_REPAIRS.items():
         text = text.replace(bad, good)
     return text
-
-
-def _fuzzy_match(raw: str, labels: list[str]) -> str | None:
-    """Return the first label whose lowercased form is a substring of raw (or vice versa)."""
-    raw_lower = raw.lower().strip()
-    for label in labels:
-        if label.lower() in raw_lower or raw_lower in label.lower():
-            return label
-    return None
