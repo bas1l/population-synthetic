@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from population_synth.analysis.cross_run.run_comparison import (
+from population_synthetic.analysis.llm_metrics.cross_run.run_comparison import (
     _holm,
     decompose_slug,
     diagnose_slug,

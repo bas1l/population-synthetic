@@ -1,7 +1,7 @@
 """End-to-end checks that the thinned mappers delegate to the shared resolver.
 
 Phase 2 gutted ``reference_mapper/base.py`` and ``synthetic_mapper/base.py`` into
-thin loaders over :mod:`population_synth.comparison.mapping_engine`, driven by the
+thin loaders over :mod:`population_synthetic.analysis.mapping.mapping_engine`, driven by the
 new symmetric per-attribute config (``values`` / ``database`` / ``synthetic``) plus
 an ``_index.json`` master. Production config is not migrated until Phase 3, so these
 tests build small in-memory ``mappings`` dicts in the *new* shape (mirroring what
@@ -16,8 +16,8 @@ narrative-format skip.
 
 from __future__ import annotations
 
-from population_synth.comparison.reference_mapper.base import BaseReferenceMapper
-from population_synth.comparison.synthetic_mapper.base import BaseSyntheticMapper
+from population_synthetic.analysis.mapping.reference_mapper.base import BaseReferenceMapper
+from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
 
 # ---------------------------------------------------------------------------
 # Shared new-shape config, keyed by file stem (as load_mappings would return),

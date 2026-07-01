@@ -23,9 +23,9 @@ can't be resolved without *guessing* its class, leave it unmapped — it correct
   where `output_base` is read from `config/experiment_defaults.yaml`
   (currently `F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data`).
 - **Comparison reports:** `{output_base}/03_Analysis/{country}_*/...json` (+ CSV + chart PNGs).
-- **Extractor (generated → schema):** `src/population_synth/comparison/extractor.py`
+- **Extractor (generated → schema):** `src/population_synthetic/comparison/extractor.py`
   — `_extract_flat()` and the `_normalize_<attr>()` / `_normalize_<attr>_it()` helpers.
-- **Evaluator (marginals + TV + unmapped counts):** `src/population_synth/comparison/evaluator.py`.
+- **Evaluator (marginals + TV + unmapped counts):** `src/population_synthetic/comparison/evaluator.py`.
 - **Aliases:** `config/assets/scb_reference/category_mappings.json` (Sweden),
   `config/assets/istat_reference/category_mappings.json` (Italy) — `pipeline_label_mappings`.
 - **Harvester:** `scripts/_throwaway_harvest_unmapped.py` (Step 2 below).
@@ -135,10 +135,10 @@ the latter, don't add it.
 Then regenerate the full set and lint:
 ```
 python scripts/analyze/compare_all_pipelines.py --country <country>     # all reports + charts
-ruff check src/population_synth/comparison/extractor.py
+ruff check src/population_synthetic/comparison/extractor.py
 ```
 Confirm **no new** lint errors by diffing against the baseline:
-`git show HEAD:src/population_synth/comparison/extractor.py | ruff check -`.
+`git show HEAD:src/population_synthetic/comparison/extractor.py | ruff check -`.
 
 ## 6. Deliverables & cleanup
 

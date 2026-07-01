@@ -157,6 +157,23 @@
         "Stockholms län",
         "Stockholm County",
         "Stockholm län"
+      ],
+      "contains": [
+        "stockholm",
+        "sthlm",
+        "solna",
+        "nacka",
+        "södertälje",
+        "huddinge",
+        "täby",
+        "lidingö",
+        "sollentuna",
+        "danderyd",
+        "sundbyberg",
+        "botkyrka",
+        "haninge",
+        "järfälla",
+        "tumba"
       ]
     },
     "Västra Götaland": {
@@ -165,6 +182,16 @@
         "Västra Götalands län",
         "Göteborg",
         "Borås"
+      ],
+      "contains": [
+        "västra götaland",
+        "göteborg",
+        "gothenburg",
+        "borås",
+        "mölndal",
+        "trollhättan",
+        "skövde",
+        "uddevalla"
       ]
     },
     "Skåne": {
@@ -174,6 +201,15 @@
         "Malmö",
         "Helsingborg",
         "Lund"
+      ],
+      "contains": [
+        "skåne",
+        "scania",
+        "malmö",
+        "malmöhus",
+        "helsingborg",
+        "lunds",
+        "kristianstad"
       ]
     },
     "Östergötland": {
@@ -182,12 +218,20 @@
         "Östergötlands län",
         "Linköping",
         "Norrköping"
+      ],
+      "contains": [
+        "östergötland",
+        "linköping",
+        "norrköping"
       ]
     },
     "Uppsala": {
       "equals": [
         "Uppsala",
         "Uppsala län"
+      ],
+      "contains": [
+        "uppsala"
       ]
     },
     "Halland": {
@@ -195,18 +239,29 @@
         "Halland",
         "Hallands län",
         "Halmstad"
+      ],
+      "contains": [
+        "halland",
+        "halmstad",
+        "varberg"
       ]
     },
     "Örebro": {
       "equals": [
         "Örebro",
         "Örebro län"
+      ],
+      "contains": [
+        "örebro"
       ]
     },
     "Jönköping": {
       "equals": [
         "Jönköping",
         "Jönköpings län"
+      ],
+      "contains": [
+        "jönköping"
       ]
     },
     "Gävleborg": {
@@ -214,6 +269,10 @@
         "Gävleborg",
         "Gävleborgs län",
         "Gävle"
+      ],
+      "contains": [
+        "gävleborg",
+        "gävle"
       ]
     },
     "Södermanland": {
@@ -221,6 +280,13 @@
         "Södermanland",
         "Södermanlands län",
         "Eskilstuna"
+      ],
+      "contains": [
+        "södermanland",
+        "sörmland",
+        "eskilstuna",
+        "nyköping",
+        "katrineholm"
       ]
     },
     "Värmland": {
@@ -228,6 +294,10 @@
         "Värmland",
         "Värmlands län",
         "Karlstad"
+      ],
+      "contains": [
+        "värmland",
+        "karlstad"
       ]
     },
     "Dalarna": {
@@ -236,6 +306,11 @@
         "Dalarnas län",
         "Falun",
         "Borlänge"
+      ],
+      "contains": [
+        "dalarna",
+        "falun",
+        "borlänge"
       ]
     },
     "Västerbotten": {
@@ -243,6 +318,11 @@
         "Västerbotten",
         "Västerbottens län",
         "Umeå"
+      ],
+      "contains": [
+        "västerbotten",
+        "umeå",
+        "skellefteå"
       ]
     },
     "Norrbotten": {
@@ -250,12 +330,20 @@
         "Norrbotten",
         "Norrbottens län",
         "Luleå"
+      ],
+      "contains": [
+        "norrbotten",
+        "luleå",
+        "kiruna"
       ]
     },
     "Kalmar": {
       "equals": [
         "Kalmar",
         "Kalmar län"
+      ],
+      "contains": [
+        "kalmar"
       ]
     },
     "Västernorrland": {
@@ -263,6 +351,12 @@
         "Västernorrland",
         "Västernorrlands län",
         "Sundsvall"
+      ],
+      "contains": [
+        "västernorrland",
+        "sundsvall",
+        "härnösand",
+        "örnsköldsvik"
       ]
     },
     "Västmanland": {
@@ -270,6 +364,10 @@
         "Västmanland",
         "Västmanlands län",
         "Västerås"
+      ],
+      "contains": [
+        "västmanland",
+        "västerås"
       ]
     },
     "Kronoberg": {
@@ -277,12 +375,21 @@
         "Kronoberg",
         "Kronobergs län",
         "Växjö"
+      ],
+      "contains": [
+        "kronoberg",
+        "växjö"
       ]
     },
     "Jämtland": {
       "equals": [
         "Jämtland",
         "Jämtlands län"
+      ],
+      "contains": [
+        "jämtland",
+        "härjedal",
+        "östersund"
       ]
     },
     "Blekinge": {
@@ -290,6 +397,11 @@
         "Blekinge",
         "Blekinge län",
         "Karlskrona"
+      ],
+      "contains": [
+        "blekinge",
+        "karlskrona",
+        "karlshamn"
       ]
     },
     "Gotland": {
@@ -297,6 +409,10 @@
         "Gotland",
         "Gotlands län",
         "Visby"
+      ],
+      "contains": [
+        "gotland",
+        "visby"
       ]
     }
   }

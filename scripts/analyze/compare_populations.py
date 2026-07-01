@@ -8,7 +8,8 @@ pop_a is the reference population (treated as "expected" for chi-squared).
 pop_b is the population to evaluate (treated as "observed").
 
 This is a thin CLI wrapper that delegates all heavy lifting to
-population_synth.comparison.{evaluator, normalizer, charts}.
+population_synthetic.analysis.comparison.{evaluator, charts} and
+population_synthetic.analysis.mapping.normalizer.
 """
 
 import argparse
@@ -16,10 +17,11 @@ import json
 import sys
 from pathlib import Path
 
-from population_synth._paths import PROJECT_ROOT
-from population_synth.comparison.charts import plot_comparison_charts, plot_radar_comparison
-from population_synth.comparison.evaluator import StatisticalEvaluator, write_csv_summary
-from population_synth.comparison.reference_mapper import normalize_population
+from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.comparison.charts import plot_comparison_charts, plot_radar_comparison
+from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+from population_synthetic.analysis.mapping.reference_mapper import normalize_population
+from population_synthetic.analysis.comparison.scheme import load_scheme
 
 
 def _load_population(path: str) -> dict:
@@ -35,6 +37,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Compare two demographic population files statistically")
     parser.add_argument("pop_a", help="Reference population file (expected)")
     parser.add_argument("pop_b", help="Population to evaluate (observed)")
+    parser.add_argument(
+        "--country",
+        required=True,
+        choices=("swedish", "italian"),
+        help="Country whose comparison scheme (config/mapping/{scb,istat}) defines the "
+             "axis and category sets. Required -- there is no in-code default.",
+    )
     parser.add_argument("--output", default="data/comparison_report.json", help="Output JSON report path")
     parser.add_argument(
         "--charts-dir",
@@ -56,10 +65,11 @@ def main() -> None:
     pop_a = _load_population(args.pop_a)
     pop_b = _load_population(args.pop_b)
 
-    pop_a = normalize_population(pop_a, country="swedish")
-    pop_b = normalize_population(pop_b, country="swedish")
+    pop_a = normalize_population(pop_a, country=args.country)
+    pop_b = normalize_population(pop_b, country=args.country)
 
-    evaluator = StatisticalEvaluator(pop_a, pop_b)
+    scheme = load_scheme(args.country)
+    evaluator = StatisticalEvaluator(pop_a, pop_b, scheme=scheme)
     evaluator.print_summary(args.pop_a, args.pop_b)
 
     report = evaluator.generate_report()
@@ -86,6 +96,8 @@ def main() -> None:
             pop_a_label=Path(args.pop_a).stem,
             pop_b_label=Path(args.pop_b).stem,
             prefix=Path(args.pop_b).stem,
+            attributes=scheme.attributes,
+            categories=scheme.categories,
         )
         print(f"Charts written to {charts_dir}")
         radar_path = plot_radar_comparison(
@@ -95,6 +107,7 @@ def main() -> None:
             pop_b_label=Path(args.pop_b).stem,
             show_chi_sq=not args.radar_tv_only,
             prefix=Path(args.pop_b).stem,
+            attributes=scheme.attributes,
         )
         if radar_path is not None:
             print(f"Radar chart written to {radar_path}")

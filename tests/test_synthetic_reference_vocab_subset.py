@@ -28,8 +28,8 @@ import json
 
 import pytest
 
-from population_synth._paths import PROJECT_ROOT
-from population_synth.comparison.reference_mapper.mappings import load_index
+from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.mapping.reference_mapper.mappings import load_index
 
 _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 

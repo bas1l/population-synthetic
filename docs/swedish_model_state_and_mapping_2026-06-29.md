@@ -12,8 +12,8 @@ and therefore should be counted as **"not mapped"** rather than silently passed 
 Data sources:
 - Run outputs under `F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/01_Raw/swedish_*`
 - Per-run comparison reports under `.../02_Data/03_Analysis/` (marginals + chi-squared + TV)
-- Mapping machinery: `src/population_synth/comparison/normalizer.py`,
-  `src/population_synth/comparison/extractor.py`,
+- Mapping machinery: `src/population_synthetic/comparison/normalizer.py`,
+  `src/population_synthetic/comparison/extractor.py`,
   `config/assets/scb_reference/category_mappings.json`
 - Prior mapping-fix notes: `docs/swedish_mapping_fix_2026-05-29.md`,
   `docs/unmapped_matrix_2026-05-29.csv`, `docs/swedish_persona_matrix_2026-05-29.md`
