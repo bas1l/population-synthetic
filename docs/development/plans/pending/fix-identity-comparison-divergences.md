@@ -22,7 +22,7 @@ Comparison artifacts:
 **Expected vocabulary** (from `config/assets/scb_reference/category_mappings.json` lines 429-458):
 - `Single/Never Married`, `Married`, `Widowed`, `Divorced`
 
-**Fix location:** `src/population_synth/comparison/extractor.py` -- the flat-identity extraction path for civil_status. Also update `pipeline_label_mappings` in `category_mappings.json`.
+**Fix location:** `src/population_synthetic/comparison/extractor.py` -- the flat-identity extraction path for civil_status. Also update `pipeline_label_mappings` in `category_mappings.json`.
 
 **Required mappings to add:**
 | LLM value | Should map to |
@@ -44,7 +44,7 @@ Comparison artifacts:
 
 **Expected vocabulary:** `Poverty`, `Working Class`, `Middle Class`, `Wealthy`
 
-**Fix location:** `src/population_synth/comparison/extractor.py` -- socioeconomic_class normalizer.
+**Fix location:** `src/population_synthetic/comparison/extractor.py` -- socioeconomic_class normalizer.
 
 **Required mappings to add:**
 | LLM value | Should map to |
@@ -66,7 +66,7 @@ Comparison artifacts:
 
 **Why this matters:** `Retired` and `Student` ARE valid SCB categories (see `category_mappings.json` lines 99, 103, 148-158). The extractor DOES handle these for pipeline format but may not be mapping them correctly for flat-identity format.
 
-**Fix location:** `src/population_synth/comparison/extractor.py` -- verify the flat-identity employment_status extraction path handles `Retired` and `Student` as valid output categories, not as unmapped.
+**Fix location:** `src/population_synthetic/comparison/extractor.py` -- verify the flat-identity employment_status extraction path handles `Retired` and `Student` as valid output categories, not as unmapped.
 
 **Additional mapping:** `Arbetstränade` / `Arbetsträning` -> could map to `Unemployed` or be flagged explicitly.
 
@@ -89,7 +89,7 @@ Comparison artifacts:
 | `Volontärarbete` / `Arbetsträning` | `Not Applicable` |
 | `Anställning för viss tid då arbetstagaren uppnått pensionsåldern` | `Temporary Full-time` |
 
-**Fix location:** `src/population_synth/comparison/extractor.py` -- `_SELF` and `_TEMP_MISC` keyword lists (lines 1405-1412) and the `_normalize_employment_type` fallback.
+**Fix location:** `src/population_synthetic/comparison/extractor.py` -- `_SELF` and `_TEMP_MISC` keyword lists (lines 1405-1412) and the `_normalize_employment_type` fallback.
 
 ---
 
@@ -109,7 +109,7 @@ Comparison artifacts:
 | `Two heterosexual parents` / `Two biological/adoptive heterosexual parents` | `Two parents` |
 | `One biological parent` | `One parent` |
 
-**Fix location:** `src/population_synth/comparison/extractor.py` -- parental_structure normalizer.
+**Fix location:** `src/population_synthetic/comparison/extractor.py` -- parental_structure normalizer.
 
 ---
 
@@ -140,7 +140,7 @@ Comparison artifacts:
 | `Realskoleexamen` | `Upper secondary (gymnasie)` or equivalent ISCED level |
 | `Ingen formell utbildning` | `Pre-primary / Primary` |
 
-**Fix location:** `src/population_synth/comparison/extractor.py` -- education_level normalizer.
+**Fix location:** `src/population_synthetic/comparison/extractor.py` -- education_level normalizer.
 
 ---
 
@@ -156,7 +156,7 @@ Comparison artifacts:
 
 ### Priority 1 -- Normalizer mapping gaps (fixes ~50% of divergence signal)
 
-Expand the extractor normalizer in `src/population_synth/comparison/extractor.py` for:
+Expand the extractor normalizer in `src/population_synthetic/comparison/extractor.py` for:
 - `civil_status` -- 4 new Swedish-language mappings
 - `socioeconomic_class` -- 7 new Swedish occupational-class mappings
 - `employment_type` -- 9 new Swedish-language mappings (mostly self-employment variants)

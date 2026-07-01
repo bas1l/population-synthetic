@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from population_synth.comparison.reference_mapper.mappings import load_index
-from population_synth.comparison.scheme import ComparisonScheme, load_scheme
+from population_synthetic.analysis.mapping.reference_mapper.mappings import load_index
+from population_synthetic.analysis.comparison.scheme import ComparisonScheme, load_scheme
 
 _ANALYSIS_FILENAME = "_analysis.json"
 

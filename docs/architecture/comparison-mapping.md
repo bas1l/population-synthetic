@@ -4,9 +4,9 @@
 > **Comparison & mapping** · [Design principles](design-principles.md) ·
 > [Axis composition](axis-composition.md) · [Configuration](configuration.md) · [Commands](commands.md)
 
-How the `comparison/` package maps both a **reference** (database) population and a
-**synthetic** (pipeline) population onto one canonical schema so they can be scored against
-each other. This is the densest part of the architecture; for the deeper rationale see
+How the `analysis/mapping/` package maps both a **reference** (database) population and a
+**synthetic** (pipeline) population onto one canonical schema so the `analysis/comparison/`
+package can score them against each other. This is the densest part of the architecture; for the deeper rationale see
 [`../database_mapper_philosophy.md`](../database_mapper_philosophy.md) and the per-country
 config READMEs (`config/mapping/scb/README.md`, `config/mapping/istat/README.md`).
 
@@ -33,7 +33,7 @@ first." error) and run the existing evaluator/chart path. `compare_all_pipelines
 `{output_base}/03_Analysis/comparison/{slug}/` (per-target JSON report + CSV + 15 bar charts +
 radar), with the summary and `{country}_radar_grid.png` at `.../comparison/`.
 
-`comparison/country_config.py` is the shared country resolver -- `reference_for_country`,
+`analysis/utils/country_config.py` is the shared country resolver -- `reference_for_country`,
 `mappings_for_country`, `known_country_ids`, `infer_country(config_path)` -- reading
 `parameters.reference` / `parameters.mappings` from the **country axis YAMLs**
 (`config/synthetic/axes/countries/{swedish,italian}.yaml`), so references/mappings are
@@ -43,7 +43,7 @@ config-driven, not hardcoded, and adding a country needs only a new YAML.
 
 Both mapper sides are driven by one per-country config tree (`config/mapping/{scb,istat}/`, one
 JSON file per comparison attribute + an `_index.json` master) and one shared resolver
-`comparison/mapping_engine.py` (`resolve`). Each per-attribute file is *symmetric*: it declares
+`analysis/mapping/mapping_engine.py` (`resolve`). Each per-attribute file is *symmetric*: it declares
 `values` once (the unified category set **and** the scored axis / chart order) plus a `database`
 rules block and a `synthetic` rules block, both keyed by unified value -> matcher. The resolver
 matches with a **global tiered sweep**: each matcher tier is tried across *all* values before the
@@ -59,12 +59,12 @@ key order = axis order) -- pure mapping scope; country scope is data-driven (Ita
 `income_source`). The cross-attribute statistics (`joint_pairs`/`coherence_attributes`/
 `coherence_threshold`) are evaluator tuning, not mapping, and live in a separate
 comparison-analysis config `config/analysis/comparison/{scb,istat}.json` (one file per country)
-read by `scheme.py`. There is no `_scheme.json` filter and no
+read by `analysis/comparison/scheme.py`. There is no `_scheme.json` filter and no
 `output_categories`/`reference_*`/`pipeline_*` dual vocabulary -- the scored axis simply *is* each
 file's `values` because both mappers emit only declared values. See
 `config/mapping/{scb,istat}/README.md` and [`../database_mapper_philosophy.md`](../database_mapper_philosophy.md).
 
-## Reference mapper (`reference_mapper/`)
+## Reference mapper (`analysis/mapping/reference_mapper/`)
 
 Maps the **reference** (database) population -- raw national-statistics records (nested
 `RawCategory` dicts from SCB/ISTAT) -> canonical schema labels. Class hierarchy
@@ -81,7 +81,7 @@ passes through). Supporting primitives `load_mappings`/`load_index`/`is_raw_form
 package; `normalizer.py` is a thin backward-compat facade delegating to it, kept because
 `extract/mappings.py` imports `load_mappings` from there.
 
-## Synthetic mapper (`synthetic_mapper/`)
+## Synthetic mapper (`analysis/mapping/synthetic_mapper/`)
 
 Maps the **synthetic** (pipeline) population -- raw `identity.json` free-text values -> canonical
 schema labels -- via `AbstractSyntheticMapper -> BaseSyntheticMapper -> {SwedishSyntheticMapper,
@@ -93,11 +93,11 @@ record-level UTF-8 repair, and the persona-skip `age` gate (missing/non-integer 
 persona). Country divergence is one subclass attribute, `MAPPINGS_SUBDIR`. Two-step API:
 `load_raw_population(seed_root)` then `map_population(raw_pop, country)`, mirroring the reference
 side. `get_synthetic_mapper(country)` is the factory; text helpers live in
-`synthetic_mapper/_text_helpers.py`.
+`analysis/mapping/synthetic_mapper/_text_helpers.py`.
 
 ## Extractor facade
 
-`extractor` is a thin backward-compat facade: `extract_individual()` / `extract_population()`
+`analysis/mapping/extractor.py` is a thin backward-compat facade: `extract_individual()` / `extract_population()`
 (both take a `country` param) delegate to the synthetic mapper; kept for tests and
 `extract_population_from_pipeline.py`.
 

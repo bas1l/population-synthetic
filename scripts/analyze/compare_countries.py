@@ -13,11 +13,11 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from population_synth.comparison.country_config import mappings_for_country
-from population_synth.comparison.evaluator import StatisticalEvaluator
-from population_synth.comparison.flatten_raw import flatten_raw_population
-from population_synth.comparison.reference_mapper.mappings import load_mappings
-from population_synth.comparison.scheme import load_scheme
+from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator
+from population_synthetic.analysis.comparison.scheme import load_scheme
+from population_synthetic.analysis.mapping.flatten_raw import flatten_raw_population
+from population_synthetic.analysis.mapping.reference_mapper.mappings import load_mappings
+from population_synthetic.analysis.utils.country_config import mappings_for_country
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -233,7 +233,7 @@ def main() -> None:
     logger.info("JSON report written to %s", output_path)
 
     if not args.no_charts:
-        from population_synth.comparison.charts import (
+        from population_synthetic.analysis.comparison.charts import (
             plot_3way_comparison_charts,
             plot_3way_radar,
         )

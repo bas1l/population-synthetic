@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from population_synth.llm_metrics.per_run.log_parser import _parse_corr, _try_parse_call
+from population_synthetic.analysis.llm_metrics.per_run.log_parser import _parse_corr, _try_parse_call
 
 _TS = "2026-05-21 10:00:00"
 

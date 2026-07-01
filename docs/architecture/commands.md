@@ -4,7 +4,7 @@
 > [Comparison & mapping](comparison-mapping.md) · [Design principles](design-principles.md) ·
 > [Axis composition](axis-composition.md) · [Configuration](configuration.md) · **Commands**
 
-The full command catalog for population-synth. Requires Python 3.10+. `CLAUDE.md` keeps only
+The full command catalog for population-synthetic. Requires Python 3.10+. `CLAUDE.md` keeps only
 the most-used subset; this page is the exhaustive list.
 
 ```bash
@@ -92,13 +92,13 @@ python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet
 python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id italian
 
 # Launch the GUI launcher (requires pip install -e ".[gui]")
-python -m population_synth.gui.main
+python -m population_synthetic.gui.main
 
 # Linting (line-length 120, rules: E/F/W/I)
 ruff check src/
 ```
 
-A pytest suite lives under `tests/` (covers the `llm_metrics/` layer and `clients/call_context`).
+A pytest suite lives under `tests/` (covers the `analysis/llm_metrics/` layer and `clients/call_context`).
 Run it with `pytest` (requires `pip install -e ".[dev]"`).
 
 ## See also

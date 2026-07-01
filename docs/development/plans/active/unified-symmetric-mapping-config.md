@@ -178,7 +178,7 @@ so scope stays country-driven with no code branch.
   `civil_status`, `employment_type`, `birth_country_detail`).
 
 **Code changes:**
-- New `src/population_synth/comparison/mapping_engine.py`: normalization primitives (reuse
+- New `src/population_synthetic/comparison/mapping_engine.py`: normalization primitives (reuse
   `synthetic_mapper/_text_helpers.py`), matcher evaluators, ordered value-walk with
   `absent`/`refine_from`/`on_miss`. Signature ~ `resolve(raw_record, rules_block, values) -> str | None`.
 - `reference_mapper/base.py` and `synthetic_mapper/base.py` gutted to thin loaders that keep
@@ -213,9 +213,9 @@ before any production config is rewritten.
       `_index.json` + per-file `values` (age_group bins from `age.json`).
 
 **Files Modified:**
-- `src/population_synth/comparison/mapping_engine.py` — new resolver.
-- `src/population_synth/comparison/reference_mapper/mappings.py` — `_index.json` reader.
-- `src/population_synth/comparison/scheme.py` — build scheme from master + `values`.
+- `src/population_synthetic/comparison/mapping_engine.py` — new resolver.
+- `src/population_synthetic/comparison/reference_mapper/mappings.py` — `_index.json` reader.
+- `src/population_synthetic/comparison/scheme.py` — build scheme from master + `values`.
 
 **Dependencies:** None
 
@@ -232,8 +232,8 @@ before any production config is rewritten.
 - [x] 2.3 — Confirm factories, subclasses, and the two-step API signatures are unchanged.
 
 **Files Modified:**
-- `src/population_synth/comparison/reference_mapper/base.py` — thin delegate.
-- `src/population_synth/comparison/synthetic_mapper/base.py` — thin delegate.
+- `src/population_synthetic/comparison/reference_mapper/base.py` — thin delegate.
+- `src/population_synthetic/comparison/synthetic_mapper/base.py` — thin delegate.
 
 **Dependencies:** Phase 1
 
@@ -267,7 +267,7 @@ before any production config is rewritten.
 **Files Modified:**
 - `config/mapping/scb/*.json`, `config/mapping/istat/*.json` — rewrite; add `_index.json`;
   delete `_scheme.json`.
-- `src/population_synth/population/sweden/fetch_service.py` — drop `EIAKR`.
+- `src/population_synthetic/population/sweden/fetch_service.py` — drop `EIAKR`.
 
 **Dependencies:** Phase 2
 
@@ -453,13 +453,13 @@ and `config/mapping/istat/{ethnicity,urbanization,id,income_source}.json`.
 - config/mapping/scb/urbanization.json
 - docs/database_mapper_philosophy.md
 - docs/development/plans/active/unified-symmetric-mapping-config.md
-- src/population_synth/comparison/mapping_engine.py
-- src/population_synth/comparison/reference_mapper/base.py
-- src/population_synth/comparison/reference_mapper/mappings.py
-- src/population_synth/comparison/scheme.py
-- src/population_synth/comparison/synthetic_mapper/base.py
-- src/population_synth/comparison/synthetic_mapper/factory.py
-- src/population_synth/population/sweden/fetch_service.py
+- src/population_synthetic/comparison/mapping_engine.py
+- src/population_synthetic/comparison/reference_mapper/base.py
+- src/population_synthetic/comparison/reference_mapper/mappings.py
+- src/population_synthetic/comparison/scheme.py
+- src/population_synthetic/comparison/synthetic_mapper/base.py
+- src/population_synthetic/comparison/synthetic_mapper/factory.py
+- src/population_synthetic/population/sweden/fetch_service.py
 - tests/_mapping_fixtures.py
 - tests/test_mapper_delegation.py
 - tests/test_mapping_engine.py

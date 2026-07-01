@@ -54,7 +54,7 @@ concrete `BaseReferenceMapper`.
 ISTAT files needed almost nothing renamed (that reference is pre-coded → passthrough);
 the rename was SCB-only.
 
-### Code (`src/population_synth/comparison/reference_mapper/`)
+### Code (`src/population_synthetic/comparison/reference_mapper/`)
 - **`base.py`** rewritten:
   - `__init__` builds all lookups from the uniform role-based keys via a small
     declarative table (`_LABEL_ATTRS`, `_MAPPING_BLOCK` for the two files whose stem
@@ -92,7 +92,7 @@ uses the file stem).
 
 ## Files touched
 
-- `src/population_synth/comparison/reference_mapper/{base,sweden,italy}.py`
+- `src/population_synthetic/comparison/reference_mapper/{base,sweden,italy}.py`
 - `config/mapping/scb/*.json` (13 files renamed; `biological_sex.json` added;
   `employment_type`/`industry_sector`/`birth_country_detail` extended)
 - `config/mapping/istat/{biological_sex,employment_type,industry_sector,birth_country_detail}.json`

@@ -2,7 +2,7 @@
 
 ## Summary
 
-Three passes of alias additions to `config/assets/scb_reference/category_mappings.json` and keyword fixes in `src/population_synth/comparison/extractor.py`, totalling ~180 new pipeline_label_mappings across 10 sections. All 22 model×strategy runs re-compared against the SCB 10k reference population.
+Three passes of alias additions to `config/assets/scb_reference/category_mappings.json` and keyword fixes in `src/population_synthetic/comparison/extractor.py`, totalling ~180 new pipeline_label_mappings across 10 sections. All 22 model×strategy runs re-compared against the SCB 10k reference population.
 
 ## What was done
 
@@ -103,5 +103,5 @@ The random-pick strategy diversifies outputs into territory the LLMs can't expre
 ## Files modified
 
 - `config/assets/scb_reference/category_mappings.json` — ~180 new pipeline_label_mappings
-- `src/population_synth/comparison/extractor.py` — UTF-8 repair, biological_sex keyword additions ("woman", "hon", "f", "m"), `_json_lookup("region", ...)` call
+- `src/population_synthetic/comparison/extractor.py` — UTF-8 repair, biological_sex keyword additions ("woman", "hon", "f", "m"), `_json_lookup("region", ...)` call
 - `docs/unmapped_matrix_2026-05-29.csv` — full 22-run unmapped matrix (generated)
