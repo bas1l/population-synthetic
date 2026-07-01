@@ -8,7 +8,7 @@
     "6 persons",
     "7+ persons"
   ],
-  "database": {
+  "real": {
     "1 person": {
       "equals": [
         "1 person"

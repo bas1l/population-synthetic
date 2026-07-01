@@ -16,7 +16,7 @@ from pathlib import Path
 from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator
 from population_synthetic.analysis.comparison.scheme import load_scheme
 from population_synthetic.analysis.mapping.flatten_raw import flatten_raw_population
-from population_synthetic.analysis.mapping.reference_mapper.mappings import load_mappings
+from population_synthetic.analysis.mapping.real_mapper.mappings import load_mappings
 from population_synthetic.analysis.utils.country_config import mappings_for_country
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")

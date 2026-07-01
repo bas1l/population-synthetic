@@ -1,11 +1,11 @@
 # SCB (Sweden) comparison mapping config
 
 This directory is the **single source of truth** for how the population comparison
-maps both the SCB reference database and the LLM pipeline output into one shared
+maps both the SCB real population data and the LLM pipeline output into one shared
 canonical schema, and for which categories each attribute is scored on. One JSON
 file per comparison attribute, plus an `_index.json` master. Loaded by
-`comparison/reference_mapper/mappings.py` (`load_mappings` / `load_index`) and driven
-by the shared resolver `comparison/mapping_engine.py`.
+`analysis/mapping/real_mapper/mappings.py` (`load_mappings` / `load_index`) and driven
+by the shared resolver `analysis/mapping/mapping_engine.py`.
 
 ## File shape
 
@@ -15,7 +15,7 @@ mapper sides:
 ```json
 {
   "values": ["Male", "Female"],
-  "database":  { "Male": {"equals": ["men", "male", "1"]},
+  "real":      { "Male": {"equals": ["men", "male", "1"]},
                  "Female": {"equals": ["women", "female", "2"]} },
   "synthetic": { "Male": {"contains": ["male", "pojke"], "equals": ["man", "m"]},
                  "Female": {"contains": ["female", "kvinna"], "equals": ["f"]} }
@@ -25,7 +25,7 @@ mapper sides:
 - **`values`** — the unified category set **and** the chart/axis order. Both mapper
   sides emit only these labels (or `None`), so `values` *is* the scored comparison
   axis; there is no separate scheme/filter.
-- **`database`** — resolves a raw national-statistics value (already coded).
+- **`real`** — resolves a raw national-statistics value (already coded).
 - **`synthetic`** — resolves a raw `identity.json` free-text value.
 - Both blocks are keyed by unified value → matcher. The resolver matches with a
   **global tiered sweep** (see precedence below): each matcher tier is tried across
@@ -34,7 +34,7 @@ mapper sides:
 
 `age.json` is a special case: it declares only `values` (the seven age-bin labels).
 `age_group` is *derived* from the raw integer `age` by `evaluator.attr_value` at
-scoring time, so there is no `database`/`synthetic` block to resolve.
+scoring time, so there is no `real`/`synthetic` block to resolve.
 
 ## Matcher vocabulary
 
@@ -68,7 +68,7 @@ final pass. `none_of` is a veto (not a tier): it rejects its value in every tier
 
 ## Attribute-level directives
 
-Reserved keys on a `database`/`synthetic` block (never confused with values, since
+Reserved keys on a `real`/`synthetic` block (never confused with values, since
 the walk is driven by `values`):
 
 | Directive | Effect |

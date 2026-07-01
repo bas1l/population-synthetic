@@ -10,7 +10,7 @@ holds the full rationale. When a rule here conflicts with convenience, the rule 
 
 ## Key design patterns
 
-- **Shared population layer** -- Breaks the SCB<->SSB cross-dependency. Both `sweden/` and `norway/` import from the shared `generators/reference/` parent, never from each other
+- **Shared population layer** -- Breaks the SCB<->SSB cross-dependency. Both `sweden/` and `norway/` import from the shared `generators/real/` parent, never from each other
 - **Factory + Strategy** -- `FactoryIdentityGenerator` selects generation strategy at runtime based on mode string
 - **Conditional chained sampling** -- Population sampling conditions each attribute on prior draws (e.g., education given age/sex, employment given education)
 - **Local file caching** -- PxWeb clients cache API responses as JSON files in `config/database/caches/{scb,ssb}/` to avoid redundant API calls
@@ -46,14 +46,14 @@ instead of a hardcoded map.
 
 ### Full comparison output
 
-When comparing pipeline output against a reference (database) population, every output artifact
+When comparing pipeline output against the real population, every output artifact
 must be generated: a bar chart for each of the 15 demographic attributes in
 `DEMOGRAPHIC_ATTRIBUTES` (age_group, biological_sex, education_level, employment_status,
 birth_location, socioeconomic_class, parental_structure, region, civil_status, industry_sector,
 employment_type, housing_tenure, household_size, income_source, birth_country_detail), a radar
 chart with TV-similarity across all attributes, the JSON comparison report (marginals + joint
 chi-squared + coherence), and the CSV marginals summary. Charts are only skipped when an attribute
-has zero data in both populations -- if the reference population provides the field, the chart
+has zero data in both populations -- if the real population provides the field, the chart
 must appear.
 
 ## See also
@@ -61,4 +61,4 @@ must appear.
 - [Comparison & mapping](comparison-mapping.md) — where the "config is the single source of truth"
   and "full comparison output" rules are enforced.
 - [Sub-packages](sub-packages.md) — the packages these patterns shape
-  (`generators/reference/`, `generators/synthetic/`, `analysis/`).
+  (`generators/real/`, `generators/synthetic/`, `analysis/`).

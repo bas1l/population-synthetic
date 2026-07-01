@@ -1,19 +1,19 @@
 """Shared, symmetric mapping resolver for the comparison pipeline.
 
-This is the single engine both the *reference* (database) mapper and the
+This is the single engine both the *real* mapper and the
 *synthetic* (pipeline) mapper delegate to. It replaces the two parallel
-5-handler factory stacks (``reference_mapper.base`` / ``synthetic_mapper.base``)
+5-handler factory stacks (``real_mapper.base`` / ``synthetic_mapper.base``)
 with one ordered value-walk driven by the symmetric per-attribute config.
 
 Config shape (per attribute file, e.g. ``biological_sex.json``)::
 
     {
       "values": ["Male", "Female"],          # unified value set + axis order
-      "database":  {"Male": {"equals": ["men","1"]}, "Female": {...}},
+      "real":      {"Male": {"equals": ["men","1"]}, "Female": {...}},
       "synthetic": {"Male": {"contains": ["male"]}, "Female": {...}}
     }
 
-The ``database`` block resolves a raw national-statistics value; the
+The ``real`` block resolves a raw national-statistics value; the
 ``synthetic`` block resolves a raw LLM ``identity.json`` value. Both are keyed by
 unified value → matcher, so the two sides are symmetric and the scored comparison
 axis simply *is* the ``values`` list.
@@ -36,7 +36,7 @@ Tier order (first hit wins; ``none_of`` vetoes its value in every tier):
 ``none_of`` is a veto, not a tier: if any token is present in the (normalized) raw,
 that value is rejected in every tier regardless of its positive matchers.
 
-A **composite** matcher (used by ``employment_type`` database, whose raw record has
+A **composite** matcher (used by ``employment_type`` real, whose raw record has
 ``attachment`` + ``hours`` sub-fields) keys sub-fields of a dict raw value instead
 of the reserved matcher keys above; every sub-field matcher must hit::
 
@@ -48,7 +48,7 @@ of the reserved matcher keys above; every sub-field matcher must hit::
 Composite values are swept in their own pass after the scalar tiers (composite and
 scalar values never coexist within one attribute side, so the pass order is moot).
 
-Attribute-level directives (reserved keys on the ``database`` / ``synthetic`` block,
+Attribute-level directives (reserved keys on the ``real`` / ``synthetic`` block,
 never confused with value keys because the walk is driven by ``values``):
 
 - ``absent`` — literal value emitted when the raw input is missing/empty
@@ -80,7 +80,7 @@ _MATCHER_KEYS: frozenset[str] = frozenset(
     {"equals", "contains", "all_of", "none_of", "int", "int_gte"}
 )
 
-#: Attribute-level directive keys on a ``database`` / ``synthetic`` rules block.
+#: Attribute-level directive keys on a ``real`` / ``synthetic`` rules block.
 #: These are never treated as values (the value-walk is driven by ``values``).
 _DIRECTIVE_KEYS: frozenset[str] = frozenset({"absent", "refine_from", "on_miss"})
 
@@ -289,7 +289,7 @@ def resolve(
         numeric attributes, or a dict of sub-fields for composite attributes
         (whose value matchers key those sub-fields).
     rules_block:
-        The per-attribute ``database`` or ``synthetic`` block: unified value →
+        The per-attribute ``real`` or ``synthetic`` block: unified value →
         matcher entries plus the optional attribute-level directives ``absent`` /
         ``refine_from`` / ``on_miss``.
     values:

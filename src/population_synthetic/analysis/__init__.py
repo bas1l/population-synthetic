@@ -5,7 +5,7 @@ Groups the post-generation tooling into one subpackage per process:
     mapping/      raw population data (national-statistics or LLM pipeline
                   identities) -> the canonical comparable schema.
     comparison/   statistically score and chart one population against a
-                  reference.
+                  real population.
     llm_metrics/  post-run analytics on identity-generation LLM calls.
     utils/        cross-process shared infrastructure.
 

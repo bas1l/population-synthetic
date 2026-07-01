@@ -41,7 +41,7 @@ pytest                                # test suite (covers llm_metrics/ and clie
 The project uses `src/` layout. The `pyproject.toml` configures `setuptools` to find packages under `src/`, so after `pip install -e .`, the `population_synthetic` namespace is available:
 
 ```python
-from population_synthetic.generators.reference.sweden.fetch_service import FetchService
+from population_synthetic.generators.real.sweden.fetch_service import FetchService
 from population_synthetic.clients.scb_client import SCBPxWebClient
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
 ```
@@ -55,13 +55,13 @@ These are enforced guardrails, not suggestions. Full rationale in
 
 - **No synthetic distributions** -- Every probability distribution in population generation must come from a real statistical API response; no hardcoded probability tables, fallback distributions, or parametric approximations. If no API provides a field, **drop it** -- never invent values. (Structural constants like dataset IDs and label maps are fine.)
 - **Config is the single source of truth** -- Attribute lists / axis order / category values / matcher rules / joint-coherence pairs / sex-harmonization maps live **only** in config (`config/mapping/{scb,istat}/`, `config/analysis/comparison/*.json`). No in-code `attr or DEFAULT` fallback. Missing/empty/malformed config **fails loudly** (raise) -- never silently reverts to a baked-in list.
-- **Full comparison output** -- A reference comparison emits every artifact: a bar chart for each of the 15 `DEMOGRAPHIC_ATTRIBUTES`, the TV-similarity radar, the JSON report (marginals + joint chi-squared + coherence), and the CSV marginals. Skip a chart only when the attribute has zero data in **both** populations.
+- **Full comparison output** -- A real-population comparison emits every artifact: a bar chart for each of the 15 `DEMOGRAPHIC_ATTRIBUTES`, the TV-similarity radar, the JSON report (marginals + joint chi-squared + coherence), and the CSV marginals. Skip a chart only when the attribute has zero data in **both** populations.
 - **Fail-fast** -- Raise loudly on unexpected or malformed input rather than silently defaulting.
 
 ## Architecture
 
 `src/` layout; the `population_synthetic` namespace holds the two data producers under
-`generators/` -- `generators/reference/` (per-country data layers over a shared parent) and
+`generators/` -- `generators/real/` (per-country data layers over a shared parent) and
 `generators/synthetic/` (LLM persona generation) -- plus `analysis/` (the
 post-generation family, one subpackage per process: `mapping/` raw -> canonical schema,
 `comparison/` two-stage map -> compare statistical scoring + charts, `llm_metrics/` post-run
@@ -93,7 +93,7 @@ Design and audit notes worth consulting before non-trivial changes:
 | [Architecture wiki](docs/architecture/README.md) | **Start here** — the architecture wiki (sub-packages, comparison/mapping, design principles, axis composition, config, commands). |
 | [Debugging identity generation](docs/development/debugging-identity-generation.md) | Runbook for diagnosing a failed persona generation (locating run dirs, reading crash-surviving logs). |
 | [SCB population & comparison](docs/scb_population_and_comparison.md) | End-to-end SCB pipeline and comparison design. |
-| [Database mapper philosophy](docs/database_mapper_philosophy.md) | *Why* the reference mapper exists and the principle governing it. |
+| [Real mapper philosophy](docs/real_mapper_philosophy.md) | *Why* the real mapper exists and the principle governing it. |
 | [SCB distribution analysis](docs/scb_population_distribution_analysis.md) (+ [verification](docs/scb_population_distribution_analysis_verification.md)) | Per-field distribution analysis. |
 | [SCB comparison API-rooting audit](docs/audit_scb_comparison_api_rooting_2026-05-11.md) | Audit of comparison-vs-API field routing. |
 | [SCB02 category-mapping rationale](docs/scb02_comparison_category_mapping_2026-05-11.md) | Category-mapping rationale. |

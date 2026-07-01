@@ -6,7 +6,7 @@
     "Single Parent",
     "Extended Family"
   ],
-  "database": {
+  "real": {
     "Living Alone": {
       "equals": [
         "Living Alone"

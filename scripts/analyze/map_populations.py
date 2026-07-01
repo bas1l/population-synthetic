@@ -6,16 +6,16 @@ per-run manifests we consider complete, and writes mapped population files under
 {output_base}/03_Analysis/mapped/:
 
     mapped/
-      database_{country}.json   mapped reference population, one per country (deduped)
+      real_{country}.json       mapped real population, one per country (deduped)
       {slug}.json               mapped synthetic population, one per target
-      _index.json               [{slug, country, synthetic_file, database_file, n, skipped}]
+      _index.json               [{slug, country, synthetic_file, real_file, n, skipped}]
 
 Mapping logic itself is reused verbatim from the existing mappers -- the synthetic
-side via load_raw_population -> map_population and the reference side via
-load_reference_population -> normalize_population. The comparison stage (Phase 3)
+side via load_synthetic_population -> map_population and the real side via
+load_real_population -> map_population. The comparison stage (Phase 3)
 becomes a pure consumer of these mapped files.
 
-Both the synthetic and database mapped files are shaped as
+Both the synthetic and real mapped files are shaped as
 ``{"metadata": {...}, "individuals": [...]}`` -- exactly what StatisticalEvaluator
 consumes -- so the mapped files are directly ``json.load``-able by the comparison
 consumers.
@@ -41,10 +41,13 @@ from population_synthetic.analysis.utils.country_config import (
     infer_country,
     known_country_ids,
     mappings_for_country,
-    reference_for_country,
+    real_for_country,
 )
-from population_synthetic.analysis.mapping.reference_mapper import load_reference_population, normalize_population
-from population_synthetic.analysis.mapping.synthetic_mapper import load_raw_population, map_population
+from population_synthetic.analysis.mapping.real_mapper import load_real_population, map_population as map_real
+from population_synthetic.analysis.mapping.synthetic_mapper import (
+    load_synthetic_population,
+    map_population as map_synthetic,
+)
 from population_synthetic.generators.synthetic.manifest_loader import load_manifest
 
 _DEFAULT_TARGETS = PROJECT_ROOT / "config" / "analysis" / "comparison_targets.yaml"
@@ -53,7 +56,7 @@ _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.ya
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Map the targeted synthetic populations and their reference populations to "
+        description="Map the targeted synthetic populations and their real populations to "
         "the canonical comparison schema, writing mapped files under 03_Analysis/mapped/."
     )
     parser.add_argument(
@@ -150,8 +153,8 @@ def main() -> None:
     print(f"Mapped output dir: {mapped_dir}")
     print()
 
-    # Cache the mapped database per country -- map it once, reuse across targets.
-    database_files: dict[str, str] = {}
+    # Cache the mapped real population per country -- map it once, reuse across targets.
+    real_files: dict[str, str] = {}
     index_entries: list[dict[str, Any]] = []
 
     for target in targets:
@@ -172,7 +175,7 @@ def main() -> None:
                 "slug": slug,
                 "country": country,
                 "synthetic_file": None,
-                "database_file": None,
+                "real_file": None,
                 "n": 0,
                 "skipped": True,
             })
@@ -185,7 +188,7 @@ def main() -> None:
                 "slug": slug,
                 "country": country,
                 "synthetic_file": None,
-                "database_file": None,
+                "real_file": None,
                 "n": 0,
                 "skipped": True,
             })
@@ -193,45 +196,45 @@ def main() -> None:
 
         # --- Synthetic side: load raw identities, then map to the canonical schema.
         try:
-            raw_synthetic = load_raw_population(seed_root)
+            raw_synthetic = load_synthetic_population(seed_root)
         except ValueError as exc:
             print(f"  SKIP: {exc}")
             index_entries.append({
                 "slug": slug,
                 "country": country,
                 "synthetic_file": None,
-                "database_file": None,
+                "real_file": None,
                 "n": 0,
                 "skipped": True,
             })
             continue
 
-        synthetic_pop = map_population(raw_synthetic, country=country)
+        synthetic_pop = map_synthetic(raw_synthetic, country=country)
         synthetic_file = mapped_dir / f"{slug}.json"
         _write_json(synthetic_file, synthetic_pop)
         n_mapped = synthetic_pop["metadata"]["n"]
         n_skipped = synthetic_pop["metadata"].get("skipped", 0)
         print(f"  Mapped synthetic -> {synthetic_file} (n={n_mapped}, skipped={n_skipped})")
 
-        # --- Database side: map once per country, reuse thereafter.
-        if country not in database_files:
-            reference_path = reference_for_country(country)
-            if not reference_path.exists():
-                print(f"  ERROR: reference file not found for {country}: {reference_path}", file=sys.stderr)
+        # --- Real side: map once per country, reuse thereafter.
+        if country not in real_files:
+            real_path = real_for_country(country)
+            if not real_path.exists():
+                print(f"  ERROR: real file not found for {country}: {real_path}", file=sys.stderr)
                 sys.exit(1)
             mappings_path = mappings_for_country(country)
-            raw_database = load_reference_population(reference_path)
-            database_pop = normalize_population(raw_database, country=country, mappings_path=mappings_path)
-            database_file = mapped_dir / f"database_{country}.json"
-            _write_json(database_file, database_pop)
-            database_files[country] = database_file.name
-            print(f"  Mapped database -> {database_file} (n={len(database_pop['individuals'])})")
+            raw_real = load_real_population(real_path)
+            real_pop = map_real(raw_real, country=country, mappings_path=mappings_path)
+            real_file = mapped_dir / f"real_{country}.json"
+            _write_json(real_file, real_pop)
+            real_files[country] = real_file.name
+            print(f"  Mapped real -> {real_file} (n={len(real_pop['individuals'])})")
 
         index_entries.append({
             "slug": slug,
             "country": country,
             "synthetic_file": synthetic_file.name,
-            "database_file": database_files[country],
+            "real_file": real_files[country],
             "n": n_mapped,
             "skipped": n_skipped,
         })

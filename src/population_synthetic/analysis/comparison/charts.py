@@ -87,7 +87,7 @@ def plot_comparison_charts(
     ``ComparisonScheme`` -- the charted attributes come from config, never an
     in-code default. When *categories* is supplied each attribute uses the
     scheme's DB-grounded category set so no synthetic-only bar appears with a
-    zero reference; otherwise categories fall back to the observed union.
+    zero real-population count; otherwise categories fall back to the observed union.
     """
     import matplotlib
     matplotlib.use("Agg")

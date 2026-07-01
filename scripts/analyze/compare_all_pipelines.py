@@ -1,9 +1,9 @@
 """
-compare_all_pipelines.py -- Batch comparison of mapped synthetic populations against a reference.
+compare_all_pipelines.py -- Batch comparison of mapped synthetic populations against a real population.
 
 Consumes the pre-mapped files produced by the map stage (scripts/analyze/map_populations.py):
 it iterates {output_base}/03_Analysis/mapped/_index.json, json.loads each mapped synthetic
-population and the shared mapped database for its country, runs the statistical comparison, and
+population and the shared mapped real population for its country, runs the statistical comparison, and
 aggregates results into a summary table and JSON file. This script performs NO mapping -- run
 map_populations.py first.
 
@@ -47,7 +47,7 @@ _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.ya
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Batch comparison of mapped synthetic populations against a reference"
+        description="Batch comparison of mapped synthetic populations against a real population"
     )
     parser.add_argument(
         "--country",
@@ -186,7 +186,7 @@ def main() -> None:
 
     summary_rows: list[dict] = []
 
-    # Group entries by country so the shared mapped database is loaded once per country.
+    # Group entries by country so the shared mapped real population is loaded once per country.
     countries_in_index = [c for c in country_ids if any(e["country"] == c for e in index_entries)]
     # Preserve any country present in the index even if not a known axis id.
     for entry in index_entries:
@@ -201,9 +201,9 @@ def main() -> None:
         if not country_entries:
             continue
 
-        # Load the shared mapped database for this country once.
-        database_pop: dict | None = None
-        database_label = f"database_{country_id}"
+        # Load the shared mapped real population for this country once.
+        real_pop: dict | None = None
+        real_label = f"real_{country_id}"
 
         mappings_path = mappings_for_country(country_id)
         scheme = load_scheme(country_id, mappings_path=mappings_path)
@@ -237,21 +237,21 @@ def main() -> None:
                 print(f"[{slug}] SKIP: mapped synthetic file not found: {synthetic_path}")
                 continue
 
-            if database_pop is None:
-                database_file = entry.get("database_file")
-                if database_file is None:
-                    print(f"[{slug}] SKIP: no mapped database recorded for {country_id}.")
+            if real_pop is None:
+                real_file = entry.get("real_file")
+                if real_file is None:
+                    print(f"[{slug}] SKIP: no mapped real population recorded for {country_id}.")
                     continue
-                database_path = mapped_dir / database_file
-                if not database_path.exists():
+                real_path = mapped_dir / real_file
+                if not real_path.exists():
                     print(
-                        f"ERROR: mapped database not found: {database_path}\n"
+                        f"ERROR: mapped real population not found: {real_path}\n"
                         "Run scripts/analyze/map_populations.py first.",
                         file=sys.stderr,
                     )
                     sys.exit(1)
-                database_pop = _load_json(database_path)
-                database_label = database_path.stem
+                real_pop = _load_json(real_path)
+                real_label = real_path.stem
 
             print(f"[{slug}] Processing...")
             synthetic_pop = _load_json(synthetic_path)
@@ -260,7 +260,7 @@ def main() -> None:
             if n_synthetic < 5:
                 print(f"  WARNING: only {n_synthetic} extracted individuals -- statistical tests unreliable")
 
-            evaluator = StatisticalEvaluator(database_pop, synthetic_pop, scheme=scheme)
+            evaluator = StatisticalEvaluator(real_pop, synthetic_pop, scheme=scheme)
             report = evaluator.generate_report()
 
             comparison_output_dir = comparison_dir / slug
@@ -278,10 +278,10 @@ def main() -> None:
             if not args.no_charts:
                 charts_dir = comparison_output_dir / slug
                 plot_comparison_charts(
-                    database_pop,
+                    real_pop,
                     synthetic_pop,
                     charts_dir,
-                    pop_a_label=database_label,
+                    pop_a_label=real_label,
                     pop_b_label=slug,
                     prefix=slug,
                     attributes=scheme.attributes,
@@ -291,7 +291,7 @@ def main() -> None:
                 radar_path = plot_radar_comparison(
                     report["marginals"],
                     charts_dir,
-                    pop_a_label=database_label,
+                    pop_a_label=real_label,
                     pop_b_label=slug,
                     show_chi_sq=not args.radar_tv_only,
                     prefix=slug,

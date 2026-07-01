@@ -1,18 +1,19 @@
 """Shared country configuration for the comparison pipeline.
 
-Centralizes the country -> reference-population and country -> category-mappings
+Centralizes the country -> real-population and country -> category-mappings
 lookups plus ``infer_country``, which derives the country id from a
 simulation-config path.
 
 The lookups are **not** hard-coded here: they are read from the country axis
 YAMLs under ``config/synthetic/axes/countries/`` (the same files consumed by
 ``manifest_loader.compose_manifest``). Each country YAML declares, under
-``parameters``, a repo-root-relative ``reference`` path and ``mappings``
-directory alongside its ``config`` entry. Adding a new country therefore needs
-only a new YAML, no code change here.
+``parameters``, a repo-root-relative ``reference`` path (the YAML key itself is
+unrenamed pending the config-layer rename) and ``mappings`` directory alongside
+its ``config`` entry. Adding a new country therefore needs only a new YAML, no
+code change here.
 
 Both the map stage and any comparison consumer share this single source so the
-country axis ids (``swedish``/``italian``), reference paths, and mappings
+country axis ids (``swedish``/``italian``), real-population paths, and mappings
 directories stay consistent across the pipeline.
 """
 
@@ -23,10 +24,12 @@ from population_synthetic.generators.synthetic.manifest_loader import discover_a
 
 
 def _load_country_axes() -> dict[str, dict[str, Path]]:
-    """Read the country axis YAMLs into ``{id: {"reference": Path, "mappings": Path}}``.
+    """Read the country axis YAMLs into ``{id: {"real": Path, "mappings": Path}}``.
 
     Paths are repo-root-relative in the YAML and are resolved against
-    ``PROJECT_ROOT`` (matching ``manifest_loader``'s ``_resolve_path``).
+    ``PROJECT_ROOT`` (matching ``manifest_loader``'s ``_resolve_path``). The YAML
+    key read here (``reference``) is unrenamed pending the config-layer rename;
+    the internal ``entry`` dict already uses the ``real`` name.
     """
     axes: dict[str, dict[str, Path]] = {}
     for data in discover_axis_values("countries"):
@@ -34,7 +37,7 @@ def _load_country_axes() -> dict[str, dict[str, Path]]:
         params = data.get("parameters", {}) or {}
         entry: dict[str, Path] = {}
         if "reference" in params:
-            entry["reference"] = (PROJECT_ROOT / params["reference"]).resolve()
+            entry["real"] = (PROJECT_ROOT / params["reference"]).resolve()
         if "mappings" in params:
             entry["mappings"] = (PROJECT_ROOT / params["mappings"]).resolve()
         axes[country_id] = entry
@@ -46,21 +49,21 @@ def known_country_ids() -> tuple[str, ...]:
     return tuple(_load_country_axes())
 
 
-def reference_for_country(country_id: str) -> Path:
-    """Resolve the reference-population path for ``country_id`` (fail-fast)."""
+def real_for_country(country_id: str) -> Path:
+    """Resolve the real-population path for ``country_id`` (fail-fast)."""
     axes = _load_country_axes()
     if country_id not in axes:
         raise ValueError(
             f"Unknown country id {country_id!r}: "
             f"known country ids are {sorted(axes)}."
         )
-    reference = axes[country_id].get("reference")
-    if reference is None:
+    real = axes[country_id].get("real")
+    if real is None:
         raise ValueError(
             f"Country axis YAML for {country_id!r} declares no "
             f"'parameters.reference' path."
         )
-    return reference
+    return real
 
 
 def mappings_for_country(country_id: str) -> Path:

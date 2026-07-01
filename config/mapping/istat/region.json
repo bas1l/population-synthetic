@@ -21,7 +21,7 @@
     "Campania",
     "Valle d'Aosta"
   ],
-  "database": {
+  "real": {
     "Lombardia": {
       "equals": [
         "Lombardia"

@@ -18,7 +18,7 @@ import numpy as np
 from scipy.stats import chi2_contingency, chisquare
 
 from population_synthetic.analysis.comparison.scheme import ComparisonScheme
-from population_synthetic.generators.reference.helpers import age_to_group
+from population_synthetic.generators.real.helpers import age_to_group
 
 # The comparison axis (attributes, categories, joint pairs, coherence attributes,
 # coherence threshold) is not defined here: it is the single source of truth in the
@@ -90,7 +90,7 @@ class StatisticalEvaluator:
 
         if attr in self.scheme.categories:
             # Scheme-driven: the comparison axis is exactly the DB-grounded category
-            # set, so values the reference never emits cannot appear, and synthetic-only
+            # set, so values the real population never emits cannot appear, and synthetic-only
             # values fall outside the axis (reported as unmapped, not silently scored).
             all_categories = list(self.scheme.categories[attr])
             unmapped = [c for c in counts_b if c is not None and c not in all_categories]

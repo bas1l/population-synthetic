@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from population_synthetic.analysis.mapping.reference_mapper.mappings import load_index
+from population_synthetic.analysis.mapping.real_mapper.mappings import load_index
 from population_synthetic.analysis.comparison.scheme import ComparisonScheme, load_scheme
 
 _ANALYSIS_FILENAME = "_analysis.json"
@@ -36,7 +36,7 @@ def _write_country(directory, attributes, *, joint_pairs, coherence, threshold=0
         if attr in omit:
             continue
         (directory / f"{attr}.json").write_text(
-            json.dumps({"values": values, "database": {}, "synthetic": {}}), encoding="utf-8"
+            json.dumps({"values": values, "real": {}, "synthetic": {}}), encoding="utf-8"
         )
 
 
@@ -171,7 +171,7 @@ def test_scheme_missing_values_key_raises(tmp_path):
         tmp_path, {"biological_sex": ["Male", "Female"]}, joint_pairs=[], coherence=[],
     )
     # Corrupt the attribute file: drop its 'values'.
-    (tmp_path / "biological_sex.json").write_text(json.dumps({"database": {}}), encoding="utf-8")
+    (tmp_path / "biological_sex.json").write_text(json.dumps({"real": {}}), encoding="utf-8")
     with pytest.raises(KeyError, match="values"):
         _load(tmp_path)
 

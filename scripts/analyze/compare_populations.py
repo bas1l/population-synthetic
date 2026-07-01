@@ -4,7 +4,7 @@ compare_populations.py -- Statistical comparison of two demographic population f
 Usage:
     python scripts/analyze/compare_populations.py <pop_a.json> <pop_b.json> [--output data/comparison_report.json]
 
-pop_a is the reference population (treated as "expected" for chi-squared).
+pop_a is the real population (treated as "expected" for chi-squared).
 pop_b is the population to evaluate (treated as "observed").
 
 This is a thin CLI wrapper that delegates all heavy lifting to
@@ -20,7 +20,7 @@ from pathlib import Path
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.comparison.charts import plot_comparison_charts, plot_radar_comparison
 from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
-from population_synthetic.analysis.mapping.reference_mapper import normalize_population
+from population_synthetic.analysis.mapping.real_mapper import map_population
 from population_synthetic.analysis.comparison.scheme import load_scheme
 
 
@@ -35,7 +35,7 @@ def _load_population(path: str) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare two demographic population files statistically")
-    parser.add_argument("pop_a", help="Reference population file (expected)")
+    parser.add_argument("pop_a", help="Real population file (expected)")
     parser.add_argument("pop_b", help="Population to evaluate (observed)")
     parser.add_argument(
         "--country",
@@ -65,8 +65,8 @@ def main() -> None:
     pop_a = _load_population(args.pop_a)
     pop_b = _load_population(args.pop_b)
 
-    pop_a = normalize_population(pop_a, country=args.country)
-    pop_b = normalize_population(pop_b, country=args.country)
+    pop_a = map_population(pop_a, country=args.country)
+    pop_b = map_population(pop_b, country=args.country)
 
     scheme = load_scheme(args.country)
     evaluator = StatisticalEvaluator(pop_a, pop_b, scheme=scheme)

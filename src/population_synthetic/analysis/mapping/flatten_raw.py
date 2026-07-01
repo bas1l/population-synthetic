@@ -14,7 +14,7 @@ sex vocabulary comes from config.
 from __future__ import annotations
 
 from population_synthetic.analysis.mapping import mapping_engine
-from population_synthetic.generators.reference.helpers import age_to_group
+from population_synthetic.generators.real.helpers import age_to_group
 
 #: Keys handled explicitly by :func:`flatten_individual`; every other key is
 #: unwrapped generically from the record itself (no hardcoded field list).
@@ -47,18 +47,18 @@ def _flatten_employment_type(value: object) -> str | None:
 def _harmonize_sex(sex_raw: str, sex_config: dict) -> str:
     """Resolve a raw sex token to the canonical value via the biological-sex config.
 
-    Uses the config's ``database`` rules (raw national-statistics side). Falls back to
+    Uses the config's ``real`` rules (raw national-statistics side). Falls back to
     the raw label when the token is outside the config's vocabulary, mirroring how the
     other fields keep their native label rather than inventing a value.
     """
-    resolved = mapping_engine.resolve(sex_raw, sex_config["database"], sex_config["values"])
+    resolved = mapping_engine.resolve(sex_raw, sex_config["real"], sex_config["values"])
     return resolved if resolved is not None else sex_raw
 
 
 def flatten_individual(raw: dict, *, sex_config: dict) -> dict:
     """Convert one raw individual record to flat-string format.
 
-    *sex_config* is the ``biological_sex`` mapping block (``values`` + ``database``),
+    *sex_config* is the ``biological_sex`` mapping block (``values`` + ``real``),
     supplied by the caller so the sex vocabulary lives in config, not in code.
     """
     flat: dict = {"id": raw.get("id")}

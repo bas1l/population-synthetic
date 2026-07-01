@@ -28,7 +28,7 @@
     "Serbia",
     "France"
   ],
-  "database": {
+  "real": {
     "Italy": {
       "equals": [
         "Italy",

@@ -10,11 +10,11 @@ the short architecture map in `CLAUDE.md`.
 ## Sub-packages (`src/population_synthetic/`)
 
 **`generators/`** -- The two data producers, grouped under one parent (this is where cohorts
-are created). Its two sub-packages are the reference side and the synthetic side of the
-comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `reference_mapper/` vs
+are created). Its two sub-packages are the real side and the synthetic side of the
+comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapper/` vs
 `synthetic_mapper/` split.
 
-**`generators/reference/`** (formerly `population/`) -- Shared population layer with country-specific sub-modules:
+**`generators/real/`** (formerly `population/`, then `reference/`) -- Shared population layer with country-specific sub-modules:
 - `data.py` -- `PopulationDistributions` dataclass (shared by both countries)
 - `helpers.py` -- Shared utilities: `age_to_group`, `sample_from`, `normalize`, `VALID_AGE_GROUPS`, `AGE_GROUP_BOUNDS`
 - `income_class.py` -- Income bracket classification using Eurostat AROP (0.60x median) and OECD/Pew (1.00x, 2.00x) thresholds
@@ -33,16 +33,16 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `reference
 
 - **`mapping/`** -- Transforms raw population data (national-statistics records *or* LLM-pipeline
   identities) into the canonical comparable schema. Holds the shared resolver `mapping_engine.py`,
-  `flatten_raw.py`, the `reference_mapper/` and `synthetic_mapper/` class hierarchies, and the thin
+  `flatten_raw.py`, the `real_mapper/` and `synthetic_mapper/` class hierarchies, and the thin
   `extractor.py` / `normalizer.py` facades. The **unified symmetric mapping config** and the
-  reference/synthetic mapper hierarchies are documented on their own page — see
+  real/synthetic mapper hierarchies are documented on their own page — see
   [Comparison & mapping](comparison-mapping.md).
-- **`comparison/`** -- Statistical evaluation and charting (population quality vs a reference):
+- **`comparison/`** -- Statistical evaluation and charting (population quality vs the real population):
   - `StatisticalEvaluator` (`evaluator.py`) computes per-field chi-squared tests and total variation distances
   - `charts` generates bar-chart and radar-chart PNGs via matplotlib
   - `scheme.py` -- the comparison-purpose bridge that reads the mapping config
 - **`utils/`** -- cross-process shared infra: `country_config.py`, the shared country resolver
-  (`reference_for_country`, `mappings_for_country`, `known_country_ids`, `infer_country`) consumed
+  (`real_for_country`, `mappings_for_country`, `known_country_ids`, `infer_country`) consumed
   by both the map stage and the comparison consumers.
 - **`llm_metrics/`** -- post-run LLM-call analytics; detailed below.
 
@@ -86,7 +86,7 @@ All cache and config paths derive from this.
 ## See also
 
 - [Comparison & mapping](comparison-mapping.md) — the `analysis/mapping/` config and the
-  reference/synthetic mapper hierarchies in full.
+  real/synthetic mapper hierarchies in full.
 - [Design principles](design-principles.md) — the patterns (shared population layer,
   factory + strategy, conditional chained sampling) that shape these packages.
 - [Configuration](configuration.md) — the config files these packages read.

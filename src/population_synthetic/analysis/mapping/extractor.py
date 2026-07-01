@@ -9,7 +9,7 @@ flat attribute dict (or None on failure).
 
 This module is a thin facade over the ``population_synthetic.analysis.mapping.synthetic_mapper``
 subpackage: the country mapper classes own the per-attribute mapping, and
-``load_raw_population`` / ``map_population`` provide the load-then-map flow. The
+``load_synthetic_population`` / ``map_population`` provide the load-then-map flow. The
 public import path (``extract_individual`` / ``extract_population``) is preserved
 unchanged for backward compatibility.
 """
@@ -23,7 +23,7 @@ from typing import Any
 
 from population_synthetic.analysis.mapping.synthetic_mapper import (
     get_synthetic_mapper,
-    load_raw_population,
+    load_synthetic_population,
     map_population,
 )
 
@@ -56,7 +56,7 @@ def extract_individual(identity_path: Path, country: str = "swedish") -> dict[st
 def extract_population(seed_root: Path, country: str = "swedish") -> dict[str, Any]:
     """Load pipeline identities from disk and map them to the canonical schema.
 
-    Convenience wrapper over ``load_raw_population`` + ``map_population``; the
+    Convenience wrapper over ``load_synthetic_population`` + ``map_population``; the
     compare scripts call those two steps explicitly to keep load and map visible.
     """
-    return map_population(load_raw_population(seed_root), country)
+    return map_population(load_synthetic_population(seed_root), country)

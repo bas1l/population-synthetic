@@ -7,7 +7,7 @@
     "Social Assistance",
     "Sickness / Activity Compensation"
   ],
-  "database": {
+  "real": {
     "Wage / Business": {
       "equals": [
         "Wage / Business",

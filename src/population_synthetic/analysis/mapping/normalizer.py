@@ -1,28 +1,28 @@
 """
-normalizer.py -- Backward-compat facade over the ``reference_mapper`` package.
+normalizer.py -- Backward-compat facade over the ``real_mapper`` package.
 
-The reference-population mapping moved to ``comparison/reference_mapper/`` (the
+The real-population mapping moved to ``comparison/real_mapper/`` (the
 structural counterpart to ``synthetic_mapper/``).  This module is kept as a thin
 facade so existing callers -- and ``extract/mappings.py`` on the synthetic side,
 which imports ``load_mappings`` from here -- keep working unchanged.  New code
-should prefer ``reference_mapper.load_reference_population`` /
-``reference_mapper.normalize_population``.
+should prefer ``real_mapper.load_real_population`` /
+``real_mapper.map_population``.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from population_synthetic.analysis.mapping.reference_mapper.factory import build_reference_mapper
-from population_synthetic.analysis.mapping.reference_mapper.mappings import load_mappings
-from population_synthetic.analysis.mapping.reference_mapper.raw_format import is_raw_format
+from population_synthetic.analysis.mapping.real_mapper.factory import build_real_mapper
+from population_synthetic.analysis.mapping.real_mapper.mappings import load_mappings
+from population_synthetic.analysis.mapping.real_mapper.raw_format import is_raw_format
 
 __all__ = ["load_mappings", "is_raw_format", "normalize_raw_to_schema", "normalize_if_raw"]
 
 
 def normalize_raw_to_schema(records: list[dict], mappings: dict, country: str = "swedish") -> list[dict]:
     """Convert raw-format records to flat schema strings using a pre-loaded *mappings* dict."""
-    mapper = build_reference_mapper(country, mappings)
+    mapper = build_real_mapper(country, mappings)
     return [mapper.normalize_individual(rec) for rec in records]
 
 

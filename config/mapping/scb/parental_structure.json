@@ -4,7 +4,7 @@
     "Single Parent",
     "Living Alone"
   ],
-  "database": {
+  "real": {
     "Nuclear Family": {
       "equals": [
         "Nuclear Family"

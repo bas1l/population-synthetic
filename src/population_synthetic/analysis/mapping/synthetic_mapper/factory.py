@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.analysis.mapping.reference_mapper.mappings import load_mappings
+from population_synthetic.analysis.mapping.real_mapper.mappings import load_mappings
 from population_synthetic.analysis.mapping.synthetic_mapper.base import AbstractSyntheticMapper
 from population_synthetic.analysis.mapping.synthetic_mapper.italy import ItalianSyntheticMapper
 from population_synthetic.analysis.mapping.synthetic_mapper.sweden import SwedishSyntheticMapper

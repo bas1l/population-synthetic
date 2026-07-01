@@ -7,7 +7,7 @@
     "5 persons",
     "6 persons or more"
   ],
-  "database": {
+  "real": {
     "1 person": {
       "equals": [
         "1 person"

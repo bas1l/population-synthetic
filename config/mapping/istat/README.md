@@ -1,11 +1,11 @@
 # ISTAT (Italy) comparison mapping config
 
 This directory is the **single source of truth** for how the population comparison
-maps both the ISTAT/Eurostat reference database and the LLM pipeline output into one
+maps both the ISTAT/Eurostat real population data and the LLM pipeline output into one
 shared canonical schema, and for which categories each attribute is scored on. One
 JSON file per comparison attribute, plus an `_index.json` master. Loaded by
-`comparison/reference_mapper/mappings.py` and driven by the shared resolver
-`comparison/mapping_engine.py`.
+`analysis/mapping/real_mapper/mappings.py` and driven by the shared resolver
+`analysis/mapping/mapping_engine.py`.
 
 The file shape, matcher vocabulary, directives, and `_index.json` role are **identical
 to the SCB directory** — see [`../scb/README.md`](../scb/README.md) for the full
@@ -18,7 +18,7 @@ Each per-attribute file is symmetric across the two mapper sides:
 ```json
 {
   "values":    ["Italy", "Europe (Other)", "Outside Europe"],
-  "database":  { "Italy": {"equals": ["Italy"]}, ... },
+  "real":      { "Italy": {"equals": ["Italy"]}, ... },
   "synthetic": { "Italy": {"contains": ["italia", "roma", ...]}, ...,
                  "refine_from": "birth_country_detail" }
 }
@@ -26,7 +26,7 @@ Each per-attribute file is symmetric across the two mapper sides:
 
 - `values` — the unified category set **and** the scored axis / chart order (both
   sides emit only these labels or `None`; there is no separate scheme/filter).
-- `database` — resolves a raw ISTAT value; `synthetic` — resolves a raw
+- `real` — resolves a raw ISTAT value; `synthetic` — resolves a raw
   `identity.json` free-text value. Keyed by unified value → matcher; the resolver
   uses a **global tiered sweep**, with `values` declared order breaking ties within a
   tier.
@@ -65,5 +65,5 @@ Record/output key = attribute name; the age exception uses raw `age`, from which
   "Nordic Country" bucket; Nordic origins fold into `Europe (Other)`.
 - `household_size` `values` are human-readable labels (`"1 person"` …
   `"6 persons or more"`) — the Phase-3 reconciliation replaced the old raw-code axis
-  (`1` … `GE6`) with these labels. The `database` matchers key those labels; the
+  (`1` … `GE6`) with these labels. The `real` matchers key those labels; the
   `synthetic` side buckets an integer count via `int` / `int_gte`.

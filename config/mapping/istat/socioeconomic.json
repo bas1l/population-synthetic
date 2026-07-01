@@ -5,7 +5,7 @@
     "Middle Class",
     "Wealthy"
   ],
-  "database": {
+  "real": {
     "Poverty": {
       "equals": [
         "Poverty"
