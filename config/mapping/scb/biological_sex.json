@@ -1,22 +1,62 @@
 {
-  "reference_handler": "label",
-  "pipeline_handler": "text_coded",
-  "pipeline_fuzzy": false,
-  "output_categories": ["Female", "Male"],
-  "pipeline_keyword_rules": [
-    {"match": "contains", "any_of": ["female", "kvinna", "kvinnlig", "kvinnor", "flicka", "tjej", "hona", "woman"], "label": "Female"},
-    {"match": "equals", "any_of": ["xx", "hon", "f"], "label": "Female"},
-    {"match": "contains", "any_of": ["male", "pojke", "kille", "manlig"], "label": "Male"},
-    {"match": "equals", "any_of": ["man", "xy", "m", "män"], "label": "Male"},
-    {"match": "contains", "any_of": ["kön man"], "label": "Male"}
+  "values": [
+    "Male",
+    "Female"
   ],
-  "description": "Biological sex raw labels/codes to canonical schema labels",
-  "reference_label_mappings": {
-    "men": "Male",
-    "male": "Male",
-    "1": "Male",
-    "women": "Female",
-    "female": "Female",
-    "2": "Female"
+  "database": {
+    "Male": {
+      "equals": [
+        "Male",
+        "men",
+        "male",
+        "1"
+      ]
+    },
+    "Female": {
+      "equals": [
+        "Female",
+        "women",
+        "female",
+        "2"
+      ]
+    },
+    "fuzzy": false
+  },
+  "synthetic": {
+    "Male": {
+      "equals": [
+        "Male",
+        "man",
+        "xy",
+        "m",
+        "män"
+      ],
+      "contains": [
+        "male",
+        "pojke",
+        "kille",
+        "manlig",
+        "kön man"
+      ]
+    },
+    "Female": {
+      "equals": [
+        "Female",
+        "xx",
+        "hon",
+        "f"
+      ],
+      "contains": [
+        "female",
+        "kvinna",
+        "kvinnlig",
+        "kvinnor",
+        "flicka",
+        "tjej",
+        "hona",
+        "woman"
+      ]
+    },
+    "fuzzy": false
   }
 }

@@ -90,7 +90,7 @@ class FetchService:
     ) -> tuple[dict, str]:
         query = {
             "query": [
-                {"code": "Arbetskraftstillh", "selection": {"filter": "item", "values": ["SYS", "ALÖS", "EIAKR"]}},
+                {"code": "Arbetskraftstillh", "selection": {"filter": "item", "values": ["SYS", "ALÖS"]}},
                 {"code": "UtbildningsNiva", "selection": {"filter": "item", "values": ["21", "3+4", "8"]}},
                 {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
                 {"code": "ContentsCode", "selection": {"filter": "item", "values": ["AM0401VR"]}},

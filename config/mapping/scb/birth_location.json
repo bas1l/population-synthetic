@@ -1,50 +1,54 @@
 {
-  "reference_handler": "label",
-  "pipeline_handler": "cross_field_coded",
-  "pipeline_primary_field": "birth_location",
-  "pipeline_refine_from": "birth_country_detail",
-  "pipeline_domestic_label": "Sweden",
-  "pipeline_refine_source": "resolved",
-  "pipeline_refine_default": "Outside Europe",
-  "pipeline_membership": false,
-  "pipeline_fuzzy": true,
-  "output_categories": [
+  "values": [
     "Sweden",
-    "Nordic Country",
     "Europe (Other)",
     "Outside Europe"
   ],
-  "pipeline_keyword_rules": [
-    {
-      "match": "contains",
-      "any_of": [
-        "stockholm",
-        "västra götaland",
-        "skåne",
-        "östergötland",
-        "uppsala",
-        "örebro",
-        "västernorrland",
-        "norrbotten",
-        "dalarna",
-        "gävleborg",
-        "halland",
-        "jönköping",
-        "kronoberg",
-        "kalmar",
-        "gotland",
-        "blekinge",
-        "värmland",
-        "västmanland",
-        "södermanland",
-        "västerbotten",
-        "jämtland"
-      ],
-      "label": "Sweden"
+  "database": {
+    "Sweden": {
+      "equals": [
+        "Sweden",
+        "Sverige",
+        "Born in Sweden",
+        "Födda i Sverige"
+      ]
     },
-    {
-      "match": "equals",
-      "any_of": [
+    "Europe (Other)": {
+      "equals": [
+        "Europe (Other)",
+        "Norden utom Sverige",
+        "Nordic countries except Sweden",
+        "EU/EES utom Norden",
+        "EU/EEA excl. Nordic",
+        "Born in another EU Member State",
+        "Födda i annat EU-land",
+        "Europa utom EU/EES",
+        "Europe excl. EU/EEA"
+      ]
+    },
+    "Outside Europe": {
+      "equals": [
+        "Outside Europe",
+        "Born outside the EU",
+        "Födda utanför EU",
+        "Afrika",
+        "Africa",
+        "Nordamerika",
+        "North America",
+        "Sydamerika",
+        "South America",
+        "Asien",
+        "Asia",
+        "Oceanien",
+        "Oceania"
+      ]
+    },
+    "fuzzy": false
+  },
+  "synthetic": {
+    "Sweden": {
+      "equals": [
+        "Sweden",
         "stockholm",
         "stockholm kommun",
         "stockholm stad",
@@ -352,11 +356,124 @@
         "arjeplog kommun",
         "arjeplog stad"
       ],
-      "label": "Sweden"
+      "contains": [
+        "stockholm",
+        "västra götaland",
+        "skåne",
+        "östergötland",
+        "uppsala",
+        "örebro",
+        "västernorrland",
+        "norrbotten",
+        "dalarna",
+        "gävleborg",
+        "halland",
+        "jönköping",
+        "kronoberg",
+        "kalmar",
+        "gotland",
+        "blekinge",
+        "värmland",
+        "västmanland",
+        "södermanland",
+        "västerbotten",
+        "jämtland",
+        "native",
+        "born in sweden",
+        "sweden",
+        "domestic migrant",
+        "sverige"
+      ]
     },
-    {
-      "match": "contains",
-      "any_of": [
+    "Europe (Other)": {
+      "equals": [
+        "Europe (Other)"
+      ],
+      "contains": [
+        "finland",
+        "finl",
+        "norge",
+        "norway",
+        "danmark",
+        "denmark",
+        "island",
+        "iceland",
+        "albania",
+        "albanien",
+        "austria",
+        "belarus",
+        "belgien",
+        "belgium",
+        "bosnia",
+        "bosnien",
+        "bulgaria",
+        "bulgarien",
+        "croatia",
+        "czech",
+        "england",
+        "estland",
+        "estonia",
+        "france",
+        "frankrike",
+        "germany",
+        "greece",
+        "grekland",
+        "holland",
+        "hungary",
+        "ireland",
+        "irland",
+        "italien",
+        "italy",
+        "kosovo",
+        "kroatien",
+        "latvia",
+        "lettland",
+        "litauen",
+        "lithuania",
+        "moldov",
+        "monteneg",
+        "nederländerna",
+        "netherlands",
+        "nordmakedon",
+        "poland",
+        "polen",
+        "portugal",
+        "romania",
+        "rumänien",
+        "schweiz",
+        "scotland",
+        "serbia",
+        "serbien",
+        "slovakia",
+        "slovakien",
+        "slovenia",
+        "slovenien",
+        "spain",
+        "spanien",
+        "switzerland",
+        "tjeckien",
+        "tyskland",
+        "uk",
+        "ukraina",
+        "ukraine",
+        "ungern",
+        "united kingdom",
+        "vitryssland",
+        "wales",
+        "österrike",
+        "nordic",
+        "scandinav",
+        "eu/europe",
+        "european",
+        "europe",
+        "immigrant"
+      ]
+    },
+    "Outside Europe": {
+      "equals": [
+        "Outside Europe"
+      ],
+      "contains": [
         "afghanistan",
         "algeria",
         "algeriet",
@@ -420,228 +537,14 @@
         "united states",
         "usa",
         "vietnam",
-        "yemen"
-      ],
-      "label": "Outside Europe"
-    },
-    {
-      "match": "contains",
-      "any_of": [
-        "finland",
-        "finl",
-        "norge",
-        "norway",
-        "danmark",
-        "denmark",
-        "island",
-        "iceland"
-      ],
-      "label": "Nordic Country"
-    },
-    {
-      "match": "contains",
-      "any_of": [
-        "albania",
-        "albanien",
-        "austria",
-        "belarus",
-        "belgien",
-        "belgium",
-        "bosnia",
-        "bosnien",
-        "bulgaria",
-        "bulgarien",
-        "croatia",
-        "czech",
-        "danmark",
-        "denmark",
-        "england",
-        "estland",
-        "estonia",
-        "finl",
-        "finland",
-        "france",
-        "frankrike",
-        "germany",
-        "greece",
-        "grekland",
-        "holland",
-        "hungary",
-        "iceland",
-        "ireland",
-        "irland",
-        "island",
-        "italien",
-        "italy",
-        "kosovo",
-        "kroatien",
-        "latvia",
-        "lettland",
-        "litauen",
-        "lithuania",
-        "moldov",
-        "monteneg",
-        "nederländerna",
-        "netherlands",
-        "nordmakedon",
-        "norge",
-        "norway",
-        "poland",
-        "polen",
-        "portugal",
-        "romania",
-        "rumänien",
-        "schweiz",
-        "scotland",
-        "serbia",
-        "serbien",
-        "slovakia",
-        "slovakien",
-        "slovenia",
-        "slovenien",
-        "spain",
-        "spanien",
-        "switzerland",
-        "tjeckien",
-        "tyskland",
-        "uk",
-        "ukraina",
-        "ukraine",
-        "ungern",
-        "united kingdom",
-        "vitryssland",
-        "wales",
-        "österrike"
-      ],
-      "label": "Europe (Other)"
-    },
-    {
-      "match": "contains",
-      "any_of": [
-        "native",
-        "born in sweden",
-        "sweden",
-        "domestic migrant"
-      ],
-      "label": "Sweden"
-    },
-    {
-      "match": "contains",
-      "any_of": [
-        "nordic",
-        "scandinav"
-      ],
-      "label": "Nordic Country"
-    },
-    {
-      "match": "contains",
-      "any_of": [
-        "eu/europe",
-        "european",
-        "europe",
-        "immigrant"
-      ],
-      "label": "Europe (Other)"
-    },
-    {
-      "match": "contains",
-      "any_of": [
+        "yemen",
         "non-eu",
         "outside europe",
         "refugee",
         "displaced",
         "international"
-      ],
-      "label": "Outside Europe"
-    },
-    {
-      "match": "contains",
-      "any_of": [
-        "sweden",
-        "sverige"
-      ],
-      "label": "Sweden"
-    }
-  ],
-  "pipeline_refine_buckets": {
-    "Norway": "Nordic Country",
-    "Denmark": "Nordic Country",
-    "Finland": "Nordic Country",
-    "Iceland": "Nordic Country",
-    "Poland": "Europe (Other)",
-    "Germany": "Europe (Other)",
-    "United Kingdom": "Europe (Other)",
-    "Ukraine": "Europe (Other)",
-    "Romania": "Europe (Other)",
-    "Bosnia and Herzegovina": "Europe (Other)",
-    "Yugoslavia": "Europe (Other)"
-  },
-  "description": "Country of birth / world region to schema labels",
-  "scb_variable": "Fodelseland",
-  "mappings": {
-    "sweden": {
-      "schema_label": "Sweden",
-      "scb_codes": [
-        "Sverige",
-        "Sweden",
-        "SE"
       ]
     },
-    "nordic": {
-      "schema_label": "Nordic Country",
-      "scb_codes": [
-        "Norden exkl. Sverige",
-        "Nordic excl. Sweden",
-        "NO",
-        "DK",
-        "FI",
-        "IS"
-      ]
-    },
-    "europe_other": {
-      "schema_label": "Europe (Other)",
-      "scb_codes": [
-        "Europa exkl. Norden",
-        "Europe excl. Nordic",
-        "EU"
-      ]
-    },
-    "outside_europe": {
-      "schema_label": "Outside Europe",
-      "scb_codes": [
-        "Utom Europa",
-        "Outside Europe",
-        "Asia",
-        "Africa",
-        "Americas",
-        "Oceania"
-      ]
-    }
-  },
-  "reference_label_mappings": {
-    "Sverige": "Sweden",
-    "Sweden": "Sweden",
-    "Born in Sweden": "Sweden",
-    "Födda i Sverige": "Sweden",
-    "Norden utom Sverige": "Nordic Country",
-    "Nordic countries except Sweden": "Nordic Country",
-    "EU/EES utom Norden": "Europe (Other)",
-    "EU/EEA excl. Nordic": "Europe (Other)",
-    "Born in another EU Member State": "Europe (Other)",
-    "Födda i annat EU-land": "Europe (Other)",
-    "Europa utom EU/EES": "Europe (Other)",
-    "Europe excl. EU/EEA": "Europe (Other)",
-    "Born outside the EU": "Outside Europe",
-    "Födda utanför EU": "Outside Europe",
-    "Afrika": "Outside Europe",
-    "Africa": "Outside Europe",
-    "Nordamerika": "Outside Europe",
-    "North America": "Outside Europe",
-    "Sydamerika": "Outside Europe",
-    "South America": "Outside Europe",
-    "Asien": "Outside Europe",
-    "Asia": "Outside Europe",
-    "Oceanien": "Outside Europe",
-    "Oceania": "Outside Europe"
+    "refine_from": "birth_country_detail"
   }
 }

@@ -1,94 +1,122 @@
 {
-  "reference_handler": "label",
-  "reference_attr": "education_level",
-  "pipeline_handler": "text_coded",
-  "pipeline_attr": "education_level",
-  "pipeline_fuzzy": false,
-  "pipeline_keyword_rules": [
-    {"match": "contains", "any_of": ["laurea", "university", "degree", "dottorato", "master", "formazione professionale avanzata", "post-graduate", "postgraduate"], "label": "University Degree"},
-    {"match": "contains", "any_of": ["liceo", "diploma", "maturità", "istituto", "secondary", "high school", "scuola superiore", "professionale", "tecnico", "formazione"], "label": "High School (Liceo/Professionale)"},
-    {"match": "contains", "any_of": ["elementare", "media", "obbligo", "primary", "no formal", "nessun", "analfabet", "alfabetizzazione", "scuola primaria"], "label": "No Formal Education"}
-  ],
-  "description": "ISCED education level codes to schema labels for Italian population data",
-  "istat_source": "52_1194_DF_DCCV_POPTIT1_UNT2020_1",
-  "mappings": {
-    "no_formal": {
-      "schema_label": "No Formal Education",
-      "isced_levels": [
-        "ISCED 0",
-        "ISCED 1",
-        "ISCED 2"
-      ]
-    },
-    "high_school": {
-      "schema_label": "High School (Liceo/Professionale)",
-      "isced_levels": [
-        "ISCED 3",
-        "ISCED 4"
-      ]
-    },
-    "university": {
-      "schema_label": "University Degree",
-      "isced_levels": [
-        "ISCED 5",
-        "ISCED 6",
-        "ISCED 7",
-        "ISCED 8"
-      ]
-    }
-  },
-  "output_categories": [
+  "values": [
     "No Formal Education",
     "High School (Liceo/Professionale)",
     "University Degree"
   ],
-  "pipeline_label_mappings": {
-    "Laurea triennale": "University Degree",
-    "laurea triennale": "University Degree",
-    "Laurea Triennale": "University Degree",
-    "Laurea magistrale": "University Degree",
-    "laurea magistrale": "University Degree",
-    "Laurea Magistrale": "University Degree",
-    "Laurea": "University Degree",
-    "laurea": "University Degree",
-    "Dottorato": "University Degree",
-    "Dottorato di ricerca": "University Degree",
-    "Master universitario": "University Degree",
-    "Diploma universitario": "University Degree",
-    "University Degree": "University Degree",
-    "University degree": "University Degree",
-    "Bachelor's degree": "University Degree",
-    "Master's degree": "University Degree",
-    "PhD": "University Degree",
-    "Liceo": "High School (Liceo/Professionale)",
-    "liceo": "High School (Liceo/Professionale)",
-    "Diploma": "High School (Liceo/Professionale)",
-    "diploma": "High School (Liceo/Professionale)",
-    "Diploma di liceo": "High School (Liceo/Professionale)",
-    "Diploma di scuola secondaria superiore": "High School (Liceo/Professionale)",
-    "Diploma di maturità": "High School (Liceo/Professionale)",
-    "Maturità": "High School (Liceo/Professionale)",
-    "maturità": "High School (Liceo/Professionale)",
-    "Istituto professionale": "High School (Liceo/Professionale)",
-    "istituto professionale": "High School (Liceo/Professionale)",
-    "Istituto tecnico": "High School (Liceo/Professionale)",
-    "istituto tecnico": "High School (Liceo/Professionale)",
-    "Scuola superiore": "High School (Liceo/Professionale)",
-    "High School": "High School (Liceo/Professionale)",
-    "High school": "High School (Liceo/Professionale)",
-    "Diploma di scuola superiore": "High School (Liceo/Professionale)",
-    "Secondary education": "High School (Liceo/Professionale)",
-    "Upper secondary": "High School (Liceo/Professionale)",
-    "Scuola dell'obbligo": "No Formal Education",
-    "Scuola media": "No Formal Education",
-    "Scuola elementare": "No Formal Education",
-    "Licenza media": "No Formal Education",
-    "Licenza elementare": "No Formal Education",
-    "Nessun titolo": "No Formal Education",
-    "No formal education": "No Formal Education",
-    "Primary education": "No Formal Education",
-    "Primary school": "No Formal Education",
-    "Elementary school": "No Formal Education",
-    "Middle school": "No Formal Education"
+  "database": {
+    "No Formal Education": {
+      "equals": [
+        "No Formal Education"
+      ]
+    },
+    "High School (Liceo/Professionale)": {
+      "equals": [
+        "High School (Liceo/Professionale)"
+      ]
+    },
+    "University Degree": {
+      "equals": [
+        "University Degree"
+      ]
+    },
+    "fuzzy": false
+  },
+  "synthetic": {
+    "No Formal Education": {
+      "equals": [
+        "No Formal Education",
+        "Scuola dell'obbligo",
+        "Scuola media",
+        "Scuola elementare",
+        "Licenza media",
+        "Licenza elementare",
+        "Nessun titolo",
+        "No formal education",
+        "Primary education",
+        "Primary school",
+        "Elementary school",
+        "Middle school"
+      ],
+      "contains": [
+        "elementare",
+        "media",
+        "obbligo",
+        "primary",
+        "no formal",
+        "nessun",
+        "analfabet",
+        "alfabetizzazione",
+        "scuola primaria"
+      ]
+    },
+    "High School (Liceo/Professionale)": {
+      "equals": [
+        "High School (Liceo/Professionale)",
+        "Liceo",
+        "liceo",
+        "Diploma",
+        "diploma",
+        "Diploma di liceo",
+        "Diploma di scuola secondaria superiore",
+        "Diploma di maturità",
+        "Maturità",
+        "maturità",
+        "Istituto professionale",
+        "istituto professionale",
+        "Istituto tecnico",
+        "istituto tecnico",
+        "Scuola superiore",
+        "High School",
+        "High school",
+        "Diploma di scuola superiore",
+        "Secondary education",
+        "Upper secondary"
+      ],
+      "contains": [
+        "liceo",
+        "diploma",
+        "maturità",
+        "istituto",
+        "secondary",
+        "high school",
+        "scuola superiore",
+        "professionale",
+        "tecnico",
+        "formazione"
+      ]
+    },
+    "University Degree": {
+      "equals": [
+        "University Degree",
+        "Laurea triennale",
+        "laurea triennale",
+        "Laurea Triennale",
+        "Laurea magistrale",
+        "laurea magistrale",
+        "Laurea Magistrale",
+        "Laurea",
+        "laurea",
+        "Dottorato",
+        "Dottorato di ricerca",
+        "Master universitario",
+        "Diploma universitario",
+        "University degree",
+        "Bachelor's degree",
+        "Master's degree",
+        "PhD"
+      ],
+      "contains": [
+        "laurea",
+        "university",
+        "degree",
+        "dottorato",
+        "master",
+        "formazione professionale avanzata",
+        "post-graduate",
+        "postgraduate"
+      ]
+    },
+    "fuzzy": false
   }
 }

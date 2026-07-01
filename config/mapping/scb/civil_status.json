@@ -1,70 +1,127 @@
 {
-  "reference_handler": "label",
-  "pipeline_handler": "text_coded",
-  "pipeline_fuzzy": false,
-  "pipeline_keyword_rules": [
-    {"match": "contains", "any_of": ["skild", "frånskild", "separated", "divorced"], "label": "Divorced"},
-    {"match": "contains", "any_of": ["singel", "ogift", "single", "never married", "ensamstående", "ensam"], "label": "Single/Never Married"},
-    {"match": "contains", "any_of": ["gift", "cohabiting", "cohabit", "habiting", "habitant", "sambo", "samboende", "särbo", "married", "partner", "relation", "förhållande", "registrerad partner"], "label": "Married"},
-    {"match": "contains", "any_of": ["änka", "änkling", "änklig", "änkeman", "widow"], "label": "Widowed"}
-  ],
-  "description": "Marital status from BE/BE0101/BE0101A/BefolkningNy — Civilstand variable. Conditional on age_group × biological_sex.",
-  "scb_variable": "Civilstand",
-  "scb_table": "BE/BE0101/BE0101A/BefolkningNy",
-  "scb_codes": {
-    "OG": "Single/Never Married",
-    "G": "Married",
-    "ÄNKL": "Widowed",
-    "SK": "Divorced"
-  },
-  "reference_label_mappings": {
-    "single": "Single/Never Married",
-    "married": "Married",
-    "widowers/widows": "Widowed",
-    "divorced": "Divorced"
-  },
-  "output_categories": [
+  "values": [
     "Single/Never Married",
     "Married",
     "Divorced",
     "Widowed"
   ],
-  "pipeline_label_mappings": {
-    "Ogift": "Single/Never Married",
-    "Singel": "Single/Never Married",
-    "Gift": "Married",
-    "Sambo": "Married",
-    "Sammanboende": "Married",
-    "Registrerat partnerskap": "Married",
-    "Skild": "Divorced",
-    "Frånskild": "Divorced",
-    "Separerad": "Divorced",
-    "Änka": "Widowed",
-    "Änkling": "Widowed",
-    "Änklig": "Widowed",
-    "Änkeman": "Widowed",
-    "Registrerad partner": "Married",
-    "Ensamstående": "Single/Never Married",
-    "Giftermål": "Married",
-    "Gifit": "Married",
-    "Äktenskaplig": "Married",
-    "Äktenskap": "Married",
-    "Sammboende": "Married",
-    "Singlar": "Single/Never Married",
-    "Singular": "Single/Never Married",
-    "Singly": "Single/Never Married",
-    "Single": "Single/Never Married",
-    "Divorced": "Divorced",
-    "Married": "Married",
-    "Widowed": "Widowed",
-    "Förlovad": "Single/Never Married",
-    "Samlevande": "Married",
-    "Separat": "Divorced",
-    "Ugift": "Single/Never Married",
-    "Unmarried": "Single/Never Married",
-    "Sammanboende med partner": "Married",
-    "Gifta": "Married",
-    "Civilstånd: Gift": "Married",
-    "Civilstånd: Giftermål": "Married"
+  "database": {
+    "Single/Never Married": {
+      "equals": [
+        "Single/Never Married",
+        "single"
+      ]
+    },
+    "Married": {
+      "equals": [
+        "Married",
+        "married"
+      ]
+    },
+    "Divorced": {
+      "equals": [
+        "Divorced",
+        "divorced"
+      ]
+    },
+    "Widowed": {
+      "equals": [
+        "Widowed",
+        "widowers/widows"
+      ]
+    },
+    "fuzzy": false
+  },
+  "synthetic": {
+    "Single/Never Married": {
+      "equals": [
+        "Single/Never Married",
+        "Ogift",
+        "Singel",
+        "Ensamstående",
+        "Singlar",
+        "Singular",
+        "Singly",
+        "Single",
+        "Förlovad",
+        "Ugift",
+        "Unmarried"
+      ],
+      "contains": [
+        "singel",
+        "ogift",
+        "single",
+        "never married",
+        "ensamstående",
+        "ensam"
+      ]
+    },
+    "Married": {
+      "equals": [
+        "Married",
+        "Gift",
+        "Sambo",
+        "Sammanboende",
+        "Registrerat partnerskap",
+        "Registrerad partner",
+        "Giftermål",
+        "Gifit",
+        "Äktenskaplig",
+        "Äktenskap",
+        "Sammboende",
+        "Samlevande",
+        "Sammanboende med partner",
+        "Gifta",
+        "Civilstånd: Gift",
+        "Civilstånd: Giftermål"
+      ],
+      "contains": [
+        "gift",
+        "cohabiting",
+        "cohabit",
+        "habiting",
+        "habitant",
+        "sambo",
+        "samboende",
+        "särbo",
+        "married",
+        "partner",
+        "relation",
+        "förhållande",
+        "registrerad partner"
+      ]
+    },
+    "Divorced": {
+      "equals": [
+        "Divorced",
+        "Skild",
+        "Frånskild",
+        "Separerad",
+        "Separat"
+      ],
+      "contains": [
+        "skild",
+        "frånskild",
+        "separated",
+        "divorced"
+      ]
+    },
+    "Widowed": {
+      "equals": [
+        "Widowed",
+        "Änka",
+        "Änkling",
+        "Änklig",
+        "Änkeman"
+      ],
+      "contains": [
+        "änka",
+        "änkling",
+        "änklig",
+        "änkeman",
+        "widow"
+      ]
+    },
+    "fuzzy": false
   }
 }
