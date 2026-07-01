@@ -13,6 +13,7 @@ Usage:
     python scripts/analyze/compare_runs.py
     python scripts/analyze/compare_runs.py --root path/to/llm_metrics --country swedish
     python scripts/analyze/compare_runs.py --metrics retry_rate wall_clock --output cmp.json
+    python scripts/analyze/compare_runs.py --slug swedish_all_pick_claude_haiku --slug swedish_all_pick_gemini_flash
 """
 
 from __future__ import annotations
@@ -29,9 +30,11 @@ from population_synthetic.analysis.llm_metrics.cross_run.run_comparison import (
     METRIC_SPECS,
     METRIC_SPECS_BY_KEY,
     build_comparison,
+    decompose_slug,
     load_run_records,
     write_comparison_json,
 )
+from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 _CONFIG_PATH = PROJECT_ROOT / "config" / "analysis" / "analyze_defaults.yaml"
 
@@ -113,6 +116,11 @@ def main() -> None:
         help="Restrict comparison to a single country ID (e.g. swedish).",
     )
     parser.add_argument(
+        "--slug", dest="slugs", action="append", default=None, metavar="SLUG",
+        help="Restrict the comparison to the given slug(s) ({country}_{strategy}_{model}). "
+        "May be repeated. The country is derived from the slugs when they share one.",
+    )
+    parser.add_argument(
         "--metrics", nargs="+", default=None, metavar="KEY",
         help=f"Subset of metrics to compare. Choices: {', '.join(METRIC_SPECS_BY_KEY)}",
     )
@@ -143,7 +151,31 @@ def main() -> None:
     charts_dir = args.charts or (comparison_dir / "charts")
     json_filename = analytics.get("json_filename", "run_analytics.json")
 
-    records, skipped = load_run_records(root, json_filename=json_filename, country=args.country)
+    # Slug filter: restrict to the selected slugs and derive the country from them when
+    # they share one (so the axis selection alone implies the country -- no --country needed).
+    slug_filter = set(args.slugs) if args.slugs else None
+    country = args.country
+    if slug_filter:
+        model_ids = [d["id"] for d in discover_axis_values("models")]
+        strategy_ids = [d["id"] for d in discover_axis_values("strategies")]
+        country_ids = [d["id"] for d in discover_axis_values("countries")]
+        slug_countries: set[str] = set()
+        for slug in sorted(slug_filter):
+            decomp = decompose_slug(slug, country_ids, strategy_ids, model_ids)
+            if decomp is None:
+                print(
+                    f"Error: --slug {slug!r} is not a known axis combination "
+                    "({country}_{strategy}_{model}).",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            slug_countries.add(decomp[0])
+        if country is None and len(slug_countries) == 1:
+            country = next(iter(slug_countries))
+
+    records, skipped = load_run_records(root, json_filename=json_filename, country=country)
+    if slug_filter:
+        records = [r for r in records if r.slug in slug_filter]
 
     # Separate benign skips (run simply not analysed yet) from decomposition
     # failures (a run HAS analytics but its slug no longer matches the axis IDs --

@@ -14,10 +14,13 @@ Usage:
     python scripts/analyze/compare_all_pipelines.py --model claude_haiku --model gemini_flash
     python scripts/analyze/compare_all_pipelines.py --strategy all_pick --no-charts
     python scripts/analyze/compare_all_pipelines.py --model claude_haiku --strategy all_pick --radar-tv-only
+    python scripts/analyze/compare_all_pipelines.py --slug swedish_all_pick_claude_haiku
 
 --country        Country axis ID filter (default: all countries in the mapped index). May be repeated.
 --model          Model axis ID filter (e.g. claude_haiku). May be repeated. Default: all models.
 --strategy       Strategy axis ID filter (e.g. all_pick). May be repeated. Default: all strategies.
+--slug           Exact slug filter ({country}_{strategy}_{model}). May be repeated. Keeps only the
+                 mapped entries whose slug is selected. Combines with --model/--strategy/--country.
 --output-base    Base output directory (the 03_Analysis parent). Default: experiment_defaults.yaml.
 --no-charts      Skip chart generation.
 --radar-tv-only  On radar chart, show only TV-similarity polygon (omit chi-squared overlay).
@@ -72,6 +75,15 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         metavar="STRATEGY_ID",
         help="Strategy axis ID filter. May be repeated. Default: all strategies.",
+    )
+    parser.add_argument(
+        "--slug",
+        dest="slugs",
+        action="append",
+        default=None,
+        metavar="SLUG",
+        help="Exact slug filter ({country}_{strategy}_{model}). May be repeated. "
+        "Keeps only the mapped entries whose slug is selected.",
     )
     parser.add_argument(
         "--output-base",
@@ -145,6 +157,7 @@ def main() -> None:
     country_filter = _split_csv(args.countries)
     model_filter = _split_csv(args.models)
     strategy_filter = _split_csv(args.strategies)
+    slug_filter = _split_csv(args.slugs)
 
     all_models = discover_axis_values("models")
     all_strategies = discover_axis_values("strategies")
@@ -215,6 +228,9 @@ def main() -> None:
 
         for entry in country_entries:
             slug = entry["slug"]
+
+            if slug_filter and slug not in slug_filter:
+                continue
 
             if entry.get("skipped") is True or entry.get("synthetic_file") is None:
                 print(f"[{slug}] SKIP: no mapped synthetic file (skipped during mapping).")
