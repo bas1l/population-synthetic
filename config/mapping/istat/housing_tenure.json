@@ -1,0 +1,81 @@
+{
+  "values": [
+    "Owner-occupied",
+    "Rental"
+  ],
+  "database": {
+    "Owner-occupied": {
+      "equals": [
+        "Owner-occupied"
+      ]
+    },
+    "Rental": {
+      "equals": [
+        "Rental"
+      ]
+    }
+  },
+  "synthetic": {
+    "Owner-occupied": {
+      "equals": [
+        "Owner-occupied",
+        "owner-occupied",
+        "Owner",
+        "owner",
+        "Owned",
+        "owned",
+        "Owner/Owned",
+        "Proprietario",
+        "proprietario",
+        "Proprietà",
+        "proprietà",
+        "Casa di proprietà",
+        "Di proprietà",
+        "Mortgaged",
+        "mortgaged",
+        "Owns",
+        "Homeowner"
+      ],
+      "contains": [
+        "owner",
+        "owned",
+        "proprietar",
+        "proprietà",
+        "mortgage",
+        "mutuo",
+        "acquistato",
+        "casa",
+        "villa",
+        "appartamento proprio",
+        "condominio",
+        "ipoteca"
+      ]
+    },
+    "Rental": {
+      "equals": [
+        "Rental",
+        "rental",
+        "Rented",
+        "rented",
+        "Affitto",
+        "affitto",
+        "In affitto",
+        "Casa in affitto",
+        "Locatario",
+        "Inquilino",
+        "Renter",
+        "Tenant"
+      ],
+      "contains": [
+        "rental",
+        "rent",
+        "affitto",
+        "locatar",
+        "inquilin",
+        "tenant",
+        "locazione",
+        "canone"
+      ]
+    }
+  }
+}

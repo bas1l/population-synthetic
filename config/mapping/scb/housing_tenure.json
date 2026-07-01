@@ -1,0 +1,146 @@
+{
+  "values": [
+    "Owner-occupied (villa/house)",
+    "Tenant-owned apartment (bostadsrätt)",
+    "Rental apartment"
+  ],
+  "database": {
+    "Owner-occupied (villa/house)": {
+      "equals": [
+        "Owner-occupied (villa/house)",
+        "owner-occupied dwellings"
+      ]
+    },
+    "Tenant-owned apartment (bostadsrätt)": {
+      "equals": [
+        "Tenant-owned apartment (bostadsrätt)",
+        "tenant-owned dwellings"
+      ]
+    },
+    "Rental apartment": {
+      "equals": [
+        "Rental apartment",
+        "rented dwellings"
+      ]
+    }
+  },
+  "synthetic": {
+    "Owner-occupied (villa/house)": {
+      "equals": [
+        "Owner-occupied (villa/house)",
+        "Äganderätt",
+        "Äganderätt (villa)",
+        "Äganderätt (villa/radhus)",
+        "Villa",
+        "Radhus",
+        "Kedjehus",
+        "Radhus/Kedjehus",
+        "Ägt hus",
+        "Ägd villa",
+        "Ägd villa/radhus",
+        "Friköpt villa",
+        "Friköpt",
+        "Egenägt hus",
+        "Ägt",
+        "Ägd",
+        "Ägande",
+        "Eget hus",
+        "Egen bostad",
+        "Egenhem",
+        "Egen ägande",
+        "Egenägd bostad",
+        "Egenhemman",
+        "Owns",
+        "Owned",
+        "Äga",
+        "Ägt bostad",
+        "Egen hem"
+      ],
+      "contains": [
+        "villa",
+        "radhus",
+        "friköpt",
+        "äganderätt",
+        "owner",
+        "house",
+        "detached",
+        "egendom",
+        "eget h",
+        "egen bostad",
+        "egna bostad",
+        "egen hemma",
+        "egenhemma",
+        "own home",
+        "owning",
+        "owned",
+        "mortgage",
+        "freehold"
+      ]
+    },
+    "Tenant-owned apartment (bostadsrätt)": {
+      "equals": [
+        "Tenant-owned apartment (bostadsrätt)",
+        "Bostadsrätt",
+        "Bostadsrätt (cooperative apartment)",
+        "Bostadsrättslägenhet",
+        "Ägarlägenhet",
+        "Ägd lägenhet",
+        "Owner-occupied apartment",
+        "Owned apartment"
+      ],
+      "contains": [
+        "bostadsrätt",
+        "bostadsratt",
+        "cooperative",
+        "co-op",
+        "tenant-owned",
+        "condominium",
+        "bostadsbolag",
+        "bostadsförening"
+      ]
+    },
+    "Rental apartment": {
+      "equals": [
+        "Rental apartment",
+        "Hyresrätt",
+        "Hyreslägenhet",
+        "Andrahandsboende",
+        "Andrahandskontrakt",
+        "Studentbostad",
+        "Bor i studentbostad",
+        "Inneboende",
+        "Andrahandshyresrätt",
+        "Andrahandsuthyrning",
+        "Rental",
+        "rental",
+        "Ej ägt",
+        "Hyrd",
+        "Hyrd lägenhet",
+        "Hyreslögenhet",
+        "Ej ägd bostad",
+        "Ej ägd egen bostad",
+        "Ej ägd",
+        "Ej ägare",
+        "Ej ägd egenbostad",
+        "Ej ägd egenhem",
+        "Ej ägd egenbostad (rented or leased)",
+        "Ej ägt eget hus",
+        "Hyrbostad",
+        "student_housing"
+      ],
+      "contains": [
+        "rental",
+        "rent",
+        "hyresrätt",
+        "hyres",
+        "hyra",
+        "uthyr",
+        "studentbostad",
+        "student",
+        "shared apartment",
+        "shared student",
+        "social housing"
+      ]
+    }
+  }
+}

@@ -1,0 +1,335 @@
+{
+  "values": [
+    "Italy",
+    "Romania",
+    "Other",
+    "Albania",
+    "Morocco",
+    "China",
+    "Ukraine",
+    "Pakistan",
+    "Egypt",
+    "Nigeria",
+    "Bangladesh",
+    "India",
+    "Philippines",
+    "Peru",
+    "Tunisia",
+    "Senegal",
+    "Brazil",
+    "Moldova",
+    "North Macedonia",
+    "Ecuador",
+    "Poland",
+    "Russia",
+    "Germany",
+    "Turkey",
+    "Spain",
+    "Serbia",
+    "France"
+  ],
+  "database": {
+    "Italy": {
+      "equals": [
+        "Italy",
+        "Italia",
+        "nato in italia",
+        "italiana"
+      ]
+    },
+    "Romania": {
+      "equals": [
+        "Romania"
+      ]
+    },
+    "Other": {
+      "equals": [
+        "Other"
+      ]
+    },
+    "Albania": {
+      "equals": [
+        "Albania"
+      ]
+    },
+    "Morocco": {
+      "equals": [
+        "Morocco"
+      ]
+    },
+    "China": {
+      "equals": [
+        "China"
+      ]
+    },
+    "Ukraine": {
+      "equals": [
+        "Ukraine"
+      ]
+    },
+    "Pakistan": {
+      "equals": [
+        "Pakistan"
+      ]
+    },
+    "Egypt": {
+      "equals": [
+        "Egypt"
+      ]
+    },
+    "Nigeria": {
+      "equals": [
+        "Nigeria"
+      ]
+    },
+    "Bangladesh": {
+      "equals": [
+        "Bangladesh"
+      ]
+    },
+    "India": {
+      "equals": [
+        "India"
+      ]
+    },
+    "Philippines": {
+      "equals": [
+        "Philippines"
+      ]
+    },
+    "Peru": {
+      "equals": [
+        "Peru"
+      ]
+    },
+    "Tunisia": {
+      "equals": [
+        "Tunisia"
+      ]
+    },
+    "Senegal": {
+      "equals": [
+        "Senegal"
+      ]
+    },
+    "Brazil": {
+      "equals": [
+        "Brazil"
+      ]
+    },
+    "Moldova": {
+      "equals": [
+        "Moldova"
+      ]
+    },
+    "North Macedonia": {
+      "equals": [
+        "North Macedonia"
+      ]
+    },
+    "Ecuador": {
+      "equals": [
+        "Ecuador"
+      ]
+    },
+    "Poland": {
+      "equals": [
+        "Poland"
+      ]
+    },
+    "Russia": {
+      "equals": [
+        "Russia"
+      ]
+    },
+    "Germany": {
+      "equals": [
+        "Germany"
+      ]
+    },
+    "Turkey": {
+      "equals": [
+        "Turkey"
+      ]
+    },
+    "Spain": {
+      "equals": [
+        "Spain"
+      ]
+    },
+    "Serbia": {
+      "equals": [
+        "Serbia"
+      ]
+    },
+    "France": {
+      "equals": [
+        "France"
+      ]
+    }
+  },
+  "synthetic": {
+    "Italy": {
+      "equals": [
+        "Italy",
+        "Italia",
+        "italy"
+      ],
+      "contains": [
+        "italy",
+        "italia",
+        "italiana"
+      ]
+    },
+    "Romania": {
+      "equals": [
+        "Romania",
+        "romania"
+      ]
+    },
+    "Other": {
+      "equals": [
+        "Other",
+        "Brasile",
+        "Brazil",
+        "Peru",
+        "Perù",
+        "Ecuador",
+        "Suriname"
+      ]
+    },
+    "Albania": {
+      "equals": [
+        "Albania",
+        "Albanian"
+      ]
+    },
+    "Morocco": {
+      "equals": [
+        "Morocco",
+        "Marocco"
+      ]
+    },
+    "China": {
+      "equals": [
+        "China",
+        "Cina"
+      ]
+    },
+    "Ukraine": {
+      "equals": [
+        "Ukraine",
+        "Ucraina"
+      ]
+    },
+    "Pakistan": {
+      "equals": [
+        "Pakistan"
+      ]
+    },
+    "Egypt": {
+      "equals": [
+        "Egypt",
+        "Egitto"
+      ]
+    },
+    "Nigeria": {
+      "equals": [
+        "Nigeria"
+      ]
+    },
+    "Bangladesh": {
+      "equals": [
+        "Bangladesh"
+      ]
+    },
+    "India": {
+      "equals": [
+        "India"
+      ]
+    },
+    "Philippines": {
+      "equals": [
+        "Philippines",
+        "Filippine"
+      ]
+    },
+    "Peru": {
+      "equals": [
+        "Peru"
+      ]
+    },
+    "Tunisia": {
+      "equals": [
+        "Tunisia"
+      ]
+    },
+    "Senegal": {
+      "equals": [
+        "Senegal"
+      ]
+    },
+    "Brazil": {
+      "equals": [
+        "Brazil"
+      ]
+    },
+    "Moldova": {
+      "equals": [
+        "Moldova",
+        "Moldavia"
+      ]
+    },
+    "North Macedonia": {
+      "equals": [
+        "North Macedonia",
+        "Macedonia del Nord"
+      ]
+    },
+    "Ecuador": {
+      "equals": [
+        "Ecuador"
+      ]
+    },
+    "Poland": {
+      "equals": [
+        "Poland",
+        "Polonia"
+      ]
+    },
+    "Russia": {
+      "equals": [
+        "Russia"
+      ]
+    },
+    "Germany": {
+      "equals": [
+        "Germany",
+        "Germania"
+      ]
+    },
+    "Turkey": {
+      "equals": [
+        "Turkey",
+        "Turchia"
+      ]
+    },
+    "Spain": {
+      "equals": [
+        "Spain",
+        "Spagna"
+      ]
+    },
+    "Serbia": {
+      "equals": [
+        "Serbia"
+      ]
+    },
+    "France": {
+      "equals": [
+        "France",
+        "Francia"
+      ]
+    }
+  }
+}

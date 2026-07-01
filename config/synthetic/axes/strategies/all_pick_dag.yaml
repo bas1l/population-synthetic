@@ -1,0 +1,21 @@
+id: "all_pick_dag"
+label: "All Pick DAG"
+description: "All fields use pick method. LLM selects directly from a predefined list. 1 LLM call per category. Uses dependency DAG so prior resolved values are passed as context."
+categories:
+  age:                           { method: pick, depends_on: [] }
+  biological_sex:                { method: pick, depends_on: [] }
+  region:                        { method: pick, depends_on: [] }
+  birth_location:                { method: pick, depends_on: [] }
+  birth_country_detail:          { method: pick, depends_on: [birth_location] }
+  civil_status:                  { method: pick, depends_on: [age, biological_sex] }
+  household_size:                { method: pick, depends_on: [civil_status, age] }
+  education_level:               { method: pick, depends_on: [age, biological_sex] }
+  employment_status:             { method: pick, depends_on: [age, education_level, civil_status] }
+  employment_type:               { method: pick, depends_on: [employment_status] }
+  industry_sector:               { method: pick, depends_on: [employment_status] }
+  socioeconomic_class:           { method: pick, depends_on: [employment_status, education_level] }
+  income_source:                 { method: pick, depends_on: [employment_status, socioeconomic_class] }
+  housing_tenure:                { method: pick, depends_on: [socioeconomic_class, civil_status] }
+  parental_structure:            { method: pick, depends_on: [] }
+  current_environment_type:      { method: pick, depends_on: [region] }
+  ethnicity_broad_global_approx: { method: pick, depends_on: [birth_location] }

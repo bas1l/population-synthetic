@@ -7,9 +7,19 @@ build/
 *.meta.json
 .venv/
 venv/
-config/assets/scb_cache/*.json
-config/assets/ssb_cache/*.json
+config/database/caches/scb/*.json
+config/database/caches/ssb/*.json
+config/database/caches/eurostat/*.json
+config/database/caches/istat/
 .claude/
 .vscode/
 .ruff_cache/
 data/
+*.layout.json
+config/gui/state.json
+
+# Leaked run artifacts (default single-run output now lives under data/)
+/identity.json
+/llm_interactions.jsonl
+/run_metadata.json
+/logs/

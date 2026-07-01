@@ -1,0 +1,33 @@
+{
+  "description": "Employment contract type from table 13878 (Ansettelsesforhold) + working hours (ArbeidsTidRen). Non-employed get 'Not Applicable'.",
+  "ssb_variable_attachment": "Ansettelsesforhold",
+  "ssb_variable_hours": "ArbeidsTidRen",
+  "ssb_table": "13878",
+  "attachment_label_mappings": {
+    "fast stilling": "permanent",
+    "midlertidig stilling": "temporary",
+    "f": "permanent",
+    "m": "temporary"
+  },
+  "hours_label_mappings": {
+    "heltid": "full_time",
+    "deltid": "part_time",
+    "h": "full_time",
+    "d": "part_time",
+    "38+": "full_time",
+    "35-37": "full_time",
+    "30-34": "part_time",
+    "20-29": "part_time",
+    "10-19": "part_time",
+    "01-09": "part_time"
+  },
+  "output_categories": [
+    "Permanent Full-time",
+    "Permanent Part-time",
+    "Temporary Full-time",
+    "Temporary Part-time",
+    "Self-Employed",
+    "Not Applicable"
+  ],
+  "fallback_note": "Self-employed are estimated from AKU data (approx. 7-9% of employed); no dedicated per-age SSB table available in PxWebApi v2 without KLASS join."
+}

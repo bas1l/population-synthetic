@@ -1,0 +1,63 @@
+{
+  "description": "Norwegian education level codes (NUS2000-style SSB classification) to schema labels. Used in tables 08921, 09429, 09599.",
+  "ssb_variable": "UtdanNivaa",
+  "ssb_tables": [
+    "08921",
+    "09429",
+    "09599"
+  ],
+  "mappings": {
+    "no_formal": {
+      "schema_label": "No Formal Education",
+      "ssb_codes": [
+        "00",
+        "01",
+        "09a",
+        "0_9",
+        "1-2",
+        "Uoppgitt eller ingen fullført utdanning",
+        "Grunnskolenivå"
+      ]
+    },
+    "high_school": {
+      "schema_label": "High School (Videregående)",
+      "ssb_codes": [
+        "02a",
+        "3-5",
+        "3-5a",
+        "Videregående skolenivå"
+      ]
+    },
+    "vocational": {
+      "schema_label": "Vocational (Fagskole)",
+      "ssb_codes": [
+        "11",
+        "Fagskolenivå"
+      ]
+    },
+    "university": {
+      "schema_label": "University Degree",
+      "ssb_codes": [
+        "03a",
+        "04a",
+        "6",
+        "7-8",
+        "6-8",
+        "Universitets- og høgskolenivå, kort",
+        "Universitets- og høgskolenivå, lang",
+        "Universitets- og høgskolenivå"
+      ]
+    }
+  },
+  "label_mappings": {
+    "grunnskoleniå": "No Formal Education",
+    "grunnskolenivå": "No Formal Education",
+    "uoppgitt eller ingen fullført utdanning": "No Formal Education",
+    "ingen fullført utdanning": "No Formal Education",
+    "videregående skolenivå": "High School (Videregående)",
+    "fagskolenivå": "Vocational (Fagskole)",
+    "universitets- og høgskolenivå, kort": "University Degree",
+    "universitets- og høgskolenivå, lang": "University Degree",
+    "universitets- og høgskolenivå": "University Degree"
+  }
+}

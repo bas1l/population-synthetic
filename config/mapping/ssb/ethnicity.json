@@ -1,0 +1,9 @@
+{
+  "description": "Derived from birth_location — ethnicity label based on birth region",
+  "mappings": {
+    "Norway": "Norwegian",
+    "Nordic Country": "Nordic",
+    "Europe (Other)": "European",
+    "Outside Europe": "Non-European"
+  }
+}

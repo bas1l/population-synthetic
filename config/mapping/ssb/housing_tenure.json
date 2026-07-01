@@ -1,0 +1,22 @@
+{
+  "description": "Dwelling ownership form from table 11081 (EierStatus). Norwegian tenure categories: Selveier (owner-occupied), Andels-/aksjeeier (cooperative share ownership), Leier (renter).",
+  "ssb_variable": "EierStatus",
+  "ssb_table": "11081",
+  "ssb_codes": {
+    "2": "Selveier",
+    "3": "Andels- / aksjeeier",
+    "4": "Leier"
+  },
+  "label_mappings": {
+    "selveier": "Owner-occupied (villa/house)",
+    "andels- / aksjeeier": "Cooperative apartment (andel/aksje)",
+    "andels-/aksjeeier": "Cooperative apartment (andel/aksje)",
+    "leier": "Rental apartment"
+  },
+  "output_categories": [
+    "Owner-occupied (villa/house)",
+    "Cooperative apartment (andel/aksje)",
+    "Rental apartment",
+    "Other"
+  ]
+}

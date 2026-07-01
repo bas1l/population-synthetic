@@ -1,0 +1,19 @@
+{
+  "description": "Master index: comparison attributes -> per-attribute config files. attributes key order = comparison axis order.",
+  "attributes": {
+    "age_group": "age.json",
+    "biological_sex": "biological_sex.json",
+    "education_level": "education.json",
+    "employment_status": "employment.json",
+    "birth_location": "birth_location.json",
+    "socioeconomic_class": "socioeconomic.json",
+    "parental_structure": "parental_structure.json",
+    "region": "region.json",
+    "civil_status": "civil_status.json",
+    "industry_sector": "industry_sector.json",
+    "employment_type": "employment_type.json",
+    "housing_tenure": "housing_tenure.json",
+    "household_size": "household_size.json",
+    "birth_country_detail": "birth_country_detail.json"
+  }
+}

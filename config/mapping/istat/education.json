@@ -1,0 +1,120 @@
+{
+  "values": [
+    "No Formal Education",
+    "High School (Liceo/Professionale)",
+    "University Degree"
+  ],
+  "database": {
+    "No Formal Education": {
+      "equals": [
+        "No Formal Education"
+      ]
+    },
+    "High School (Liceo/Professionale)": {
+      "equals": [
+        "High School (Liceo/Professionale)"
+      ]
+    },
+    "University Degree": {
+      "equals": [
+        "University Degree"
+      ]
+    }
+  },
+  "synthetic": {
+    "No Formal Education": {
+      "equals": [
+        "No Formal Education",
+        "Scuola dell'obbligo",
+        "Scuola media",
+        "Scuola elementare",
+        "Licenza media",
+        "Licenza elementare",
+        "Nessun titolo",
+        "No formal education",
+        "Primary education",
+        "Primary school",
+        "Elementary school",
+        "Middle school"
+      ],
+      "contains": [
+        "elementare",
+        "media",
+        "obbligo",
+        "primary",
+        "no formal",
+        "nessun",
+        "analfabet",
+        "alfabetizzazione",
+        "scuola primaria"
+      ]
+    },
+    "High School (Liceo/Professionale)": {
+      "equals": [
+        "High School (Liceo/Professionale)",
+        "Liceo",
+        "liceo",
+        "Diploma",
+        "diploma",
+        "Diploma di liceo",
+        "Diploma di scuola secondaria superiore",
+        "Diploma di maturità",
+        "Maturità",
+        "maturità",
+        "Istituto professionale",
+        "istituto professionale",
+        "Istituto tecnico",
+        "istituto tecnico",
+        "Scuola superiore",
+        "High School",
+        "High school",
+        "Diploma di scuola superiore",
+        "Secondary education",
+        "Upper secondary"
+      ],
+      "contains": [
+        "liceo",
+        "diploma",
+        "maturità",
+        "istituto",
+        "secondary",
+        "high school",
+        "scuola superiore",
+        "professionale",
+        "tecnico",
+        "formazione"
+      ]
+    },
+    "University Degree": {
+      "equals": [
+        "University Degree",
+        "Laurea triennale",
+        "laurea triennale",
+        "Laurea Triennale",
+        "Laurea magistrale",
+        "laurea magistrale",
+        "Laurea Magistrale",
+        "Laurea",
+        "laurea",
+        "Dottorato",
+        "Dottorato di ricerca",
+        "Master universitario",
+        "Diploma universitario",
+        "University degree",
+        "Bachelor's degree",
+        "Master's degree",
+        "PhD"
+      ],
+      "contains": [
+        "laurea",
+        "university",
+        "degree",
+        "dottorato",
+        "master",
+        "formazione professionale avanzata",
+        "post-graduate",
+        "postgraduate"
+      ]
+    }
+  }
+}

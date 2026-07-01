@@ -1,0 +1,365 @@
+{
+  "values": [
+    "Agriculture & Forestry",
+    "Manufacturing & Industry",
+    "Retail & Service",
+    "IT & Technology",
+    "Public Administration",
+    "Education",
+    "Healthcare & Social",
+    "Other",
+    "Not Applicable"
+  ],
+  "database": {
+    "Agriculture & Forestry": {
+      "equals": [
+        "Agriculture & Forestry",
+        "agriculture, forestry, fishing"
+      ]
+    },
+    "Manufacturing & Industry": {
+      "equals": [
+        "Manufacturing & Industry",
+        "manufacturing, mining and quarrying, energy and environment",
+        "construction"
+      ]
+    },
+    "Retail & Service": {
+      "equals": [
+        "Retail & Service",
+        "trade",
+        "transport",
+        "accommodation and food services"
+      ]
+    },
+    "IT & Technology": {
+      "equals": [
+        "IT & Technology",
+        "information and communication",
+        "financial operations, business services"
+      ]
+    },
+    "Public Administration": {
+      "equals": [
+        "Public Administration",
+        "public administration etc."
+      ]
+    },
+    "Education": {
+      "equals": [
+        "Education",
+        "education"
+      ]
+    },
+    "Healthcare & Social": {
+      "equals": [
+        "Healthcare & Social",
+        "human health and social work activities"
+      ]
+    },
+    "Other": {
+      "equals": [
+        "Other",
+        "personal and cultural services"
+      ]
+    },
+    "Not Applicable": {
+      "equals": [
+        "Not Applicable"
+      ]
+    },
+    "absent": "Not Applicable"
+  },
+  "synthetic": {
+    "Agriculture & Forestry": {
+      "equals": [
+        "Agriculture & Forestry",
+        "Jordbruk",
+        "Lantbruk",
+        "Skogsbruk",
+        "Fiske",
+        "Jord- och skogsbruk",
+        "Agriculture/Forestry/Fishing"
+      ],
+      "contains": [
+        "agricultur",
+        "farming",
+        "forestry",
+        "fishing",
+        "fisher",
+        "jordbruk",
+        "lantbruk",
+        "skogsbruk",
+        "skogs",
+        "fiske",
+        "naturbruk",
+        "timber",
+        "agrifood"
+      ]
+    },
+    "Manufacturing & Industry": {
+      "equals": [
+        "Manufacturing & Industry",
+        "Tillverkning",
+        "Tillverkningsindustri",
+        "Industri",
+        "Byggverksamhet",
+        "Bygg och anläggning",
+        "Energi och miljö",
+        "Gruvor och mineralutvinning",
+        "Manufacturing/Industry"
+      ],
+      "contains": [
+        "bygg",
+        "construction",
+        "tillverkning",
+        "industri",
+        "manufactur",
+        "heavy industry",
+        "industrial",
+        "factory",
+        "fabrik",
+        "automotive",
+        "fordon",
+        "gruv",
+        "mining",
+        "verkstad",
+        "energy",
+        "energi",
+        "utilities",
+        "metal",
+        "maskin",
+        "machinery",
+        "wood processing",
+        "paper and pulp",
+        "pharmaceutical",
+        "biotech",
+        "installation",
+        "el, vvs"
+      ]
+    },
+    "Retail & Service": {
+      "equals": [
+        "Retail & Service",
+        "Handel",
+        "Detaljhandel",
+        "Partihandel",
+        "Handel (parti- och detaljhandel)",
+        "Transport",
+        "Transport och magasinering",
+        "Hotell och restaurang",
+        "Hotell- och restaurangverksamhet"
+      ],
+      "contains": [
+        "detaljhandel",
+        "handel",
+        "partihandel",
+        "retail",
+        "wholesale",
+        "trade",
+        "sales",
+        "butik",
+        "shop",
+        "hospitality",
+        "hotel",
+        "hotell",
+        "restaurant",
+        "restaurang",
+        "catering",
+        "food service",
+        "accommodation",
+        "transport",
+        "logistic",
+        "logistik",
+        "freight",
+        "courier",
+        "warehouse",
+        "lager",
+        "delivery",
+        "tourism",
+        "turism",
+        "travel"
+      ]
+    },
+    "IT & Technology": {
+      "equals": [
+        "IT & Technology",
+        "Information och kommunikation",
+        "IT",
+        "IT och telekom",
+        "Informationsteknik",
+        "Telekom",
+        "Finans- och försäkringsverksamhet",
+        "Finansverksamhet",
+        "Bank och försäkring",
+        "Ekonomi- och finanstjänster",
+        "Företagstjänster",
+        "Fastighetsverksamhet",
+        "IT/Technology"
+      ],
+      "contains": [
+        "finansiell",
+        "bank",
+        "finans",
+        "financ",
+        "insurance",
+        "försäkring",
+        "teknik",
+        "information",
+        "it-",
+        "it/",
+        "it och",
+        "it and",
+        "it service",
+        "it-tjänst",
+        "it support",
+        "ict",
+        "technolog",
+        "teknolog",
+        "tech",
+        "software",
+        "mjukvar",
+        "programvar",
+        "systemutveckl",
+        "digital",
+        "telekom",
+        "telecom",
+        "kommunikation",
+        "communication",
+        "data analy",
+        "datavetenskap",
+        "consult",
+        "konsult",
+        "business service",
+        "professional service",
+        "affärstjänst",
+        "real estate",
+        "fastighet"
+      ]
+    },
+    "Public Administration": {
+      "equals": [
+        "Public Administration",
+        "Offentlig förvaltning",
+        "Offentlig sektor",
+        "Försvar",
+        "Public Administration/Defense"
+      ],
+      "contains": [
+        "offentlig förvaltning",
+        "offentlig sektor",
+        "offentlig verksamhet",
+        "public administration",
+        "public sector",
+        "public services",
+        "public policy",
+        "government",
+        "municipal",
+        "kommunal",
+        "kommun",
+        "landsting",
+        "myndighet",
+        "statlig",
+        "staten",
+        "förvaltning",
+        "civil service",
+        "defence",
+        "defense",
+        "försvar"
+      ]
+    },
+    "Education": {
+      "equals": [
+        "Education",
+        "Utbildning",
+        "Forskning"
+      ],
+      "contains": [
+        "utbildning",
+        "forskning",
+        "education",
+        "academ",
+        "universit",
+        "högskola",
+        "lärosäte",
+        "skola",
+        "school",
+        "teaching",
+        "training",
+        "edtech",
+        "pedagog",
+        "research",
+        "tuition"
+      ]
+    },
+    "Healthcare & Social": {
+      "equals": [
+        "Healthcare & Social",
+        "Vård och omsorg",
+        "Vård och omsorg (Healthcare and social care)",
+        "Hälso- och sjukvård",
+        "Sjukvård",
+        "Socialtjänst",
+        "Healthcare/Social Work"
+      ],
+      "contains": [
+        "vård",
+        "sjukvård",
+        "omsorg",
+        "healthcare",
+        "health",
+        " care",
+        "social care",
+        "social work",
+        "social services",
+        "socialtjänst",
+        "hälsa",
+        "hälso",
+        "sjukhus",
+        "hospital",
+        "nursing",
+        "medical",
+        "elderly",
+        "äldre",
+        "childcare",
+        "welfare",
+        "välfärd",
+        "disability"
+      ]
+    },
+    "Other": {
+      "equals": [
+        "Other",
+        "Kultur, nöje och fritid",
+        "Personliga tjänster",
+        "Övriga tjänster",
+        "Other Services"
+      ],
+      "contains": [
+        "kultur",
+        "kreativ"
+      ]
+    },
+    "Not Applicable": {
+      "equals": [
+        "Not Applicable"
+      ],
+      "contains": [
+        "not applicable",
+        "n/a",
+        "ej tillämpligt",
+        "ej tillämpbart",
+        "ej relevant",
+        "not employed",
+        "not currently employed",
+        "no current sector",
+        "inte i arbete",
+        "retired",
+        "pensionär",
+        "unemployed",
+        "arbetslös"
+      ]
+    },
+    "on_miss": "Other"
+  }
+}

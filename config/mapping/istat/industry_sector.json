@@ -1,0 +1,106 @@
+{
+  "values": [
+    "Professional & Managerial",
+    "Clerical & Administrative",
+    "Craft & Technical",
+    "Elementary Occupations",
+    "Not Applicable"
+  ],
+  "database": {
+    "Professional & Managerial": {
+      "equals": [
+        "Professional & Managerial"
+      ]
+    },
+    "Clerical & Administrative": {
+      "equals": [
+        "Clerical & Administrative"
+      ]
+    },
+    "Craft & Technical": {
+      "equals": [
+        "Craft & Technical"
+      ]
+    },
+    "Elementary Occupations": {
+      "equals": [
+        "Elementary Occupations"
+      ]
+    },
+    "Not Applicable": {
+      "equals": [
+        "Not Applicable"
+      ]
+    },
+    "absent": "Not Applicable"
+  },
+  "synthetic": {
+    "Professional & Managerial": {
+      "equals": [
+        "Professional & Managerial",
+        "Finance",
+        "finance",
+        "Finance and Banking",
+        "Technology",
+        "technology",
+        "Technology/IT",
+        "IT/Technology",
+        "IT",
+        "Servizi professionali",
+        "Tecnologia",
+        "Healthcare",
+        "Sanità",
+        "Education",
+        "Istruzione",
+        "Professional"
+      ]
+    },
+    "Clerical & Administrative": {
+      "equals": [
+        "Clerical & Administrative",
+        "Services",
+        "services",
+        "Servizi",
+        "servizi",
+        "Public Administration",
+        "Pubblica amministrazione",
+        "Retail",
+        "Commercio",
+        "Clerical"
+      ]
+    },
+    "Craft & Technical": {
+      "equals": [
+        "Craft & Technical",
+        "Manufacturing",
+        "manufacturing",
+        "Manifatturiero",
+        "Engineering",
+        "Construction",
+        "Edilizia",
+        "Costruzioni",
+        "Transport",
+        "Trasporti",
+        "Craft"
+      ]
+    },
+    "Elementary Occupations": {
+      "equals": [
+        "Elementary Occupations",
+        "Agriculture",
+        "Agricoltura",
+        "Tourism",
+        "Turismo",
+        "Hospitality",
+        "Ristorazione",
+        "Elementary"
+      ]
+    },
+    "Not Applicable": {
+      "equals": [
+        "Not Applicable"
+      ]
+    },
+    "on_miss": "Not Applicable"
+  }
+}

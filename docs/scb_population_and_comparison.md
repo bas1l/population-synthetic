@@ -14,7 +14,7 @@ No API keys are required — the SCB PxWeb API is public. Responses are cached l
 ## Generating an SCB Population
 
 ```bash
-python scripts/generate_scb_population.py --n 500 --output scb_pop.json --seed 42
+python scripts/generate/generate_scb_population.py --n 500 --output scb_pop.json --seed 42
 ```
 
 | Flag | Default | Description |
@@ -105,9 +105,9 @@ Each individual is sampled through a dependency chain — later attributes are c
 Generate two populations with different seeds to test sampling stability:
 
 ```bash
-python scripts/generate_scb_population.py --n 500 --output scb_pop_a.json --seed 42
-python scripts/generate_scb_population.py --n 500 --output scb_pop_b.json --seed 99
-python scripts/compare_populations.py scb_pop_a.json scb_pop_b.json --output comparison.json
+python scripts/generate/generate_scb_population.py --n 500 --output scb_pop_a.json --seed 42
+python scripts/generate/generate_scb_population.py --n 500 --output scb_pop_b.json --seed 99
+python scripts/analyze/compare_populations.py scb_pop_a.json scb_pop_b.json --output comparison.json
 ```
 
 ### Pipeline vs SCB
@@ -116,15 +116,15 @@ Compare pipeline-generated personas against the SCB reference distribution:
 
 ```bash
 # 1. Generate the SCB reference
-python scripts/generate_scb_population.py --n 500 --output scb_pop.json --seed 42
+python scripts/generate/generate_scb_population.py --n 500 --output scb_pop.json --seed 42
 
 # 2. Extract personas from a pipeline seed
-python scripts/extract_population_from_pipeline.py \
+python scripts/generate/extract_population_from_pipeline.py \
     --seed-root <path-to-seed-folder> \
     --output pipeline_pop.json
 
 # 3. Compare (SCB as reference, pipeline as observed)
-python scripts/compare_populations.py scb_pop.json pipeline_pop.json --output comparison.json
+python scripts/analyze/compare_populations.py scb_pop.json pipeline_pop.json --output comparison.json
 ```
 
 The first argument is treated as the **reference** (expected) and the second as the **observed** population.

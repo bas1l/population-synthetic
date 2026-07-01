@@ -1,0 +1,27 @@
+{
+  "description": "Civil/marital status from table 03031 (EkteskStatus). Conditional on decade age band and sex.",
+  "ssb_variable": "EkteskStatus",
+  "ssb_table": "03031",
+  "ssb_codes": {
+    "1": "Single/Never Married",
+    "2": "Married",
+    "3": "Widowed",
+    "4": "Divorced",
+    "5": "Separated",
+    "6": "Other"
+  },
+  "label_mappings": {
+    "ugift": "Single/Never Married",
+    "gift": "Married",
+    "enke/enkemann": "Widowed",
+    "skilt": "Divorced",
+    "separert": "Divorced",
+    "annen sivilstand": "Single/Never Married"
+  },
+  "output_categories": [
+    "Single/Never Married",
+    "Married",
+    "Widowed",
+    "Divorced"
+  ]
+}

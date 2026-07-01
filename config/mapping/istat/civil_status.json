@@ -1,0 +1,97 @@
+{
+  "values": [
+    "Single",
+    "Married",
+    "Divorced",
+    "Widowed"
+  ],
+  "database": {
+    "Single": {
+      "equals": [
+        "Single"
+      ]
+    },
+    "Married": {
+      "equals": [
+        "Married"
+      ]
+    },
+    "Divorced": {
+      "equals": [
+        "Divorced"
+      ]
+    },
+    "Widowed": {
+      "equals": [
+        "Widowed"
+      ]
+    }
+  },
+  "synthetic": {
+    "Single": {
+      "equals": [
+        "Single",
+        "single",
+        "Celibe",
+        "Nubile",
+        "celibe",
+        "nubile",
+        "Celibe/Nubile",
+        "Unmarried"
+      ],
+      "contains": [
+        "single",
+        "celibe",
+        "nubile",
+        "unmarried"
+      ]
+    },
+    "Married": {
+      "equals": [
+        "Married",
+        "married",
+        "coniugato/a",
+        "Coniugato",
+        "Coniugata",
+        "Sposato",
+        "Sposata",
+        "Sposato/a",
+        "sposato/a",
+        "Cohabitating"
+      ],
+      "contains": [
+        "married",
+        "coniugat",
+        "sposat"
+      ]
+    },
+    "Divorced": {
+      "equals": [
+        "Divorced",
+        "divorced",
+        "Divorziato",
+        "Divorziata",
+        "divorziato",
+        "Divorziato/a"
+      ],
+      "contains": [
+        "divorced",
+        "divorziat"
+      ]
+    },
+    "Widowed": {
+      "equals": [
+        "Widowed",
+        "widowed",
+        "Vedovo",
+        "Vedova",
+        "vedovo",
+        "Vedovo/a"
+      ],
+      "contains": [
+        "widowed",
+        "vedov"
+      ]
+    }
+  }
+}

@@ -1,107 +1,102 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this
+repository. It is a lean **hub**: the always-needed guardrails and quick-start live here; the
+depth lives in the [architecture wiki](docs/architecture/README.md).
 
 ## Project Overview
 
-**population-synth** is a standalone extraction from the `anxiety-synthetic` monorepo. It provides three capabilities:
+**population-synthetic** is a standalone extraction from the `anxiety-synthetic` monorepo. It provides three capabilities:
 
-1. **Population Generation** -- Fetch real Nordic demographic distributions (SCB for Sweden, SSB for Norway) and sample statistically realistic population profiles via conditional chained sampling
-2. **Identity Generation** -- LLM-based persona identity creation using Gemini models with multiple strategy modes (sequential, batch, configurable)
+1. **Population Generation** -- Fetch real demographic distributions from national statistical APIs (SCB for Sweden, SSB for Norway, ISTAT/Eurostat for Italy) and sample statistically realistic population profiles via conditional chained sampling
+2. **Identity Generation** -- LLM-based persona identity creation using Gemini models with configurable strategy mode
 3. **Population Comparison** -- Statistical evaluation and visual comparison between any two population files
 
-## Commands
+## Quick Start
+
+Requires Python 3.10+. Install in editable mode (required for imports to work):
 
 ```bash
-# Install (editable mode, required for imports to work)
-pip install -e .
+pip install -e ".[dev]"          # editable install + dev tools; add ".[gui]" for the PyQt5 launcher
 
-# Install with dev tools
-pip install -e ".[dev]"
+# Generate a Swedish population from live SCB data
+python scripts/generate/generate_scb_population.py --n 1000 --seed 42 --output scb_pop.json
 
-# Generate Swedish population from live SCB data
-python scripts/generate_scb_population.py --n 1000 --seed 42 --output scb_pop.json
+# Generate identities via axis composition (model × strategy × country)
+python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id swedish
 
-# Generate Norwegian population from live SSB data
-python scripts/generate_ssb_population.py --n 1000 --seed 42 --output ssb_pop.json
+# Comparison is two-stage: MAP first, then COMPARE (compare consumes the pre-mapped files)
+python scripts/analyze/map_populations.py
+python scripts/analyze/compare_pipeline_to_scb.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
 
-# Generate a persona identity (requires GEMINI_API_KEY)
-python scripts/generate_identity.py --mode configurable \
-    --config config/assets/identity/configurable/simulation_config_004_swedish_generative.json
-
-# Compare two population files
-python scripts/compare_populations.py pop_a.json pop_b.json
-
-# Linting
-ruff check src/
+python -m population_synthetic.gui.main   # GUI launcher (requires ".[gui]")
+ruff check src/                       # lint (line-length 120, rules E/F/W/I)
+pytest                                # test suite (covers llm_metrics/ and clients/call_context)
 ```
 
-No test suite exists currently.
+**Full command catalog → [Command reference](docs/architecture/commands.md)** (`docs/architecture/commands.md`).
 
 ## Import Convention
 
-The project uses `src/` layout. The `pyproject.toml` configures `setuptools` to find packages under `src/`, so after `pip install -e .`, the `population_synth` namespace is available:
+The project uses `src/` layout. The `pyproject.toml` configures `setuptools` to find packages under `src/`, so after `pip install -e .`, the `population_synthetic` namespace is available:
 
 ```python
-from population_synth.population.sweden.fetch_service import FetchService
-from population_synth.clients.scb_client import SCBPxWebClient
-from population_synth.identity.factory_identity_generator import FactoryIdentityGenerator
+from population_synthetic.generators.reference.sweden.fetch_service import FetchService
+from population_synthetic.clients.scb_client import SCBPxWebClient
+from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
 ```
 
-All imports use the fully-qualified `population_synth.*` package namespace. Scripts in `scripts/` depend on the editable install.
+All imports use the fully-qualified `population_synthetic.*` package namespace. Scripts in `scripts/` depend on the editable install.
+
+## Core Invariants (hard rules)
+
+These are enforced guardrails, not suggestions. Full rationale in
+[Design principles](docs/architecture/design-principles.md) (`docs/architecture/design-principles.md`).
+
+- **No synthetic distributions** -- Every probability distribution in population generation must come from a real statistical API response; no hardcoded probability tables, fallback distributions, or parametric approximations. If no API provides a field, **drop it** -- never invent values. (Structural constants like dataset IDs and label maps are fine.)
+- **Config is the single source of truth** -- Attribute lists / axis order / category values / matcher rules / joint-coherence pairs / sex-harmonization maps live **only** in config (`config/mapping/{scb,istat}/`, `config/analysis/comparison/*.json`). No in-code `attr or DEFAULT` fallback. Missing/empty/malformed config **fails loudly** (raise) -- never silently reverts to a baked-in list.
+- **Full comparison output** -- A reference comparison emits every artifact: a bar chart for each of the 15 `DEMOGRAPHIC_ATTRIBUTES`, the TV-similarity radar, the JSON report (marginals + joint chi-squared + coherence), and the CSV marginals. Skip a chart only when the attribute has zero data in **both** populations.
+- **Fail-fast** -- Raise loudly on unexpected or malformed input rather than silently defaulting.
 
 ## Architecture
 
-### Four Sub-packages
+`src/` layout; the `population_synthetic` namespace holds the two data producers under
+`generators/` -- `generators/reference/` (per-country data layers over a shared parent) and
+`generators/synthetic/` (LLM persona generation) -- plus `analysis/` (the
+post-generation family, one subpackage per process: `mapping/` raw -> canonical schema,
+`comparison/` two-stage map -> compare statistical scoring + charts, `llm_metrics/` post-run
+LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
+top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
-**`population/`** -- Shared population layer with country-specific sub-modules:
-- `data.py` -- `PopulationDistributions` dataclass (shared by both countries)
-- `helpers.py` -- Shared utilities: `age_to_group`, `sample_from`, `normalize`, `VALID_AGE_GROUPS`, `AGE_GROUP_BOUNDS`
-- `income_class.py` -- Income bracket classification using Eurostat AROP (0.60x median) and OECD/Pew (1.00x, 2.00x) thresholds
-- `sweden/` -- SCB-specific: constants (table IDs, label maps), fetch service, parsers, sample service
-- `norway/` -- SSB-specific: constants (table IDs, label maps), fetch service, parsers, sample service
-
-**`identity/`** -- LLM-based persona identity generation:
-- Factory + Strategy pattern: `FactoryIdentityGenerator` selects sequential, batch, or configurable strategy at runtime
-- Base class defines the generation interface; each strategy implements `generate_identity()`
-- Configurable mode uses simulation config JSON files with pluggable strategy definitions
-
-**`comparison/`** -- Statistical evaluation and charting:
-- `StatisticalEvaluator` computes per-field chi-squared tests and total variation distances
-- `normalizer` converts raw API output format to canonical schema for comparison
-- `charts` generates bar-chart and radar-chart PNGs via matplotlib
-- `extractor` pulls demographic fields from pipeline `identity.json` files
-
-**`clients/`** -- API clients:
-- `BasePxWebClient` -- Shared HTTP client with local JSON file caching
-- `SCBPxWebClient` -- Statistics Sweden PxWeb API (POST requests)
-- `SSBPxWebClient` -- Statistics Norway PxWebApi v2 (GET requests, POST fallback, >=2.1s rate limiter)
-- `GeminiClient` -- Google Gemini API wrapper with metadata sidecar tracking
-
-### Path Resolution
-
-`_paths.py` provides a single `PROJECT_ROOT` constant:
-```python
-PROJECT_ROOT = Path(__file__).resolve().parents[2]  # src/population_synth/ -> population-synth/
-```
-All cache and config paths derive from this.
-
-## Key Design Patterns
-
-- **Shared population layer** -- Breaks the SCB<->SSB cross-dependency. Both `sweden/` and `norway/` import from the shared `population/` parent, never from each other
-- **Factory + Strategy** -- `FactoryIdentityGenerator` selects generation strategy at runtime based on mode string
-- **Conditional chained sampling** -- Population sampling conditions each attribute on prior draws (e.g., education given age/sex, employment given education)
-- **Live API data only** -- All distributions come from live API calls; no static data is ever substituted. If no table exists for a field, the field is dropped
-- **Local file caching** -- PxWeb clients cache API responses as JSON files in `config/assets/{scb,ssb}_cache/` to avoid redundant API calls
-
-## Configuration
-
-- **Identity prompts and simulation configs:** `config/assets/identity/` (batch, configurable, sequential sub-directories)
-- **SCB API cache:** `config/assets/scb_cache/` (git-ignored)
-- **SSB API cache:** `config/assets/ssb_cache/` (git-ignored)
-- **Category label mappings:** `config/assets/scb_reference/category_mappings.json` and `config/assets/ssb_reference/category_mappings.json`
+| Topic | Page |
+|-------|------|
+| Per-package breakdown + path resolution | [Sub-packages](docs/architecture/sub-packages.md) |
+| Two-stage map -> compare flow + mapping config + mapper hierarchies | [Comparison & mapping](docs/architecture/comparison-mapping.md) |
+| Design patterns + hard-rule rationale | [Design principles](docs/architecture/design-principles.md) |
+| Axis composition (model × strategy × country) | [Axis composition](docs/architecture/axis-composition.md) |
+| `config/` inventory | [Configuration](docs/architecture/configuration.md) |
+| Command catalog | [Commands](docs/architecture/commands.md) |
+| Wiki home / index | [Architecture home](docs/architecture/README.md) |
 
 ## Environment & Secrets
 
-- `GEMINI_API_KEY` environment variable required for identity generation (raises `ValueError` if missing)
+- `GEMINI_API_KEY` environment variable required for identity generation with `--provider gemini` (raises `ValueError` if missing)
+- `--provider claude` requires the `claude` CLI on PATH; raises `RuntimeError` at construction if not found; no extra API key needed (Claude Code manages its own auth)
 - Population generation (SCB/SSB scripts) does not require any API keys
+
+## Documentation
+
+Design and audit notes worth consulting before non-trivial changes:
+
+| Doc | What it covers |
+|-----|----------------|
+| [Architecture wiki](docs/architecture/README.md) | **Start here** — the architecture wiki (sub-packages, comparison/mapping, design principles, axis composition, config, commands). |
+| [Debugging identity generation](docs/development/debugging-identity-generation.md) | Runbook for diagnosing a failed persona generation (locating run dirs, reading crash-surviving logs). |
+| [SCB population & comparison](docs/scb_population_and_comparison.md) | End-to-end SCB pipeline and comparison design. |
+| [Database mapper philosophy](docs/database_mapper_philosophy.md) | *Why* the reference mapper exists and the principle governing it. |
+| [SCB distribution analysis](docs/scb_population_distribution_analysis.md) (+ [verification](docs/scb_population_distribution_analysis_verification.md)) | Per-field distribution analysis. |
+| [SCB comparison API-rooting audit](docs/audit_scb_comparison_api_rooting_2026-05-11.md) | Audit of comparison-vs-API field routing. |
+| [SCB02 category-mapping rationale](docs/scb02_comparison_category_mapping_2026-05-11.md) | Category-mapping rationale. |
+| [ISTAT population data sources](docs/istat_population_data_sources.md) | Italy field-by-field API source matrix, protocol details, sampling chain, known limitations. |
+| [Code standards](docs/code-standards/README.md) · [Data-pipeline engineering](docs/data-pipeline-engineering/README.md) | Repository-agnostic engineering-standards wiki sets. |
+| [Development notes](docs/development/) | In-progress development notes and plans. |

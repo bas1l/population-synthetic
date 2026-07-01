@@ -1,0 +1,193 @@
+{
+  "values": [
+    "Wage / Business",
+    "Capital",
+    "Pension",
+    "Insurance / Allowance",
+    "Social Assistance",
+    "Sickness / Activity Compensation"
+  ],
+  "database": {
+    "Wage / Business": {
+      "equals": [
+        "Wage / Business",
+        "wage and business income"
+      ]
+    },
+    "Capital": {
+      "equals": [
+        "Capital",
+        "capital income"
+      ]
+    },
+    "Pension": {
+      "equals": [
+        "Pension",
+        "pensions"
+      ]
+    },
+    "Insurance / Allowance": {
+      "equals": [
+        "Insurance / Allowance",
+        "sickness compensation, parental allowance, labour market assistance etc."
+      ]
+    },
+    "Social Assistance": {
+      "equals": [
+        "Social Assistance",
+        "social assistance"
+      ]
+    },
+    "Sickness / Activity Compensation": {
+      "equals": [
+        "Sickness / Activity Compensation",
+        "sickness and activity compensation"
+      ]
+    }
+  },
+  "synthetic": {
+    "Wage / Business": {
+      "none_of": [
+        "unemploy",
+        "arbetslös",
+        "arbetssökande"
+      ],
+      "equals": [
+        "Wage / Business",
+        "Lön",
+        "Lön från anställning",
+        "Lön och företagsinkomster",
+        "Inkomst från egen verksamhet",
+        "Inkomst från eget företag",
+        "Företagsinkomst",
+        "Näringsverksamhet",
+        "Frilansinkomst"
+      ],
+      "contains": [
+        "wage",
+        "business",
+        "employment",
+        "self-employ",
+        "lön",
+        "företag",
+        "egenföretagare",
+        "freelan",
+        "frilans",
+        "work"
+      ]
+    },
+    "Capital": {
+      "equals": [
+        "Capital",
+        "Kapitalinkomster",
+        "Kapitalinkomst",
+        "Aktieutdelning",
+        "Räntor och utdelningar"
+      ],
+      "contains": [
+        "capital",
+        "kapital",
+        "dividend",
+        "interest",
+        "ränta",
+        "räntor",
+        "ränte",
+        "rente",
+        "aktieutdelning",
+        "utdelning",
+        "investment",
+        "stocks",
+        "avkastning",
+        "real estate",
+        "property income",
+        "rental income",
+        "rental/property",
+        "hyresintäkt",
+        "hyresinkomst",
+        "hyresintäkter"
+      ]
+    },
+    "Pension": {
+      "equals": [
+        "Pension",
+        "Allmän pension",
+        "Tjänstepension",
+        "Privat pension",
+        "Ålderspension"
+      ],
+      "contains": [
+        "pension"
+      ]
+    },
+    "Insurance / Allowance": {
+      "equals": [
+        "Insurance / Allowance",
+        "A-kassa",
+        "Arbetslöshetsersättning",
+        "Föräldrapenning",
+        "Sjukpenning",
+        "Studiemedel",
+        "Studiebidrag",
+        "Bostadsbidrag"
+      ],
+      "contains": [
+        "insurance",
+        "allowance",
+        "a-kassa",
+        "sjukpenning",
+        "föräldrapenning",
+        "allowan",
+        "ersättning",
+        "transfer",
+        "benefit",
+        "student loan",
+        "student aid",
+        "student grant",
+        "student finance",
+        "studielån",
+        "studiestöd",
+        "studiemedel",
+        "studiebidrag",
+        "study grant",
+        "scholarship",
+        "stipend",
+        "csn",
+        "grant from",
+        "grants from",
+        "försäkringskassa",
+        "dagpenning",
+        "bidrag",
+        "unemploy",
+        "arbetslöshet"
+      ]
+    },
+    "Social Assistance": {
+      "equals": [
+        "Social Assistance",
+        "Försörjningsstöd",
+        "Socialbidrag",
+        "Ekonomiskt bistånd"
+      ],
+      "contains": [
+        "social assistance",
+        "försörjningsstöd",
+        "socialbidrag"
+      ]
+    },
+    "Sickness / Activity Compensation": {
+      "equals": [
+        "Sickness / Activity Compensation",
+        "Sjukersättning",
+        "Aktivitetsersättning",
+        "Sjuk- och aktivitetsersättning"
+      ],
+      "contains": [
+        "sickness",
+        "activity compensation",
+        "sjukersättning",
+        "aktivitetsersättning"
+      ]
+    },
+    "on_miss": "Wage / Business"
+  }
+}

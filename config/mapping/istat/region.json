@@ -1,0 +1,272 @@
+{
+  "values": [
+    "Lombardia",
+    "Abruzzo",
+    "Puglia",
+    "Friuli-Venezia Giulia",
+    "Piemonte",
+    "Toscana",
+    "Umbria",
+    "Basilicata",
+    "Sicilia",
+    "Lazio",
+    "Liguria",
+    "Sardegna",
+    "Molise",
+    "Emilia-Romagna",
+    "Marche",
+    "Trentino-Alto Adige/Südtirol",
+    "Calabria",
+    "Veneto",
+    "Campania",
+    "Valle d'Aosta"
+  ],
+  "database": {
+    "Lombardia": {
+      "equals": [
+        "Lombardia"
+      ]
+    },
+    "Abruzzo": {
+      "equals": [
+        "Abruzzo"
+      ]
+    },
+    "Puglia": {
+      "equals": [
+        "Puglia"
+      ]
+    },
+    "Friuli-Venezia Giulia": {
+      "equals": [
+        "Friuli-Venezia Giulia"
+      ]
+    },
+    "Piemonte": {
+      "equals": [
+        "Piemonte"
+      ]
+    },
+    "Toscana": {
+      "equals": [
+        "Toscana"
+      ]
+    },
+    "Umbria": {
+      "equals": [
+        "Umbria"
+      ]
+    },
+    "Basilicata": {
+      "equals": [
+        "Basilicata"
+      ]
+    },
+    "Sicilia": {
+      "equals": [
+        "Sicilia"
+      ]
+    },
+    "Lazio": {
+      "equals": [
+        "Lazio"
+      ]
+    },
+    "Liguria": {
+      "equals": [
+        "Liguria"
+      ]
+    },
+    "Sardegna": {
+      "equals": [
+        "Sardegna"
+      ]
+    },
+    "Molise": {
+      "equals": [
+        "Molise"
+      ]
+    },
+    "Emilia-Romagna": {
+      "equals": [
+        "Emilia-Romagna"
+      ]
+    },
+    "Marche": {
+      "equals": [
+        "Marche"
+      ]
+    },
+    "Trentino-Alto Adige/Südtirol": {
+      "equals": [
+        "Trentino-Alto Adige/Südtirol"
+      ]
+    },
+    "Calabria": {
+      "equals": [
+        "Calabria"
+      ]
+    },
+    "Veneto": {
+      "equals": [
+        "Veneto"
+      ]
+    },
+    "Campania": {
+      "equals": [
+        "Campania"
+      ]
+    },
+    "Valle d'Aosta": {
+      "equals": [
+        "Valle d'Aosta"
+      ]
+    }
+  },
+  "synthetic": {
+    "Lombardia": {
+      "equals": [
+        "Lombardia",
+        "Milano",
+        "Brescia",
+        "Milan"
+      ]
+    },
+    "Abruzzo": {
+      "equals": [
+        "Abruzzo",
+        "L'Aquila",
+        "Pescara"
+      ]
+    },
+    "Puglia": {
+      "equals": [
+        "Puglia",
+        "Bari",
+        "Taranto",
+        "Foggia"
+      ]
+    },
+    "Friuli-Venezia Giulia": {
+      "equals": [
+        "Friuli-Venezia Giulia",
+        "Friuli Venezia Giulia",
+        "Trieste"
+      ]
+    },
+    "Piemonte": {
+      "equals": [
+        "Piemonte",
+        "Torino",
+        "Turin"
+      ]
+    },
+    "Toscana": {
+      "equals": [
+        "Toscana",
+        "Firenze",
+        "Livorno",
+        "Florence"
+      ]
+    },
+    "Umbria": {
+      "equals": [
+        "Umbria",
+        "Perugia"
+      ]
+    },
+    "Basilicata": {
+      "equals": [
+        "Basilicata",
+        "Potenza"
+      ]
+    },
+    "Sicilia": {
+      "equals": [
+        "Sicilia",
+        "Palermo",
+        "Catania",
+        "Messina"
+      ]
+    },
+    "Lazio": {
+      "equals": [
+        "Lazio",
+        "Roma",
+        "Rome"
+      ]
+    },
+    "Liguria": {
+      "equals": [
+        "Liguria",
+        "Genova",
+        "Genoa"
+      ]
+    },
+    "Sardegna": {
+      "equals": [
+        "Sardegna",
+        "Cagliari"
+      ]
+    },
+    "Molise": {
+      "equals": [
+        "Molise",
+        "Campobasso"
+      ]
+    },
+    "Emilia-Romagna": {
+      "equals": [
+        "Emilia-Romagna",
+        "Emilia Romagna",
+        "Bologna",
+        "Reggio Emilia",
+        "Modena",
+        "Parma"
+      ]
+    },
+    "Marche": {
+      "equals": [
+        "Marche",
+        "Ancona"
+      ]
+    },
+    "Trentino-Alto Adige/Südtirol": {
+      "equals": [
+        "Trentino-Alto Adige/Südtirol",
+        "Trentino-Alto Adige",
+        "Trentino",
+        "Trento",
+        "Bolzano"
+      ]
+    },
+    "Calabria": {
+      "equals": [
+        "Calabria",
+        "Reggio Calabria"
+      ]
+    },
+    "Veneto": {
+      "equals": [
+        "Veneto",
+        "Venezia",
+        "Verona",
+        "Padova",
+        "Venice"
+      ]
+    },
+    "Campania": {
+      "equals": [
+        "Campania",
+        "Napoli",
+        "Naples"
+      ]
+    },
+    "Valle d'Aosta": {
+      "equals": [
+        "Valle d'Aosta",
+        "Aosta"
+      ]
+    }
+  }
+}

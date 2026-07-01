@@ -1,0 +1,6 @@
+id: "italian"
+label: "Italy"
+parameters:
+  config: "config/synthetic/simulation_configs/simulation_config_005_italian_generative.json"
+  reference: "data/istat_api/istat_population.json"
+  mappings: "config/mapping/istat"

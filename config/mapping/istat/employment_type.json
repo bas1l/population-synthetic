@@ -1,0 +1,81 @@
+{
+  "values": [
+    "Unspecified/Full-time",
+    "Unspecified/Part-time",
+    "Not Applicable"
+  ],
+  "database": {
+    "Unspecified/Full-time": {
+      "attachment": {
+        "contains": [
+          "unspecified"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "full-time"
+        ]
+      }
+    },
+    "Unspecified/Part-time": {
+      "attachment": {
+        "contains": [
+          "unspecified"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "part-time"
+        ]
+      }
+    },
+    "absent": "Not Applicable"
+  },
+  "synthetic": {
+    "Unspecified/Full-time": {
+      "none_of": [
+        "part-time",
+        "part time",
+        "parziale",
+        "tempo parziale"
+      ],
+      "contains": [
+        "tempo indeterminato",
+        "indeterminato",
+        "tempo determinato",
+        "determinato",
+        "permanent",
+        "permanente",
+        "temporary",
+        "full-time",
+        "full time",
+        "tempo pieno",
+        "dipendente",
+        "impiegato",
+        "impiego",
+        "autonomo",
+        "libero professionista",
+        "freelance",
+        "self-employed",
+        "employed",
+        "contratto"
+      ]
+    },
+    "Unspecified/Part-time": {
+      "contains": [
+        "part-time",
+        "part time",
+        "tempo parziale",
+        "parziale"
+      ]
+    },
+    "Not Applicable": {
+      "equals": [
+        "not applicable",
+        "n/a",
+        "non applicabile"
+      ]
+    },
+    "on_miss": "Not Applicable"
+  }
+}

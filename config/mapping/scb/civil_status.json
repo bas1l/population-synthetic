@@ -1,0 +1,125 @@
+{
+  "values": [
+    "Single/Never Married",
+    "Married",
+    "Divorced",
+    "Widowed"
+  ],
+  "database": {
+    "Single/Never Married": {
+      "equals": [
+        "Single/Never Married",
+        "single"
+      ]
+    },
+    "Married": {
+      "equals": [
+        "Married",
+        "married"
+      ]
+    },
+    "Divorced": {
+      "equals": [
+        "Divorced",
+        "divorced"
+      ]
+    },
+    "Widowed": {
+      "equals": [
+        "Widowed",
+        "widowers/widows"
+      ]
+    }
+  },
+  "synthetic": {
+    "Single/Never Married": {
+      "equals": [
+        "Single/Never Married",
+        "Ogift",
+        "Singel",
+        "Ensamstående",
+        "Singlar",
+        "Singular",
+        "Singly",
+        "Single",
+        "Förlovad",
+        "Ugift",
+        "Unmarried"
+      ],
+      "contains": [
+        "singel",
+        "ogift",
+        "single",
+        "never married",
+        "ensamstående",
+        "ensam"
+      ]
+    },
+    "Married": {
+      "equals": [
+        "Married",
+        "Gift",
+        "Sambo",
+        "Sammanboende",
+        "Registrerat partnerskap",
+        "Registrerad partner",
+        "Giftermål",
+        "Gifit",
+        "Äktenskaplig",
+        "Äktenskap",
+        "Sammboende",
+        "Samlevande",
+        "Sammanboende med partner",
+        "Gifta",
+        "Civilstånd: Gift",
+        "Civilstånd: Giftermål"
+      ],
+      "contains": [
+        "gift",
+        "cohabiting",
+        "cohabit",
+        "habiting",
+        "habitant",
+        "sambo",
+        "samboende",
+        "särbo",
+        "married",
+        "partner",
+        "relation",
+        "förhållande",
+        "registrerad partner"
+      ]
+    },
+    "Divorced": {
+      "equals": [
+        "Divorced",
+        "Skild",
+        "Frånskild",
+        "Separerad",
+        "Separat"
+      ],
+      "contains": [
+        "skild",
+        "frånskild",
+        "separated",
+        "divorced"
+      ]
+    },
+    "Widowed": {
+      "equals": [
+        "Widowed",
+        "Änka",
+        "Änkling",
+        "Änklig",
+        "Änkeman"
+      ],
+      "contains": [
+        "änka",
+        "änkling",
+        "änklig",
+        "änkeman",
+        "widow"
+      ]
+    }
+  }
+}

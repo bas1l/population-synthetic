@@ -1,0 +1,135 @@
+{
+  "instruction": [
+    "You are a demographic simulation engine for a Swedish population.",
+    "You will be called once per identity category. Each call provides: (1) a 'Current Persona Context' containing all attributes resolved so far, and (2) a 'Target Category' with its name, description, and any constraints.",
+    "Your task is to generate a single, contextually appropriate value for the target category based on the resolved context.",
+    "The persona lives in Sweden. Use Swedish conventions for regions, institutions, and cultural references where applicable.",
+    "Ensure the generated value is internally coherent with all attributes already resolved in the Current Persona Context.",
+    "For categorical fields: generate a single string value. Do not generate a list — pick exactly one.",
+    "For numeric fields: generate a single integer or float within the given min/max range.",
+    "Return ONLY valid JSON. No markdown, no explanation, no commentary.",
+    "The JSON output must match the format specified in each individual prompt."
+  ],
+  "categories": {
+    "age": {
+      "type": "integer",
+      "min": 18,
+      "max": 90,
+      "description": "Age of the persona in years."
+    },
+    "biological_sex": {
+      "description": "The biological sex of the persona."
+    },
+    "gender_identity": {
+      "description": "The gender identity of the persona."
+    },
+    "sexual_orientation": {
+      "description": "The sexual orientation of the persona."
+    },
+    "birth_location": {
+      "description": "Whether the persona was born domestically or abroad"
+    },
+    "region": {
+      "description": "The administrative region where the persona currently resides."
+    },
+    "birth_country_detail": {
+      "description": "The specific country where the persona was born."
+    },
+    "somatotype": {
+      "description": "The general body type of the persona (ectomorph: lean/slender, mesomorph: muscular/athletic, endomorph: heavier/rounder)."
+    },
+    "disabilities_visible": {
+      "description": "Any visible disability or mobility/sensory impairment the persona has."
+    },
+    "parental_structure": {
+      "description": "The household structure the persona grew up in as a child."
+    },
+    "sibling_constellation": {
+      "description": "The persona's birth order and sibling position."
+    },
+    "childhood_atmosphere": {
+      "description": "The emotional and relational atmosphere of the persona's childhood home."
+    },
+    "civil_status": {
+      "description": "The current civil/relationship status of the persona."
+    },
+    "household_size": {
+      "description": "The number of people in the persona's current household."
+    },
+    "education_level": {
+      "description": "The highest level of formal education the persona has completed."
+    },
+    "socioeconomic_class": {
+      "description": "The socioeconomic class of the persona."
+    },
+    "religious_alignment": {
+      "description": "The persona's relationship to religion."
+    },
+    "housing_tenure": {
+      "description": "The type of housing the persona lives in."
+    },
+    "current_environment_type": {
+      "description": "The type of environment where the persona currently lives (urban metropolis, suburban, or rural/countryside)."
+    },
+    "ethnicity_broad_global_approx": {
+      "description": "The broad global ethnicity category of the persona."
+    },
+    "openness": {
+      "type": "integer",
+      "min": 1,
+      "max": 100,
+      "description": "The persona's score on the Big Five 'Openness to Experience' dimension (1 = very low, 100 = very high). High openness reflects curiosity, creativity, and appreciation for novel experiences. Low openness reflects conventionality and preference for routine."
+    },
+    "conscientiousness": {
+      "type": "integer",
+      "min": 1,
+      "max": 100,
+      "description": "The persona's score on the Big Five 'Conscientiousness' dimension (1 = very low, 100 = very high). High conscientiousness reflects organisation, diligence, and reliability. Low conscientiousness reflects impulsivity and disorganisation."
+    },
+    "extraversion": {
+      "type": "integer",
+      "min": 1,
+      "max": 100,
+      "description": "The persona's score on the Big Five 'Extraversion' dimension (1 = highly introverted, 100 = highly extraverted). Reflects sociability, assertiveness, and enthusiasm for social interaction."
+    },
+    "agreeableness": {
+      "type": "integer",
+      "min": 1,
+      "max": 100,
+      "description": "The persona's score on the Big Five 'Agreeableness' dimension (1 = very low, 100 = very high). High agreeableness reflects warmth, cooperativeness, and empathy. Low agreeableness reflects competitiveness and scepticism."
+    },
+    "neuroticism": {
+      "type": "integer",
+      "min": 1,
+      "max": 100,
+      "description": "The persona's score on the Big Five 'Neuroticism' dimension (1 = very low/emotionally stable, 100 = very high/emotionally reactive). High neuroticism reflects anxiety, mood variability, and emotional sensitivity."
+    },
+    "cognitive_style": {
+      "description": "The persona's dominant cognitive processing style. Analytical thinkers prefer logic and systematic reasoning. Intuitive thinkers rely on gut feeling and pattern recognition. Creative thinkers are divergent and imaginative. Pragmatic thinkers focus on practical outcomes."
+    },
+    "employment_status": {
+      "description": "The persona's current employment status."
+    },
+    "financial_behavior": {
+      "description": "The persona's general financial behaviour pattern. Savers prioritise putting money aside and living below their means. Spenders tend to spend most or all of their income. Balanced individuals manage money pragmatically without strong orientation toward either extreme."
+    },
+    "industry_sector": {
+      "description": "The industry sector in which the persona works."
+    },
+    "employment_type": {
+      "description": "The type of employment contract the persona holds."
+    },
+    "income_source": {
+      "description": "The persona's primary source of income."
+    },
+    "social_media_usage": {
+      "description": "The persona's relationship with social media. Consumers use social media to read and view content but rarely post. Contributors actively post, comment, and create content. Non-users do not use social media at all."
+    },
+    "tone_baseline": {
+      "description": "The persona's default communicative tone in everyday interactions. Casual communicators are relaxed, informal, and colloquial. Formal communicators are precise and professional even in informal settings. Empathetic communicators are warm, attentive, and emotionally attuned. Direct communicators are concise and unambiguous."
+    },
+    "speaking_pace": {
+      "description": "The persona's habitual speed of speech. Fast speakers are typically energetic or anxious. Slow speakers are typically deliberate or thoughtful."
+    }
+  }
+}

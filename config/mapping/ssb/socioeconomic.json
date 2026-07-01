@@ -1,0 +1,23 @@
+{
+  "description": "Socioeconomic class derived from individual gross income brackets (table 06655, BruttoInn × Alder × Kjonn). Country median computed from bracket midpoints × counts; Eurostat AROP (0.60×) and OECD/Pew (1.00×, 2.00×) multipliers applied. Conditional on (age_group, sex).",
+  "ssb_variable": "BruttoInn",
+  "ssb_table": "06655",
+  "mappings": {
+    "poverty": {
+      "schema_label": "Poverty",
+      "description": "Gross individual income < 0.60 × national median (Eurostat AROP threshold)"
+    },
+    "working_class": {
+      "schema_label": "Working Class",
+      "description": "Gross individual income 0.60 – 1.00 × national median (OECD lower-middle floor)"
+    },
+    "middle_class": {
+      "schema_label": "Middle Class",
+      "description": "Gross individual income 1.00 – 2.00 × national median (OECD middle band)"
+    },
+    "wealthy": {
+      "schema_label": "Wealthy",
+      "description": "Gross individual income >= 2.00 × national median (OECD/Pew upper income)"
+    }
+  }
+}
