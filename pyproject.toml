@@ -29,6 +29,7 @@ dev = [
 gui = [
     "PyQt5>=5.15",
     "grandalf>=0.8",
+    "ruamel.yaml>=0.18",
 ]
 
 [tool.setuptools.packages.find]

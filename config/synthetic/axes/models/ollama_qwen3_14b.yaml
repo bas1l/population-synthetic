@@ -1,5 +1,5 @@
 id: "ollama_qwen3_14b"
-label: "Ollama Qwen3 14B"
+label: "Ollama Qwen3 14B (discarded for now)"
 model_config:
   provider: "ollama"
   model: "qwen3:14b"

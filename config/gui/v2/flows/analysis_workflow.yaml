@@ -1,0 +1,80 @@
+# Analysis workflow DAG. The GUI walks tasks in dependency order and TRANSLATES
+# each into CLI invocations of the task's script (scripts do NOT read this file).
+# dispatch:
+#   per_combo — one invocation per checked combo: --model-id/--strategy-id/--country-id
+#   slugs     — one invocation total, with one --slug {country}_{strategy}_{model} per combo
+tasks:
+  map_populations:
+    label: Map Populations
+    script: scripts/analyze/map_populations.py
+    dispatch: per_combo
+    enabled: true
+    supports_force: true          # node shows a Force checkbox -> --force
+    force: false
+    options:
+      output-base:                # --output-base (blank = script default)
+    depends_on: []
+
+  compare_synth_real:
+    label: Compare Synthetic to Real
+    script: scripts/analyze/compare_all_pipelines.py
+    dispatch: slugs
+    enabled: true
+    options:
+      no-charts: false            # --no-charts (flag when true)
+      radar-tv-only: false        # --radar-tv-only
+      output-base:
+    depends_on: [map_populations]
+
+  model_performance:
+    label: Model Performance (models x methods)
+    script: scripts/analyze/compare_model_performance.py
+    dispatch: slugs
+    enabled: true
+    min_combos: 2                 # guard: loud skip below 2 checked combos
+    options:
+      no-charts: false
+      per-attribute-charts: false
+      strict: false
+      output-base:
+    depends_on: [compare_synth_real]
+
+  compare_pops:
+    label: Compare Two Populations
+    script: scripts/analyze/compare_populations.py
+    dispatch: slugs
+    enabled: false                # opt-in: needs EXACTLY 2 combos
+    min_combos: 2
+    max_combos: 2
+    options:
+      output:                     # --output (blank = script default)
+      no-charts: false
+    depends_on: [map_populations]
+
+  llm_metrics_per_run:            # independent — isolated node
+    label: LLM Metrics (per-run)
+    script: scripts/analyze/analyze_run.py
+    dispatch: per_combo
+    enabled: false
+    supports_force: true
+    force: false
+    options:
+      charts:                     # --charts DIR (blank = default)
+      verbose: false
+    depends_on: []
+
+  llm_metrics_cross_run:          # independent — isolated node
+    label: LLM Metrics (cross-run)
+    script: scripts/analyze/compare_runs.py
+    dispatch: slugs
+    enabled: false
+    options:
+      metrics:                    # --metrics KEY... (blank = all)
+    depends_on: []
+
+selection:                        # shared by ALL tasks in the chain
+  models: [claude_haiku, claude_opus, claude_sonnet, ollama_deepseek_r1_14b, 
+      ollama_gemma4_e4b, ollama_llama31_8b, ollama_mistral_nemo_12b]
+  strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick, 
+      all_generate_pick, all_pick, all_pick_dag]
+  countries: [swedish]

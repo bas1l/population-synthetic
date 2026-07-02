@@ -1,5 +1,5 @@
 id: "ollama_lucie_7b"
-label: "Ollama Lucie 7B Instruct"
+label: "Ollama Lucie 7B Instruct (discarded for now)"
 model_config:
   provider: "ollama"
   model: "OpenLLM-France/Lucie-7B-Instruct:latest"
