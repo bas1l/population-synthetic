@@ -1,10 +1,11 @@
-"""Shared numeric primitives for the llm_metrics pipeline.
+"""Shared numeric primitives for the analysis pipelines.
 
-A single home for ``median`` / ``percentile`` / ``shannon_entropy`` so the
-per-run aggregator, the per-run charts, and the cross-run comparison all use the
-*same* convention.  Previously these were implemented three times with divergent
-percentile semantics (stdlib nearest-rank vs numpy linear interpolation), so the
-same conceptual p95 could differ between a chart and a cross-run summary.
+A single home for ``median`` / ``percentile`` / ``shannon_entropy`` so every
+analysis consumer (the llm_metrics per-run aggregator and charts, the cross-run
+comparison, the cross-model performance comparison) uses the *same* convention.
+Previously these were implemented three times with divergent percentile
+semantics (stdlib nearest-rank vs numpy linear interpolation), so the same
+conceptual p95 could differ between a chart and a cross-run summary.
 
 **Percentile convention: nearest-rank.**  ``percentile`` returns a value that
 actually occurred in the sample (no interpolation between ranks).  This keeps the

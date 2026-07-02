@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from population_synthetic.analysis.llm_metrics.shared._stats import median as _median
-from population_synthetic.analysis.llm_metrics.shared._stats import percentile as _percentile
+from population_synthetic.analysis.utils._stats import median as _median
+from population_synthetic.analysis.utils._stats import percentile as _percentile
 
 # ------------------------------------------------------------------
 # Chart styling constants

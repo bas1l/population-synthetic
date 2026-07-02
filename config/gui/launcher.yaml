@@ -137,6 +137,30 @@ actions:
         default: false
         help: "Skip chart generation"
 
+  - id: model_performance
+    label: "Model Performance (models x methods)"
+    group: analysis
+    script: scripts/analyze/compare_model_performance.py
+    requires_manifest: false
+    axis_mode: batch
+    min_combos: 2
+    parameters:
+      - key: no-charts
+        label: "Skip charts"
+        type: bool
+        default: false
+        help: "Skip chart generation"
+      - key: per-attribute-charts
+        label: "Per-attribute charts"
+        type: bool
+        default: false
+        help: "Also write one grouped bar chart per demographic attribute"
+      - key: strict
+        label: "Strict (fail on missing reports)"
+        type: bool
+        default: false
+        help: "Fail when any selected combo lacks a comparison report"
+
   - id: llm_metrics_per_run
     label: "LLM Metrics (per-run)"
     group: analysis

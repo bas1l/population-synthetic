@@ -29,7 +29,7 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   - `configurable` -- strategy-driven generation controlled by a simulation config JSON file with pluggable strategy definitions
 
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
-(`mapping/`, `comparison/`, `llm_metrics/`, plus a shared `utils/`):
+(`mapping/`, `comparison/`, `performance/`, `llm_metrics/`, plus a shared `utils/`):
 
 - **`mapping/`** -- Transforms raw population data (national-statistics records *or* LLM-pipeline
   identities) into the canonical comparable schema. Holds the shared resolver `mapping_engine.py`,
@@ -41,16 +41,27 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   - `StatisticalEvaluator` (`evaluator.py`) computes per-field chi-squared tests and total variation distances
   - `charts` generates bar-chart and radar-chart PNGs via matplotlib
   - `scheme.py` -- the comparison-purpose bridge that reads the mapping config
-- **`utils/`** -- cross-process shared infra: `country_config.py`, the shared country resolver
-  (`real_for_country`, `mappings_for_country`, `known_country_ids`, `infer_country`) consumed
-  by both the map stage and the comparison consumers.
+- **`performance/`** -- Cross-model performance comparison (sits after the compare stage; driven by
+  `compare_model_performance.py`). Consumes the per-combo comparison reports and ranks the
+  model × strategy combos against each other per country -- per attribute (TV-similarity) and
+  overall -- with Kruskal-Wallis + Dunn/Holm factor tests. `loader.py` (`ComboPerformance` DTO +
+  report discovery via `mapped/_index.json`), `builder.py` (`build_performance_comparison` +
+  JSON/CSV writers), `charts.py` (heatmap, leaderboard, per-attribute bars). Never recomputes
+  from populations.
+- **`utils/`** -- cross-process shared infra:
+  - `country_config.py` -- the shared country resolver (`real_for_country`, `mappings_for_country`,
+    `known_country_ids`, `infer_country`) consumed by both the map stage and the comparison consumers
+  - `axes.py` -- axis-vocabulary helpers: `decompose_slug` / `diagnose_slug` (slug -> axis IDs) and
+    `STRATEGY_COMPLEXITY_ORDER` (strategy chart ordering)
+  - `_stats.py` -- stdlib numeric primitives (median, percentile, Shannon entropy); no external dep
+  - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected); carries the
+    scipy/numpy dependency surface, shared by the llm_metrics cross-run and performance processes
 - **`llm_metrics/`** -- post-run LLM-call analytics; detailed below.
 
 **`gui/`** -- PyQt5 desktop launcher for running generation and comparison tasks. `LauncherWindow` presents action groups (Generate, Compare) defined in `config/gui/launcher.yaml`. Axis selection uses checkbox lists (`CheckableAxisList` x3 inside `ExperimentSelector`) rather than dropdowns, so a single launch runs the full **cartesian product** of selected models x strategies x countries -- `ExperimentSelection.combinations()` enumerates the tuples via `itertools.product`, `ManifestOverview` previews them in a table, and `CombinationRunner` (QThread) runs each as a `--model-id/--strategy-id/--country-id` subprocess with live console streaming and process-tree abort. Selections persist to `config/gui/state.json`.
 
-**`analysis/llm_metrics/`** -- Post-processing analytics for identity generation runs (LLM call behaviour, distinct from `analysis/comparison/` which scores population quality). Named for its output subdir `03_Analysis/llm_metrics/`. Organised as a **two-level pipeline** split across three subpackages: `per_run/` (pipeline A, driven by `analyze_run.py`) turns one run into per-persona analytics + a report; `cross_run/` (pipeline B, driven by `compare_runs.py`) consumes many runs' analytics and produces a cross-run comparison; `shared/` holds the numeric primitives both pipelines use. `per_run/` and `cross_run/` never import each other -- only through `shared/`.
+**`analysis/llm_metrics/`** -- Post-processing analytics for identity generation runs (LLM call behaviour, distinct from `analysis/comparison/` which scores population quality). Named for its output subdir `03_Analysis/llm_metrics/`. Organised as a **two-level pipeline** split across two subpackages: `per_run/` (pipeline A, driven by `analyze_run.py`) turns one run into per-persona analytics + a report; `cross_run/` (pipeline B, driven by `compare_runs.py`) consumes many runs' analytics and produces a cross-run comparison. The numeric primitives and hypothesis tests both levels use live in the cross-process `analysis/utils/` (`_stats.py` / `stats_tests.py`). `per_run/` and `cross_run/` never import each other -- only through `analysis/utils`.
 
-- **`shared/`** -- `_stats.py` -- stdlib numeric primitives (median, percentile, Shannon entropy) used by both pipelines; no external dep.
 - **`per_run/`** -- single-run pipeline (parse -> join -> aggregate -> visualize/report):
   - `interaction_parser.py` / `log_parser.py` -- Parse `llm_interactions.jsonl` and log files from run output
   - `joiner.py` -- Enriches JSONL interaction records by matching to log-file call records via timestamp proximity (±2s). Note: parallel runs write a single top-level master log (`01_Raw/{slug}/logs/`), not per-persona logs; `analyze_run.py` joins that master log so token/latency fields populate. The ±2s join means per-persona token sums are approximate in parallel runs, but aggregate/per-category distributions are sound
@@ -59,11 +70,10 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   - `console_report.py` (`print_metrics`) -- Renders the per-run summary table to the console
 - **`cross_run/`** -- cross-run pipeline (load -> test -> build -> visualize):
   - `comparison_loader.py` -- Discovers and loads the per-run `run_analytics.json` files to compare
-  - `comparison_stats.py` -- Statistical tests: Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected, no external dep)
-  - `run_comparison.py` (`build_comparison`, `METRIC_SPECS`, `decompose_slug`) -- Cross-run statistics: groups runs by model and strategy (country fixed) and assembles the comparison
+  - `run_comparison.py` (`build_comparison`, `METRIC_SPECS`) -- Cross-run statistics: groups runs by model and strategy (country fixed) and assembles the comparison (tests from `analysis/utils/stats_tests.py`)
   - `comparison_charts.py` (`plot_run_comparison`) -- Box plots (with significance brackets), mean±SD bars, and model×method heatmaps per metric
 
-**`utils/`** (top-level) -- Minimal pipeline utilities (`should_process_task()` for skip-if-done logic). Distinct from `analysis/utils/`, which holds the comparison country resolver.
+**`utils/`** (top-level) -- Minimal pipeline utilities (`should_process_task()` for skip-if-done logic). Distinct from `analysis/utils/`, which holds the cross-process analysis infra (country resolver, axis helpers, numeric primitives, hypothesis tests).
 
 **`clients/`** -- API clients:
 - `BasePxWebClient` -- Shared HTTP client with local JSON file caching

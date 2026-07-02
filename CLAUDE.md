@@ -64,7 +64,8 @@ These are enforced guardrails, not suggestions. Full rationale in
 `generators/` -- `generators/real/` (per-country data layers over a shared parent) and
 `generators/synthetic/` (LLM persona generation) -- plus `analysis/` (the
 post-generation family, one subpackage per process: `mapping/` raw -> canonical schema,
-`comparison/` two-stage map -> compare statistical scoring + charts, `llm_metrics/` post-run
+`comparison/` two-stage map -> compare statistical scoring + charts, `performance/` cross-model
+ranking of the comparison reports (models × strategies per country), `llm_metrics/` post-run
 LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
