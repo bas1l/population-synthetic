@@ -30,6 +30,7 @@ python scripts/analyze/map_populations.py
 python scripts/analyze/compare_pipeline_to_scb.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
 
 python -m population_synthetic.gui.main   # GUI launcher (requires ".[gui]")
+python -m population_synthetic.gui_v2.main   # config-driven Flow Runner GUI (requires ".[gui]"; old GUI above remains)
 ruff check src/                       # lint (line-length 120, rules E/F/W/I)
 pytest                                # test suite (covers llm_metrics/ and clients/call_context)
 ```
@@ -92,6 +93,7 @@ Design and audit notes worth consulting before non-trivial changes:
 |-----|----------------|
 | [Architecture wiki](docs/architecture/README.md) | **Start here** — the architecture wiki (sub-packages, comparison/mapping, design principles, axis composition, config, commands). |
 | [Debugging identity generation](docs/development/debugging-identity-generation.md) | Runbook for diagnosing a failed persona generation (locating run dirs, reading crash-surviving logs). |
+| [gui_v2 Flow Runner](docs/development/gui-v2.md) | The config-driven `gui_v2` launcher: two-tier config, GUI-translates-YAML→CLI execution contract, and the workflow DAG chaining contract. |
 | [SCB population & comparison](docs/scb_population_and_comparison.md) | End-to-end SCB pipeline and comparison design. |
 | [Real mapper philosophy](docs/real_mapper_philosophy.md) | *Why* the real mapper exists and the principle governing it. |
 | [SCB distribution analysis](docs/scb_population_distribution_analysis.md) (+ [verification](docs/scb_population_distribution_analysis_verification.md)) | Per-field distribution analysis. |
