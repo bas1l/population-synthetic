@@ -6,13 +6,21 @@ the CSV summary export.
 """
 
 import csv
+import json
 import math
 
 from population_synthetic.analysis.comparison.evaluator import (
     StatisticalEvaluator,
+    write_association_csv,
     write_csv_summary,
 )
-from population_synthetic.analysis.comparison.scheme import ComparisonScheme, load_scheme
+from population_synthetic.analysis.comparison.scheme import (
+    C2STConfig,
+    CombinationCheck,
+    ComparisonScheme,
+    GroundedJointPair,
+    load_scheme,
+)
 
 _AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85"]
 
@@ -177,7 +185,7 @@ def test_generate_report_structure():
     ev = StatisticalEvaluator(_pop(a, source="scb"), _pop([dict(p) for p in a],
                               source="pipeline"), scheme=scheme)
     report = ev.generate_report()
-    assert set(report) == {"metadata", "marginals", "joint_chi_sq", "coherence"}
+    assert set(report) == {"metadata", "marginals", "joint_chi_sq", "coherence", "multivariate"}
     assert report["metadata"]["population_a"]["source"] == "scb"
     assert report["metadata"]["population_b"]["n"] == 5
     assert "age_group" in report["marginals"]
@@ -258,3 +266,148 @@ def test_load_scheme_is_country_specific():
     assert sv.categories["employment_status"] == ["Employed", "Unemployed"]
     assert "Separated" not in it.categories["civil_status"]
     assert "Civil Partnership" not in it.categories["civil_status"]
+
+
+# --- multivariate block --------------------------------------------------
+
+
+def _mv_scheme():
+    """A small multivariate scheme with grounded/non-grounded joint pairs, a k-way
+    combination check, and an MMD C2ST config (numpy-only, no sklearn needed)."""
+    return ComparisonScheme(
+        attributes=["age_group", "biological_sex", "education_level", "employment_status"],
+        categories={
+            "age_group": _AGE_GROUPS,
+            "biological_sex": ["Male", "Female"],
+            "education_level": ["University Degree", "High School"],
+            "employment_status": ["Employed", "Unemployed"],
+        },
+        joint_pairs=[("age_group", "education_level")],
+        coherence_attributes=("age_group", "education_level", "employment_status"),
+        coherence_threshold=0.001,
+        grounded_joint_pairs=(
+            GroundedJointPair(pair=("age_group", "biological_sex"), grounded=True, basis="audit"),
+            GroundedJointPair(pair=("age_group", "education_level"), grounded=False, basis="reference"),
+        ),
+        combination_checks=(
+            CombinationCheck(
+                attributes=("age_group", "education_level", "employment_status"),
+                k=3,
+                threshold=0.001,
+            ),
+        ),
+        c2st_config=C2STConfig(folds=2, method="mmd", seed=0),
+    )
+
+
+def _mv_population(n, *, sex_cycle=("Male", "Female"), edu="University Degree"):
+    people = []
+    for i in range(n):
+        people.append(_person(
+            i,
+            age=30,
+            biological_sex=sex_cycle[i % len(sex_cycle)],
+            education_level=edu,
+            employment_status="Employed",
+        ))
+    return people
+
+
+def test_generate_report_includes_multivariate_block():
+    scheme = _mv_scheme()
+    a = _mv_population(24)
+    b = _mv_population(12)
+    ev = StatisticalEvaluator(_pop(a, source="scb"), _pop(b, source="pipeline"), scheme=scheme)
+    report = ev.generate_report()
+
+    assert "multivariate" in report
+    mv = report["multivariate"]
+    assert set(mv) == {"c2st", "association", "joint_fidelity", "combination_plausibility"}
+
+    # c2st sub-block
+    assert set(mv["c2st"]) == {"auc", "p_value", "method", "balanced_n"}
+    assert mv["c2st"]["method"] == "mmd"
+    assert mv["c2st"]["balanced_n"] == 12
+
+    # association sub-block: 4 attributes -> 6 pairs, summary stats present.
+    assoc = mv["association"]
+    assert len(assoc["pairs"]) == 6
+    assert {"attr_x", "attr_y", "v_real", "v_syn", "abs_delta_v"} == set(assoc["pairs"][0])
+    assert "mean_abs_delta_v" in assoc and "frobenius_norm" in assoc
+
+    # joint_fidelity carries the grounded flag + basis per configured pair.
+    jf = mv["joint_fidelity"]["pairs"]
+    assert len(jf) == 2
+    assert {"attr_x", "attr_y", "joint_tv", "grounded", "basis"} == set(jf[0])
+    assert any(p["grounded"] for p in jf) and any(not p["grounded"] for p in jf)
+
+    # combination_plausibility: one configured check, fractions in [0, 1].
+    checks = mv["combination_plausibility"]["checks"]
+    assert len(checks) == 1
+    chk = checks[0]
+    assert chk["k"] == 3 and chk["n_total"] == 12
+    assert 0.0 <= chk["fraction_impossible"] <= 1.0
+    assert 0.0 <= chk["fraction_rare"] <= 1.0
+
+
+def test_generate_report_multivariate_json_round_trips():
+    scheme = _mv_scheme()
+    ev = StatisticalEvaluator(_pop(_mv_population(20)), _pop(_mv_population(8)), scheme=scheme)
+    report = ev.generate_report()
+    # json.dumps/loads tolerate NaN by default (the evaluator already emits NaN floats).
+    restored = json.loads(json.dumps(report))
+    assert restored["multivariate"]["c2st"]["method"] == "mmd"
+    assert len(restored["multivariate"]["association"]["pairs"]) == 6
+
+
+def test_identical_populations_have_low_c2st_and_zero_delta_v():
+    scheme = _mv_scheme()
+    a = _mv_population(40, sex_cycle=("Male", "Female"))
+    b = [dict(p) for p in a]
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=scheme)
+    mv = ev.compute_multivariate()
+    # Same population -> associations match exactly -> zero delta.
+    assert mv["association"]["mean_abs_delta_v"] == 0.0
+    assert mv["association"]["frobenius_norm"] == 0.0
+    # Joint TV between a population and its copy is 0 for every pair.
+    for jp in mv["joint_fidelity"]["pairs"]:
+        assert jp["joint_tv"] == 0.0
+
+
+def test_multivariate_tiny_synthetic_degrades_without_crash():
+    scheme = _mv_scheme()
+    a = _mv_population(30)
+    # A single synthetic persona -> balanced_n < 2 -> NaN C2ST, no crash.
+    b = _mv_population(1)
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=scheme)
+    mv = ev.compute_multivariate()
+    assert math.isnan(mv["c2st"]["auc"])
+    assert math.isnan(mv["c2st"]["p_value"])
+    assert mv["c2st"]["balanced_n"] == 1
+    # Association / joint / combination still populate (no exception).
+    assert len(mv["association"]["pairs"]) == 6
+    assert len(mv["combination_plausibility"]["checks"]) == 1
+
+
+def test_multivariate_empty_synthetic_degrades_without_crash():
+    scheme = _mv_scheme()
+    ev = StatisticalEvaluator(_pop(_mv_population(30)), _pop([]), scheme=scheme)
+    mv = ev.compute_multivariate()
+    assert math.isnan(mv["c2st"]["auc"])
+    assert mv["c2st"]["balanced_n"] == 0
+    chk = mv["combination_plausibility"]["checks"][0]
+    assert chk["n_total"] == 0
+    assert math.isnan(chk["fraction_impossible"])
+    assert math.isnan(chk["fraction_rare"])
+
+
+def test_write_association_csv_one_row_per_pair(tmp_path):
+    scheme = _mv_scheme()
+    ev = StatisticalEvaluator(_pop(_mv_population(20)), _pop(_mv_population(10)), scheme=scheme)
+    report = ev.generate_report()
+    out = tmp_path / "run_association.csv"
+    write_association_csv(report, out)
+    with open(out, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 6
+    assert {"attr_x", "attr_y", "v_real", "v_syn", "abs_delta_v"} == set(rows[0])

@@ -152,9 +152,10 @@ def test_writers(tmp_path):
     csv_path = write_performance_csv(result, tmp_path / "swedish_performance.csv")
     lines = csv_path.read_text(encoding="utf-8").strip().splitlines()
     header = lines[0].split(",")
-    assert header[:7] == [
+    assert header[:9] == [
         "rank", "model", "strategy", "slug", "n", "overall_tv_similarity", "coherence_score",
+        "c2st_auc", "mean_delta_v",
     ]
-    assert header[7:] == [f"tv_similarity__{a}" for a in ATTRIBUTES]
+    assert header[9:] == [f"tv_similarity__{a}" for a in ATTRIBUTES]
     assert len(lines) == 1 + 4  # header + one row per combo
     assert lines[1].startswith("1,claude_haiku,all_pick,swedish_all_pick_claude_haiku")

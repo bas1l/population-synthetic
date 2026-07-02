@@ -274,6 +274,107 @@ def plot_radar_comparison(
 
 
 # ------------------------------------------------------------------
+# Multivariate association-fidelity heatmap (|Delta V|)
+# ------------------------------------------------------------------
+
+def plot_association_heatmap(
+    report: dict[str, Any],
+    output_dir: Path,
+    *,
+    prefix: str | None = None,
+    attributes: list[str] | None = None,
+) -> Path | None:
+    """Per-combo attribute x attribute heatmap of Cramer's-V discrepancy ``|Delta V|``.
+
+    Consumes ``report["multivariate"]["association"]["pairs"]`` (each carrying
+    ``attr_x`` / ``attr_y`` / ``abs_delta_v``) and renders a symmetric grid where
+    each cell is the absolute difference between the real and synthetic pairwise
+    association. ``|Delta V|`` is an error magnitude (0 = identical association,
+    higher = worse), so it uses a single-hue sequential ramp -- more colour reads
+    as a larger joint-structure discrepancy.
+
+    Returns ``None`` for reports without a multivariate association block (old
+    reports) or with no usable pairs, so callers degrade gracefully.
+    """
+    pairs = report.get("multivariate", {}).get("association", {}).get("pairs", [])
+    if not pairs:
+        return None
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # Attribute order: the config axis when supplied (stable across combos),
+    # otherwise the observed union of the pair endpoints (sorted).
+    if attributes is not None:
+        attrs = [a for a in attributes if any(a in (p["attr_x"], p["attr_y"]) for p in pairs)]
+    else:
+        seen: list[str] = []
+        for p in pairs:
+            for a in (p["attr_x"], p["attr_y"]):
+                if a not in seen:
+                    seen.append(a)
+        attrs = sorted(seen)
+    if len(attrs) < 2:
+        return None
+
+    idx = {a: i for i, a in enumerate(attrs)}
+    n = len(attrs)
+    grid = np.full((n, n), np.nan)
+    for p in pairs:
+        i = idx.get(p["attr_x"])
+        j = idx.get(p["attr_y"])
+        if i is None or j is None:
+            continue
+        raw = p.get("abs_delta_v")
+        val = float(raw) if raw is not None else np.nan
+        grid[i, j] = val
+        grid[j, i] = val
+
+    masked = np.ma.masked_invalid(grid)
+    if masked.count() == 0:
+        return None
+
+    cmap = plt.get_cmap("Reds").copy()
+    cmap.set_bad(color="#DDDDDD")
+
+    fig, ax = plt.subplots(figsize=(max(6.0, n * 0.7 + 2.5), max(5.0, n * 0.7 + 2.0)))
+    vmax = max(float(masked.max()), 1e-6)
+    im = ax.imshow(masked, cmap=cmap, vmin=0.0, vmax=vmax)
+
+    ax.set_xticks(range(n))
+    ax.set_xticklabels(attrs, rotation=40, ha="right", fontsize=7)
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(attrs, fontsize=7)
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
+    cbar.set_label("|Delta V|  (Cramer's V: real vs synthetic)", fontsize=8)
+
+    threshold = vmax / 2.0
+    for i in range(n):
+        for j in range(n):
+            v = grid[i, j]
+            if np.isnan(v):
+                continue
+            color = "white" if v > threshold else "black"
+            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=6, color=color)
+
+    title = "Pairwise association fidelity  |Delta V|"
+    if prefix:
+        title = f"{prefix}: {title}"
+    ax.set_title(title, fontsize=11, fontweight="bold")
+    fig.tight_layout()
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"{prefix}_association_heatmap.png" if prefix else "association_heatmap.png"
+    out_path = output_dir / fname
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
+# ------------------------------------------------------------------
 # 3-way bar-chart comparison
 # ------------------------------------------------------------------
 

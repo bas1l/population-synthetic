@@ -173,6 +173,85 @@ def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -
 
 
 # ------------------------------------------------------------------
+# C2ST AUC vs mean TV-similarity scatter (multivariate summary)
+# ------------------------------------------------------------------
+
+def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None:
+    """Scatter of C2ST ROC-AUC vs mean TV-similarity across combos, coloured by strategy.
+
+    Positions each combo by its marginal fidelity (x = mean TV-similarity) and
+    its joint discriminability (y = C2ST AUC, 0.5 = indistinguishable joint,
+    higher = more separable = worse). Colour encodes strategy in complexity order
+    (identity, fixed order -- never cycled), so the reader can see whether the
+    strategy that wins on marginals also produces the least-separable joint.
+
+    Combos lacking a finite C2ST AUC (reports predating the multivariate block,
+    or degenerate synthetic populations) are skipped. Returns ``None`` when no
+    combo has a plottable point.
+    """
+    combos: dict[str, Any] = result.get("combos", {})
+    strategies = _ordered_strategies(result["metadata"]["strategies"])
+    color_for = {s: _COLOR_SERIES[i % len(_COLOR_SERIES)] for i, s in enumerate(strategies)}
+
+    by_strategy: dict[str, list[tuple[float, float, str]]] = {}
+    for combo in combos.values():
+        multivariate = combo.get("multivariate") or {}
+        auc = multivariate.get("c2st_auc")
+        tv = combo["overall"]["tv_similarity_mean"]
+        if auc is None or auc != auc or tv != tv:  # None or NaN -> not plottable
+            continue
+        by_strategy.setdefault(combo["strategy"], []).append((float(tv), float(auc), combo["model"]))
+    if not by_strategy:
+        return None
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fig, ax = plt.subplots(figsize=(8.5, 6.0))
+    all_aucs: list[float] = []
+    for strategy in strategies:
+        pts = by_strategy.get(strategy)
+        if not pts:
+            continue
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        all_aucs.extend(ys)
+        ax.scatter(
+            xs, ys, s=70, color=color_for[strategy], label=strategy,
+            edgecolor="white", linewidth=0.6, alpha=0.9, zorder=3,
+        )
+
+    ax.axhline(0.5, color="#888888", linestyle="--", linewidth=1.0, zorder=1)
+    ax.text(
+        0.01, 0.5, "0.5 = indistinguishable joint",
+        transform=ax.get_yaxis_transform(), va="bottom", ha="left",
+        fontsize=7.5, color="#666666",
+    )
+
+    ax.set_xlabel("mean TV-similarity across attributes (marginal fidelity)", fontsize=9)
+    ax.set_ylabel("C2ST ROC-AUC (joint discriminability; 0.5 best)", fontsize=9)
+    lo = min([0.5] + all_aucs) - 0.03
+    hi = max([0.5] + all_aucs) + 0.03
+    ax.set_ylim(lo, min(1.02, hi))
+    ax.grid(True, linestyle=":", alpha=0.4)
+    ax.legend(title="strategy", fontsize=7.5, title_fontsize=8)
+
+    country = result["metadata"]["country"]
+    ax.set_title(
+        f"{country}: joint discriminability (C2ST) vs marginal fidelity",
+        fontsize=12, fontweight="bold",
+    )
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
+# ------------------------------------------------------------------
 # Per-attribute grouped bars (optional)
 # ------------------------------------------------------------------
 

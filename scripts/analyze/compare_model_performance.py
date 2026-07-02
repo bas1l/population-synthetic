@@ -51,6 +51,7 @@ from population_synthetic.analysis.performance.builder import (
 )
 from population_synthetic.analysis.performance.charts import (
     plot_attribute_bars,
+    plot_c2st_vs_tv,
     plot_performance_heatmap,
     plot_performance_leaderboard,
 )
@@ -260,6 +261,11 @@ def main() -> None:
             )
             if leaderboard is not None:
                 print(f"Leaderboard written to {leaderboard}")
+            c2st_scatter = plot_c2st_vs_tv(
+                result, performance_dir / f"{country}_c2st_vs_tv.png"
+            )
+            if c2st_scatter is not None:
+                print(f"C2ST-vs-TV scatter written to {c2st_scatter}")
             if args.per_attribute_charts:
                 written = plot_attribute_bars(result, performance_dir / f"{country}_by_attribute")
                 print(f"Per-attribute charts written to {performance_dir / f'{country}_by_attribute'} "

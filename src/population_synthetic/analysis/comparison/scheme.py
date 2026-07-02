@@ -42,12 +42,59 @@ _DEFAULT_COHERENCE_THRESHOLD = 0.001
 
 
 @dataclass(frozen=True)
+class GroundedJointPair:
+    """One attribute pair with its API-grounding verdict for joint-fidelity scoring.
+
+    ``grounded`` is ``True`` when the real population's joint over ``pair`` comes from a
+    real API conditional cross-tabulation (so validating a synthetic joint against it is
+    meaningful) and ``False`` when the reference joint is itself a marginal product or a
+    forced-independence copy (validating against it would over-claim fidelity). ``basis``
+    records the audit finding that justifies the verdict (see
+    ``docs/scb_population_distribution_analysis.md``).
+    """
+
+    pair: tuple[str, str]
+    grounded: bool
+    basis: str = ""
+
+
+@dataclass(frozen=True)
+class CombinationCheck:
+    """One configurable k-way combination-plausibility check.
+
+    Generalises the legacy age x education x employment coherence triple to an arbitrary
+    ``attributes`` tuple; ``k`` is the tuple arity and ``threshold`` the rare-support
+    cut-off (a combination with real support below ``threshold`` is flagged rare; zero
+    support is impossible).
+    """
+
+    attributes: tuple[str, ...]
+    k: int
+    threshold: float
+
+
+@dataclass(frozen=True)
+class C2STConfig:
+    """Classifier-two-sample-test tuning (cross-validation folds, backend, seed)."""
+
+    folds: int
+    method: str
+    seed: int
+
+
+@dataclass(frozen=True)
 class ComparisonScheme:
     """In-scope attributes and DB-exact category sets for one country.
 
     ``attributes``/``categories`` describe the scored marginal axis (sourced from the
     mapping config); ``joint_pairs``/``coherence_attributes``/``coherence_threshold``
     are the cross-attribute evaluator tuning (sourced from the analysis config).
+
+    ``grounded_joint_pairs``/``combination_checks``/``c2st_config`` are the multivariate
+    evaluator tuning, also sourced from the analysis config. They are additive and
+    backward compatible: when a key is genuinely absent from the config,
+    ``grounded_joint_pairs`` and ``combination_checks`` default to empty tuples and
+    ``c2st_config`` to ``None``. A key that is *present but malformed* fails loudly.
     """
 
     attributes: list[str]
@@ -55,6 +102,9 @@ class ComparisonScheme:
     joint_pairs: list[tuple[str, str]]
     coherence_attributes: tuple[str, ...]
     coherence_threshold: float
+    grounded_joint_pairs: tuple[GroundedJointPair, ...] = ()
+    combination_checks: tuple[CombinationCheck, ...] = ()
+    c2st_config: C2STConfig | None = None
 
 
 def _scheme_dir(country: str, mappings_path: Path | None) -> Path:
@@ -73,12 +123,117 @@ def _analysis_path(country: str, analysis_path: Path | None) -> Path:
     return _ANALYSIS_ROOT / f"{subdir}.json"
 
 
-def _load_analysis_config(path: Path) -> tuple[list[tuple[str, str]], tuple[str, ...], float]:
+def _parse_grounded_joint_pairs(raw: dict, source: Path) -> tuple[GroundedJointPair, ...]:
+    """Parse the optional ``grounded_joint_pairs`` block.
+
+    Absent key -> empty tuple (backward compatible). Present-but-malformed -> raise.
+    Each entry is an object ``{"pair": [attr_x, attr_y], "grounded": bool, "basis": str}``
+    where ``basis`` is optional documentation.
+    """
+    if "grounded_joint_pairs" not in raw:
+        return ()
+    entries = raw["grounded_joint_pairs"]
+    if not isinstance(entries, list):
+        raise ValueError(f"Comparison-analysis config {source}: 'grounded_joint_pairs' must be a list")
+
+    parsed: list[GroundedJointPair] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError(f"Comparison-analysis config {source}: 'grounded_joint_pairs' entries must be objects")
+        for key in ("pair", "grounded"):
+            if key not in entry:
+                raise KeyError(f"Comparison-analysis config {source}: 'grounded_joint_pairs' entry missing key {key!r}")
+        pair = entry["pair"]
+        if not isinstance(pair, list) or len(pair) != 2:
+            raise ValueError(f"Comparison-analysis config {source}: 'grounded_joint_pairs' pair must be a [x, y] list")
+        if not isinstance(entry["grounded"], bool):
+            raise ValueError(f"Comparison-analysis config {source}: 'grounded_joint_pairs' 'grounded' must be bool")
+        parsed.append(
+            GroundedJointPair(
+                pair=(str(pair[0]), str(pair[1])),
+                grounded=entry["grounded"],
+                basis=str(entry.get("basis", "")),
+            )
+        )
+    return tuple(parsed)
+
+
+def _parse_combination_checks(raw: dict, source: Path) -> tuple[CombinationCheck, ...]:
+    """Parse the optional ``combination_checks`` block.
+
+    Absent key -> empty tuple. Present-but-malformed -> raise. Each entry is
+    ``{"attributes": [...], "k": int, "threshold": float}``.
+    """
+    if "combination_checks" not in raw:
+        return ()
+    entries = raw["combination_checks"]
+    if not isinstance(entries, list):
+        raise ValueError(f"Comparison-analysis config {source}: 'combination_checks' must be a list")
+
+    parsed: list[CombinationCheck] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError(f"Comparison-analysis config {source}: each 'combination_checks' entry must be an object")
+        for key in ("attributes", "k", "threshold"):
+            if key not in entry:
+                raise KeyError(f"Comparison-analysis config {source}: 'combination_checks' entry missing key {key!r}")
+        attributes = entry["attributes"]
+        if not isinstance(attributes, list) or not attributes:
+            raise ValueError(f"Config {source}: 'combination_checks' 'attributes' must be a non-empty list")
+        if not isinstance(entry["k"], int) or isinstance(entry["k"], bool):
+            raise ValueError(f"Comparison-analysis config {source}: 'combination_checks' 'k' must be an integer")
+        if not isinstance(entry["threshold"], (int, float)) or isinstance(entry["threshold"], bool):
+            raise ValueError(f"Comparison-analysis config {source}: 'combination_checks' 'threshold' must be a number")
+        parsed.append(
+            CombinationCheck(
+                attributes=tuple(str(a) for a in attributes),
+                k=entry["k"],
+                threshold=float(entry["threshold"]),
+            )
+        )
+    return tuple(parsed)
+
+
+def _parse_c2st(raw: dict, source: Path) -> C2STConfig | None:
+    """Parse the optional ``c2st`` block.
+
+    Absent key -> ``None``. Present-but-malformed -> raise. Shape:
+    ``{"folds": int, "method": str, "seed": int}``.
+    """
+    if "c2st" not in raw:
+        return None
+    cfg = raw["c2st"]
+    if not isinstance(cfg, dict):
+        raise ValueError(f"Comparison-analysis config {source}: 'c2st' must be an object")
+    for key in ("folds", "method", "seed"):
+        if key not in cfg:
+            raise KeyError(f"Comparison-analysis config {source}: 'c2st' missing key {key!r}")
+    if not isinstance(cfg["folds"], int) or isinstance(cfg["folds"], bool):
+        raise ValueError(f"Comparison-analysis config {source}: 'c2st' 'folds' must be an integer")
+    if not isinstance(cfg["method"], str):
+        raise ValueError(f"Comparison-analysis config {source}: 'c2st' 'method' must be a string")
+    if not isinstance(cfg["seed"], int) or isinstance(cfg["seed"], bool):
+        raise ValueError(f"Comparison-analysis config {source}: 'c2st' 'seed' must be an integer")
+    return C2STConfig(folds=cfg["folds"], method=cfg["method"], seed=cfg["seed"])
+
+
+def _load_analysis_config(
+    path: Path,
+) -> tuple[
+    list[tuple[str, str]],
+    tuple[str, ...],
+    float,
+    tuple[GroundedJointPair, ...],
+    tuple[CombinationCheck, ...],
+    C2STConfig | None,
+]:
     """Read the comparison-analysis config for one country.
 
-    Returns ``(joint_pairs, coherence_attributes, coherence_threshold)``. Fails loudly
-    on a missing file or a missing ``joint_pairs``/``coherence_attributes`` key;
-    ``coherence_threshold`` defaults to :data:`_DEFAULT_COHERENCE_THRESHOLD` when absent.
+    Returns ``(joint_pairs, coherence_attributes, coherence_threshold,
+    grounded_joint_pairs, combination_checks, c2st_config)``. Fails loudly on a missing
+    file or a missing ``joint_pairs``/``coherence_attributes`` key; ``coherence_threshold``
+    defaults to :data:`_DEFAULT_COHERENCE_THRESHOLD` when absent. The three multivariate
+    keys are optional (default empty/None when absent) but fail loudly when malformed.
     """
     if not path.is_file():
         raise FileNotFoundError(f"No comparison-analysis config found: {path} not found")
@@ -93,7 +248,17 @@ def _load_analysis_config(path: Path) -> tuple[list[tuple[str, str]], tuple[str,
     joint_pairs = [tuple(pair) for pair in raw["joint_pairs"]]
     coherence_attributes = tuple(raw["coherence_attributes"])
     coherence_threshold = float(raw.get("coherence_threshold", _DEFAULT_COHERENCE_THRESHOLD))
-    return joint_pairs, coherence_attributes, coherence_threshold
+    grounded_joint_pairs = _parse_grounded_joint_pairs(raw, path)
+    combination_checks = _parse_combination_checks(raw, path)
+    c2st_config = _parse_c2st(raw, path)
+    return (
+        joint_pairs,
+        coherence_attributes,
+        coherence_threshold,
+        grounded_joint_pairs,
+        combination_checks,
+        c2st_config,
+    )
 
 
 def load_scheme(
@@ -144,7 +309,14 @@ def _scheme_from_index(directory: Path, analysis_path: Path) -> ComparisonScheme
             raise KeyError(f"Mapping file {attr_path} is missing required key 'values'")
         categories[attr] = list(block["values"])
 
-    joint_pairs, coherence_attributes, coherence_threshold = _load_analysis_config(analysis_path)
+    (
+        joint_pairs,
+        coherence_attributes,
+        coherence_threshold,
+        grounded_joint_pairs,
+        combination_checks,
+        c2st_config,
+    ) = _load_analysis_config(analysis_path)
 
     return ComparisonScheme(
         attributes=attributes,
@@ -152,6 +324,9 @@ def _scheme_from_index(directory: Path, analysis_path: Path) -> ComparisonScheme
         joint_pairs=joint_pairs,
         coherence_attributes=coherence_attributes,
         coherence_threshold=coherence_threshold,
+        grounded_joint_pairs=grounded_joint_pairs,
+        combination_checks=combination_checks,
+        c2st_config=c2st_config,
     )
 
 
@@ -178,6 +353,9 @@ def _scheme_from_legacy(country: str, directory: Path) -> ComparisonScheme:
     joint_pairs = [tuple(pair) for pair in raw["joint_pairs"]]
     coherence_attributes = tuple(raw["coherence_attributes"])
     coherence_threshold = float(raw.get("coherence_threshold", _DEFAULT_COHERENCE_THRESHOLD))
+    grounded_joint_pairs = _parse_grounded_joint_pairs(raw, scheme_path)
+    combination_checks = _parse_combination_checks(raw, scheme_path)
+    c2st_config = _parse_c2st(raw, scheme_path)
 
     return ComparisonScheme(
         attributes=attributes,
@@ -185,4 +363,7 @@ def _scheme_from_legacy(country: str, directory: Path) -> ComparisonScheme:
         joint_pairs=joint_pairs,
         coherence_attributes=coherence_attributes,
         coherence_threshold=coherence_threshold,
+        grounded_joint_pairs=grounded_joint_pairs,
+        combination_checks=combination_checks,
+        c2st_config=c2st_config,
     )

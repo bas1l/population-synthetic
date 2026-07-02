@@ -30,8 +30,13 @@ def make_report(
     coherence_score: float = 0.9,
     n_synth: int = 100,
     flagged: list[dict[str, Any]] | None = None,
+    multivariate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """A minimal comparison-report dict shaped like StatisticalEvaluator.generate_report."""
+    """A minimal comparison-report dict shaped like StatisticalEvaluator.generate_report.
+
+    *multivariate* is added verbatim as the optional top-level ``multivariate``
+    block when supplied; omitted entirely otherwise (mirroring pre-change reports).
+    """
     marginals = {
         attr: {
             "chi_sq_p": 0.5,
@@ -41,7 +46,7 @@ def make_report(
         }
         for attr, tv in tv_by_attr.items()
     }
-    return {
+    report: dict[str, Any] = {
         "metadata": {
             "generated_at": "2026-07-02T00:00:00+00:00",
             "population_a": {"source": "real", "n": 1000},
@@ -56,6 +61,33 @@ def make_report(
             "flagged": flagged or [],
         },
     }
+    if multivariate is not None:
+        report["multivariate"] = multivariate
+    return report
+
+
+def make_multivariate(
+    *,
+    c2st_auc: float = 0.62,
+    mean_delta_v: float = 0.11,
+    pairs: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """A minimal ``multivariate`` block matching the evaluator's report shape."""
+    if pairs is None:
+        pairs = [
+            {"attr_x": "age_group", "attr_y": "biological_sex",
+             "v_real": 0.30, "v_syn": 0.22, "abs_delta_v": 0.08},
+            {"attr_x": "age_group", "attr_y": "education_level",
+             "v_real": 0.40, "v_syn": 0.26, "abs_delta_v": 0.14},
+            {"attr_x": "biological_sex", "attr_y": "education_level",
+             "v_real": 0.15, "v_syn": 0.05, "abs_delta_v": 0.10},
+        ]
+    return {
+        "c2st": {"auc": c2st_auc, "p_value": 0.01, "method": "sklearn", "balanced_n": 100},
+        "association": {"pairs": pairs, "mean_abs_delta_v": mean_delta_v, "frobenius_norm": 0.2},
+        "joint_fidelity": {"pairs": []},
+        "combination_plausibility": {"checks": []},
+    }
 
 
 def make_combo(
@@ -67,6 +99,8 @@ def make_combo(
     country: str = "swedish",
     coherence_score: float = 0.9,
     n_synth: int = 100,
+    c2st_auc: float | None = None,
+    mean_delta_v: float | None = None,
 ) -> ComboPerformance:
     """A ComboPerformance built directly (for builder tests, no filesystem)."""
     return ComboPerformance(
@@ -86,6 +120,8 @@ def make_combo(
             "n_total": n_synth,
             "flagged": [],
         },
+        c2st_auc=c2st_auc,
+        mean_delta_v=mean_delta_v,
     )
 
 

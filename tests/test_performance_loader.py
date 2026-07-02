@@ -14,7 +14,13 @@ from population_synthetic.analysis.performance.loader import (
     extract_combo_performance,
     load_combo_performances,
 )
-from tests._performance_fixtures import ATTRIBUTES, AXIS_IDS, build_workspace, make_report
+from tests._performance_fixtures import (
+    ATTRIBUTES,
+    AXIS_IDS,
+    build_workspace,
+    make_multivariate,
+    make_report,
+)
 
 
 def _attrs(country: str) -> list[str]:
@@ -82,6 +88,43 @@ def test_extract_attribute_drift_raises():
             "swedish_all_pick_claude_haiku", "swedish", "all_pick", "claude_haiku",
             report, ATTRIBUTES,
         )
+
+
+def test_extract_old_report_without_multivariate_block():
+    # Pre-change reports have no 'multivariate' key: the optional fields stay None,
+    # and nothing about the existing extraction regresses.
+    report = make_report({"age_group": 0.1, "biological_sex": 0.2, "education_level": 0.3})
+    assert "multivariate" not in report
+    combo = extract_combo_performance(
+        "swedish_all_pick_claude_haiku", "swedish", "all_pick", "claude_haiku", report, ATTRIBUTES
+    )
+    assert combo.c2st_auc is None
+    assert combo.mean_delta_v is None
+    assert combo.tv_similarity["age_group"] == pytest.approx(0.9)
+
+
+def test_extract_new_report_populates_multivariate():
+    report = make_report(
+        {"age_group": 0.1, "biological_sex": 0.2, "education_level": 0.3},
+        multivariate=make_multivariate(c2st_auc=0.73, mean_delta_v=0.12),
+    )
+    combo = extract_combo_performance(
+        "swedish_all_pick_claude_haiku", "swedish", "all_pick", "claude_haiku", report, ATTRIBUTES
+    )
+    assert combo.c2st_auc == pytest.approx(0.73)
+    assert combo.mean_delta_v == pytest.approx(0.12)
+
+
+def test_extract_multivariate_nan_auc_tolerated():
+    # A present-but-degenerate block (NaN AUC) is carried through as NaN, not None.
+    report = make_report(
+        {"age_group": 0.1, "biological_sex": 0.2, "education_level": 0.3},
+        multivariate=make_multivariate(c2st_auc=float("nan")),
+    )
+    combo = extract_combo_performance(
+        "swedish_all_pick_claude_haiku", "swedish", "all_pick", "claude_haiku", report, ATTRIBUTES
+    )
+    assert combo.c2st_auc != combo.c2st_auc  # NaN
 
 
 def test_extract_missing_toplevel_key_raises():

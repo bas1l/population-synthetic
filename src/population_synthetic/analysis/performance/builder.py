@@ -143,6 +143,11 @@ def build_performance_comparison(
                 "n_total": r.coherence.get("n_total"),
                 "flagged_count": len(r.coherence.get("flagged", [])),
             },
+            # Optional multivariate summaries (reference only; ranking is unchanged).
+            "multivariate": {
+                "c2st_auc": r.c2st_auc,
+                "mean_delta_v": r.mean_delta_v,
+            },
             "nan_attributes": [a for a in attributes if a not in r.tv_similarity],
         }
 
@@ -185,11 +190,13 @@ def write_performance_csv(result: dict[str, Any], out_path: str | Path) -> Path:
     with open(out_path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(
-            ["rank", "model", "strategy", "slug", "n", "overall_tv_similarity", "coherence_score"]
+            ["rank", "model", "strategy", "slug", "n", "overall_tv_similarity", "coherence_score",
+             "c2st_auc", "mean_delta_v"]
             + [f"tv_similarity__{attr}" for attr in attributes]
         )
         for slug in result["ranking"]:
             combo = result["combos"][slug]
+            multivariate = combo.get("multivariate") or {}
             writer.writerow(
                 [
                     combo["overall"]["rank"],
@@ -199,6 +206,8 @@ def write_performance_csv(result: dict[str, Any], out_path: str | Path) -> Path:
                     combo["n"],
                     combo["overall"]["tv_similarity_mean"],
                     combo["overall"]["coherence_score"],
+                    multivariate.get("c2st_auc"),
+                    multivariate.get("mean_delta_v"),
                 ]
                 + [combo["per_attribute"][attr]["tv_similarity"] for attr in attributes]
             )

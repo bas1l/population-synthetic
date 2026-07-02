@@ -18,6 +18,7 @@ Requires Python 3.10+. Install in editable mode (required for imports to work):
 
 ```bash
 pip install -e ".[dev]"          # editable install + dev tools; add ".[gui]" for the PyQt5 launcher
+pip install -e ".[analysis]"     # optional: scikit-learn backend for the C2ST multivariate metric (MMD fallback otherwise)
 
 # Generate a Swedish population from live SCB data
 python scripts/generate/generate_scb_population.py --n 1000 --seed 42 --output scb_pop.json

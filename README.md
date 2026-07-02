@@ -31,6 +31,13 @@ For the PyQt5 GUI launcher:
 pip install -e ".[gui]"
 ```
 
+For the scikit-learn backend of the C2ST multivariate-fidelity metric (a numpy/scipy MMD
+fallback is used when it is absent):
+
+```bash
+pip install -e ".[analysis]"
+```
+
 Requires Python 3.10+.
 
 ## Usage

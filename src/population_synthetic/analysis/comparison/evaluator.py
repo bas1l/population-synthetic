@@ -239,6 +239,175 @@ class StatisticalEvaluator:
             "flagged": flagged,
         }
 
+    # --- Multivariate / joint fidelity -------------------------------------
+
+    def compute_multivariate(self) -> dict[str, Any]:
+        """Assemble the ``multivariate`` block: C2ST, association fidelity, joint
+        fidelity, and k-way combination plausibility.
+
+        Consumes the Phase-2 scheme fields (``grounded_joint_pairs``,
+        ``combination_checks``, ``c2st_config``) and the Phase-1 pure primitives in
+        ``comparison.multivariate`` (imported *lazily* here: that module imports
+        ``attr_value`` from this one at load time, so a top-level import would be a
+        cycle).
+
+        Degrades gracefully for a tiny/failed synthetic population B (``n_b`` small
+        or zero): C2ST returns NaN AUC/p-value (balanced size below 2), joint TV
+        returns NaN where a side has no in-grid mass, and combination fractions
+        return NaN when ``n_b == 0`` -- no crash, mirroring the ``n_b < 5`` caveat
+        the marginal path already documents.
+        """
+        # Lazy import to avoid the circular import (multivariate imports attr_value
+        # from this module at load time).
+        from population_synthetic.analysis.comparison import multivariate
+
+        return {
+            "c2st": self._compute_c2st(multivariate),
+            "association": self._compute_association(multivariate),
+            "joint_fidelity": self._compute_joint_fidelity(multivariate),
+            "combination_plausibility": self._compute_combination_plausibility(),
+        }
+
+    def _compute_c2st(self, multivariate: Any) -> dict[str, Any]:
+        """Run the classifier two-sample test on the one-hot-encoded populations.
+
+        Uses ``scheme.c2st_config`` when present; falls back to documented defaults
+        (folds=5, method="auto", seed=0) when the config omits the ``c2st`` block --
+        no baked-in distribution, just backend tuning. The primitive balances the
+        classes by subsampling and returns NaN for a balanced size below 2.
+        """
+        cfg = self.scheme.c2st_config
+        folds = cfg.folds if cfg is not None else 5
+        method = cfg.method if cfg is not None else "auto"
+        seed = cfg.seed if cfg is not None else 0
+
+        x_real = multivariate.one_hot_encode(self.individuals_a, self.scheme)
+        x_syn = multivariate.one_hot_encode(self.individuals_b, self.scheme)
+        result = multivariate.c2st(x_real, x_syn, method=method, folds=folds, seed=seed)
+        return {
+            "auc": result["auc"],
+            "p_value": result["p_value"],
+            "method": result["method"],
+            "balanced_n": result["balanced_n"],
+        }
+
+    def _compute_association(self, multivariate: Any) -> dict[str, Any]:
+        """Pairwise Cramer's V fidelity between the two populations.
+
+        Reports per shared attribute pair ``v_real``/``v_syn``/``abs_delta_v`` plus
+        the summary ``mean_abs_delta_v`` and ``frobenius_norm`` of the |Delta V|
+        vector. Cramer's V is defined (0.0) for degenerate tables, so a tiny B never
+        raises here.
+        """
+        attrs = self.scheme.attributes
+        v_real = multivariate.association_matrix(self.individuals_a, attrs, self.scheme)
+        v_syn = multivariate.association_matrix(self.individuals_b, attrs, self.scheme)
+
+        pairs: list[dict[str, Any]] = []
+        deltas: list[float] = []
+        for key in v_real:  # both maps share the same ordered pair keys
+            attr_x, attr_y = key
+            vr = v_real[key]
+            vs = v_syn[key]
+            delta = abs(vr - vs)
+            deltas.append(delta)
+            pairs.append({
+                "attr_x": attr_x,
+                "attr_y": attr_y,
+                "v_real": round(vr, 6),
+                "v_syn": round(vs, 6),
+                "abs_delta_v": round(delta, 6),
+            })
+
+        if deltas:
+            mean_abs = float(np.mean(deltas))
+            frobenius = float(np.sqrt(np.sum(np.square(deltas))))
+        else:
+            mean_abs = float("nan")
+            frobenius = float("nan")
+
+        return {
+            "pairs": pairs,
+            "mean_abs_delta_v": round(mean_abs, 6),
+            "frobenius_norm": round(frobenius, 6),
+        }
+
+    def _compute_joint_fidelity(self, multivariate: Any) -> dict[str, Any]:
+        """Per-pair joint total-variation distance with the config grounding flag.
+
+        Iterates ``scheme.grounded_joint_pairs`` (which carries both the grounded and
+        the non-grounded pairs, so the paper does not over-claim); each entry reports
+        the joint TV, the ``grounded`` verdict, and the ``basis`` audit note. Joint TV
+        is NaN when either side has no in-grid observations.
+        """
+        pairs: list[dict[str, Any]] = []
+        for gp in self.scheme.grounded_joint_pairs:
+            attr_x, attr_y = gp.pair
+            tv = multivariate.joint_tv(self.individuals_a, self.individuals_b, attr_x, attr_y, self.scheme)
+            pairs.append({
+                "attr_x": attr_x,
+                "attr_y": attr_y,
+                "joint_tv": tv if np.isnan(tv) else round(tv, 6),
+                "grounded": gp.grounded,
+                "basis": gp.basis,
+            })
+        return {"pairs": pairs}
+
+    def _compute_combination_plausibility(self) -> dict[str, Any]:
+        """Generalise the coherence check to each configured k-way combination set.
+
+        Reuses the ``compute_coherence`` joint-probability-table logic: build the real
+        (population A) joint over the check's attribute tuple, then classify each B
+        individual as impossible (zero real support, incl. a tuple with a missing
+        value) or rare (support below the check's threshold). Fractions are over
+        ``n_b`` and NaN when B is empty.
+        """
+        checks: list[dict[str, Any]] = []
+        for check in self.scheme.combination_checks:
+            attrs = check.attributes
+            threshold = check.threshold
+
+            tuple_counts: Counter = Counter()
+            for ind in self.individuals_a:
+                key = tuple(attr_value(ind, a) for a in attrs)
+                if None not in key:
+                    tuple_counts[key] += 1
+            total = sum(tuple_counts.values()) or 1
+            joint_probs = {k: v / total for k, v in tuple_counts.items()}
+
+            n_impossible = 0
+            n_rare = 0
+            n_plausible = 0
+            for ind in self.individuals_b:
+                key = tuple(attr_value(ind, a) for a in attrs)
+                prob = 0.0 if None in key else joint_probs.get(key, 0.0)
+                if prob <= 0.0:
+                    n_impossible += 1
+                elif prob < threshold:
+                    n_rare += 1
+                else:
+                    n_plausible += 1
+
+            if self.n_b > 0:
+                frac_impossible = round(n_impossible / self.n_b, 6)
+                frac_rare = round(n_rare / self.n_b, 6)
+            else:
+                frac_impossible = float("nan")
+                frac_rare = float("nan")
+
+            checks.append({
+                "attributes": list(attrs),
+                "k": check.k,
+                "threshold": threshold,
+                "n_total": self.n_b,
+                "n_impossible": n_impossible,
+                "n_rare": n_rare,
+                "n_plausible": n_plausible,
+                "fraction_impossible": frac_impossible,
+                "fraction_rare": frac_rare,
+            })
+        return {"checks": checks}
+
     # --- Report generation -------------------------------------------------
 
     def generate_report(self) -> dict[str, Any]:
@@ -248,6 +417,7 @@ class StatisticalEvaluator:
         marginals = self.compute_marginals()
         joint_chi_sq = self.compute_joint_chi_sq()
         coherence = self.compute_coherence()
+        multivariate = self.compute_multivariate()
 
         marginals_clean = {
             attr: {
@@ -277,6 +447,7 @@ class StatisticalEvaluator:
             "marginals": marginals_clean,
             "joint_chi_sq": joint_chi_sq,
             "coherence": coherence,
+            "multivariate": multivariate,
         }
 
     def print_summary(self, file_a: str, file_b: str) -> None:
@@ -289,6 +460,7 @@ class StatisticalEvaluator:
         marginals = self.compute_marginals()
         joint_chi_sq = self.compute_joint_chi_sq()
         coherence = self.compute_coherence()
+        multivariate = self.compute_multivariate()
 
         print("==== Population Comparison Report ====")
         print(f"Population A: {file_a} (n={self.n_a})")
@@ -338,6 +510,50 @@ class StatisticalEvaluator:
                 )
         else:
             print("  No individuals flagged.")
+        print()
+        self._print_multivariate_summary(multivariate)
+
+    def _print_multivariate_summary(self, multivariate: dict[str, Any]) -> None:
+        """Print the short multivariate section (C2ST, association, joint, k-way)."""
+        print("--- Multivariate / Joint Fidelity ---")
+
+        c2st = multivariate["c2st"]
+        auc = c2st["auc"]
+        auc_str = f"{auc:.3f}" if not np.isnan(auc) else "nan"
+        p = c2st["p_value"]
+        p_str = f"{p:.3f}" if not np.isnan(p) else "nan"
+        print(
+            f"C2ST ({c2st['method']}): AUC = {auc_str}, p = {p_str}, "
+            f"balanced n = {c2st['balanced_n']} (0.5 = indistinguishable joint)"
+        )
+
+        assoc = multivariate["association"]
+        mean_dv = assoc["mean_abs_delta_v"]
+        frob = assoc["frobenius_norm"]
+        mean_str = f"{mean_dv:.4f}" if not np.isnan(mean_dv) else "nan"
+        frob_str = f"{frob:.4f}" if not np.isnan(frob) else "nan"
+        print(
+            f"Association (Cramer's V): mean |dV| = {mean_str}, "
+            f"Frobenius = {frob_str} over {len(assoc['pairs'])} pairs"
+        )
+
+        joint_pairs = multivariate["joint_fidelity"]["pairs"]
+        if joint_pairs:
+            print("Joint TV per pair:")
+            for jp in joint_pairs:
+                tv = jp["joint_tv"]
+                tv_str = f"{tv:.3f}" if not np.isnan(tv) else "nan"
+                tag = "grounded" if jp["grounded"] else "reference"
+                print(f"  {jp['attr_x']} x {jp['attr_y']:<20} TV = {tv_str}  [{tag}]")
+
+        checks = multivariate["combination_plausibility"]["checks"]
+        for chk in checks:
+            fi = chk["fraction_impossible"]
+            fr = chk["fraction_rare"]
+            fi_str = f"{fi:.3f}" if not np.isnan(fi) else "nan"
+            fr_str = f"{fr:.3f}" if not np.isnan(fr) else "nan"
+            label = " x ".join(chk["attributes"])
+            print(f"Combination ({label}, k={chk['k']}): impossible = {fi_str}, rare = {fr_str}")
 
 
 # ------------------------------------------------------------------
@@ -369,4 +585,30 @@ def write_csv_summary(report: dict, output_path: Path | str) -> None:
                 "unmapped_categories": len(unmapped),
                 "unknown_count_a": m.get("unknown_count_a", 0),
                 "unknown_count_b": m.get("unknown_count_b", 0),
+            })
+
+
+def write_association_csv(report: dict, output_path: Path | str) -> None:
+    """Write one row per attribute pair from the multivariate association block.
+
+    Mirrors :func:`write_csv_summary` but emits the pairwise Cramer's V fidelity
+    (``v_real``/``v_syn``/``abs_delta_v``). A report without a ``multivariate`` block
+    (an old pre-Phase-3 report) writes a header-only file rather than raising, so the
+    caller stays additive.
+    """
+    pairs = report.get("multivariate", {}).get("association", {}).get("pairs", [])
+    output_path = Path(output_path)
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["attr_x", "attr_y", "v_real", "v_syn", "abs_delta_v"],
+        )
+        writer.writeheader()
+        for pair in pairs:
+            writer.writerow({
+                "attr_x": pair["attr_x"],
+                "attr_y": pair["attr_y"],
+                "v_real": pair["v_real"],
+                "v_syn": pair["v_syn"],
+                "abs_delta_v": pair["abs_delta_v"],
             })
