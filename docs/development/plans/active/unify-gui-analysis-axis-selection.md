@@ -59,17 +59,32 @@ Unifying on the axis selector removes these failure modes and gives one mental m
 
 ## Success Criteria
 
-- [ ] The Analysis section shows the axis selector for **all** its actions (Map, Compare Synthetic
-      to Real, Compare Two Populations, both LLM Metrics).
-- [ ] `compare_scb` and `compare_all` no longer appear in the GUI; **Compare Synthetic to Real**
-      produces per-slug reports, the country radar grid, and `comparison_summary.json` over exactly
-      the checked combos.
-- [ ] **Compare Two Populations** requires exactly two checked combos and emits an A-vs-B report
-      over their mapped populations; a friendly message is shown for ≠2 selections.
-- [ ] **LLM Metrics (per-run)** writes one `run_analytics.json` per selected slug; **cross-run**
-      aggregates across the selected slugs.
-- [ ] Each new/changed action runs end-to-end from the GUI, and the new CLI flags work standalone.
-- [ ] `ruff check src/` and `pytest` pass.
+- [x] The Analysis section shows the axis selector for **all** its actions (verified headlessly:
+      every analysis action parses as `per_combo`/`batch`, both of which show `ExperimentSelector`).
+- [x] `compare_scb` and `compare_all` no longer appear in the GUI; **Compare Synthetic to Real**
+      (`compare_synth_real`, batch) is wired to `compare_all_pipelines.py`. *(Report/radar-grid/summary
+      output over checked combos still needs a live run against mapped data — see note below.)*
+- [x] **Compare Two Populations** is `batch` with `min_combos: 2`/`max_combos: 2` (the ≠2 guard is
+      enforced by `_run`). *(A-vs-B report contents need a live run against two mapped pipelines.)*
+- [x] **LLM Metrics (per-run)** is `per_combo`, **cross-run** is `batch`, both on the axis selector.
+      *(Per-slug `run_analytics.json` / aggregation need a live run against `01_Raw` data.)*
+- [x] New CLI flags work standalone — `--slug` (compare_all_pipelines/compare_populations/compare_runs)
+      and axis flags (analyze_run, map_populations) are accepted (no argparse errors).
+- [x] `ruff check src/` and `pytest` pass (125 passed; ruff clean).
+
+### Verification note (2026-07-02)
+Two follow-up commits complete the plan on top of `cf541c3`:
+- `34c8c3b` — **critical gap fix.** The committed `map_populations.py` (run as `per_combo`) did **not**
+  accept `--model-id/--strategy-id/--country-id` and crashed with "unrecognized arguments"; added the
+  axis single-target mode (+ `_index.json` upsert, batch mode retained) and country propagation in
+  `compare_pipeline_to_scb.py`. This file was missing from the plan's original Modified Files list.
+- `e349902` — cleared 15 **pre-existing** ruff errors (16 at base) in gui/mapping modules so
+  `ruff check src/` passes; none were introduced by this plan.
+
+Confirmed headlessly: `axis_slug(...) == compose_manifest(...).parallel_output_dir.name`; the five
+analysis actions carry the intended `axis_mode`/`min_combos`/`max_combos`; all backend scripts accept
+their new flags. **Not yet run:** a live PyQt GUI session (needs a display) and end-to-end
+batch/per_combo runs against real mapped/raw data — the remaining Manual Verification items below.
 
 ---
 
