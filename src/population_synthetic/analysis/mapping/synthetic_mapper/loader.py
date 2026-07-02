@@ -16,8 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
 from population_synthetic.analysis.mapping.synthetic_mapper.factory import get_synthetic_mapper
-from population_synthetic.analysis.mapping.synthetic_mapper.base import  BaseSyntheticMapper
 
 logger = logging.getLogger(__name__)
 

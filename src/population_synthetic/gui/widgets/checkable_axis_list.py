@@ -65,7 +65,7 @@ class CheckableAxisList(QWidget):
             cb.setParent(None)
         self._checkboxes.clear()
 
-        stretch = self._scroll_layout.takeAt(self._scroll_layout.count() - 1)
+        self._scroll_layout.takeAt(self._scroll_layout.count() - 1)
 
         self._items = list(items)
         for item in self._items:
