@@ -49,7 +49,6 @@ from PyQt5.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QStatusBar,
-    QTabWidget,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -191,11 +190,10 @@ class FlowRunnerWindow(QMainWindow):
         # kind's panels independent — a widget can live in only one tab set.
         self._center_stack = QStackedWidget()
 
-        # Script page: [Options | DAG View]
-        self._script_tabs = QTabWidget()
-        self._options_panel = FlowOptionsPanel()
-        self._options_panel.option_changed.connect(self._on_option_changed)
-        self._script_tabs.addTab(self._options_panel, "Options")
+        # Script page: the strategy DAG on top, the flow's options directly
+        # beneath it in a vertical splitter — both visible at once (mirrors the
+        # workflow page below).
+        self._script_page = QSplitter(Qt.Vertical)
 
         self._dag_view = _StrategyDagView()
         self._dag_message = self._build_placeholder("Select a flow to view its strategy DAG")
@@ -203,20 +201,54 @@ class FlowRunnerWindow(QMainWindow):
         self._dag_stack = QStackedWidget()
         self._dag_stack.addWidget(self._dag_message)
         self._dag_stack.addWidget(self._dag_view)
-        self._script_tabs.addTab(self._dag_stack, "DAG View")
-        self._center_stack.addWidget(self._script_tabs)
+        self._script_page.addWidget(self._dag_stack)
 
-        # Workflow page: [Workflow | Options]
-        self._workflow_tabs = QTabWidget()
+        script_options_pane = QWidget()
+        script_options_layout = QVBoxLayout(script_options_pane)
+        script_options_layout.setContentsMargins(0, 0, 0, 0)
+        script_options_layout.setSpacing(2)
+        script_options_header = QLabel("Options")
+        script_options_header.setStyleSheet("font-weight: bold; padding: 2px 4px;")
+        script_options_layout.addWidget(script_options_header)
+        self._options_panel = FlowOptionsPanel()
+        self._options_panel.option_changed.connect(self._on_option_changed)
+        script_options_layout.addWidget(self._options_panel)
+        self._script_page.addWidget(script_options_pane)
+
+        self._script_page.setStretchFactor(0, 3)
+        self._script_page.setStretchFactor(1, 1)
+        # Pin the initial split (stretch only governs resize, not the first
+        # layout): graph gets the bulk, options a compact strip beneath it.
+        self._script_page.setSizes([600, 200])
+        self._center_stack.addWidget(self._script_page)
+
+        # Workflow page: the task DAG on top, the clicked task's options directly
+        # beneath it in a vertical splitter — both visible at once, so selecting a
+        # node never hides the graph (and dragging a node never swaps a tab).
+        self._workflow_page = QSplitter(Qt.Vertical)
         self._workflow_graph = WorkflowGraphView()
         self._workflow_graph.node_clicked.connect(self._on_workflow_node_clicked)
         self._workflow_graph.enabled_changed.connect(self._on_task_enabled_changed)
         self._workflow_graph.force_changed.connect(self._on_task_force_changed)
-        self._workflow_tabs.addTab(self._workflow_graph, "Workflow")
+        self._workflow_page.addWidget(self._workflow_graph)
+
+        options_pane = QWidget()
+        options_layout = QVBoxLayout(options_pane)
+        options_layout.setContentsMargins(0, 0, 0, 0)
+        options_layout.setSpacing(2)
+        options_header = QLabel("Task options")
+        options_header.setStyleSheet("font-weight: bold; padding: 2px 4px;")
+        options_layout.addWidget(options_header)
         self._workflow_options_panel = FlowOptionsPanel()
         self._workflow_options_panel.option_changed.connect(self._on_option_changed)
-        self._workflow_tabs.addTab(self._workflow_options_panel, "Options")
-        self._center_stack.addWidget(self._workflow_tabs)
+        options_layout.addWidget(self._workflow_options_panel)
+        self._workflow_page.addWidget(options_pane)
+
+        self._workflow_page.setStretchFactor(0, 3)
+        self._workflow_page.setStretchFactor(1, 1)
+        # Same compact options strip as the script page above (see note there).
+        self._workflow_page.setSizes([600, 200])
+        self._center_stack.addWidget(self._workflow_page)
 
         self._splitter.addWidget(self._center_stack)
 
@@ -227,9 +259,12 @@ class FlowRunnerWindow(QMainWindow):
         self._axis_selector.selection_changed.connect(self._on_selection_changed)
         self._splitter.addWidget(self._axis_selector)
 
-        self._splitter.setStretchFactor(0, 0)  # flow selector — stays at content width
-        self._splitter.setStretchFactor(1, 2)  # options/workflow (1/2)
-        self._splitter.setStretchFactor(2, 1)  # axis selection   (1/4)
+        self._splitter.setStretchFactor(0, 0)   # flow selector — stays at content width
+        self._splitter.setStretchFactor(1, 14)  # options/workflow — lion's share
+        self._splitter.setStretchFactor(2, 3)   # axis selection
+        # Pin the initial widths so the right (axis) column is ~15% of the row
+        # (150 / (150 + 700 + 150)); center:axis 14:3 holds it on resize.
+        self._splitter.setSizes([150, 700, 150])
 
         # --- Console panel (reused from the legacy launcher, import only) ---
         self._console = ConsoleWidget()
@@ -238,8 +273,10 @@ class FlowRunnerWindow(QMainWindow):
         self._vsplitter = QSplitter(Qt.Vertical)
         self._vsplitter.addWidget(self._splitter)
         self._vsplitter.addWidget(self._console)
-        self._vsplitter.setStretchFactor(0, 7)
-        self._vsplitter.setStretchFactor(1, 3)
+        self._vsplitter.setStretchFactor(0, 6)
+        self._vsplitter.setStretchFactor(1, 4)
+        # Terminal defaults to 40% of the central area height (above the run bar).
+        self._vsplitter.setSizes([600, 400])
 
         # --- Wrap vertical splitter + run bar in a central QWidget ---
         central = QWidget()
@@ -328,14 +365,13 @@ class FlowRunnerWindow(QMainWindow):
         self._run_button.setEnabled(True)
         self._run_label.setText(f"{entry.category} / {entry.name}  [{entry.kind}]")
         if entry.kind == "script":
-            self._center_stack.setCurrentWidget(self._script_tabs)
+            self._center_stack.setCurrentWidget(self._script_page)
             self._options_panel.populate(model)
             self.refresh_dag(model)
         else:  # workflow
-            self._center_stack.setCurrentWidget(self._workflow_tabs)
+            self._center_stack.setCurrentWidget(self._workflow_page)
             self._workflow_graph.populate(model)  # type: ignore[arg-type]
             self._workflow_options_panel.show_placeholder("Select a task node to edit its options")
-            self._workflow_tabs.setCurrentWidget(self._workflow_graph)
         self._refresh_title()
         self.statusBar().showMessage(f"Loaded {entry.config.name}", 3000)
 
@@ -364,13 +400,12 @@ class FlowRunnerWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_workflow_node_clicked(self, name: str) -> None:
-        """Retarget the Options tab onto the clicked task and show it."""
+        """Retarget the beneath-graph options pane onto the clicked task."""
         if not isinstance(self._model, WorkflowConfigModel):
             return
         adapter = _TaskOptionsAdapter(self._model, name)
         self._workflow_options_panel.populate(adapter)  # type: ignore[arg-type]
         self._workflow_graph.select_task(name)
-        self._workflow_tabs.setCurrentWidget(self._workflow_options_panel)
 
     def _on_task_enabled_changed(self, name: str, enabled: bool) -> None:
         """Node Enabled checkbox → WorkflowConfigModel (dirty ``*``)."""

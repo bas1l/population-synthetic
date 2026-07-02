@@ -11,10 +11,6 @@ categories:
         axis_mode: three_axis
   - name: Analysis
     flows:
-      - name: Pipeline vs Reference
-        script: scripts/analyze/compare_pipeline_to_scb.py
-        config: config/gui/v2/flows/compare_scb.yaml
-        axis_mode: three_axis
       - name: Analysis Workflow
         kind: workflow
         config: config/gui/v2/flows/analysis_workflow.yaml

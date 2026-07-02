@@ -50,6 +50,7 @@ _LABEL_FONT_SIZE = 12
 _H_PADDING = 44
 _CORNER_RADIUS = 6
 _INSET = 6
+_DRAG_THRESHOLD = 4  # scene-units of movement before a press counts as a drag, not a click
 
 _COLOR_BG_ENABLED = QColor("#d0e8ff")
 _COLOR_BORDER_ENABLED = QColor("#2255aa")
@@ -98,6 +99,8 @@ class WorkflowTaskNode(QGraphicsRectItem):
         super().__init__(0, 0, node_w, _NODE_H, parent)
         self._task_name = task_name
         self._updating = False
+        self._press_scene_pos: QPointF | None = None
+        self._dragged = False
         self._status = TaskStatus.PENDING
         self._enabled = model.is_task_enabled(task_name)
         self._has_force = bool(meta["supports_force"])
@@ -207,8 +210,26 @@ class WorkflowTaskNode(QGraphicsRectItem):
     # ------------------------------------------------------------------
 
     def mousePressEvent(self, event) -> None:
+        # Record the press so mouseReleaseEvent can tell a click (select) from a
+        # drag (move). Emitting node_clicked on press would fire mid-drag and,
+        # e.g., steal focus to the options pane every time a node is nudged.
+        self._press_scene_pos = event.scenePos()
+        self._dragged = False
         super().mousePressEvent(event)
-        self.signals.node_clicked.emit(self._task_name)
+
+    def mouseMoveEvent(self, event) -> None:
+        super().mouseMoveEvent(event)
+        if self._press_scene_pos is not None:
+            moved = (event.scenePos() - self._press_scene_pos).manhattanLength()
+            if moved > _DRAG_THRESHOLD:
+                self._dragged = True
+
+    def mouseReleaseEvent(self, event) -> None:
+        super().mouseReleaseEvent(event)
+        if self._press_scene_pos is not None and not self._dragged:
+            self.signals.node_clicked.emit(self._task_name)
+        self._press_scene_pos = None
+        self._dragged = False
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemPositionHasChanged:
