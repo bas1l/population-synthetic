@@ -36,10 +36,11 @@ import tempfile
 from pathlib import Path
 
 import yaml
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QCloseEvent, QKeySequence
 from PyQt5.QtWidgets import (
     QAction,
+    QButtonGroup,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -65,6 +66,7 @@ from population_synthetic.gui_v2.menu_config import FlowEntry
 from population_synthetic.gui_v2.widgets.axis_selector import AxisSelector
 from population_synthetic.gui_v2.widgets.flow_options_panel import FlowOptionsPanel
 from population_synthetic.gui_v2.widgets.flow_selector import FlowSelector
+from population_synthetic.gui_v2.widgets.population_summary import PopulationSummaryPanel
 from population_synthetic.gui_v2.widgets.workflow_graph_view import WorkflowGraphView
 from population_synthetic.gui_v2.workflow_config_model import WorkflowConfigModel
 from population_synthetic.gui_v2.workflow_runner import WorkflowRunner
@@ -147,11 +149,18 @@ class FlowRunnerWindow(QMainWindow):
         self._runner: CombinationRunner | WorkflowRunner | None = None
         self._abort_requested = False
 
+        # Live-refresh timer for the population summary page: while a generate
+        # run is in progress it re-globs each combo's output dir once per tick
+        # so the "generated so far" counts and progress bars tick up.
+        self._summary_timer = QTimer(self)
+        self._summary_timer.setInterval(1000)
+
         self.setWindowTitle(_BASE_TITLE)
         self.resize(1300, 750)
 
         self._build_toolbar()
         self._build_ui()
+        self._summary_timer.timeout.connect(self._summary_panel.refresh_counts)
         self.setStatusBar(QStatusBar())
 
     # ------------------------------------------------------------------
@@ -250,7 +259,21 @@ class FlowRunnerWindow(QMainWindow):
         self._workflow_page.setSizes([600, 200])
         self._center_stack.addWidget(self._workflow_page)
 
-        self._splitter.addWidget(self._center_stack)
+        # Population summary page: a live per-combo persona-generation table,
+        # shown for script (generate) flows via the toggle bar below and
+        # auto-shown while a generate run is in progress.
+        self._summary_panel = PopulationSummaryPanel()
+        self._center_stack.addWidget(self._summary_panel)
+
+        # Center column = a toggle bar (Configure | Population Summary, script
+        # flows only) stacked over the page-swapping center stack.
+        self._center_column = QWidget()
+        center_layout = QVBoxLayout(self._center_column)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(2)
+        center_layout.addWidget(self._build_view_toggle())
+        center_layout.addWidget(self._center_stack, stretch=1)
+        self._splitter.addWidget(self._center_column)
 
         # --- Right column: axis selection (three checkable lists bound to the flow YAML) ---
         # Shown for BOTH `three_axis` and `workflow` flows: the checked combos
@@ -296,6 +319,47 @@ class FlowRunnerWindow(QMainWindow):
         placeholder.setAlignment(Qt.AlignCenter)
         placeholder.setStyleSheet("QLabel { color: #888888; }")
         return placeholder
+
+    def _build_view_toggle(self) -> QWidget:
+        """Two exclusive toggle buttons flipping a script flow's center view.
+
+        Shown only for ``kind: script`` flows (which produce personas); hidden
+        for workflow flows. "Configure" shows the strategy-DAG + options page;
+        "Population Summary" shows the live per-combo generation table.
+        """
+        self._view_toggle_bar = QWidget()
+        hbox = QHBoxLayout(self._view_toggle_bar)
+        hbox.setContentsMargins(4, 2, 4, 0)
+        hbox.setSpacing(4)
+
+        self._configure_button = QPushButton("Configure")
+        self._summary_button = QPushButton("Population Summary")
+        self._view_toggle_group = QButtonGroup(self)
+        for button in (self._configure_button, self._summary_button):
+            button.setCheckable(True)
+            button.setStyleSheet(
+                "QPushButton { padding: 3px 12px; }"
+                " QPushButton:checked { font-weight: bold; background-color: #4CAF50; color: white; }"
+            )
+            self._view_toggle_group.addButton(button)
+            hbox.addWidget(button)
+        self._configure_button.setChecked(True)
+        self._configure_button.clicked.connect(lambda: self._center_stack.setCurrentWidget(self._script_page))
+        self._summary_button.clicked.connect(lambda: self._center_stack.setCurrentWidget(self._summary_panel))
+        hbox.addStretch()
+
+        self._view_toggle_bar.setVisible(False)  # shown per-flow in _load_flow
+        return self._view_toggle_bar
+
+    def _show_summary_page(self) -> None:
+        """Switch the center to the summary page and sync the toggle."""
+        self._center_stack.setCurrentWidget(self._summary_panel)
+        self._summary_button.setChecked(True)
+
+    def _show_configure_page(self) -> None:
+        """Switch the center to the script config page and sync the toggle."""
+        self._center_stack.setCurrentWidget(self._script_page)
+        self._configure_button.setChecked(True)
 
     def _build_run_bar(self) -> QWidget:
         bar = QWidget()
@@ -365,10 +429,14 @@ class FlowRunnerWindow(QMainWindow):
         self._run_button.setEnabled(True)
         self._run_label.setText(f"{entry.category} / {entry.name}  [{entry.kind}]")
         if entry.kind == "script":
-            self._center_stack.setCurrentWidget(self._script_page)
             self._options_panel.populate(model)
             self.refresh_dag(model)
+            # Preview existing on-disk counts and expose the Configure/Summary toggle.
+            self._summary_panel.populate_combos(self._axis_selector.checked_combos())
+            self._view_toggle_bar.setVisible(True)
+            self._show_configure_page()
         else:  # workflow
+            self._view_toggle_bar.setVisible(False)
             self._center_stack.setCurrentWidget(self._workflow_page)
             self._workflow_graph.populate(model)  # type: ignore[arg-type]
             self._workflow_options_panel.show_placeholder("Select a task node to edit its options")
@@ -394,6 +462,9 @@ class FlowRunnerWindow(QMainWindow):
         self._refresh_title()
         if self._current_entry is not None and self._current_entry.kind == "script":
             self.refresh_dag(self._model)
+            # Only re-glob counts while idle — during a run the summary_timer owns refreshes.
+            if self._runner is None:
+                self._summary_panel.populate_combos(self._axis_selector.checked_combos())
 
     # ------------------------------------------------------------------
     # Workflow graph interaction
@@ -526,6 +597,10 @@ class FlowRunnerWindow(QMainWindow):
             requires_manifest=True,
             axis_mode="per_combo",
         )
+        # Rebuild the summary for exactly the combos about to run and auto-show it.
+        self._summary_panel.populate_combos(combos)
+        self._show_summary_page()
+
         runner = CombinationRunner(combos, action, options, force)
         runner.combo_started.connect(self._on_combo_started)
         runner.line_received.connect(self._console.append_line)
@@ -607,6 +682,7 @@ class FlowRunnerWindow(QMainWindow):
 
     def _on_combo_started(self, idx: int, total: int, model_id: str, strategy_id: str, country_id: str) -> None:
         self.statusBar().showMessage(f"Running {idx}/{total}: {model_id} × {strategy_id} × {country_id}")
+        self._summary_panel.set_active_combo(model_id, strategy_id, country_id)
 
     def _on_runner_finished(self) -> None:
         aborted = self._abort_requested
@@ -620,6 +696,17 @@ class FlowRunnerWindow(QMainWindow):
         self._run_button.setEnabled(not running and self._current_entry is not None)
         self._abort_button.setVisible(running)
         self._abort_button.setEnabled(running)
+
+        # Drive the live population-summary refresh only for generate (script) runs.
+        is_script_run = self._current_entry is not None and self._current_entry.kind == "script"
+        if running and is_script_run:
+            self._summary_timer.start()
+        else:
+            self._summary_timer.stop()
+            if is_script_run:
+                # Settle on the true final counts, then drop the running-row highlight.
+                self._summary_panel.refresh_counts()
+                self._summary_panel.clear_active_combo()
 
     # ------------------------------------------------------------------
     # Dirty state / persistence
