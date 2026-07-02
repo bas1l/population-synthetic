@@ -30,10 +30,10 @@ from population_synthetic.analysis.llm_metrics.cross_run.run_comparison import (
     METRIC_SPECS,
     METRIC_SPECS_BY_KEY,
     build_comparison,
-    decompose_slug,
     load_run_records,
     write_comparison_json,
 )
+from population_synthetic.analysis.utils.axes import decompose_slug
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 _CONFIG_PATH = PROJECT_ROOT / "config" / "analysis" / "analyze_defaults.yaml"

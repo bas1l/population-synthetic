@@ -11,12 +11,13 @@ two entry-point scripts. The folder layout mirrors that workflow:
                                               |
                                               v
     cross_run/ (compare_runs.py)      many run_analytics.json -> comparison
-        comparison_loader (load) -> comparison_stats (test)
+        comparison_loader (load) -> analysis.utils.stats_tests (test)
         -> run_comparison (build) -> comparison_charts (visualize)
 
-    shared/   numeric primitives (median / percentile / Shannon entropy) used
-              by both levels.
+Numeric primitives (median / percentile / Shannon entropy) and the hypothesis
+tests live in the cross-process ``analysis.utils`` layer (``_stats`` /
+``stats_tests``).
 
 Cross-level rule: ``per_run`` and ``cross_run`` never import each other; both
-may import ``shared``.
+may import ``analysis.utils``.
 """

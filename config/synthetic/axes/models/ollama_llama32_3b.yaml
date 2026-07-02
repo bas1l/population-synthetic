@@ -1,5 +1,5 @@
 id: "ollama_llama32_3b"
-label: "Ollama Llama3.2 3B"
+label: "Ollama Llama3.2 3B (discarded for now)"
 model_config:
   provider: "ollama"
   model: "llama3.2:3b-instruct-q4_K_M"

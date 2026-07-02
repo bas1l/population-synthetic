@@ -1,21 +1,16 @@
-"""Tests for cross-run statistics: Holm adjustment, Dunn post-hoc, slug decomposition.
+"""Tests for the shared analysis statistics: Holm adjustment, Dunn post-hoc, slug decomposition.
 
-The Holm and Dunn tests pin the hand-rolled non-parametric machinery; the
-``decompose_slug`` tests pin the greedy axis-ID parsing (and its ``None`` failure
-mode) that Phase 5 guards against.
+The Holm and Dunn tests pin the hand-rolled non-parametric machinery in
+``analysis.utils.stats_tests``; the ``decompose_slug`` tests pin the greedy
+axis-ID parsing (and its ``None`` failure mode) in ``analysis.utils.axes``.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from population_synthetic.analysis.llm_metrics.cross_run.run_comparison import (
-    _holm,
-    decompose_slug,
-    diagnose_slug,
-    dunn_posthoc,
-    summarize,
-)
+from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
+from population_synthetic.analysis.utils.stats_tests import _holm, dunn_posthoc, summarize
 
 COUNTRIES = ["swedish", "italian"]
 STRATEGIES = ["all_pick", "all_generate_pick"]

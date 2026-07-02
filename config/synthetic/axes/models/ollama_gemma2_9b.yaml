@@ -1,5 +1,5 @@
 id: "ollama_gemma2_9b"
-label: "Ollama Gemma2 9B"
+label: "Ollama Gemma2 9B (discarded for now)"
 model_config:
   provider: "ollama"
   model: "gemma2:9b"

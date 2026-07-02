@@ -35,8 +35,8 @@ from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.comparison.charts import plot_comparison_charts, plot_radar_comparison
 from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
 from population_synthetic.analysis.comparison.scheme import load_scheme
-from population_synthetic.analysis.llm_metrics.cross_run.comparison_loader import decompose_slug
 from population_synthetic.analysis.mapping.real_mapper import map_population
+from population_synthetic.analysis.utils.axes import decompose_slug
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"

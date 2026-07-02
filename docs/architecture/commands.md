@@ -66,6 +66,10 @@ python scripts/analyze/compare_pipeline_to_istat.py --model-id claude_haiku --st
 # Compare every mapped target against country real populations (batch; iterates mapped/_index.json)
 python scripts/analyze/compare_all_pipelines.py --country swedish --country italian
 
+# Cross-model performance comparison: rank model x strategy combos per country against the real
+# baseline (consumes the comparison reports; run compare_all_pipelines.py first)
+python scripts/analyze/compare_model_performance.py --country swedish --per-attribute-charts
+
 # Extract demographic profiles from a pipeline output tree into a single population file
 python scripts/generate/extract_population_from_pipeline.py --seed-root path/to/pipeline_output/ \
     --output pipeline_population.json
