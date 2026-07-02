@@ -17,6 +17,7 @@ Batch dir
 Usage:
     python scripts/analyze/analyze_run.py <run_dir> [--output run_analytics.json] [--verbose] [--charts DIR]
     python scripts/analyze/analyze_run.py --all [--verbose]
+    python scripts/analyze/analyze_run.py --model-id claude_haiku --strategy-id all_pick --country-id swedish
 
     <run_dir>         Path to a single-persona or batch run directory.
     --output PATH     Write the full analytics dict to this JSON file.
@@ -24,6 +25,10 @@ Usage:
     --verbose         Also print per-persona breakdown after the run summary.
     --all             Discover every run under {output_base}/01_Raw/ and analyse
                       each one into the derived llm_metrics/{slug}/ folder.
+    --model-id/--strategy-id/--country-id
+                      Axis mode: resolve the run dir to {output_base}/01_Raw/{slug}
+                      and analyse that single run (all three required together).
+    --force           Accepted for axis-mode compatibility; re-analysis always overwrites.
 
 Example output:
 
@@ -65,6 +70,7 @@ from population_synthetic.analysis.llm_metrics.per_run.log_parser import (
     parse_log_file,
     parse_run_summary,
 )
+from population_synthetic.generators.synthetic.manifest_loader import axis_slug
 
 # ---------------------------------------------------------------------------
 # Config loading
@@ -335,6 +341,27 @@ def main() -> None:
         action="store_true",
         help="Analyse every run under {output_base}/01_Raw/ into llm_metrics/{slug}/.",
     )
+    parser.add_argument(
+        "--model-id",
+        default=None,
+        help="Axis model ID (e.g. 'claude_haiku') — axis mode; resolves the run dir to "
+        "{output_base}/01_Raw/{slug}. Requires --strategy-id and --country-id.",
+    )
+    parser.add_argument(
+        "--strategy-id",
+        default=None,
+        help="Axis strategy ID (e.g. 'all_pick') — axis mode.",
+    )
+    parser.add_argument(
+        "--country-id",
+        default=None,
+        help="Axis country ID (e.g. 'swedish') — axis mode.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Accepted for axis-mode compatibility (re-analysis always overwrites); no effect.",
+    )
     args = parser.parse_args()
 
     cfg = _load_config()
@@ -343,8 +370,27 @@ def main() -> None:
         _run_all(cfg)
         return
 
+    # --- Axis mode: resolve {output_base}/01_Raw/{slug} from the axis IDs.
+    axis_ids = [args.model_id, args.strategy_id, args.country_id]
+    if any(x is not None for x in axis_ids):
+        if any(x is None for x in axis_ids):
+            print(
+                "Error: --model-id, --strategy-id, and --country-id must all be provided together.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        output_base = cfg.get("output_base")
+        if not output_base:
+            print(
+                "Error: axis mode requires 'output_base' in config/analysis/analyze_defaults.yaml.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        slug = axis_slug(args.model_id, args.strategy_id, args.country_id)
+        args.run_dir = Path(output_base) / "01_Raw" / slug
+
     if args.run_dir is None:
-        print("Error: run_dir is required (or pass --all).", file=sys.stderr)
+        print("Error: run_dir is required (or pass --all or the axis IDs).", file=sys.stderr)
         sys.exit(1)
 
     run_dir: Path = args.run_dir.resolve()

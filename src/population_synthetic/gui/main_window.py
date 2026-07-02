@@ -23,9 +23,9 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from population_synthetic.generators.synthetic.manifest_loader import axis_slug, discover_axis_values
 from population_synthetic.gui.launcher_config import ActionEntry, LauncherConfig
 from population_synthetic.gui.manifest_model import ExperimentSelection, ManifestDisplayInfo
-from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 from population_synthetic.gui.widgets.configuration_panel import ConfigurationPanel
 from population_synthetic.gui.widgets.console_widget import ConsoleWidget, ProcessOutputReader
 from population_synthetic.gui.widgets.dag_graph_widget import DagGraphWidget
@@ -218,28 +218,32 @@ class LauncherWindow(QMainWindow):
                 cmd += [f"--{key}", str(value)]
         return cmd
 
+    def _launch_single_process(self, cmd: list[str], status_msg: str) -> None:
+        """Launch one subprocess and wire it to the console via the poll timer."""
+        self._process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=0,
+        )
+        self._reader = ProcessOutputReader(self._process)
+        self._reader.line_received.connect(self._console.append_line)
+        self._reader.cr_line_received.connect(self._console.append_cr_line)
+        self._reader.start()
+        self._task_selector.set_run_enabled(False)
+        self._task_selector.set_abort_enabled(True)
+        self.statusBar().showMessage(status_msg)
+        self._poll_timer.start(500)
+
     def _run(self) -> None:
         action = self._task_selector.current_action()
         if action is None:
             return
         overrides = self._config_panel.get_overrides()
 
-        if not action.requires_manifest:
+        if action.axis_mode == "none":
             cmd = self._build_command(action, overrides)
-            self._process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                bufsize=0,
-            )
-            self._reader = ProcessOutputReader(self._process)
-            self._reader.line_received.connect(self._console.append_line)
-            self._reader.cr_line_received.connect(self._console.append_cr_line)
-            self._reader.start()
-            self._task_selector.set_run_enabled(False)
-            self._task_selector.set_abort_enabled(True)
-            self.statusBar().showMessage(f"Running: {action.script.name}...")
-            self._poll_timer.start(500)
+            self._launch_single_process(cmd, f"Running: {action.script.name}...")
             return
 
         selection = self._config_panel.current_selection()
@@ -252,6 +256,39 @@ class LauncherWindow(QMainWindow):
             )
             return
 
+        if action.axis_mode == "batch":
+            if action.min_combos is not None and len(combos) < action.min_combos:
+                QMessageBox.warning(
+                    self,
+                    "Too Few Selected",
+                    f"This action needs at least {action.min_combos} combination(s); "
+                    f"you selected {len(combos)}.",
+                )
+                return
+            if action.max_combos is not None and len(combos) > action.max_combos:
+                QMessageBox.warning(
+                    self,
+                    "Too Many Selected",
+                    f"This action accepts at most {action.max_combos} combination(s); "
+                    f"you selected {len(combos)}.",
+                )
+                return
+
+            cmd = [sys.executable, str(action.script)]
+            for model_id, strategy_id, country_id in combos:
+                cmd += ["--slug", axis_slug(model_id, strategy_id, country_id)]
+            for key, value in overrides.items():
+                if isinstance(value, bool):
+                    if value:
+                        cmd.append(f"--{key}")
+                elif value is not None and value != "":
+                    cmd += [f"--{key}", str(value)]
+            self._launch_single_process(
+                cmd, f"Running: {action.script.name} over {len(combos)} pipeline(s)..."
+            )
+            return
+
+        # axis_mode == "per_combo": one subprocess per combo via CombinationRunner.
         if len(combos) > 20:
             answer = QMessageBox.question(
                 self,

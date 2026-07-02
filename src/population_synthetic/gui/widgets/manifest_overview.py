@@ -95,16 +95,18 @@ class ManifestOverview(QWidget):
         self._table.setRowCount(len(combos))
         worker_rows: list[tuple[int, Path | None]] = []
         for row, (model_id, strategy_id, country_id) in enumerate(combos):
+            country_label = country_labels.get(country_id, country_id)
+            axis_cols = [model_id, strategy_id, country_label]
             try:
                 cfg = compose_manifest(model_id, strategy_id, country_id)
-            except Exception as e:
-                self._set_row(row, [model_id, strategy_id, country_labels.get(country_id, country_id), f"error: {e}", "", "", _DASH])
+            except Exception as e:  # noqa: BLE001 - surfaced in the row, not swallowed
+                self._set_row(row, [*axis_cols, f"error: {e}", "", "", _DASH])
                 continue
 
             workers = str(cfg.parallel_workers) if cfg.parallel_workers is not None else _DASH
             self._set_row(
                 row,
-                [model_id, strategy_id, country_labels.get(country_id, country_id), cfg.provider or _DASH, cfg.mode or _DASH, workers, _PENDING],
+                [*axis_cols, cfg.provider or _DASH, cfg.mode or _DASH, workers, _PENDING],
             )
             tooltip = cfg.name
             if cfg.parallel_output_dir is not None:

@@ -182,6 +182,21 @@ def resolve_slug(args: argparse.Namespace, parser: argparse.ArgumentParser):
     return seed_name, manifest
 
 
+def resolve_country(args: argparse.Namespace, manifest) -> str:
+    """Resolve the comparison country: which real population and scheme to score against.
+
+    Priority: the explicit ``--country-id`` axis value, then the country inferred from a
+    composed/loaded manifest's simulation config, else the default (``swedish``) for the
+    manifest-less ``--seed-root`` / ``--mapped-*`` paths that carry no country.
+    """
+    if args.country_id:
+        return args.country_id
+    if manifest is not None and getattr(manifest, "config_path", None) is not None:
+        from population_synthetic.analysis.utils.country_config import infer_country
+        return infer_country(manifest.config_path)
+    return _COUNTRY
+
+
 def _load_mapped(path: Path, label: str) -> dict:
     """json.load a pre-mapped population file, with a clear error if it is absent."""
     if not path.exists():
@@ -215,6 +230,7 @@ def compare_populations(
     args: argparse.Namespace,
     slug: str,
     real_label: str,
+    country: str,
 ) -> None:
     """Score the synthetic population against the real population and emit artifacts.
 
@@ -226,7 +242,7 @@ def compare_populations(
         print(f"WARNING: Synthetic population has only {n} individuals"
               " -- statistical tests will be unreliable.\n")
 
-    scheme = load_scheme(_COUNTRY)
+    scheme = load_scheme(country)
     evaluator = StatisticalEvaluator(real_pop, synthetic_pop, scheme=scheme)
     evaluator.print_summary(real_label, slug)
 
@@ -298,11 +314,12 @@ def main() -> None:
     args = parser.parse_args()
 
     slug, manifest = resolve_slug(args, parser)
+    country = resolve_country(args, manifest)
     output_base = _resolve_output_base(args.output_base)
     mapped_dir = Path(args.mapped_dir) if args.mapped_dir else output_base / "03_Analysis" / "mapped"
 
     synthetic_path = Path(args.mapped_synthetic) if args.mapped_synthetic else mapped_dir / f"{slug}.json"
-    real_path = Path(args.mapped_real) if args.mapped_real else mapped_dir / f"real_{_COUNTRY}.json"
+    real_path = Path(args.mapped_real) if args.mapped_real else mapped_dir / f"real_{country}.json"
 
     synthetic_pop = _load_mapped(synthetic_path, "synthetic")
     real_pop = _load_mapped(real_path, "real")
@@ -310,7 +327,7 @@ def main() -> None:
     real_label = Path(args.real_label).stem if args.real_label else real_path.stem
     output_path = resolve_output_path(args, manifest, slug, output_base)
 
-    compare_populations(real_pop, synthetic_pop, output_path, args, slug, real_label)
+    compare_populations(real_pop, synthetic_pop, output_path, args, slug, real_label, country)
 
 
 if __name__ == "__main__":

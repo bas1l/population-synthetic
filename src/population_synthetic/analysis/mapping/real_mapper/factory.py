@@ -6,9 +6,9 @@ from pathlib import Path
 
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.mapping.real_mapper.base import AbstractRealMapper
-from population_synthetic.analysis.mapping.real_mapper.sweden import SwedishRealMapper
 from population_synthetic.analysis.mapping.real_mapper.italy import ItalianRealMapper
 from population_synthetic.analysis.mapping.real_mapper.mappings import load_mappings
+from population_synthetic.analysis.mapping.real_mapper.sweden import SwedishRealMapper
 
 _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 

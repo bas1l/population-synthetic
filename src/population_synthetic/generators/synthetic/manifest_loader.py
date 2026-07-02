@@ -145,6 +145,17 @@ def discover_axis_values(axis: str) -> list[dict]:
     return sorted(results, key=lambda d: d["id"])
 
 
+def axis_slug(model_id: str, strategy_id: str, country_id: str) -> str:
+    """Return the canonical axis slug ``{country}_{strategy}_{model}``.
+
+    This is the single source of truth for the slug format joining an
+    axis combo to its on-disk artifacts (raw runs, mapped populations,
+    comparison outputs). ``compose_manifest`` and the batch GUI path both
+    route through here so the format cannot drift.
+    """
+    return f"{country_id}_{strategy_id}_{model_id}"
+
+
 def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> ManifestConfig:
     """Compose a ManifestConfig from axis files and experiment defaults."""
     defaults_path = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
@@ -204,7 +215,7 @@ def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> Manife
     # the strategy path -- there is no separate strategy_defs json to point at.
     strategy_path = strategy_path_file.resolve()
 
-    slug = f"{country_id}_{strategy_id}_{model_id}"
+    slug = axis_slug(model_id, strategy_id, country_id)
     parallel_output_dir = _resolve_path(f"{output_base}/01_Raw/{slug}")
     comparison_output_dir = _resolve_path(f"{output_base}/03_Analysis/comparison/{slug}")
 

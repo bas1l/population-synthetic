@@ -49,7 +49,8 @@ class ParameterPanel(QWidget):
             default = self._resolve_default(param, manifest)
             widget = self._build_widget(param, default)
             self._widgets[param.key] = widget
-            form.addRow(QLabel(param.label), widget if not isinstance(widget, QHBoxLayout) else self._wrap_layout(widget))
+            field = self._wrap_layout(widget) if isinstance(widget, QHBoxLayout) else widget
+            form.addRow(QLabel(param.label), field)
 
     def _resolve_default(self, param: ActionParameter, manifest: ManifestDisplayInfo | None) -> Any:
         if param.default_from_manifest and manifest is not None:
