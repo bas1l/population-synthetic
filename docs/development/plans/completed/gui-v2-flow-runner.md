@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-01 (amended 2026-07-02: dependency-linked Analysis Workflow; ComboTree → flat axis lists; `targets` dispatch dropped)
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed (2026-07-02)
 **Base Branch:** `feature/model-performance-comparison`
 **Branch:** `feature/gui-v2-flow-runner`
 
