@@ -1,10 +1,10 @@
 """Two-step synthetic-population pipeline: load raw from disk, then map to schema.
 
-``load_raw_population`` reads the ``persona_*/identity.json`` files verbatim (the
+``load_synthetic_population`` reads the ``persona_*/identity.json`` files verbatim (the
 population *as it is on the harddrive*); ``map_population`` applies the
 country-specific synthetic mapper to produce the canonical schema population.
-Keeping the two steps separate mirrors the reference side
-(``load_reference_population`` -> ``normalize_population``).
+Keeping the two steps separate mirrors the real side
+(``load_real_population`` -> ``map_population``).
 """
 
 from __future__ import annotations
@@ -16,13 +16,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
 from population_synthetic.analysis.mapping.synthetic_mapper.factory import get_synthetic_mapper
-from population_synthetic.analysis.mapping.synthetic_mapper.base import  BaseSyntheticMapper
 
 logger = logging.getLogger(__name__)
 
 
-def load_raw_population(seed_root: Path) -> dict[str, Any]:
+def load_synthetic_population(seed_root: Path) -> dict[str, Any]:
     """Load ``persona_*/identity.json`` files verbatim from disk (no mapping).
 
     Each individual is the raw identity dict with its ``id`` (the persona
@@ -62,7 +62,7 @@ def map_population(raw_pop: dict[str, Any], country: str = "swedish") -> dict[st
     """Map a raw pipeline population to the canonical schema for *country*.
 
     Skips critically-incomplete personas (``map_individual`` returns ``None``)
-    and folds disk-unreadable files (from :func:`load_raw_population`) into the
+    and folds disk-unreadable files (from :func:`load_synthetic_population`) into the
     skip count, so the returned ``metadata`` matches the legacy one-shot path.
     """
     mapper: BaseSyntheticMapper = get_synthetic_mapper(country)

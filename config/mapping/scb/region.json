@@ -22,7 +22,7 @@
     "Blekinge",
     "Gotland"
   ],
-  "database": {
+  "real": {
     "Stockholm": {
       "equals": [
         "Stockholm",

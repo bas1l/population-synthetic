@@ -1,0 +1,12 @@
+# config/gui/v2/flows/generate_parallel.yaml
+# options keys are CLI flag names; the GUI turns them into per-combo CLI args
+# (the script does NOT read this file).
+options:
+  n: 100                     # --n
+  workers: 8                 # --workers
+  retry-until-success: false # --retry-until-success (flag when true)
+selection:
+  models:     [claude_haiku]
+  strategies: [all_pick]
+  countries:  [swedish]
+force: false                 # generate flows only

@@ -13,7 +13,7 @@ all real logic lives in the `population_synthetic.*` package (installed via
 | `generate_scb_population.py` | Sample a Swedish population from live SCB PxWeb data |
 | `generate_ssb_population.py` | Sample a Norwegian population from live SSB PxWebApi data |
 | `generate_istat_population.py` | Sample an Italian population from ISTAT SDMX + Eurostat |
-| `generate_db_population.py` | Dispatcher: `--source scb\|ssb` runs the matching generator above |
+| `generate_real_population.py` | Dispatcher: `--source scb\|ssb` runs the matching generator above |
 | `generate_identity.py` | Generate a single LLM persona identity (manifest / axis IDs / explicit CLI) |
 | `generate_identities_parallel.py` | Generate N identities in parallel with retry rounds |
 | `extract_population_from_pipeline.py` | Extract demographic profiles from pipeline `identity.json` files into a population JSON |
@@ -23,8 +23,8 @@ all real logic lives in the `population_synthetic.*` package (installed via
 | Script | Purpose |
 | --- | --- |
 | `compare_populations.py` | Generic two-file statistical comparison |
-| `compare_pipeline_to_scb.py` | Compare LLM pipeline output against an SCB reference |
-| `compare_pipeline_to_istat.py` | Compare LLM pipeline output against an ISTAT reference |
+| `compare_pipeline_to_scb.py` | Compare LLM pipeline output against an SCB real population |
+| `compare_pipeline_to_istat.py` | Compare LLM pipeline output against an ISTAT real population |
 | `compare_all_pipelines.py` | Batch comparison over every model × strategy × country |
 | `compare_countries.py` | Cross-country marginals (Sweden vs Norway vs Italy) |
 | `analyze_run.py` | Per-run LLM interaction analytics (call counts, retries, tokens, latency) |

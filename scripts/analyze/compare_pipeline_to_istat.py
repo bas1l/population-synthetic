@@ -1,10 +1,10 @@
 """
 compare_pipeline_to_istat.py -- Compare a pre-mapped synthetic population against a pre-mapped
-ISTAT reference population (Italy).
+ISTAT real population (Italy).
 
 This script performs NO mapping. It consumes the mapped files produced by the map stage
 (scripts/analyze/map_populations.py): the mapped synthetic population {mapped-dir}/{slug}.json
-and the shared mapped reference {mapped-dir}/database_italian.json. Run map_populations.py first.
+and the shared mapped real population {mapped-dir}/real_italian.json. Run map_populations.py first.
 
 Usage:
     python scripts/analyze/compare_pipeline_to_istat.py \\
@@ -19,13 +19,13 @@ Usage:
 
     python scripts/analyze/compare_pipeline_to_istat.py \\
         --mapped-synthetic <dir>/<slug>.json \\
-        --mapped-database <dir>/database_italian.json
+        --mapped-real <dir>/real_italian.json
 
 --manifest         Seed manifest YAML; derives the slug from parallel.output_dir basename.
 --seed-root        Pipeline seed output directory; the slug is its basename.
 --mapped-dir       Directory holding the mapped files (default: {output_base}/03_Analysis/mapped).
 --mapped-synthetic Explicit path to the mapped synthetic population JSON (overrides --mapped-dir/{slug}).
---mapped-database  Explicit path to the mapped reference population JSON (overrides database_italian.json).
+--mapped-real      Explicit path to the mapped real population JSON (overrides real_italian.json).
 --output           Path for the JSON comparison report (default: 03_Analysis/comparison/{slug}/{slug}.json).
 """
 
@@ -80,7 +80,7 @@ def _load_mapped(path: Path, label: str) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Compare a pre-mapped synthetic population against a pre-mapped ISTAT reference"
+        description="Compare a pre-mapped synthetic population against a pre-mapped ISTAT real population"
     )
     parser.add_argument(
         "--manifest", default=None,
@@ -119,14 +119,14 @@ def main() -> None:
         help="Explicit path to the mapped synthetic population JSON (overrides --mapped-dir/{slug}.json).",
     )
     parser.add_argument(
-        "--mapped-database",
+        "--mapped-real",
         default=None,
-        help="Explicit path to the mapped reference population JSON (overrides database_italian.json).",
+        help="Explicit path to the mapped real population JSON (overrides real_italian.json).",
     )
     parser.add_argument(
-        "--reference",
+        "--real-label",
         default=None,
-        help="Display label for the reference population (default: mapped database file stem).",
+        help="Display label for the real population (default: mapped real file stem).",
     )
     parser.add_argument(
         "--output", default=None,
@@ -185,12 +185,12 @@ def main() -> None:
     mapped_dir = Path(args.mapped_dir) if args.mapped_dir else output_base / "03_Analysis" / "mapped"
 
     synthetic_path = Path(args.mapped_synthetic) if args.mapped_synthetic else mapped_dir / f"{slug}.json"
-    database_path = Path(args.mapped_database) if args.mapped_database else mapped_dir / f"database_{_COUNTRY}.json"
+    real_path = Path(args.mapped_real) if args.mapped_real else mapped_dir / f"real_{_COUNTRY}.json"
 
     synthetic_pop = _load_mapped(synthetic_path, "synthetic")
-    database_pop = _load_mapped(database_path, "reference")
+    real_pop = _load_mapped(real_path, "real")
 
-    reference_label = Path(args.reference).stem if args.reference else database_path.stem
+    real_label = Path(args.real_label).stem if args.real_label else real_path.stem
 
     if args.output:
         output_path = Path(args.output)
@@ -205,8 +205,8 @@ def main() -> None:
               " -- statistical tests will be unreliable.\n")
 
     scheme = load_scheme(_COUNTRY)
-    evaluator = StatisticalEvaluator(database_pop, synthetic_pop, scheme=scheme)
-    evaluator.print_summary(reference_label, slug)
+    evaluator = StatisticalEvaluator(real_pop, synthetic_pop, scheme=scheme)
+    evaluator.print_summary(real_label, slug)
 
     report = evaluator.generate_report()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -227,10 +227,10 @@ def main() -> None:
         if charts_dir.exists():
             shutil.rmtree(charts_dir)
         plot_comparison_charts(
-            database_pop,
+            real_pop,
             synthetic_pop,
             charts_dir,
-            pop_a_label=reference_label,
+            pop_a_label=real_label,
             pop_b_label=slug,
             prefix=slug,
             attributes=scheme.attributes,
@@ -240,7 +240,7 @@ def main() -> None:
         radar_path = plot_radar_comparison(
             report["marginals"],
             charts_dir,
-            pop_a_label=reference_label,
+            pop_a_label=real_label,
             pop_b_label=slug,
             show_chi_sq=not args.radar_tv_only,
             prefix=slug,

@@ -4,7 +4,7 @@ The synthetic mapper no longer holds a handler-kind engine: it reads the per-cou
 ``_index.json`` master plus each per-attribute file's ``synthetic`` block and ``values``
 list, and delegates every attribute to :func:`mapping_engine.resolve`. These tests drive
 the concrete base class directly with the shared in-memory config from
-:mod:`tests._mapping_fixtures` (mirroring ``test_reference_mapper_base.py``), and add a
+:mod:`tests._mapping_fixtures` (mirroring ``test_real_mapper_base.py``), and add a
 couple of real-config integration checks through ``get_synthetic_mapper``.
 
 They exercise the three responsibilities the base class still owns -- the format gate

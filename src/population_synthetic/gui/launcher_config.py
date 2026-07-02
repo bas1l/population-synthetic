@@ -25,14 +25,20 @@ class ActionParameter:
     choices: list[str] | None = None
 
 
+VALID_AXIS_MODES = {"none", "per_combo", "batch"}
+
+
 @dataclass
 class ActionEntry:
     id: str
     label: str
     script: Path
     requires_manifest: bool
+    axis_mode: str  # normalised: "none" | "per_combo" | "batch"
     group: str = ""
     parameters: list[ActionParameter] = field(default_factory=list)
+    min_combos: int | None = None
+    max_combos: int | None = None
 
 
 @dataclass
@@ -90,14 +96,35 @@ def parse_launcher_config(yaml_path: Path) -> LauncherConfig:
             for p in action.get("parameters", [])
         ]
 
+        requires_manifest = action["requires_manifest"]
+        # Run-mode is explicit when declared; otherwise derive from the legacy
+        # ``requires_manifest`` boolean so untouched (e.g. Generate) actions keep
+        # their behaviour: true -> per_combo, false -> none.
+        raw_axis_mode = action.get("axis_mode")
+        if raw_axis_mode is None:
+            axis_mode = "per_combo" if requires_manifest else "none"
+        else:
+            axis_mode = raw_axis_mode
+            if axis_mode not in VALID_AXIS_MODES:
+                raise ValueError(
+                    f"Action '{action['id']}' has invalid axis_mode {axis_mode!r}; "
+                    f"must be one of {sorted(VALID_AXIS_MODES)}"
+                )
+
+        min_combos = action.get("min_combos")
+        max_combos = action.get("max_combos")
+
         entries.append(
             ActionEntry(
                 id=action["id"],
                 label=action["label"],
                 script=script_path,
-                requires_manifest=action["requires_manifest"],
+                requires_manifest=requires_manifest,
+                axis_mode=axis_mode,
                 group=action.get("group", ""),
                 parameters=parameters,
+                min_combos=min_combos,
+                max_combos=max_combos,
             )
         )
 

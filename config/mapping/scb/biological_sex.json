@@ -3,7 +3,7 @@
     "Male",
     "Female"
   ],
-  "database": {
+  "real": {
     "Male": {
       "equals": [
         "Male",

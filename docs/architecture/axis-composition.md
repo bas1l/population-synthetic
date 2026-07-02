@@ -13,7 +13,7 @@ layers:
 1. `config/synthetic/experiment_defaults.yaml` -- base parameters (mode, output_base, parallel settings)
 2. `config/synthetic/axes/models/{model_id}.yaml` -- provider, model name, API key env var
 3. `config/synthetic/axes/strategies/{strategy_id}.yaml` -- generation strategy (all_pick, all_generate_pick, etc.)
-4. `config/synthetic/axes/countries/{country_id}.yaml` -- country-specific simulation config and reference population
+4. `config/synthetic/axes/countries/{country_id}.yaml` -- country-specific simulation config and real population
 
 Each strategy yaml is the **single source of truth** for that strategy: it carries `id`, `label`,
 `description`, and the full per-category `categories` DAG (`method` + `depends_on`) inline -- the

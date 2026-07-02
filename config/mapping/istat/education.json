@@ -4,7 +4,7 @@
     "High School (Liceo/Professionale)",
     "University Degree"
   ],
-  "database": {
+  "real": {
     "No Formal Education": {
       "equals": [
         "No Formal Education"

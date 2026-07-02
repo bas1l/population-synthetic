@@ -1,0 +1,165 @@
+"""AxisSelector — right column: three checkable axis lists bound to a flow YAML.
+
+Composes three reused :class:`CheckableAxisList` widgets (models, strategies,
+countries — imported unmodified from the legacy launcher, mirroring the
+legacy ``ExperimentSelector`` composition) populated from
+``discover_axis_values``, plus a "Combos: N" label showing the
+cartesian-product count and a "Force reprocessing" checkbox shown only for
+flows whose YAML declares a top-level ``force:`` key (generate flows).
+
+Persistence goes through the bound :class:`FlowConfigModel` — checks write
+``selection:``/``force:`` via ``set_selection``/``set_force`` (marking the
+model dirty). This widget never reads or writes ``config/gui/state.json``;
+that file belongs to the legacy launcher.
+"""
+
+from __future__ import annotations
+
+import itertools
+from functools import partial
+
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import QCheckBox, QLabel, QVBoxLayout, QWidget
+
+from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
+from population_synthetic.gui.widgets.checkable_axis_list import CheckableAxisList
+from population_synthetic.gui_v2.flow_config_model import FlowConfigModel
+
+# Axis keys in flow-YAML `selection:` order == cartesian-product significance
+# order (model-major, country fastest) — same ordering as the legacy
+# `ExperimentSelection.combinations()` (`gui/manifest_model.py`).
+_AXES: tuple[tuple[str, str], ...] = (
+    ("models", "Models"),
+    ("strategies", "Strategies"),
+    ("countries", "Countries"),
+)
+
+
+def cartesian_combos(
+    model_ids: list[str], strategy_ids: list[str], country_ids: list[str]
+) -> list[tuple[str, str, str]]:
+    """Deterministic cartesian product of the three checked-id lists.
+
+    Pure helper (no Qt) so combo ordering is unit-testable headlessly.
+    Order is model-major, then strategy, then country — each axis in its
+    input order (the discovered sorted-by-id order for GUI callers), matching
+    the legacy launcher's ``ExperimentSelection.combinations()``.
+    """
+    return list(itertools.product(model_ids, strategy_ids, country_ids))
+
+
+class AxisSelector(QWidget):
+    """Three flat checkable axis lists driving the flow's combo selection.
+
+    API: :meth:`bind` (re)targets a :class:`FlowConfigModel` (``None`` →
+    disabled/empty); :meth:`checked_combos` returns the cartesian product of
+    the checked ids; :attr:`selection_changed` fires after any check or force
+    toggle has been written through the model (which is then dirty).
+    """
+
+    selection_changed = pyqtSignal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._model: FlowConfigModel | None = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._axis_lists: dict[str, CheckableAxisList] = {}
+        self._known_ids: dict[str, set[str]] = {}
+        for axis, title in _AXES:
+            axis_list = CheckableAxisList(title, self)
+            # discover_axis_values raises on a malformed axis file — fail-fast.
+            items = discover_axis_values(axis)
+            axis_list.populate(items)
+            self._known_ids[axis] = {item["id"] for item in items}
+            axis_list.selection_changed.connect(partial(self._on_axis_changed, axis))
+            layout.addWidget(axis_list)
+            self._axis_lists[axis] = axis_list
+
+        self._combos_label = QLabel()
+        layout.addWidget(self._combos_label)
+
+        self._force_checkbox = QCheckBox("Force reprocessing")
+        self._force_checkbox.setVisible(False)  # generate flows only (YAML has a `force:` key)
+        self._force_checkbox.toggled.connect(self._on_force_toggled)
+        layout.addWidget(self._force_checkbox)
+
+        layout.addStretch()
+
+        self._update_combos_label()
+        self.setEnabled(False)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def bind(self, model: FlowConfigModel | None) -> None:
+        """(Re)target *model*: restore checks/force from its YAML blocks.
+
+        ``None`` detaches: all checks cleared, widget disabled. Restoring
+        never writes back (the model stays clean). Fail-fast: a missing
+        ``selection:`` axis or an id unknown to the discovered axis values
+        raises *before* any widget state is touched, so the previously bound
+        flow's checks survive a failed bind.
+        """
+        if model is None:
+            self._model = None
+            for axis_list in self._axis_lists.values():
+                axis_list.set_selected([])
+            self._force_checkbox.setVisible(False)
+            self._update_combos_label()
+            self.setEnabled(False)
+            return
+
+        # Validate everything before mutating any widget state.
+        selection = {axis: model.get_selection(axis) for axis, _title in _AXES}
+        for axis, ids in selection.items():
+            unknown = [i for i in ids if i not in self._known_ids[axis]]
+            if unknown:
+                raise ValueError(
+                    f"Flow config {model.path}: selection '{axis}' contains unknown ids {unknown} "
+                    f"(discovered: {sorted(self._known_ids[axis])})"
+                )
+        force = model.get_force() if model.has_force() else None
+
+        self._model = None  # detach while restoring so checks are not written back
+        for axis, ids in selection.items():
+            self._axis_lists[axis].set_selected(ids)
+        self._force_checkbox.blockSignals(True)
+        self._force_checkbox.setVisible(force is not None)
+        self._force_checkbox.setChecked(bool(force))
+        self._force_checkbox.blockSignals(False)
+        self._model = model
+        self._update_combos_label()
+        self.setEnabled(True)
+
+    def checked_combos(self) -> list[tuple[str, str, str]]:
+        """Cartesian product of the checked (model_id, strategy_id, country_id) ids."""
+        return cartesian_combos(
+            self._axis_lists["models"].selected_ids(),
+            self._axis_lists["strategies"].selected_ids(),
+            self._axis_lists["countries"].selected_ids(),
+        )
+
+    # ------------------------------------------------------------------
+    # Handlers
+    # ------------------------------------------------------------------
+
+    def _on_axis_changed(self, axis: str, ids: list) -> None:
+        """A CheckableAxisList changed — write through the model and notify."""
+        self._update_combos_label()
+        if self._model is None:
+            return  # detached (or mid-bind restore): display-only update
+        self._model.set_selection(axis, list(ids))  # marks the model dirty
+        self.selection_changed.emit()
+
+    def _on_force_toggled(self, checked: bool) -> None:
+        if self._model is None:
+            return
+        self._model.set_force(checked)  # marks the model dirty
+        self.selection_changed.emit()
+
+    def _update_combos_label(self) -> None:
+        self._combos_label.setText(f"Combos: {len(self.checked_combos())}")

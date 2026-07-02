@@ -5,7 +5,7 @@
     "Divorced",
     "Widowed"
   ],
-  "database": {
+  "real": {
     "Single": {
       "equals": [
         "Single"

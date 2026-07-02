@@ -204,7 +204,7 @@ def test_write_csv_summary_one_row_per_attribute(tmp_path):
 
 
 def test_scheme_restricts_axis_and_flags_synthetic_only_category():
-    # The reference only ever emits Employed/Unemployed; a synthetic-only "Student"
+    # The real only ever emits Employed/Unemployed; a synthetic-only "Student"
     # must fall outside the scored axis and be reported as unmapped.
     scheme = _scheme(["employment_status"], {"employment_status": ["Employed", "Unemployed"]})
     a = [_person(i, employment_status="Employed") for i in range(8)] + [_person(8, employment_status="Unemployed")]

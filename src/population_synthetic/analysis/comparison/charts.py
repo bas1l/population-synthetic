@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 
 from population_synthetic.analysis.comparison.evaluator import attr_value
+from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
 
 # ------------------------------------------------------------------
 # Chart styling constants
@@ -87,7 +88,7 @@ def plot_comparison_charts(
     ``ComparisonScheme`` -- the charted attributes come from config, never an
     in-code default. When *categories* is supplied each attribute uses the
     scheme's DB-grounded category set so no synthetic-only bar appears with a
-    zero reference; otherwise categories fall back to the observed union.
+    zero real-population count; otherwise categories fall back to the observed union.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -441,15 +442,6 @@ def plot_3way_radar(
 # ------------------------------------------------------------------
 # Radar grid (models × strategies)
 # ------------------------------------------------------------------
-
-STRATEGY_COMPLEXITY_ORDER = [
-    "all_pick",
-    "all_pick_dag",
-    "all_generate_pick",
-    "all_generate_evaluate_pick",
-    "all_generate_evaluate_random_pick",
-]
-
 
 def plot_radar_grid(
     results: dict[tuple[str, str], dict[str, dict[str, Any]]],

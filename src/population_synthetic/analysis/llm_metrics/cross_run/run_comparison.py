@@ -15,10 +15,10 @@ Pipeline:
     3. :func:`write_comparison_json` -- persist a serialisable summary.
 
 This module is the builder/serialiser layer: it groups, aggregates, and assembles
-the comparison structure.  The hypothesis tests live in
-:mod:`population_synthetic.analysis.llm_metrics.cross_run.comparison_stats` and the registry/DTOs/I/O live in
-:mod:`population_synthetic.analysis.llm_metrics.cross_run.comparison_loader`; both are re-exported below so
-existing import sites keep working.
+the comparison structure.  The hypothesis tests live in the shared
+:mod:`population_synthetic.analysis.utils.stats_tests`, slug decomposition in
+:mod:`population_synthetic.analysis.utils.axes`, and the registry/DTOs/I/O in
+:mod:`population_synthetic.analysis.llm_metrics.cross_run.comparison_loader`.
 """
 
 from __future__ import annotations
@@ -34,19 +34,11 @@ from population_synthetic.analysis.llm_metrics.cross_run.comparison_loader impor
     METRIC_SPECS_BY_KEY,
     MetricSpec,
     RunRecord,
-    decompose_slug,
-    diagnose_slug,
     extract_comparison_metrics,
     load_run_records,
 )
-from population_synthetic.analysis.llm_metrics.cross_run.comparison_stats import (
-    _holm,
-    _nonempty_groups,
-    dunn_posthoc,
-    kruskal_test,
-    summarize,
-)
-from population_synthetic.analysis.llm_metrics.shared import _stats
+from population_synthetic.analysis.utils import _stats
+from population_synthetic.analysis.utils.stats_tests import dunn_posthoc, kruskal_test, summarize
 
 __all__ = [
     # Registry / DTOs / loader (re-exported from comparison_loader)
@@ -54,13 +46,9 @@ __all__ = [
     "METRIC_SPECS",
     "METRIC_SPECS_BY_KEY",
     "RunRecord",
-    "decompose_slug",
-    "diagnose_slug",
     "extract_comparison_metrics",
     "load_run_records",
-    # Statistics (re-exported from comparison_stats)
-    "_holm",
-    "_nonempty_groups",
+    # Statistics (re-exported from analysis.utils.stats_tests)
     "dunn_posthoc",
     "kruskal_test",
     "summarize",

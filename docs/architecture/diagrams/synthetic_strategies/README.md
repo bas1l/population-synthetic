@@ -2,8 +2,8 @@
 
 Workflow / DAG diagrams for the five configurable **LLM identity-generation
 strategies**. These describe how persona identities are *generated* by an LLM —
-distinct from the sibling [`../database/`](../database/README.md) diagrams, which
-describe how the *reference* population is sampled from real statistics.
+distinct from the sibling [`../real/`](../real/README.md) diagrams, which
+describe how the *real* population is sampled from real statistics.
 
 Each strategy has two artefacts (same content, different format):
 

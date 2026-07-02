@@ -7,16 +7,14 @@ supports zoom, middle-button pan, and persists manual node positions to a
 ``.layout.json`` sidecar.
 """
 import json
-import math
 from pathlib import Path
 
-from PyQt5.QtCore import QObject, QPointF, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QPainter
-from PyQt5.QtWidgets import QGraphicsScene, QGraphicsTextItem, QGraphicsView, QShortcut
-from PyQt5.QtGui import QKeySequence
-
-from grandalf.graphs import Edge as GEdge, Graph, Vertex
+from grandalf.graphs import Edge as GEdge
+from grandalf.graphs import Graph, Vertex
 from grandalf.layouts import SugiyamaLayout
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QKeySequence, QPainter
+from PyQt5.QtWidgets import QGraphicsScene, QGraphicsTextItem, QGraphicsView, QShortcut
 
 from population_synthetic.gui.widgets.dag_graph_items import DagCategoryNode, DagEdge
 

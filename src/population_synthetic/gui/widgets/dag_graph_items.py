@@ -15,12 +15,8 @@ from PyQt5.QtWidgets import (
     QGraphicsPolygonItem,
     QGraphicsProxyWidget,
     QGraphicsRectItem,
-    QGraphicsScene,
     QLabel,
-    QVBoxLayout,
-    QWidget,
 )
-
 
 _NODE_H = 90
 _MIN_NODE_W = 180

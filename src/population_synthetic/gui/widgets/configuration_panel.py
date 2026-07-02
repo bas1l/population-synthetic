@@ -37,7 +37,7 @@ class ConfigurationPanel(QWidget):
 
     def update_for_action(self, action: ActionEntry) -> None:
         """Toggle experiment selector visibility and repopulate parameters."""
-        self._experiment_selector.setVisible(action.requires_manifest)
+        self._experiment_selector.setVisible(action.axis_mode in {"per_combo", "batch"})
         self._parameter_panel.populate(action.parameters, self.current_manifest())
 
     def current_selection(self) -> ExperimentSelection:

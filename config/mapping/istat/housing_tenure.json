@@ -3,7 +3,7 @@
     "Owner-occupied",
     "Rental"
   ],
-  "database": {
+  "real": {
     "Owner-occupied": {
       "equals": [
         "Owner-occupied"

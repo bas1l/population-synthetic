@@ -6,16 +6,16 @@ per-run manifests we consider complete, and writes mapped population files under
 {output_base}/03_Analysis/mapped/:
 
     mapped/
-      database_{country}.json   mapped reference population, one per country (deduped)
+      real_{country}.json       mapped real population, one per country (deduped)
       {slug}.json               mapped synthetic population, one per target
-      _index.json               [{slug, country, synthetic_file, database_file, n, skipped}]
+      _index.json               [{slug, country, synthetic_file, real_file, n, skipped}]
 
 Mapping logic itself is reused verbatim from the existing mappers -- the synthetic
-side via load_raw_population -> map_population and the reference side via
-load_reference_population -> normalize_population. The comparison stage (Phase 3)
+side via load_synthetic_population -> map_population and the real side via
+load_real_population -> map_population. The comparison stage (Phase 3)
 becomes a pure consumer of these mapped files.
 
-Both the synthetic and database mapped files are shaped as
+Both the synthetic and real mapped files are shaped as
 ``{"metadata": {...}, "individuals": [...]}`` -- exactly what StatisticalEvaluator
 consumes -- so the mapped files are directly ``json.load``-able by the comparison
 consumers.
@@ -41,11 +41,14 @@ from population_synthetic.analysis.utils.country_config import (
     infer_country,
     known_country_ids,
     mappings_for_country,
-    reference_for_country,
+    real_for_country,
 )
-from population_synthetic.analysis.mapping.reference_mapper import load_reference_population, normalize_population
-from population_synthetic.analysis.mapping.synthetic_mapper import load_raw_population, map_population
-from population_synthetic.generators.synthetic.manifest_loader import load_manifest
+from population_synthetic.analysis.mapping.real_mapper import load_real_population, map_population as map_real
+from population_synthetic.analysis.mapping.synthetic_mapper import (
+    load_synthetic_population,
+    map_population as map_synthetic,
+)
+from population_synthetic.generators.synthetic.manifest_loader import compose_manifest, load_manifest
 
 _DEFAULT_TARGETS = PROJECT_ROOT / "config" / "analysis" / "comparison_targets.yaml"
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
@@ -53,13 +56,36 @@ _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.ya
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Map the targeted synthetic populations and their reference populations to "
+        description="Map the targeted synthetic populations and their real populations to "
         "the canonical comparison schema, writing mapped files under 03_Analysis/mapped/."
     )
     parser.add_argument(
         "--targets",
-        default=str(_DEFAULT_TARGETS),
-        help=f"Targets YAML listing the manifests to map (default: {_DEFAULT_TARGETS.name}).",
+        default=None,
+        help="Targets YAML listing the manifests to map (batch mode). "
+        f"Defaults to {_DEFAULT_TARGETS.name} when no axis IDs are given; "
+        "mutually exclusive with --model-id/--strategy-id/--country-id.",
+    )
+    parser.add_argument(
+        "--model-id",
+        default=None,
+        help="Axis model ID (e.g., 'claude_haiku') — axis single-target mode; "
+        "mutually exclusive with --targets.",
+    )
+    parser.add_argument(
+        "--strategy-id",
+        default=None,
+        help="Axis strategy ID (e.g., 'all_pick') — axis single-target mode.",
+    )
+    parser.add_argument(
+        "--country-id",
+        default=None,
+        help="Axis country ID (e.g., 'swedish') — axis single-target mode.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-map even if the mapped files already exist (default: skip if present).",
     )
     parser.add_argument(
         "--output-base",
@@ -138,20 +164,172 @@ def _write_json(path: Path, data: Any) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+def _skipped_entry(slug: str, country: str) -> dict[str, Any]:
+    """The _index.json entry for a target whose synthetic run is not (yet) mappable."""
+    return {
+        "slug": slug,
+        "country": country,
+        "synthetic_file": None,
+        "real_file": None,
+        "n": 0,
+        "skipped": True,
+    }
+
+
+def _map_one_target(
+    manifest,
+    country: str,
+    slug: str,
+    mapped_dir: Path,
+    real_files: dict[str, str],
+    force: bool,
+) -> dict[str, Any]:
+    """Map one synthetic run and its real population; return the _index.json entry.
+
+    ``real_files`` is a mutable ``{country: filename}`` cache shared across calls so the
+    real population for a country is mapped at most once per invocation. Unless ``force``
+    is set, an already-mapped ``{slug}.json`` / ``real_{country}.json`` is reused rather
+    than re-mapped (idempotent, cheap repeated runs).
+    """
+    print(f"[{slug}] country={country}")
+    synthetic_file = mapped_dir / f"{slug}.json"
+
+    # --- Synthetic side: reuse if present, else load raw identities and map.
+    if not force and synthetic_file.exists():
+        with open(synthetic_file, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+        n_mapped = existing["metadata"]["n"]
+        n_skipped = existing["metadata"].get("skipped", 0)
+        print(f"  SKIP (exists): {synthetic_file} (n={n_mapped}, skipped={n_skipped})")
+    else:
+        seed_root = manifest.parallel_output_dir
+
+        # Seed-root guards (mirroring compare_all_pipelines.py): warn & skip, never crash.
+        if seed_root is None or not seed_root.exists():
+            print(f"  SKIP: parallel_output_dir does not exist: {seed_root}")
+            return _skipped_entry(slug, country)
+
+        persona_files = list(seed_root.glob("persona_*/identity.json"))
+        if not persona_files:
+            print(f"  SKIP: no persona_*/identity.json files found under {seed_root}")
+            return _skipped_entry(slug, country)
+
+        try:
+            raw_synthetic = load_synthetic_population(seed_root)
+        except ValueError as exc:
+            print(f"  SKIP: {exc}")
+            return _skipped_entry(slug, country)
+
+        synthetic_pop = map_synthetic(raw_synthetic, country=country)
+        _write_json(synthetic_file, synthetic_pop)
+        n_mapped = synthetic_pop["metadata"]["n"]
+        n_skipped = synthetic_pop["metadata"].get("skipped", 0)
+        print(f"  Mapped synthetic -> {synthetic_file} (n={n_mapped}, skipped={n_skipped})")
+
+    # --- Real side: map once per country, reuse thereafter.
+    real_file = mapped_dir / f"real_{country}.json"
+    if country not in real_files:
+        if force or not real_file.exists():
+            real_path = real_for_country(country)
+            if not real_path.exists():
+                print(f"  ERROR: real file not found for {country}: {real_path}", file=sys.stderr)
+                sys.exit(1)
+            mappings_path = mappings_for_country(country)
+            raw_real = load_real_population(real_path)
+            real_pop = map_real(raw_real, country=country, mappings_path=mappings_path)
+            _write_json(real_file, real_pop)
+            print(f"  Mapped real -> {real_file} (n={len(real_pop['individuals'])})")
+        else:
+            print(f"  SKIP (exists): {real_file}")
+        real_files[country] = real_file.name
+
+    return {
+        "slug": slug,
+        "country": country,
+        "synthetic_file": synthetic_file.name,
+        "real_file": real_files[country],
+        "n": n_mapped,
+        "skipped": n_skipped,
+    }
+
+
+def _upsert_index_entry(index_path: Path, entry: dict[str, Any]) -> None:
+    """Insert or replace the ``_index.json`` entry for ``entry['slug']``, leaving the rest.
+
+    Axis single-target runs (one per GUI combo) must never clobber the sibling slugs that
+    compare_all_pipelines.py iterates, so we merge into the existing index rather than
+    rewriting it wholesale.
+    """
+    entries: list[dict[str, Any]] = []
+    if index_path.exists():
+        with open(index_path, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+    for i, existing in enumerate(entries):
+        if existing.get("slug") == entry["slug"]:
+            entries[i] = entry
+            break
+    else:
+        entries.append(entry)
+    _write_json(index_path, entries)
+
+
 def main() -> None:
     args = _parse_args()
+
+    axis_ids = [args.model_id, args.strategy_id, args.country_id]
+    axis_mode = any(x is not None for x in axis_ids)
+
+    if axis_mode and args.targets is not None:
+        print(
+            "ERROR: --targets is mutually exclusive with --model-id/--strategy-id/--country-id",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if axis_mode and any(x is None for x in axis_ids):
+        print(
+            "ERROR: --model-id, --strategy-id, and --country-id must all be provided together",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     output_base = _resolve_output_base(args.output_base)
     mapped_dir = output_base / "03_Analysis" / "mapped"
     mapped_dir.mkdir(parents=True, exist_ok=True)
+    index_path = mapped_dir / "_index.json"
 
-    targets = _load_targets(Path(args.targets))
-    print(f"Loaded {len(targets)} target(s) from {args.targets}")
+    # --- Axis single-target mode: map one composed (model, strategy, country) run.
+    if axis_mode:
+        country = args.country_id
+        if country not in known_country_ids():
+            print(
+                f"ERROR: unknown country {country!r}: valid ids are {sorted(known_country_ids())}.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        manifest = compose_manifest(args.model_id, args.strategy_id, args.country_id)
+        seed_root = manifest.parallel_output_dir
+        slug = (
+            seed_root.name
+            if seed_root is not None
+            else f"{args.country_id}_{args.strategy_id}_{args.model_id}"
+        )
+        print(f"Axis target: {slug} (country={country})")
+        print(f"Mapped output dir: {mapped_dir}")
+        print()
+        entry = _map_one_target(manifest, country, slug, mapped_dir, real_files={}, force=args.force)
+        _upsert_index_entry(index_path, entry)
+        print(f"\nIndex upserted at {index_path} (slug={slug})")
+        return
+
+    # --- Batch mode: map every target in the targets YAML, then rewrite the full index.
+    targets_path = Path(args.targets) if args.targets else _DEFAULT_TARGETS
+    targets = _load_targets(targets_path)
+    print(f"Loaded {len(targets)} target(s) from {targets_path}")
     print(f"Mapped output dir: {mapped_dir}")
     print()
 
-    # Cache the mapped database per country -- map it once, reuse across targets.
-    database_files: dict[str, str] = {}
+    # Cache the mapped real population per country -- map it once, reuse across targets.
+    real_files: dict[str, str] = {}
     index_entries: list[dict[str, Any]] = []
 
     for target in targets:
@@ -163,81 +341,11 @@ def main() -> None:
 
         seed_root = manifest.parallel_output_dir
         slug = seed_root.name if seed_root is not None else manifest_path.stem
-        print(f"[{slug}] country={country}")
 
-        # Seed-root guards (mirroring compare_all_pipelines.py): warn & skip, never crash.
-        if seed_root is None or not seed_root.exists():
-            print(f"  SKIP: parallel_output_dir does not exist: {seed_root}")
-            index_entries.append({
-                "slug": slug,
-                "country": country,
-                "synthetic_file": None,
-                "database_file": None,
-                "n": 0,
-                "skipped": True,
-            })
-            continue
-
-        persona_files = list(seed_root.glob("persona_*/identity.json"))
-        if not persona_files:
-            print(f"  SKIP: no persona_*/identity.json files found under {seed_root}")
-            index_entries.append({
-                "slug": slug,
-                "country": country,
-                "synthetic_file": None,
-                "database_file": None,
-                "n": 0,
-                "skipped": True,
-            })
-            continue
-
-        # --- Synthetic side: load raw identities, then map to the canonical schema.
-        try:
-            raw_synthetic = load_raw_population(seed_root)
-        except ValueError as exc:
-            print(f"  SKIP: {exc}")
-            index_entries.append({
-                "slug": slug,
-                "country": country,
-                "synthetic_file": None,
-                "database_file": None,
-                "n": 0,
-                "skipped": True,
-            })
-            continue
-
-        synthetic_pop = map_population(raw_synthetic, country=country)
-        synthetic_file = mapped_dir / f"{slug}.json"
-        _write_json(synthetic_file, synthetic_pop)
-        n_mapped = synthetic_pop["metadata"]["n"]
-        n_skipped = synthetic_pop["metadata"].get("skipped", 0)
-        print(f"  Mapped synthetic -> {synthetic_file} (n={n_mapped}, skipped={n_skipped})")
-
-        # --- Database side: map once per country, reuse thereafter.
-        if country not in database_files:
-            reference_path = reference_for_country(country)
-            if not reference_path.exists():
-                print(f"  ERROR: reference file not found for {country}: {reference_path}", file=sys.stderr)
-                sys.exit(1)
-            mappings_path = mappings_for_country(country)
-            raw_database = load_reference_population(reference_path)
-            database_pop = normalize_population(raw_database, country=country, mappings_path=mappings_path)
-            database_file = mapped_dir / f"database_{country}.json"
-            _write_json(database_file, database_pop)
-            database_files[country] = database_file.name
-            print(f"  Mapped database -> {database_file} (n={len(database_pop['individuals'])})")
-
-        index_entries.append({
-            "slug": slug,
-            "country": country,
-            "synthetic_file": synthetic_file.name,
-            "database_file": database_files[country],
-            "n": n_mapped,
-            "skipped": n_skipped,
-        })
+        entry = _map_one_target(manifest, country, slug, mapped_dir, real_files, force=args.force)
+        index_entries.append(entry)
         print()
 
-    index_path = mapped_dir / "_index.json"
     _write_json(index_path, index_entries)
     print(f"Index written to {index_path} ({len(index_entries)} entries)")
 

@@ -10,7 +10,7 @@ nothing about which demographic fields exist or how any of them is coded.
 
 ``BaseSyntheticMapper`` is a **thin loader** over the shared symmetric resolver
 (:mod:`population_synthetic.analysis.mapping.mapping_engine`), the synthetic-side mirror of
-``reference_mapper/base.py``. It reads the per-country ``_index.json`` master
+``real_mapper/base.py``. It reads the per-country ``_index.json`` master
 (``attribute -> config filename``, in axis order) plus each per-attribute config
 file, and for every attribute delegates to :func:`mapping_engine.resolve`, passing
 that file's ``synthetic`` rules block and ``values`` list. The old 5 handler-kind
@@ -39,7 +39,7 @@ from typing import Any, ClassVar
 
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.mapping import mapping_engine
-from population_synthetic.analysis.mapping.reference_mapper.mappings import load_mappings
+from population_synthetic.analysis.mapping.real_mapper.mappings import load_mappings
 from population_synthetic.analysis.mapping.synthetic_mapper._text_helpers import _repair_utf8_double_encoding
 
 logger = logging.getLogger(__name__)

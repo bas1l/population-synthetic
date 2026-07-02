@@ -1,9 +1,9 @@
 """
-compare_all_pipelines.py -- Batch comparison of mapped synthetic populations against a reference.
+compare_all_pipelines.py -- Batch comparison of mapped synthetic populations against a real population.
 
 Consumes the pre-mapped files produced by the map stage (scripts/analyze/map_populations.py):
 it iterates {output_base}/03_Analysis/mapped/_index.json, json.loads each mapped synthetic
-population and the shared mapped database for its country, runs the statistical comparison, and
+population and the shared mapped real population for its country, runs the statistical comparison, and
 aggregates results into a summary table and JSON file. This script performs NO mapping -- run
 map_populations.py first.
 
@@ -14,10 +14,13 @@ Usage:
     python scripts/analyze/compare_all_pipelines.py --model claude_haiku --model gemini_flash
     python scripts/analyze/compare_all_pipelines.py --strategy all_pick --no-charts
     python scripts/analyze/compare_all_pipelines.py --model claude_haiku --strategy all_pick --radar-tv-only
+    python scripts/analyze/compare_all_pipelines.py --slug swedish_all_pick_claude_haiku
 
 --country        Country axis ID filter (default: all countries in the mapped index). May be repeated.
 --model          Model axis ID filter (e.g. claude_haiku). May be repeated. Default: all models.
 --strategy       Strategy axis ID filter (e.g. all_pick). May be repeated. Default: all strategies.
+--slug           Exact slug filter ({country}_{strategy}_{model}). May be repeated. Keeps only the
+                 mapped entries whose slug is selected. Combines with --model/--strategy/--country.
 --output-base    Base output directory (the 03_Analysis parent). Default: experiment_defaults.yaml.
 --no-charts      Skip chart generation.
 --radar-tv-only  On radar chart, show only TV-similarity polygon (omit chi-squared overlay).
@@ -31,15 +34,15 @@ from pathlib import Path
 import yaml
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.analysis.llm_metrics.cross_run.comparison_loader import decompose_slug
 from population_synthetic.analysis.comparison.charts import (
     plot_comparison_charts,
     plot_radar_comparison,
     plot_radar_grid,
 )
-from population_synthetic.analysis.utils.country_config import mappings_for_country
 from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
 from population_synthetic.analysis.comparison.scheme import load_scheme
+from population_synthetic.analysis.utils.axes import decompose_slug
+from population_synthetic.analysis.utils.country_config import mappings_for_country
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
@@ -47,7 +50,7 @@ _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.ya
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Batch comparison of mapped synthetic populations against a reference"
+        description="Batch comparison of mapped synthetic populations against a real population"
     )
     parser.add_argument(
         "--country",
@@ -72,6 +75,15 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         metavar="STRATEGY_ID",
         help="Strategy axis ID filter. May be repeated. Default: all strategies.",
+    )
+    parser.add_argument(
+        "--slug",
+        dest="slugs",
+        action="append",
+        default=None,
+        metavar="SLUG",
+        help="Exact slug filter ({country}_{strategy}_{model}). May be repeated. "
+        "Keeps only the mapped entries whose slug is selected.",
     )
     parser.add_argument(
         "--output-base",
@@ -145,6 +157,7 @@ def main() -> None:
     country_filter = _split_csv(args.countries)
     model_filter = _split_csv(args.models)
     strategy_filter = _split_csv(args.strategies)
+    slug_filter = _split_csv(args.slugs)
 
     all_models = discover_axis_values("models")
     all_strategies = discover_axis_values("strategies")
@@ -186,7 +199,7 @@ def main() -> None:
 
     summary_rows: list[dict] = []
 
-    # Group entries by country so the shared mapped database is loaded once per country.
+    # Group entries by country so the shared mapped real population is loaded once per country.
     countries_in_index = [c for c in country_ids if any(e["country"] == c for e in index_entries)]
     # Preserve any country present in the index even if not a known axis id.
     for entry in index_entries:
@@ -201,9 +214,9 @@ def main() -> None:
         if not country_entries:
             continue
 
-        # Load the shared mapped database for this country once.
-        database_pop: dict | None = None
-        database_label = f"database_{country_id}"
+        # Load the shared mapped real population for this country once.
+        real_pop: dict | None = None
+        real_label = f"real_{country_id}"
 
         mappings_path = mappings_for_country(country_id)
         scheme = load_scheme(country_id, mappings_path=mappings_path)
@@ -215,6 +228,9 @@ def main() -> None:
 
         for entry in country_entries:
             slug = entry["slug"]
+
+            if slug_filter and slug not in slug_filter:
+                continue
 
             if entry.get("skipped") is True or entry.get("synthetic_file") is None:
                 print(f"[{slug}] SKIP: no mapped synthetic file (skipped during mapping).")
@@ -237,21 +253,21 @@ def main() -> None:
                 print(f"[{slug}] SKIP: mapped synthetic file not found: {synthetic_path}")
                 continue
 
-            if database_pop is None:
-                database_file = entry.get("database_file")
-                if database_file is None:
-                    print(f"[{slug}] SKIP: no mapped database recorded for {country_id}.")
+            if real_pop is None:
+                real_file = entry.get("real_file")
+                if real_file is None:
+                    print(f"[{slug}] SKIP: no mapped real population recorded for {country_id}.")
                     continue
-                database_path = mapped_dir / database_file
-                if not database_path.exists():
+                real_path = mapped_dir / real_file
+                if not real_path.exists():
                     print(
-                        f"ERROR: mapped database not found: {database_path}\n"
+                        f"ERROR: mapped real population not found: {real_path}\n"
                         "Run scripts/analyze/map_populations.py first.",
                         file=sys.stderr,
                     )
                     sys.exit(1)
-                database_pop = _load_json(database_path)
-                database_label = database_path.stem
+                real_pop = _load_json(real_path)
+                real_label = real_path.stem
 
             print(f"[{slug}] Processing...")
             synthetic_pop = _load_json(synthetic_path)
@@ -260,7 +276,7 @@ def main() -> None:
             if n_synthetic < 5:
                 print(f"  WARNING: only {n_synthetic} extracted individuals -- statistical tests unreliable")
 
-            evaluator = StatisticalEvaluator(database_pop, synthetic_pop, scheme=scheme)
+            evaluator = StatisticalEvaluator(real_pop, synthetic_pop, scheme=scheme)
             report = evaluator.generate_report()
 
             comparison_output_dir = comparison_dir / slug
@@ -278,10 +294,10 @@ def main() -> None:
             if not args.no_charts:
                 charts_dir = comparison_output_dir / slug
                 plot_comparison_charts(
-                    database_pop,
+                    real_pop,
                     synthetic_pop,
                     charts_dir,
-                    pop_a_label=database_label,
+                    pop_a_label=real_label,
                     pop_b_label=slug,
                     prefix=slug,
                     attributes=scheme.attributes,
@@ -291,7 +307,7 @@ def main() -> None:
                 radar_path = plot_radar_comparison(
                     report["marginals"],
                     charts_dir,
-                    pop_a_label=database_label,
+                    pop_a_label=real_label,
                     pop_b_label=slug,
                     show_chi_sq=not args.radar_tv_only,
                     prefix=slug,

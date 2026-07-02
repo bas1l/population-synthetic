@@ -3,8 +3,8 @@ default_action: generate_parallel
 groups:
   - id: generate
     label: "Generate Population"
-  - id: compare
-    label: "Compare Population"
+  - id: analysis
+    label: "Analysis"
 
 actions:
   - id: generate_one
@@ -90,70 +90,104 @@ actions:
         default_from_manifest: null
         help: "Output JSON file path"
 
-  - id: compare_scb
-    label: "Pipeline vs Reference"
-    group: compare
-    script: scripts/analyze/compare_pipeline_to_scb.py
+  - id: map_populations
+    label: "Map Populations (run before Compare)"
+    group: analysis
+    script: scripts/analyze/map_populations.py
     requires_manifest: true
+    axis_mode: per_combo
     parameters: []
 
-  - id: compare_all
-    label: "All Pipelines vs Reference"
-    group: compare
+  - id: compare_synth_real
+    label: "Compare Synthetic to Real"
+    group: analysis
     script: scripts/analyze/compare_all_pipelines.py
     requires_manifest: false
+    axis_mode: batch
     parameters:
-      - key: country
-        label: "Country"
-        type: choice
-        choices: ["swedish"]
-        default: swedish
-        help: "Country axis ID to compare"
-      - key: model
-        label: "Model filter"
-        type: str
-        default: null
-        help: "Comma-separated model IDs (blank = all)"
-      - key: strategy
-        label: "Strategy filter"
-        type: str
-        default: null
-        help: "Comma-separated strategy IDs (blank = all)"
-      - key: reference
-        label: "Reference file"
-        type: file
-        default: null
-        help: "SCB reference population JSON (blank = built-in default)"
       - key: no-charts
         label: "Skip charts"
         type: bool
         default: false
+        help: "Skip chart generation"
       - key: radar-tv-only
         label: "Radar: TV only"
         type: bool
         default: false
+        help: "On the radar chart, show only the TV-similarity polygon"
 
   - id: compare_pops
     label: "Compare Two Populations"
-    group: compare
+    group: analysis
     script: scripts/analyze/compare_populations.py
     requires_manifest: false
+    axis_mode: batch
+    min_combos: 2
+    max_combos: 2
     parameters:
-      - key: pop_a
-        label: "Population A"
-        type: file
-        default: null
-        default_from_manifest: null
-        help: "First population file"
-      - key: pop_b
-        label: "Population B"
-        type: file
-        default: null
-        default_from_manifest: null
-        help: "Second population file"
       - key: output
         label: "Output file"
         type: str
         default: null
         default_from_manifest: null
-        help: "Output comparison report path"
+        help: "Output comparison report path (blank = default)"
+      - key: no-charts
+        label: "Skip charts"
+        type: bool
+        default: false
+        help: "Skip chart generation"
+
+  - id: model_performance
+    label: "Model Performance (models x methods)"
+    group: analysis
+    script: scripts/analyze/compare_model_performance.py
+    requires_manifest: false
+    axis_mode: batch
+    min_combos: 2
+    parameters:
+      - key: no-charts
+        label: "Skip charts"
+        type: bool
+        default: false
+        help: "Skip chart generation"
+      - key: per-attribute-charts
+        label: "Per-attribute charts"
+        type: bool
+        default: false
+        help: "Also write one grouped bar chart per demographic attribute"
+      - key: strict
+        label: "Strict (fail on missing reports)"
+        type: bool
+        default: false
+        help: "Fail when any selected combo lacks a comparison report"
+
+  - id: llm_metrics_per_run
+    label: "LLM Metrics (per-run)"
+    group: analysis
+    script: scripts/analyze/analyze_run.py
+    requires_manifest: false
+    axis_mode: per_combo
+    parameters:
+      - key: charts
+        label: "Charts dir"
+        type: str
+        default: null
+        help: "Write analytics charts here (blank = default)"
+      - key: verbose
+        label: "Verbose"
+        type: bool
+        default: false
+        help: "Print per-persona breakdown after the run summary"
+
+  - id: llm_metrics_cross_run
+    label: "LLM Metrics (cross-run)"
+    group: analysis
+    script: scripts/analyze/compare_runs.py
+    requires_manifest: false
+    axis_mode: batch
+    parameters:
+      - key: metrics
+        label: "Metrics subset"
+        type: str
+        default: null
+        help: "Space-separated metric keys (blank = all)"

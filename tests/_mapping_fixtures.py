@@ -1,8 +1,8 @@
 """Shared in-memory mapping config for the mapper base-class tests.
 
-Both ``BaseReferenceMapper`` and ``BaseSyntheticMapper`` are now thin loaders over
+Both ``BaseRealMapper`` and ``BaseSyntheticMapper`` are now thin loaders over
 the shared :mod:`population_synthetic.analysis.mapping.mapping_engine`, driven by the unified
-symmetric per-attribute config (``values`` / ``database`` / ``synthetic``) plus an
+symmetric per-attribute config (``values`` / ``real`` / ``synthetic``) plus an
 ``_index.json`` master. :func:`new_shape_mappings` returns a small, self-contained
 config in exactly the shape :func:`load_mappings` produces (one entry per file stem,
 keyed by stem, plus the ``_index`` master) so the concrete base classes can be driven
@@ -42,14 +42,14 @@ def new_shape_mappings() -> dict:
         "age": {"values": ["18-24", "25-44", "45-64", "65+"]},
         "biological_sex": {
             "values": ["Male", "Female"],
-            "database": {"Male": {"equals": ["men", "1"]}, "Female": {"equals": ["women", "2"]}},
+            "real": {"Male": {"equals": ["men", "1"]}, "Female": {"equals": ["women", "2"]}},
             "synthetic": {
                 "Male": {"contains": ["male", "pojke"], "equals": ["man", "m"]},
                 "Female": {"contains": ["female", "kvinna"], "equals": ["f"]},            },
         },
         "education": {
             "values": ["Primary", "Secondary", "Tertiary"],
-            "database": {
+            "real": {
                 "Primary": {"equals": ["grundskola"]},
                 "Secondary": {"equals": ["gymnasium"]},
                 "Tertiary": {"equals": ["universitet"]},            },
@@ -61,7 +61,7 @@ def new_shape_mappings() -> dict:
         },
         "employment_type": {
             "values": ["Permanent Full-time", "Permanent Part-time", "Not Applicable"],
-            "database": {
+            "real": {
                 "Permanent Full-time": {
                     "attachment": {"contains": ["permanent employees"]},
                     "hours": {"contains": ["35+ hours"]},
@@ -79,7 +79,7 @@ def new_shape_mappings() -> dict:
         },
         "socioeconomic": {
             "values": ["Poverty", "Working Class", "Middle Class", "Upper Class"],
-            "database": {
+            "real": {
                 "Poverty": {"equals": ["Decile 1", "Decile 2"]},
                 "Working Class": {"equals": ["Decile 3", "Decile 4", "Decile 5"]},
                 "Middle Class": {"equals": ["Decile 6", "Decile 7", "Decile 8"]},
@@ -93,7 +93,7 @@ def new_shape_mappings() -> dict:
         },
         "industry_sector": {
             "values": ["Health", "Education", "Other"],
-            "database": {
+            "real": {
                 "Health": {"equals": ["q"]},
                 "Education": {"equals": ["p"]},
                 "absent": "Not Applicable",            },
@@ -105,7 +105,7 @@ def new_shape_mappings() -> dict:
         },
         "birth_location": {
             "values": ["Sweden", "Nordic Country", "Europe (Other)", "Outside Europe"],
-            "database": {
+            "real": {
                 "Sweden": {"equals": ["sweden", "sverige"]},
                 "Nordic Country": {"equals": ["norway", "denmark"]},            },
             "synthetic": {
@@ -117,7 +117,7 @@ def new_shape_mappings() -> dict:
         },
         "birth_country_detail": {
             "values": ["Sweden", "Norway", "Germany", "Syria"],
-            "database": {
+            "real": {
                 "Sweden": {"equals": ["sweden"]},
                 "Norway": {"equals": ["norway"]},
                 "Germany": {"equals": ["germany"]},
@@ -131,7 +131,7 @@ def new_shape_mappings() -> dict:
         },
         "household_size": {
             "values": ["1 person", "2 persons", "3 persons", "4+ persons"],
-            "database": {
+            "real": {
                 "1 person": {"equals": ["1"]},
                 "2 persons": {"equals": ["2"]},
                 "3 persons": {"equals": ["3"]},

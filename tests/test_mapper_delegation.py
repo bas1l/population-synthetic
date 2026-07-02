@@ -1,8 +1,8 @@
 """End-to-end checks that the thinned mappers delegate to the shared resolver.
 
-Phase 2 gutted ``reference_mapper/base.py`` and ``synthetic_mapper/base.py`` into
+Phase 2 gutted ``real_mapper/base.py`` and ``synthetic_mapper/base.py`` into
 thin loaders over :mod:`population_synthetic.analysis.mapping.mapping_engine`, driven by the
-new symmetric per-attribute config (``values`` / ``database`` / ``synthetic``) plus
+new symmetric per-attribute config (``values`` / ``real`` / ``synthetic``) plus
 an ``_index.json`` master. Production config is not migrated until Phase 3, so these
 tests build small in-memory ``mappings`` dicts in the *new* shape (mirroring what
 ``load_mappings`` produces: one entry per file stem, plus the ``_index`` master) and
@@ -16,7 +16,7 @@ narrative-format skip.
 
 from __future__ import annotations
 
-from population_synthetic.analysis.mapping.reference_mapper.base import BaseReferenceMapper
+from population_synthetic.analysis.mapping.real_mapper.base import BaseRealMapper
 from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
 
 # ---------------------------------------------------------------------------
@@ -43,14 +43,14 @@ _MAPPINGS = {
     "age": {"values": ["18-24", "25-44", "45-64", "65+"]},
     "biological_sex": {
         "values": ["Male", "Female"],
-        "database": {"Male": {"equals": ["men", "1"]}, "Female": {"equals": ["women", "2"]}},
+        "real": {"Male": {"equals": ["men", "1"]}, "Female": {"equals": ["women", "2"]}},
         "synthetic": {
             "Male": {"contains": ["male", "pojke"], "equals": ["man", "m"]},
             "Female": {"contains": ["female", "kvinna"], "equals": ["f"]},        },
     },
     "education": {
         "values": ["Primary", "Secondary", "Tertiary"],
-        "database": {
+        "real": {
             "Primary": {"equals": ["grundskola"]},
             "Secondary": {"equals": ["gymnasium"]},
             "Tertiary": {"equals": ["universitet"]},        },
@@ -62,7 +62,7 @@ _MAPPINGS = {
     },
     "employment_type": {
         "values": ["Permanent Full-time", "Permanent Part-time", "Not Applicable"],
-        "database": {
+        "real": {
             "Permanent Full-time": {
                 "attachment": {"contains": ["permanent employees"]},
                 "hours": {"contains": ["35+ hours"]},
@@ -80,7 +80,7 @@ _MAPPINGS = {
     },
     "socioeconomic": {
         "values": ["Poverty", "Working Class", "Middle Class", "Upper Class"],
-        "database": {
+        "real": {
             "Poverty": {"equals": ["Decile 1", "Decile 2"]},
             "Working Class": {"equals": ["Decile 3", "Decile 4", "Decile 5"]},
             "Middle Class": {"equals": ["Decile 6", "Decile 7", "Decile 8"]},
@@ -94,7 +94,7 @@ _MAPPINGS = {
     },
     "industry_sector": {
         "values": ["Health", "Education", "Other"],
-        "database": {
+        "real": {
             "Health": {"equals": ["q"]},
             "Education": {"equals": ["p"]},
             "absent": "Not Applicable",        },
@@ -106,7 +106,7 @@ _MAPPINGS = {
     },
     "birth_location": {
         "values": ["Sweden", "Nordic Country", "Europe (Other)", "Outside Europe"],
-        "database": {
+        "real": {
             "Sweden": {"equals": ["sweden", "sverige"]},
             "Nordic Country": {"equals": ["norway", "denmark"]},        },
         "synthetic": {
@@ -118,7 +118,7 @@ _MAPPINGS = {
     },
     "birth_country_detail": {
         "values": ["Sweden", "Norway", "Germany", "Syria"],
-        "database": {
+        "real": {
             "Sweden": {"equals": ["sweden"]},
             "Norway": {"equals": ["norway"]},
             "Germany": {"equals": ["germany"]},
@@ -132,7 +132,7 @@ _MAPPINGS = {
     },
     "household_size": {
         "values": ["1 person", "2 persons", "3 persons", "4+ persons"],
-        "database": {
+        "real": {
             "1 person": {"equals": ["1"]},
             "2 persons": {"equals": ["2"]},
             "3 persons": {"equals": ["3"]},
@@ -147,12 +147,12 @@ _MAPPINGS = {
 
 
 # ---------------------------------------------------------------------------
-# Reference mapper
+# Real mapper
 # ---------------------------------------------------------------------------
 
-def _ref_record() -> dict:
+def _real_record() -> dict:
     return {
-        "id": "ref-1",
+        "id": "real-1",
         "age": 30,
         "biological_sex": {"label": "women"},
         "education_level": {"label": "universitet"},
@@ -168,11 +168,11 @@ def _ref_record() -> dict:
     }
 
 
-def test_reference_mapper_delegates_end_to_end():
-    mapper = BaseReferenceMapper(_MAPPINGS)
-    out = mapper.normalize_individual(_ref_record())
+def test_real_mapper_delegates_end_to_end():
+    mapper = BaseRealMapper(_MAPPINGS)
+    out = mapper.normalize_individual(_real_record())
 
-    assert out["id"] == "ref-1"
+    assert out["id"] == "real-1"
     assert out["age"] == 30  # raw passthrough, not an age_group label
     assert "age_group" not in out
     assert out["biological_sex"] == "Female"  # equals "women"
@@ -184,9 +184,9 @@ def test_reference_mapper_delegates_end_to_end():
     assert out["household_size"] == "4+ persons"
 
 
-def test_reference_missing_field_resolves_to_none():
-    mapper = BaseReferenceMapper(_MAPPINGS)
-    record = {"id": "ref-2", "age": 40, "biological_sex": {"label": "unmatched-token"}}
+def test_real_missing_field_resolves_to_none():
+    mapper = BaseRealMapper(_MAPPINGS)
+    record = {"id": "real-2", "age": 40, "biological_sex": {"label": "unmatched-token"}}
     out = mapper.normalize_individual(record)
     assert out["biological_sex"] is None  # miss, no fuzzy, no on_miss
 

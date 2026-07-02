@@ -3,9 +3,9 @@ sets that drive population comparison.
 
 The scheme is the single source of truth for *what the comparison scores*: which
 demographic properties are compared for a country and, per property, the exact
-category set the country's reference database emits. It is curated empirically --
-each category list is the distinct non-None values the reference mapper produces
-over that country's real reference population -- so the comparison axis has no
+category set the country's real-population database emits. It is curated empirically --
+each category list is the distinct non-None values the real mapper produces
+over that country's real population -- so the comparison axis has no
 empty buckets, no DB-absent properties, and no mapper-synthesized categories.
 
 The scheme is sourced from two config trees. The mapping side --
@@ -32,8 +32,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.analysis.mapping.reference_mapper.factory import _mapper_class
-from population_synthetic.analysis.mapping.reference_mapper.mappings import index_path, load_index
+from population_synthetic.analysis.mapping.real_mapper.factory import _mapper_class
+from population_synthetic.analysis.mapping.real_mapper.mappings import index_path, load_index
 
 _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 _ANALYSIS_ROOT = PROJECT_ROOT / "config" / "analysis" / "comparison"
@@ -60,7 +60,7 @@ class ComparisonScheme:
 def _scheme_dir(country: str, mappings_path: Path | None) -> Path:
     if mappings_path is not None:
         return mappings_path
-    # Reuse the reference-mapper country dispatch (raises for unknown country).
+    # Reuse the real-mapper country dispatch (raises for unknown country).
     subdir = _mapper_class(country).MAPPINGS_SUBDIR
     return _MAPPINGS_ROOT / subdir
 

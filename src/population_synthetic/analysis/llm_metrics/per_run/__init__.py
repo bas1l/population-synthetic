@@ -9,5 +9,5 @@ generation run into analytics plus a report. Dataflow:
 ``joiner`` matches interaction records to log call records, ``aggregator``
 computes per-persona metrics, and ``charts`` / ``console_report`` visualize and
 report them (writing ``run_analytics.json``). Modules here may import
-``llm_metrics.shared`` but never ``llm_metrics.cross_run``.
+``analysis.utils`` but never ``llm_metrics.cross_run``.
 """

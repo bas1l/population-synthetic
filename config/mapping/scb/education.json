@@ -9,7 +9,7 @@
     "Post-Graduate (ISCED 6)",
     "Unknown / Not reported"
   ],
-  "database": {
+  "real": {
     "Pre-Secondary < 9 yrs (ISCED 1)": {
       "equals": [
         "Pre-Secondary < 9 yrs (ISCED 1)",

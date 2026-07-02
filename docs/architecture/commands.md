@@ -46,25 +46,29 @@ python scripts/generate/generate_identity.py --provider claude --model sonnet --
 # Compare two population files
 python scripts/analyze/compare_populations.py pop_a.json pop_b.json
 
-# Map stage: map the targeted synthetic populations + their references to the canonical schema
+# Map stage: map the targeted synthetic populations + their real populations to the canonical schema
 # (reads config/analysis/comparison_targets.yaml; writes {output_base}/03_Analysis/mapped/).
 # Run this BEFORE any compare command -- the compare scripts consume these pre-mapped files.
 python scripts/analyze/map_populations.py
 python scripts/analyze/map_populations.py --targets config/analysis/comparison_targets.yaml
 
-# Compare pipeline output against an SCB reference (consumes pre-mapped files; via manifest)
+# Compare pipeline output against the SCB real population (consumes pre-mapped files; via manifest)
 python scripts/analyze/compare_pipeline_to_scb.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
 
-# Compare pipeline output against an SCB reference (explicit mapped-file paths)
+# Compare pipeline output against the SCB real population (explicit mapped-file paths)
 python scripts/analyze/compare_pipeline_to_scb.py \
     --mapped-synthetic {output_base}/03_Analysis/mapped/<slug>.json \
-    --mapped-database {output_base}/03_Analysis/mapped/database_swedish.json
+    --mapped-real {output_base}/03_Analysis/mapped/real_swedish.json
 
-# Compare pipeline output against an ISTAT reference (Italy; consumes pre-mapped files)
+# Compare pipeline output against the ISTAT real population (Italy; consumes pre-mapped files)
 python scripts/analyze/compare_pipeline_to_istat.py --model-id claude_haiku --strategy-id all_pick --country-id italian
 
-# Compare every mapped target against country references (batch; iterates mapped/_index.json)
+# Compare every mapped target against country real populations (batch; iterates mapped/_index.json)
 python scripts/analyze/compare_all_pipelines.py --country swedish --country italian
+
+# Cross-model performance comparison: rank model x strategy combos per country against the real
+# baseline (consumes the comparison reports; run compare_all_pipelines.py first)
+python scripts/analyze/compare_model_performance.py --country swedish --per-attribute-charts
 
 # Extract demographic profiles from a pipeline output tree into a single population file
 python scripts/generate/extract_population_from_pipeline.py --seed-root path/to/pipeline_output/ \

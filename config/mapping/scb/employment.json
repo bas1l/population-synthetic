@@ -3,7 +3,7 @@
     "Employed",
     "Unemployed"
   ],
-  "database": {
+  "real": {
     "Employed": {
       "equals": [
         "Employed",

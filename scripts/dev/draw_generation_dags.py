@@ -2,7 +2,7 @@
 """Render the synthetic-population generation workflow / conditional-sampling DAG
 for each country (Sweden / Norway / Italy).
 
-For every country this emits three artefacts into ``docs/architecture/diagrams/database/``:
+For every country this emits three artefacts into ``docs/architecture/diagrams/real/``:
 
 * ``{country}_generation_dag.svg`` -- vectorised figure (scalable)
 * ``{country}_generation_dag.png`` -- raster image (300 dpi)
@@ -12,7 +12,7 @@ The figure has two parts: a top ETL band (clients/APIs -> load_all -> parsers ->
 PopulationDistributions -> sampler) and the conditional chained-sampling DAG below
 it (the order in which ``sample_one`` draws each attribute and what each draw is
 conditioned on). Data is hand-derived from the source modules under
-``src/population_synthetic/generators/reference/{sweden,norway,italy}/``.
+``src/population_synthetic/generators/real/{sweden,norway,italy}/``.
 
 Run: ``python scripts/dev/draw_generation_dags.py``
 """
@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-OUT_DIR = PROJECT_ROOT / "docs" / "architecture" / "diagrams" / "database"
+OUT_DIR = PROJECT_ROOT / "docs" / "architecture" / "diagrams" / "real"
 
 # ---------------------------------------------------------------------------
 # Palette (colour-blind friendly, muted)
@@ -102,7 +102,7 @@ def sweden_spec():
     return dict(
         key="sweden",
         title="Sweden  -  SCB synthetic population generation",
-        subtitle="src/population_synthetic/generators/reference/sweden/  |  SampleService.sample_one  "
+        subtitle="src/population_synthetic/generators/real/sweden/  |  SampleService.sample_one  "
                  "(conditional chained sampling, ~14 draws)",
         etl=[
             ("SCBPxWebClient", "PxWeb\njson-stat2 (POST)", C_SRC),
@@ -132,7 +132,7 @@ def norway_spec():
     return dict(
         key="norway",
         title="Norway  -  SSB synthetic population generation",
-        subtitle="src/population_synthetic/generators/reference/norway/  |  SSBSampleService.sample_one  "
+        subtitle="src/population_synthetic/generators/real/norway/  |  SSBSampleService.sample_one  "
                  "(11-step chain, income_source omitted)",
         etl=[
             ("SSBPxWebClient", "PxWebApi v2\nGET (>=2.1s limit)", C_SRC),
@@ -165,7 +165,7 @@ def italy_spec():
     return dict(
         key="italy",
         title="Italy  -  ISTAT + Eurostat synthetic population generation",
-        subtitle="src/population_synthetic/generators/reference/italy/  |  ISTATSampleService.sample_one  "
+        subtitle="src/population_synthetic/generators/real/italy/  |  ISTATSampleService.sample_one  "
                  "(10-step chain, no income_source)",
         etl=[
             ("EurostatClient", "JSON-stat 2.0", C_SRC),
