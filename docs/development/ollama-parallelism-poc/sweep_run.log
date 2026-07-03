@@ -1,0 +1,162 @@
+Plan: 11 models, 30 (model,np) reconfigures, 90 result rows (3 profiles each).
+  llama3.2:3b-instruct-q4_K_M: np levels [1, 2, 4, 8, 10]
+  OpenLLM-France/Lucie-7B-Instruct:latest: np levels [1, 2, 4, 7]
+  llama3.1:8b-instruct-q4_K_M: np levels [1, 2, 4, 6]
+  gemma2:9b: np levels [1]
+  gemma4:e4b: np levels [1, 2, 4, 8, 12]
+  mistral-nemo:12b: np levels [1, 2, 4]
+  qwen3:14b: np levels [1, 2, 4]
+  deepseek-r1:14b: np levels [1, 2]
+  llama3.3:70b-instruct-q4_K_M: np levels [1]
+  deepseek-r1:70b: np levels [1]
+  qwen2.5:72b-instruct-q4_K_M: np levels [1]
+
+[     0s] reconfigure llama3.2:3b-instruct-q4_K_M np=1 ...
+    short    n=6/6 x3tr in~55 out~94 | req/s=0.954 (min 0.951, max 0.978) tok/s=89.5 lat=1.1s
+    long_in  n=6/6 x3tr in~1506 out~91 | req/s=0.898 (min 0.885, max 0.914) tok/s=83.2 lat=1.1s
+    long_out n=6/6 x3tr in~64 out~760 | req/s=0.134 (min 0.133, max 0.135) tok/s=101.6 lat=7.5s
+
+[   176s] reconfigure llama3.2:3b-instruct-q4_K_M np=2 ...
+    short    n=6/6 x3tr in~55 out~90 | req/s=1.413 (min 1.361, max 1.414) tok/s=126.7 lat=1.4s
+    long_in  n=6/6 x3tr in~1506 out~91 | req/s=1.298 (min 1.109, max 1.327) tok/s=117.0 lat=1.5s
+    long_out n=6/6 x3tr in~64 out~755 | req/s=0.186 (min 0.183, max 0.19) tok/s=141.0 lat=10.7s
+
+[   303s] reconfigure llama3.2:3b-instruct-q4_K_M np=4 ...
+    short    n=8/8 x3tr in~55 out~93 | req/s=1.717 (min 1.695, max 1.729) tok/s=158.6 lat=2.3s
+    long_in  n=8/8 x3tr in~1506 out~91 | req/s=1.549 (min 1.222, max 1.606) tok/s=140.4 lat=2.5s
+    long_out n=8/8 x3tr in~64 out~758 | req/s=0.224 (min 0.222, max 0.231) tok/s=169.6 lat=17.7s
+
+[   444s] reconfigure llama3.2:3b-instruct-q4_K_M np=8 ...
+    short    n=16/16 x3tr in~55 out~92 | req/s=1.959 (min 1.913, max 1.964) tok/s=178.6 lat=4.0s
+    long_in  n=16/16 x3tr in~1506 out~92 | req/s=1.757 (min 1.338, max 1.758) tok/s=158.2 lat=4.4s
+    long_out n=16/16 x3tr in~64 out~738 | req/s=0.259 (min 0.252, max 0.26) tok/s=192.2 lat=30.1s
+
+[   689s] reconfigure llama3.2:3b-instruct-q4_K_M np=10 ...
+    short    n=16/16 x3tr in~55 out~92 | req/s=2.171 (min 2.101, max 2.235) tok/s=201.9 lat=3.7s
+    long_in  n=16/16 x3tr in~1506 out~90 | req/s=1.927 (min 1.25, max 1.961) tok/s=175.4 lat=4.2s
+    long_out n=16/16 x3tr in~64 out~755 | req/s=0.299 (min 0.298, max 0.3) tok/s=225.4 lat=27.0s
+
+[   904s] reconfigure OpenLLM-France/Lucie-7B-Instruct:latest np=1 ...
+    short    n=6/6 x3tr in~36 out~96 | req/s=0.694 (min 0.694, max 0.695) tok/s=66.6 lat=1.4s
+    long_in  n=6/6 x3tr in~1691 out~33 | req/s=1.767 (min 1.23, max 4.939) tok/s=57.7 lat=0.6s
+    long_out n=6/6 x3tr in~43 out~746 | req/s=0.090 (min 0.09, max 0.094) tok/s=67.5 lat=11.1s
+
+[  1139s] reconfigure OpenLLM-France/Lucie-7B-Instruct:latest np=2 ...
+    short    n=6/6 x3tr in~36 out~96 | req/s=1.087 (min 1.086, max 1.092) tok/s=104.2 lat=1.8s
+    long_in  n=6/6 x3tr in~1691 out~64 | req/s=1.415 (min 0.831, max 19.746) tok/s=66.6 lat=1.4s
+    long_out n=6/6 x3tr in~43 out~708 | req/s=0.145 (min 0.143, max 0.146) tok/s=103.2 lat=13.3s
+
+[  1295s] reconfigure OpenLLM-France/Lucie-7B-Instruct:latest np=4 ...
+    short    n=8/8 x3tr in~36 out~96 | req/s=1.375 (min 1.366, max 1.379) tok/s=132.0 lat=2.9s
+    long_in  n=8/8 x3tr in~1691 out~47 | req/s=2.260 (min 0.85, max 4.608) tok/s=59.7 lat=1.6s
+    long_out n=8/8 x3tr in~43 out~722 | req/s=0.179 (min 0.171, max 0.18) tok/s=129.1 lat=21.9s
+
+[  1466s] reconfigure OpenLLM-France/Lucie-7B-Instruct:latest np=7 ...
+    short    n=14/14 x3tr in~36 out~96 | req/s=1.565 (min 1.51, max 1.573) tok/s=150.3 lat=4.4s
+    long_in  n=14/14 x3tr in~1691 out~28 | req/s=3.317 (min 1.278, max 4.069) tok/s=91.0 lat=1.2s
+    long_out n=14/14 x3tr in~43 out~738 | req/s=0.200 (min 0.193, max 0.2) tok/s=144.9 lat=33.7s
+
+[  1727s] reconfigure llama3.1:8b-instruct-q4_K_M np=1 ...
+    short    n=6/6 x3tr in~40 out~96 | req/s=0.547 (min 0.544, max 0.548) tok/s=52.3 lat=1.8s
+    long_in  n=6/6 x3tr in~1491 out~94 | req/s=0.524 (min 0.493, max 0.526) tok/s=49.5 lat=1.9s
+    long_out n=6/6 x3tr in~49 out~768 | req/s=0.073 (min 0.073, max 0.073) tok/s=55.9 lat=13.7s
+
+[  2046s] reconfigure llama3.1:8b-instruct-q4_K_M np=2 ...
+    short    n=6/6 x3tr in~40 out~96 | req/s=0.849 (min 0.846, max 0.859) tok/s=81.1 lat=2.3s
+    long_in  n=6/6 x3tr in~1491 out~94 | req/s=0.789 (min 0.659, max 0.811) tok/s=74.5 lat=2.5s
+    long_out n=6/6 x3tr in~49 out~768 | req/s=0.111 (min 0.111, max 0.112) tok/s=85.6 lat=17.9s
+
+[  2257s] reconfigure llama3.1:8b-instruct-q4_K_M np=4 ...
+    short    n=8/8 x3tr in~40 out~96 | req/s=1.073 (min 1.05, max 1.088) tok/s=101.6 lat=3.7s
+    long_in  n=8/8 x3tr in~1491 out~85 | req/s=0.961 (min 0.766, max 1.075) tok/s=91.0 lat=4.1s
+    long_out n=8/8 x3tr in~49 out~768 | req/s=0.136 (min 0.136, max 0.136) tok/s=104.5 lat=29.3s
+
+[  2485s] reconfigure llama3.1:8b-instruct-q4_K_M np=6 ...
+    short    n=12/12 x3tr in~40 out~95 | req/s=1.175 (min 1.173, max 1.179) tok/s=111.2 lat=5.0s
+    long_in  n=12/12 x3tr in~1491 out~93 | req/s=1.083 (min 0.826, max 1.093) tok/s=101.9 lat=5.4s
+    long_out n=12/12 x3tr in~49 out~768 | req/s=0.151 (min 0.15, max 0.152) tok/s=115.6 lat=39.8s
+
+[  2795s] reconfigure gemma2:9b np=1 ...
+    short    n=6/6 x3tr in~38 out~84 | req/s=0.474 (min 0.466, max 0.488) tok/s=39.7 lat=2.1s
+    long_in  n=6/6 x3tr in~1491 out~85 | req/s=0.426 (min 0.421, max 0.438) tok/s=37.1 lat=2.4s
+    long_out n=6/6 x3tr in~48 out~686 | req/s=0.060 (min 0.059, max 0.062) tok/s=41.5 lat=16.6s
+
+[  3177s] reconfigure gemma4:e4b np=1 ...
+    short    n=6/6 x3tr in~44 out~96 | req/s=0.467 (min 0.461, max 0.468) tok/s=44.8 lat=2.1s
+    long_in  n=6/6 x3tr in~1497 out~96 | req/s=0.344 (min 0.281, max 0.344) tok/s=33.0 lat=2.9s
+    long_out n=6/6 x3tr in~54 out~768 | req/s=0.061 (min 0.061, max 0.061) tok/s=46.8 lat=16.4s
+
+[  3573s] reconfigure gemma4:e4b np=2 ...
+    short    n=6/6 x3tr in~44 out~96 | req/s=0.757 (min 0.747, max 0.759) tok/s=72.7 lat=2.6s
+    long_in  n=6/6 x3tr in~1497 out~96 | req/s=0.455 (min 0.285, max 0.457) tok/s=43.7 lat=4.4s
+    long_out n=6/6 x3tr in~54 out~768 | req/s=0.094 (min 0.093, max 0.094) tok/s=71.8 lat=21.4s
+
+[  3842s] reconfigure gemma4:e4b np=4 ...
+    short    n=8/8 x3tr in~44 out~96 | req/s=1.064 (min 1.035, max 1.077) tok/s=102.2 lat=3.7s
+    long_in  n=8/8 x3tr in~1497 out~96 | req/s=0.540 (min 0.258, max 0.54) tok/s=51.8 lat=7.4s
+    long_out n=8/8 x3tr in~54 out~768 | req/s=0.118 (min 0.117, max 0.118) tok/s=90.3 lat=34.0s
+
+[  4135s] reconfigure gemma4:e4b np=8 ...
+    short    n=16/16 x3tr in~44 out~96 | req/s=1.279 (min 1.27, max 1.298) tok/s=122.8 lat=6.2s
+    long_in  n=16/16 x3tr in~1497 out~96 | req/s=0.595 (min 0.268, max 0.597) tok/s=57.1 lat=13.4s
+    long_out n=16/16 x3tr in~54 out~768 | req/s=0.135 (min 0.135, max 0.135) tok/s=103.7 lat=59.2s
+
+[  4648s] reconfigure gemma4:e4b np=12 ...
+    short    n=16/16 x3tr in~44 out~96 | req/s=1.566 (min 1.54, max 1.567) tok/s=150.3 lat=5.7s
+    long_in  n=16/16 x3tr in~1497 out~96 | req/s=0.572 (min 0.192, max 0.572) tok/s=54.9 lat=15.9s
+    long_out n=16/16 x3tr in~54 out~768 | req/s=0.149 (min 0.149, max 0.15) tok/s=114.8 lat=59.9s
+
+[  5146s] reconfigure mistral-nemo:12b np=1 ...
+    short    n=6/6 x3tr in~35 out~87 | req/s=0.449 (min 0.445, max 0.48) tok/s=39.1 lat=2.2s
+    long_in  n=6/6 x3tr in~1487 out~86 | req/s=0.428 (min 0.406, max 0.434) tok/s=37.2 lat=2.3s
+    long_out n=6/6 x3tr in~42 out~751 | req/s=0.055 (min 0.054, max 0.055) tok/s=41.4 lat=18.1s
+
+[  5560s] reconfigure mistral-nemo:12b np=2 ...
+    short    n=6/6 x3tr in~35 out~82 | req/s=0.765 (min 0.751, max 0.815) tok/s=64.2 lat=2.5s
+    long_in  n=6/6 x3tr in~1487 out~83 | req/s=0.702 (min 0.585, max 0.719) tok/s=59.9 lat=2.8s
+    long_out n=6/6 x3tr in~42 out~768 | req/s=0.090 (min 0.089, max 0.09) tok/s=68.7 lat=22.2s
+
+[  5815s] reconfigure mistral-nemo:12b np=4 ...
+    short    n=8/8 x3tr in~35 out~84 | req/s=1.113 (min 1.074, max 1.26) tok/s=95.0 lat=3.4s
+    long_in  n=8/8 x3tr in~1487 out~86 | req/s=1.011 (min 0.641, max 1.029) tok/s=87.1 lat=3.8s
+    long_out n=8/8 x3tr in~42 out~754 | req/s=0.136 (min 0.133, max 0.138) tok/s=104.0 lat=29.3s
+
+[  6045s] reconfigure qwen3:14b np=1 ...
+    short    n=6/6 x3tr in~40 out~96 | req/s=0.333 (min 0.332, max 0.333) tok/s=32.0 lat=3.0s
+    long_in  n=6/6 x3tr in~1491 out~96 | req/s=0.317 (min 0.295, max 0.317) tok/s=30.4 lat=3.2s
+    long_out n=6/6 x3tr in~49 out~768 | req/s=0.043 (min 0.043, max 0.043) tok/s=32.7 lat=23.5s
+
+[  6584s] reconfigure qwen3:14b np=2 ...
+    short    n=6/6 x3tr in~40 out~96 | req/s=0.560 (min 0.555, max 0.561) tok/s=53.7 lat=3.5s
+    long_in  n=6/6 x3tr in~1491 out~96 | req/s=0.449 (min 0.372, max 0.449) tok/s=43.1 lat=4.4s
+    long_out n=6/6 x3tr in~49 out~768 | req/s=0.069 (min 0.069, max 0.069) tok/s=53.1 lat=28.9s
+
+[  6923s] reconfigure qwen3:14b np=4 ...
+    short    n=8/8 x3tr in~40 out~96 | req/s=0.735 (min 0.727, max 0.737) tok/s=70.6 lat=5.4s
+    long_in  n=8/8 x3tr in~1491 out~96 | req/s=0.550 (min 0.395, max 0.555) tok/s=52.8 lat=7.2s
+    long_out n=8/8 x3tr in~49 out~768 | req/s=0.088 (min 0.088, max 0.088) tok/s=67.4 lat=45.5s
+
+[  7282s] reconfigure deepseek-r1:14b np=1 ...
+    short    n=6/6 x3tr in~33 out~96 | req/s=0.321 (min 0.321, max 0.321) tok/s=30.8 lat=3.1s
+    long_in  n=6/6 x3tr in~1484 out~96 | req/s=0.303 (min 0.283, max 0.303) tok/s=29.0 lat=3.3s
+    long_out n=6/6 x3tr in~42 out~768 | req/s=0.041 (min 0.041, max 0.041) tok/s=31.7 lat=24.2s
+
+[  7839s] reconfigure deepseek-r1:14b np=2 ...
+    short    n=6/6 x3tr in~33 out~96 | req/s=0.514 (min 0.512, max 0.516) tok/s=49.3 lat=3.9s
+    long_in  n=6/6 x3tr in~1484 out~96 | req/s=0.473 (min 0.387, max 0.473) tok/s=45.4 lat=4.2s
+    long_out n=6/6 x3tr in~42 out~768 | req/s=0.066 (min 0.066, max 0.066) tok/s=50.8 lat=30.2s
+
+[  8192s] reconfigure llama3.3:70b-instruct-q4_K_M np=1 ...
+    short    n=4/4 x2tr in~40 out~96 | req/s=0.008 (min 0.008, max 0.008) tok/s=0.7 lat=130.7s
+    long_in  n=4/4 x2tr in~1013 out~96 | req/s=0.007 (min 0.007, max 0.007) tok/s=0.7 lat=140.6s
+    long_out n=4/4 x2tr in~49 out~384 | req/s=0.002 (min 0.002, max 0.002) tok/s=0.7 lat=527.5s
+
+[ 15125s] reconfigure deepseek-r1:70b np=1 ...
+    short    n=4/4 x2tr in~33 out~96 | req/s=0.008 (min 0.007, max 0.008) tok/s=0.7 lat=132.4s
+    long_in  n=4/4 x2tr in~1006 out~96 | req/s=0.007 (min 0.007, max 0.007) tok/s=0.7 lat=140.8s
+    long_out n=4/4 x2tr in~42 out~384 | req/s=0.002 (min 0.002, max 0.002) tok/s=0.7 lat=527.3s
+
+[ 22111s] reconfigure qwen2.5:72b-instruct-q4_K_M np=1 ...
+  !! warm-up failed: 500 Server Error: Internal Server Error for url: http://192.168.0.19:11434/api/chat — skipping (model,np)
+
+Done in 22716s. Rows in F:\GitHub\clinical_projects\population-synthetic\docs\development\ollama-parallelism-poc\sweep_results.jsonl
