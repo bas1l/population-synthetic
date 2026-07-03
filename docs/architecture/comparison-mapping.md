@@ -35,6 +35,18 @@ radar + `{slug}_association.csv` and `{slug}_association_heatmap.png` from the m
 with the summary and `{country}_radar_grid.png` at `.../comparison/`. `compare_model_performance.py`
 additionally emits a cross-combo `{country}_c2st_vs_tv.png` under `.../performance/`.
 
+The **multivariate / joint-fidelity** block (C2ST, pairwise Cramér's-V association, per-pair joint
+TV, k-way combination plausibility -- defined via the scheme's `grounded_joint_pairs` /
+`combination_checks` / `c2st` tuning) is also available as a **standalone process**:
+`analyze_joint_fidelity.py` recomputes only that block (through the shared
+`StatisticalEvaluator.compute_multivariate()`) over the same `mapped/_index.json` targets and writes
+it to its own `{output_base}/03_Analysis/joint_fidelity/` folder -- per-combo envelope JSON +
+`{slug}_association.csv` + `{slug}_association_heatmap.png`, plus a per-country roll-up
+`{country}_joint_fidelity.json`/`.csv` and a cross-combo `{country}_c2st_vs_grounded_tv.png`. It
+depends only on `map_populations` and is fully additive: it never writes under `.../comparison/` or
+`.../performance/`. See the `joint_fidelity/` subpackage in
+[Sub-packages](sub-packages.md).
+
 `analysis/utils/country_config.py` is the shared country resolver -- `real_for_country`,
 `mappings_for_country`, `known_country_ids`, `infer_country(config_path)` -- reading
 `parameters.reference` (the YAML key itself is unrenamed pending a follow-up config-layer rename;

@@ -1,11 +1,14 @@
 # gui_v2 — config-driven Flow Runner GUI
 
 `gui_v2` (`python -m population_synthetic.gui_v2.main`, requires the `.[gui]`
-extra) is a **parallel** PyQt5 launcher that coexists with the original
-`gui/` package (`python -m population_synthetic.gui.main`, still the fallback
-and untouched). It adopts a two-tier, editable-YAML config model and a
-DAG-based Analysis Workflow. This page documents the three contracts a
-maintainer needs before changing it.
+extra) is the **primary** PyQt5 launcher. The original `gui/` package
+(`python -m population_synthetic.gui.main`) is **deprecated** — it still runs as a
+fallback and emits a `DeprecationWarning`, but it is retained mainly because
+`gui_v2` reuses its widgets and runners (`CombinationRunner`, `_kill_process_tree`,
+`ConsoleWidget`, `DagGraphWidget`, `CheckableAxisList`, `PersonaCountWorker`) as
+shared substrate — so the package must not be removed. `gui_v2` adopts a two-tier,
+editable-YAML config model and a DAG-based Analysis Workflow. This page documents
+the three contracts a maintainer needs before changing it.
 
 ## Two-tier config
 
@@ -65,8 +68,9 @@ enabled chain GUI-side:
   `SKIPPED_GUARD` with a **loud** console banner; the run continues.
 - **Run** → on **exit code 0** the task is marked `COMPLETED`, which unlocks its
   dependents; the first nonzero exit fails the task (`FAILED`) and its
-  dependents dep-skip, while independent branches (the `compare_pops` side
-  branch and the isolated `llm_metrics` islands) still run.
+  dependents dep-skip, while independent branches (the `joint_fidelity` and
+  `compare_pops` side branches -- both `slugs`-dispatch, depending only on
+  `map_populations` -- and the isolated `llm_metrics` islands) still run.
 - **Abort** → `_kill_process_tree` on the live process; the current task and all
   not-yet-run tasks become `ABORTED`.
 

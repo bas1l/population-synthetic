@@ -26,6 +26,16 @@ tasks:
       output-base:
     depends_on: [map_populations]
 
+  joint_fidelity:
+    label: Multivariate Joint Fidelity
+    script: scripts/analyze/analyze_joint_fidelity.py
+    dispatch: slugs
+    enabled: true
+    options:
+      no-charts: false            # --no-charts
+      output-base:                # blank = script default
+    depends_on: [map_populations]
+
   model_performance:
     label: Model Performance (models x methods)
     script: scripts/analyze/compare_model_performance.py

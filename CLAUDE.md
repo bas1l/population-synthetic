@@ -17,7 +17,7 @@ depth lives in the [architecture wiki](docs/architecture/README.md).
 Requires Python 3.10+. Install in editable mode (required for imports to work):
 
 ```bash
-pip install -e ".[dev]"          # editable install + dev tools; add ".[gui]" for the PyQt5 launcher
+pip install -e ".[dev]"          # editable install + dev tools; add ".[gui]" for the PyQt5 Flow Runner GUI
 pip install -e ".[analysis]"     # optional: scikit-learn backend for the C2ST multivariate metric (MMD fallback otherwise)
 
 # Generate a Swedish population from live SCB data
@@ -30,8 +30,8 @@ python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet
 python scripts/analyze/map_populations.py
 python scripts/analyze/compare_pipeline_to_scb.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
 
-python -m population_synthetic.gui.main   # GUI launcher (requires ".[gui]")
-python -m population_synthetic.gui_v2.main   # config-driven Flow Runner GUI (requires ".[gui]"; old GUI above remains)
+python -m population_synthetic.gui_v2.main   # primary GUI: config-driven Flow Runner (requires ".[gui]")
+python -m population_synthetic.gui.main   # DEPRECATED original launcher (fallback only; requires ".[gui]")
 ruff check src/                       # lint (line-length 120, rules E/F/W/I)
 pytest                                # test suite (covers llm_metrics/ and clients/call_context)
 ```
@@ -66,7 +66,9 @@ These are enforced guardrails, not suggestions. Full rationale in
 `generators/` -- `generators/real/` (per-country data layers over a shared parent) and
 `generators/synthetic/` (LLM persona generation) -- plus `analysis/` (the
 post-generation family, one subpackage per process: `mapping/` raw -> canonical schema,
-`comparison/` two-stage map -> compare statistical scoring + charts, `performance/` cross-model
+`comparison/` two-stage map -> compare statistical scoring + charts, `joint_fidelity/` standalone
+multivariate joint-fidelity (recomputes the `multivariate` block over the mapped populations into
+its own `03_Analysis/joint_fidelity/` folder), `performance/` cross-model
 ranking of the comparison reports (models × strategies per country), `llm_metrics/` post-run
 LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:

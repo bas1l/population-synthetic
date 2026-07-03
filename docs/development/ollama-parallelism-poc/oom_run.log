@@ -1,0 +1,85 @@
+
+=== gemma4:e4b (rec=12) ===
+  np=12: OK
+  np=24: OK
+  np=48: OK
+  np=64: OK
+
+=== llama3.2:3b-instruct-q4_K_M (rec=10) ===
+  np=10: OK
+  np=20: OK
+  np=40: OK
+  np=64: OK
+
+=== OpenLLM-France/Lucie-7B-Instruct:latest (rec=7) ===
+  np=7: OK
+  np=14: OK
+  np=28: OK
+  np=56: OK
+  np=64: OK
+
+=== llama3.1:8b-instruct-q4_K_M (rec=6) ===
+  np=6: OK
+  np=12: OK
+  np=24: OK
+  np=48: OK
+  np=64: OK
+
+=== mistral-nemo:12b (rec=4) ===
+  np=4: OK
+  np=8: OK
+  np=16: OK
+  np=32: OK
+  np=64: OK
+
+=== qwen3:14b (rec=4) ===
+  np=4: FAIL HTTPConnectionPool(host='192.168.0.19', port=11434): Read timed out. (read timeout=300)
+
+=== deepseek-r1:14b (rec=2) ===
+  np=2: OK
+  np=4: OK
+  np=8: OK
+  np=16: OK
+  np=32: OK
+  np=64: OK
+
+=== gemma2:9b (rec=1) ===
+  np=1: OK
+  np=2: OK
+  np=4: OK
+  np=8: OK
+  np=16: OK
+  np=32: OOM/FAIL HTTP 500: {"error":"model requires more system memory (80.6 GiB) than is availab
+  np=24: OOM/FAIL HTTP 500: {"error":"model requires more system memory (66.5 GiB) than is availab
+  np=20: OK
+  np=22: OK
+  np=23: OOM/FAIL HTTP 500: {"error":"llama runner process has terminated: %!w(\u003cnil\u003e)"}
+
+=== llama3.3:70b-instruct-q4_K_M (rec=1) ===
+  np=1: OK
+  np=2: OK
+  np=4: OK
+  np=8: OK
+  np=16: OK
+  np=32: OOM/FAIL HTTP 500: {"error":"model requires more system memory (69.0 GiB) than is availab
+  np=24: OOM/FAIL HTTP 500: {"error":"model requires more system memory (69.0 GiB) than is availab
+  np=20: OOM/FAIL HTTP 500: {"error":"llama runner process has terminated: %!w(\u003cnil\u003e)"}
+  np=18: OOM/FAIL HTTP 500: {"error":"llama runner process has terminated: %!w(\u003cnil\u003e)"}
+  np=17: OK
+
+=== deepseek-r1:70b (rec=1) ===
+  np=1: OK
+  np=2: OK
+  np=4: OK
+  np=8: OK
+  np=16: OK
+  np=32: OOM/FAIL HTTP 500: {"error":"model requires more system memory (69.0 GiB) than is availab
+  np=24: OOM/FAIL HTTP 500: {"error":"model requires more system memory (69.0 GiB) than is availab
+  np=20: OOM/FAIL HTTP 500: {"error":"llama runner process has terminated: %!w(\u003cnil\u003e)"}
+  np=18: OOM/FAIL HTTP 500: {"error":"llama runner process has terminated: %!w(\u003cnil\u003e)"}
+  np=17: OK
+
+=== qwen2.5:72b-instruct-q4_K_M (rec=1) ===
+  np=1: FAIL HTTP 500: {"error":"timed out waiting for llama runner to start - progress 0.00 - "}
+
+Done in 8762s -> F:\GitHub\clinical_projects\population-synthetic\docs\development\ollama-parallelism-poc\oom_results.json
