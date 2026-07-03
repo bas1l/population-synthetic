@@ -572,8 +572,14 @@
       distribution with a code built for the real one. It punishes B for putting probability
       where A has almost none more harshly than TV does.</p>
     <div class="formula">D_KL(B ‖ A) = Σ p_B(c) · log₂( p_B(c) / p_A(c) )      (Laplace-smoothed)</div>
-    <p>Smoothing (add 1 to every count) means an empty category never causes a divide-by-zero or
-      an infinite result.</p>
+    <p>Read each term as a <strong>log-ratio weighted by how often the category occurs in B</strong>:
+      <code>log₂(p_B/p_A)</code> is the "surprise" for that category — zero when B and A agree,
+      positive when B over-represents it, negative when B under-represents it — and the
+      <code>p_B(c)</code> in front weights it by B's own frequency. The <strong>base-2 log is what
+      puts the answer in bits</strong>: it is the extra bits per person you waste encoding B's data
+      with a code built for A. Individual terms can be negative, but the total is never below 0
+      (Gibbs' inequality). <strong>Laplace smoothing</strong> (add 1 to every count) keeps an empty
+      category from causing a divide-by-zero or an infinite result.</p>
 
     <figure class="viz">
       <div class="plot-wrap">
@@ -599,14 +605,22 @@
         <text x="465" y="232" class="catlabel" text-anchor="middle">Tertiary</text>
       </svg>
       </div>
-      <figcaption>Each category's <b>p_B · log₂(p_B/p_A)</b>. Terms can be negative (Primary, where
-        B under-shoots); the signed sum lands near <b>≈ 0.05 bits</b> — small, because the
-        distributions are close (smoothing pulls it further toward ~0.03).</figcaption>
+      <figcaption>Each category's <b>p_B · log₂(p_B/p_A)</b>: −0.100 + 0.076 + 0.078. Terms can be
+        negative (Primary, where B under-shoots), but the total is never below zero; here it sums to
+        <b>≈ 0.05 bits</b> — small, because the distributions are close. Laplace smoothing nudges it
+        slightly lower still.</figcaption>
     </figure>
 
     <p><span class="label-line">How to read it.</span> <strong>0 = identical</strong>; no upper
       bound, higher is worse. It is <em>asymmetric</em> — the code computes B relative to A.
       Best for ranking models, not as an absolute pass/fail.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — the log-ratio &amp; base 2.</span> What each term means, why the
+      base is 2 (bits vs nats), why terms can be negative yet the total never is, and how Laplace
+      smoothing shifts the number. See
+      <a class="backlink" href="comparison-metrics/kl-divergence-bits-and-log.md">the bits &amp; log-ratio note</a>.
+    </div>
   </div>
 </section>
 
