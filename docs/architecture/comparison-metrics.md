@@ -215,22 +215,41 @@ right in aggregate while still containing impossible individuals (e.g. a 7-year-
 PhD and full-time employment). This scores the fraction of synthetic individuals whose
 **combination** of attributes actually occurs in the real population.
 
-**How it works (in words):** from the real population A, build a lookup table of how often
-each combination of the coherence attributes (e.g. `age_group × education_level ×
-employment_status`) occurs, as a probability. Then, for each synthetic individual in B,
-look up their exact combination:
+**How it works (in words):** from the real population A, build a lookup table of the
+**empirical** (un-smoothed) probability of each combination of the coherence attributes —
+for the Swedish scheme that tuple is `age_group × education_level × employment_status`. Then,
+for each synthetic individual in B, look up their exact combination:
 
-- if its real-population probability is **≥ a threshold** → count them as *plausible*;
-- otherwise → *flag* them (records the individual and the probability).
+- if its real-population probability is **≥ the threshold** → count them as *plausible*;
+- otherwise → *flag* them (records the id, the attribute values, and the probability).
 
 `score = n_plausible / n_total_B`. Computed in `evaluator.py:compute_coherence`.
 
-**Worked example:** if 920 of 1,000 synthetic people have combinations that are
-well-supported in the real data, the coherence score is **0.92 (92%)**, and the other 80
+The **threshold is the whole test.** The Swedish scheme sets `coherence_threshold = 0.001`,
+i.e. *a combination must occur in at least 0.1 % of the real population to count as
+plausible* (≥ 10 people in a real population of 10,000). Because the table is un-smoothed, a
+combination that **never appears in A** has probability exactly 0 — so flagging splits
+naturally into **impossible** (zero support, or a missing attribute value → probability 0)
+and **rare** (present in A but below the threshold). The tuple and threshold live in config
+(`config/analysis/comparison/{country}.json`); `coherence_attributes` is required and fails
+loud if absent, while `coherence_threshold` defaults to `0.001`.
+
+**Worked example:** with a real A of 10,000 (threshold ⇒ "≥ 10 occurrences") and a synthetic
+B of 1,000: `age 30–39 · Tertiary · Employed` occurs 1,800 times (p = 0.18) → plausible;
+`age 85+ · Tertiary · Employed full-time` occurs 6 times (p = 0.0006) → flagged as *rare*;
+`age 7–12 · Tertiary · Employed` occurs 0 times → flagged as *impossible*. If 920 of the
+1,000 land at or above the threshold, the coherence score is **0.92 (92%)** and the other 80
 appear in the flagged list for inspection.
 
-**How to read it:** 0 to 1, **higher is better**. It is a bluntly interpretable
-"what fraction of my synthetic people are demographically possible" number.
+**How to read it:** 0 to 1, **higher is better**. A blunt "what fraction of my synthetic
+people are demographically possible" number — but a high score is *cheap* when the threshold
+is low (it mostly rules out the impossible, not the merely unusual), so read it alongside the
+threshold value and §4d's impossible/rare split.
+
+> **Deep dive:** what the threshold really means, the two ways a person gets flagged, the
+> missing-value trap, why the tuple is kept small (curse of dimensionality), the "A is a
+> finite sample" caveat, and how coherence relates to the §4d k-way metric — see
+> [Reading the coherence score: the plausibility threshold](comparison-metrics/coherence-score-explained.md).
 
 ---
 
