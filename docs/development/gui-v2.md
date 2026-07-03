@@ -1,11 +1,14 @@
 # gui_v2 — config-driven Flow Runner GUI
 
 `gui_v2` (`python -m population_synthetic.gui_v2.main`, requires the `.[gui]`
-extra) is a **parallel** PyQt5 launcher that coexists with the original
-`gui/` package (`python -m population_synthetic.gui.main`, still the fallback
-and untouched). It adopts a two-tier, editable-YAML config model and a
-DAG-based Analysis Workflow. This page documents the three contracts a
-maintainer needs before changing it.
+extra) is the **primary** PyQt5 launcher. The original `gui/` package
+(`python -m population_synthetic.gui.main`) is **deprecated** — it still runs as a
+fallback and emits a `DeprecationWarning`, but it is retained mainly because
+`gui_v2` reuses its widgets and runners (`CombinationRunner`, `_kill_process_tree`,
+`ConsoleWidget`, `DagGraphWidget`, `CheckableAxisList`, `PersonaCountWorker`) as
+shared substrate — so the package must not be removed. `gui_v2` adopts a two-tier,
+editable-YAML config model and a DAG-based Analysis Workflow. This page documents
+the three contracts a maintainer needs before changing it.
 
 ## Two-tier config
 
