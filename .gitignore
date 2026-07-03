@@ -23,3 +23,8 @@ config/gui/state.json
 /llm_interactions.jsonl
 /run_metadata.json
 /logs/
+
+# Manuscript drafting: the deliverable lives in OneDrive
+# (…/Gauss/04_Dissemination/Manuscripts/40_llm-population-fidelity-benchmark/),
+# which is outside this repo. Keep the local drafting source out of git too.
+docs/paper/

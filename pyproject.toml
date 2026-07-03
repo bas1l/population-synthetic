@@ -31,6 +31,9 @@ gui = [
     "grandalf>=0.8",
     "ruamel.yaml>=0.18",
 ]
+analysis = [
+    "scikit-learn>=1.3",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

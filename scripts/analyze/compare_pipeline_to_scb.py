@@ -37,8 +37,16 @@ from pathlib import Path
 import yaml
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.analysis.comparison.charts import plot_comparison_charts, plot_radar_comparison
-from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+from population_synthetic.analysis.comparison.charts import (
+    plot_association_heatmap,
+    plot_comparison_charts,
+    plot_radar_comparison,
+)
+from population_synthetic.analysis.comparison.evaluator import (
+    StatisticalEvaluator,
+    write_association_csv,
+    write_csv_summary,
+)
 from population_synthetic.analysis.comparison.scheme import load_scheme
 
 _COUNTRY = "swedish"
@@ -256,6 +264,10 @@ def compare_populations(
     write_csv_summary(report, csv_path)
     print(f"CSV summary written to {csv_path}")
 
+    association_csv_path = output_path.with_name(f"{output_path.stem}_association.csv")
+    write_association_csv(report, association_csv_path)
+    print(f"Association CSV written to {association_csv_path}")
+
     if not args.no_charts:
         _write_charts(real_pop, synthetic_pop, report, output_path, args, slug, real_label, scheme)
 
@@ -303,6 +315,12 @@ def _write_charts(
     )
     if radar_path is not None:
         print(f"Radar chart written to {radar_path}")
+
+    heatmap_path = plot_association_heatmap(
+        report, charts_dir, prefix=slug, attributes=scheme.attributes
+    )
+    if heatmap_path is not None:
+        print(f"Association heatmap written to {heatmap_path}")
 
 
 # ---------------------------------------------------------------------------

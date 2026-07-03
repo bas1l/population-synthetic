@@ -95,8 +95,9 @@ python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet
 # Generate Italian identities via axis composition
 python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id italian
 
-# Launch the GUI launcher (requires pip install -e ".[gui]")
-python -m population_synthetic.gui.main
+# Launch the primary GUI: the config-driven Flow Runner (requires pip install -e ".[gui]")
+python -m population_synthetic.gui_v2.main
+# (deprecated fallback: python -m population_synthetic.gui.main)
 
 # Linting (line-length 120, rules: E/F/W/I)
 ruff check src/

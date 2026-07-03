@@ -31,7 +31,21 @@ first." error) and run the existing evaluator/chart path. `compare_all_pipelines
 `{output_base}/03_Analysis/mapped`) + `{slug}`, or take explicit `--mapped-synthetic` /
 `--mapped-real`. All comparison artifacts land under
 `{output_base}/03_Analysis/comparison/{slug}/` (per-target JSON report + CSV + 15 bar charts +
-radar), with the summary and `{country}_radar_grid.png` at `.../comparison/`.
+radar + `{slug}_association.csv` and `{slug}_association_heatmap.png` from the multivariate block),
+with the summary and `{country}_radar_grid.png` at `.../comparison/`. `compare_model_performance.py`
+additionally emits a cross-combo `{country}_c2st_vs_tv.png` under `.../performance/`.
+
+The **multivariate / joint-fidelity** block (C2ST, pairwise Cramér's-V association, per-pair joint
+TV, k-way combination plausibility -- defined via the scheme's `grounded_joint_pairs` /
+`combination_checks` / `c2st` tuning) is also available as a **standalone process**:
+`analyze_joint_fidelity.py` recomputes only that block (through the shared
+`StatisticalEvaluator.compute_multivariate()`) over the same `mapped/_index.json` targets and writes
+it to its own `{output_base}/03_Analysis/joint_fidelity/` folder -- per-combo envelope JSON +
+`{slug}_association.csv` + `{slug}_association_heatmap.png`, plus a per-country roll-up
+`{country}_joint_fidelity.json`/`.csv` and a cross-combo `{country}_c2st_vs_grounded_tv.png`. It
+depends only on `map_populations` and is fully additive: it never writes under `.../comparison/` or
+`.../performance/`. See the `joint_fidelity/` subpackage in
+[Sub-packages](sub-packages.md).
 
 `analysis/utils/country_config.py` is the shared country resolver -- `real_for_country`,
 `mappings_for_country`, `known_country_ids`, `infer_country(config_path)` -- reading
@@ -58,7 +72,8 @@ sibling's resolved value, e.g. `birth_location` from `birth_country_detail`), `o
 when all miss). The `_index.json` master lists the in-scope attributes (`attribute -> filename`,
 key order = axis order) -- pure mapping scope; country scope is data-driven (Italy's master omits
 `income_source`). The cross-attribute statistics (`joint_pairs`/`coherence_attributes`/
-`coherence_threshold`) are evaluator tuning, not mapping, and live in a separate
+`coherence_threshold`, plus the multivariate tuning `grounded_joint_pairs`/`combination_checks`/`c2st`)
+are evaluator tuning, not mapping, and live in a separate
 comparison-analysis config `config/analysis/comparison/{scb,istat}.json` (one file per country)
 read by `analysis/comparison/scheme.py`. There is no `_scheme.json` filter and no
 `output_categories`/`real_*`/`pipeline_*` dual vocabulary -- the scored axis simply *is* each

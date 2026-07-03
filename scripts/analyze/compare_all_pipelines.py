@@ -39,7 +39,11 @@ from population_synthetic.analysis.comparison.charts import (
     plot_radar_comparison,
     plot_radar_grid,
 )
-from population_synthetic.analysis.comparison.evaluator import StatisticalEvaluator, write_csv_summary
+from population_synthetic.analysis.comparison.evaluator import (
+    StatisticalEvaluator,
+    write_association_csv,
+    write_csv_summary,
+)
 from population_synthetic.analysis.comparison.scheme import load_scheme
 from population_synthetic.analysis.utils.axes import decompose_slug
 from population_synthetic.analysis.utils.country_config import mappings_for_country
@@ -290,6 +294,10 @@ def main() -> None:
             csv_path = output_path.with_suffix(".csv")
             write_csv_summary(report, csv_path)
             print(f"  CSV written to {csv_path}")
+
+            association_csv_path = output_path.with_name(f"{output_path.stem}_association.csv")
+            write_association_csv(report, association_csv_path)
+            print(f"  Association CSV written to {association_csv_path}")
 
             if not args.no_charts:
                 charts_dir = comparison_output_dir / slug

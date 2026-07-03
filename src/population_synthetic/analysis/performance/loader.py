@@ -52,6 +52,18 @@ class ComboPerformance:
     marginals: dict[str, dict[str, Any]]  # attr -> full per-attribute metric dict
     tv_similarity: dict[str, float]       # attr -> 1 - tv_distance (NaN attrs omitted)
     coherence: dict[str, Any]             # the report's coherence block
+    # Optional multivariate summaries (reference only -- never the ranking key).
+    # ``None`` when the report predates the multivariate block; may be ``NaN``
+    # when the block is present but degenerate (tiny/failed synthetic n).
+    c2st_auc: float | None = None         # multivariate.c2st.auc
+    mean_delta_v: float | None = None     # multivariate.association.mean_abs_delta_v
+
+
+def _optional_float(value: Any) -> float | None:
+    """Coerce an optional report value to ``float`` (keeping ``NaN``), else ``None``."""
+    if value is None:
+        return None
+    return float(value)
 
 
 def scheme_attributes(country: str) -> list[str]:
@@ -104,6 +116,13 @@ def extract_combo_performance(
             f"Comparison report for {slug!r} is missing 'metadata.population_b.n'"
         )
 
+    # Multivariate block is additive and optional: old reports lack it entirely
+    # (fields stay None), new reports supply c2st.auc / association.mean_abs_delta_v
+    # (which may themselves be NaN for degenerate synthetic populations).
+    multivariate = report.get("multivariate") or {}
+    c2st_block = multivariate.get("c2st") or {}
+    association_block = multivariate.get("association") or {}
+
     return ComboPerformance(
         slug=slug,
         country=country,
@@ -113,6 +132,8 @@ def extract_combo_performance(
         marginals=marginals,
         tv_similarity=tv_similarity,
         coherence=report["coherence"],
+        c2st_auc=_optional_float(c2st_block.get("auc")),
+        mean_delta_v=_optional_float(association_block.get("mean_abs_delta_v")),
     )
 
 

@@ -17,9 +17,12 @@ from population_synthetic.analysis.comparison.scheme import ComparisonScheme, lo
 _ANALYSIS_FILENAME = "_analysis.json"
 
 
-def _write_country(directory, attributes, *, joint_pairs, coherence, threshold=0.001, omit=()):
+def _write_country(directory, attributes, *, joint_pairs, coherence, threshold=0.001, omit=(), extra_analysis=None):
     """Write a fixture country dir: ``_index.json`` (attributes) + per-attribute files
-    + an ``_analysis.json`` comparison-analysis config (cross-attribute statistics)."""
+    + an ``_analysis.json`` comparison-analysis config (cross-attribute statistics).
+
+    ``extra_analysis`` merges extra keys (e.g. ``grounded_joint_pairs``,
+    ``combination_checks``, ``c2st``) into the analysis config verbatim."""
     directory.mkdir(parents=True, exist_ok=True)
     index = {
         "description": "fixture",
@@ -31,6 +34,8 @@ def _write_country(directory, attributes, *, joint_pairs, coherence, threshold=0
         "coherence_attributes": coherence,
         "coherence_threshold": threshold,
     }
+    if extra_analysis:
+        analysis.update(extra_analysis)
     (directory / _ANALYSIS_FILENAME).write_text(json.dumps(analysis), encoding="utf-8")
     for attr, values in attributes.items():
         if attr in omit:
@@ -199,3 +204,132 @@ def test_legacy_scheme_json_still_read_when_no_index(tmp_path):
     assert scheme.attributes == ["biological_sex"]
     assert scheme.categories["biological_sex"] == ["Male", "Female"]
     assert scheme.coherence_threshold == 0.001
+
+
+# --- multivariate config keys (grounded_joint_pairs / combination_checks / c2st) ----
+
+def _minimal_country(directory, **extra_analysis):
+    _write_country(
+        directory,
+        {"age_group": _AGE_BINS, "biological_sex": ["Male", "Female"]},
+        joint_pairs=[["age_group", "biological_sex"]],
+        coherence=["age_group"],
+        extra_analysis=extra_analysis or None,
+    )
+
+
+def test_multivariate_keys_absent_default_cleanly(tmp_path):
+    # No grounded_joint_pairs / combination_checks / c2st in the config -> empty/None defaults.
+    _minimal_country(tmp_path)
+    scheme = _load(tmp_path)
+    assert scheme.grounded_joint_pairs == ()
+    assert scheme.combination_checks == ()
+    assert scheme.c2st_config is None
+
+
+def test_grounded_joint_pairs_parsed(tmp_path):
+    _minimal_country(
+        tmp_path,
+        grounded_joint_pairs=[
+            {"pair": ["age_group", "biological_sex"], "grounded": True, "basis": "age_sex"},
+            {"pair": ["age_group", "education_level"], "grounded": False},
+        ],
+    )
+    scheme = _load(tmp_path)
+    assert len(scheme.grounded_joint_pairs) == 2
+    first = scheme.grounded_joint_pairs[0]
+    assert first.pair == ("age_group", "biological_sex")
+    assert first.grounded is True
+    assert first.basis == "age_sex"
+    second = scheme.grounded_joint_pairs[1]
+    assert second.grounded is False
+    assert second.basis == ""  # optional basis defaults to empty string
+
+
+def test_combination_checks_parsed(tmp_path):
+    _minimal_country(
+        tmp_path,
+        combination_checks=[
+            {"attributes": ["age_group", "education_level", "employment_status"], "k": 3, "threshold": 0.002},
+        ],
+    )
+    scheme = _load(tmp_path)
+    assert len(scheme.combination_checks) == 1
+    check = scheme.combination_checks[0]
+    assert check.attributes == ("age_group", "education_level", "employment_status")
+    assert check.k == 3
+    assert check.threshold == 0.002
+
+
+def test_c2st_parsed(tmp_path):
+    _minimal_country(tmp_path, c2st={"folds": 5, "method": "sklearn", "seed": 42})
+    scheme = _load(tmp_path)
+    assert scheme.c2st_config is not None
+    assert scheme.c2st_config.folds == 5
+    assert scheme.c2st_config.method == "sklearn"
+    assert scheme.c2st_config.seed == 42
+
+
+@pytest.mark.parametrize(
+    "grounded, exc",
+    [
+        ({"grounded_joint_pairs": {"pair": ["a", "b"], "grounded": True}}, ValueError),  # not a list
+        ({"grounded_joint_pairs": [{"grounded": True}]}, KeyError),  # missing 'pair'
+        ({"grounded_joint_pairs": [{"pair": ["a", "b"]}]}, KeyError),  # missing 'grounded'
+        ({"grounded_joint_pairs": [{"pair": ["a", "b", "c"], "grounded": True}]}, ValueError),  # pair not length 2
+        ({"grounded_joint_pairs": [{"pair": ["a", "b"], "grounded": "yes"}]}, ValueError),  # grounded not bool
+    ],
+)
+def test_grounded_joint_pairs_malformed_raises(tmp_path, grounded, exc):
+    _minimal_country(tmp_path, **grounded)
+    with pytest.raises(exc):
+        _load(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "combos, exc",
+    [
+        ({"combination_checks": {"attributes": ["a"], "k": 1, "threshold": 0.1}}, ValueError),  # not a list
+        ({"combination_checks": [{"k": 3, "threshold": 0.1}]}, KeyError),  # missing 'attributes'
+        ({"combination_checks": [{"attributes": [], "k": 0, "threshold": 0.1}]}, ValueError),  # empty attributes
+        ({"combination_checks": [{"attributes": ["a"], "k": "3", "threshold": 0.1}]}, ValueError),  # k not int
+        ({"combination_checks": [{"attributes": ["a"], "k": 1, "threshold": "x"}]}, ValueError),  # threshold not num
+    ],
+)
+def test_combination_checks_malformed_raises(tmp_path, combos, exc):
+    _minimal_country(tmp_path, **combos)
+    with pytest.raises(exc):
+        _load(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "c2st, exc",
+    [
+        ({"c2st": [1, 2, 3]}, ValueError),  # not an object
+        ({"c2st": {"method": "sklearn", "seed": 42}}, KeyError),  # missing 'folds'
+        ({"c2st": {"folds": "5", "method": "sklearn", "seed": 42}}, ValueError),  # folds not int
+        ({"c2st": {"folds": 5, "method": 1, "seed": 42}}, ValueError),  # method not str
+        ({"c2st": {"folds": 5, "method": "sklearn", "seed": 4.2}}, ValueError),  # seed not int
+    ],
+)
+def test_c2st_malformed_raises(tmp_path, c2st, exc):
+    _minimal_country(tmp_path, **c2st)
+    with pytest.raises(exc):
+        _load(tmp_path)
+
+
+def test_production_scb_config_grounded_pairs_load(tmp_path):
+    # The real SCB analysis config should parse and expose the grounded flag per pair.
+    from population_synthetic.analysis.comparison.scheme import _load_analysis_config
+    from population_synthetic._paths import PROJECT_ROOT
+
+    path = PROJECT_ROOT / "config" / "analysis" / "comparison" / "scb.json"
+    (_, _, _, grounded_pairs, combination_checks, c2st_config) = _load_analysis_config(path)
+    assert any(gp.grounded for gp in grounded_pairs)
+    assert any(not gp.grounded for gp in grounded_pairs)
+    # education x employment is the documented forced-independence (non-grounded) pair.
+    by_pair = {gp.pair: gp.grounded for gp in grounded_pairs}
+    assert by_pair[("education_level", "employment_status")] is False
+    assert by_pair[("age_group", "biological_sex")] is True
+    assert combination_checks and combination_checks[0].k == 3
+    assert c2st_config is not None and c2st_config.folds == 5

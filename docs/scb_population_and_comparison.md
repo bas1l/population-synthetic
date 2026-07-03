@@ -155,6 +155,15 @@ education_level            0.201        0.006      0.042      0.040
 
 **Individual coherence:** what percentage of population B individuals have plausible (age, education, employment) combinations under population A's joint distribution. Flagged individuals have probability < 0.001. Score above 90% indicates good demographic realism.
 
+**Multivariate fidelity (`multivariate` block in the JSON report):** four secondary joint-structure metrics, reported alongside the marginals but not part of the leaderboard ranking:
+
+- **C2ST** (classifier two-sample test): mean cross-validated ROC-AUC of a classifier trained to tell the two populations apart on all 15 one-hot-encoded attributes (0.5 = indistinguishable joint, 1.0 = trivially separable). The real population is subsampled to the synthetic size per fold to remove class-imbalance inflation, and a permutation test gives a p-value. Backend is scikit-learn (a gradient-boosted tree) when the optional `[analysis]` extra is installed, else a numpy/scipy MMD fallback; the `method` field records which ran.
+- **Association fidelity:** per-pair `|ΔV|` (bias-corrected Cramér's V difference) over all 105 attribute pairs, with `mean_abs_delta_v` and `frobenius_norm` summaries.
+- **Grounded joint TV:** per-pair joint total-variation distance, each pair labelled `grounded` (a real API conditional cross-tab) or not, from the SCB distribution audit (`scb_population_distribution_analysis.md`).
+- **Combination plausibility:** the k-way generalisation of individual coherence; the fraction of B individuals whose configured attribute tuple is impossible (zero real support) or rare (below threshold).
+
+Extra artifacts: a `{run}_association.csv` (one row per attribute pair), a per-comparison `{prefix}_association_heatmap.png` (from `compare_pipeline_to_scb.py`), and a cross-combo `{country}_c2st_vs_tv.png` scatter (from `compare_model_performance.py`).
+
 ## Attribute Categories
 
 All populations use the same schema labels for comparability:
