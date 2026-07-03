@@ -1,0 +1,1176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparison Metrics — Field Guide</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  img, svg { max-width: 100%; }
+  :root {
+    --bg: #f2f5f4;
+    --surface: #ffffff;
+    --surface-2: #eef2f0;
+    --ink: #16211f;
+    --muted: #5a6a66;
+    --line: #d7e0dc;
+    --line-strong: #c2cec9;
+    --real: #1f6f78;      /* Population A — real / reference */
+    --syn:  #c1732b;      /* Population B — synthetic */
+    --real-soft: rgba(31,111,120,0.14);
+    --syn-soft: rgba(193,115,43,0.16);
+    --good: #2f8f5b;
+    --bad:  #c2452f;
+    --warn: #cf9a2b;
+    --accent: #1f6f78;
+    --shadow: 0 1px 2px rgba(20,40,36,.05), 0 8px 24px -12px rgba(20,40,36,.18);
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", "SF Mono", "Consolas", monospace;
+    --measure: 68ch;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1513;
+      --surface: #151e1c;
+      --surface-2: #1b2523;
+      --ink: #e7efec;
+      --muted: #97a7a2;
+      --line: #26322f;
+      --line-strong: #33423e;
+      --real: #4fb6c0;
+      --syn:  #e2a052;
+      --real-soft: rgba(79,182,192,0.16);
+      --syn-soft: rgba(226,160,82,0.18);
+      --good: #56c78a;
+      --bad:  #ea7359;
+      --warn: #e0b74e;
+      --accent: #4fb6c0;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f2f5f4; --surface: #ffffff; --surface-2: #eef2f0; --ink: #16211f;
+    --muted: #5a6a66; --line: #d7e0dc; --line-strong: #c2cec9;
+    --real: #1f6f78; --syn: #c1732b; --real-soft: rgba(31,111,120,0.14);
+    --syn-soft: rgba(193,115,43,0.16); --good: #2f8f5b; --bad: #c2452f; --warn: #cf9a2b;
+    --accent: #1f6f78; --shadow: 0 1px 2px rgba(20,40,36,.05), 0 8px 24px -12px rgba(20,40,36,.18);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1513; --surface: #151e1c; --surface-2: #1b2523; --ink: #e7efec;
+    --muted: #97a7a2; --line: #26322f; --line-strong: #33423e;
+    --real: #4fb6c0; --syn: #e2a052; --real-soft: rgba(79,182,192,0.16);
+    --syn-soft: rgba(226,160,82,0.18); --good: #56c78a; --bad: #ea7359; --warn: #e0b74e;
+    --accent: #4fb6c0; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---------- Header ---------- */
+  header.masthead {
+    max-width: 940px; margin: 0 auto; padding: 64px 24px 34px;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12.5px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 18px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 600; font-size: clamp(2.1rem, 5vw, 3.1rem);
+    line-height: 1.08; letter-spacing: -0.015em; margin: 0 0 18px;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: 1.18rem; color: var(--muted); max-width: var(--measure);
+    margin: 0; line-height: 1.55;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------- A/B legend key ---------- */
+  .keycard {
+    margin: 34px auto 0; max-width: 940px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden; background: var(--surface); box-shadow: var(--shadow);
+  }
+  .keycard > div { padding: 20px 24px; }
+  .keycard > div:first-child { border-right: 1px solid var(--line); }
+  .key-h { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; }
+  .swatch { width: 16px; height: 16px; border-radius: 5px; flex: none; }
+  .swatch.a { background: var(--real); }
+  .swatch.b { background: var(--syn); }
+  .keycard p { margin: 7px 0 0; color: var(--muted); font-size: .95rem; line-height: 1.5; }
+  .keycard code { font-family: var(--font-mono); font-size: .86em; color: var(--ink); }
+
+  /* ---------- Contents nav ---------- */
+  nav.toc {
+    max-width: 940px; margin: 26px auto 0; padding: 22px 24px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface-2);
+  }
+  nav.toc h2 {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 14px; font-weight: 600;
+  }
+  .toc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 20px 28px; }
+  .toc-grid ol { margin: 0; padding: 0; list-style: none; }
+  .toc-fam {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 8px;
+  }
+  .toc-grid li { margin: 0 0 5px; }
+  .toc-grid a { color: var(--ink); text-decoration: none; font-size: .95rem; }
+  .toc-grid a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .toc-grid a .fld { font-family: var(--font-mono); font-size: .82em; color: var(--muted); }
+
+  /* ---------- Family band ---------- */
+  .family {
+    max-width: 940px; margin: 72px auto 0; padding: 0;
+    display: flex; align-items: baseline; gap: 18px;
+  }
+  .family .num {
+    font-family: var(--font-display); font-size: 2.4rem; font-weight: 600;
+    color: var(--accent); line-height: 1; letter-spacing: -.02em;
+  }
+  .family .txt h2 {
+    font-family: var(--font-display); font-size: 1.9rem; font-weight: 600;
+    margin: 0 0 4px; letter-spacing: -.01em;
+  }
+  .family .txt p { margin: 0; color: var(--muted); font-size: 1rem; max-width: var(--measure); }
+  .family-rule { max-width: 940px; margin: 18px auto 0; border: 0; border-top: 1px solid var(--line-strong); }
+
+  /* ---------- Metric card ---------- */
+  .metric {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    margin: 30px 0 0; padding: 30px 32px 32px; scroll-margin-top: 24px;
+  }
+  .metric-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px; margin-bottom: 4px; }
+  .metric-head h3 {
+    font-family: var(--font-display); font-size: 1.5rem; font-weight: 600;
+    margin: 0; letter-spacing: -.01em;
+  }
+  .field {
+    font-family: var(--font-mono); font-size: .8rem; color: var(--accent);
+    background: var(--surface-2); border: 1px solid var(--line);
+    padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .metric p { max-width: var(--measure); }
+  .metric p:first-of-type { margin-top: 14px; }
+  .label-line { font-weight: 600; color: var(--ink); }
+
+  .body-prose { }
+  .body-prose p { margin: 14px 0; }
+  .metric strong { font-weight: 600; }
+  code {
+    font-family: var(--font-mono); font-size: .88em;
+    background: var(--surface-2); padding: .1em .4em; border-radius: 5px;
+    border: 1px solid var(--line);
+  }
+  .formula {
+    font-family: var(--font-mono); font-size: .92rem; line-height: 1.5;
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px; border-radius: 8px; margin: 16px 0;
+    overflow-x: auto; white-space: pre-wrap;
+  }
+
+  /* readout chips */
+  .readout { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 6px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: .9rem; padding: 6px 12px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--surface-2);
+  }
+  .chip b { font-family: var(--font-mono); font-weight: 600; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .dot.good { background: var(--good); }
+  .dot.bad { background: var(--bad); }
+  .dot.warn { background: var(--warn); }
+
+  /* ---------- Visual figure ---------- */
+  figure.viz {
+    margin: 22px 0 4px; padding: 20px 20px 14px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  figure.viz .plot-wrap { overflow-x: auto; }
+  figure.viz svg { display: block; width: 100%; height: auto; max-width: 640px; margin: 0 auto; }
+  figcaption {
+    font-size: .85rem; color: var(--muted); margin-top: 12px;
+    text-align: center; line-height: 1.5; max-width: 560px; margin-left: auto; margin-right: auto;
+  }
+  figcaption b { color: var(--ink); font-family: var(--font-mono); }
+
+  /* svg shared */
+  .viz text { font-family: var(--font-body); fill: var(--ink); }
+  .ax { fill: var(--muted); font-size: 12px; }
+  .axmono { font-family: var(--font-mono); }
+  .grid { stroke: var(--line); stroke-width: 1; }
+  .baseline { stroke: var(--line-strong); stroke-width: 1.5; }
+  .barA { fill: var(--real); }
+  .barB { fill: var(--syn); }
+  .vlabel { font-size: 12px; font-family: var(--font-mono); font-weight: 600; }
+  .catlabel { font-size: 12.5px; fill: var(--ink); }
+  .mini-legend { display:flex; justify-content:center; gap:22px; margin-top:10px; flex-wrap: wrap; }
+  .mini-legend span { display:inline-flex; align-items:center; gap:7px; font-size:.82rem; color: var(--muted); }
+  .mini-legend i { width:13px; height:13px; border-radius:4px; display:inline-block; }
+
+  .callout {
+    margin: 18px 0 0; padding: 14px 18px; border-radius: 10px;
+    background: var(--real-soft); border: 1px solid var(--line);
+    font-size: .95rem; max-width: var(--measure);
+  }
+  .callout.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); }
+  .callout .k { font-weight: 700; }
+
+  /* ---------- Cheat sheet table ---------- */
+  .sheet-wrap { overflow-x: auto; margin-top: 24px; border: 1px solid var(--line); border-radius: 12px; }
+  table.sheet { border-collapse: collapse; width: 100%; font-size: .92rem; background: var(--surface); min-width: 640px; }
+  table.sheet th, table.sheet td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line); }
+  table.sheet thead th {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600;
+    background: var(--surface-2); position: sticky; top: 0;
+  }
+  table.sheet tbody tr:last-child td { border-bottom: 0; }
+  table.sheet .m { font-family: var(--font-mono); font-size: .86em; }
+  table.sheet .fam-tag {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .dir { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+  .dir.better { color: var(--good); }
+  .dir.worse { color: var(--bad); }
+  .num-c { font-variant-numeric: tabular-nums; }
+
+  .trap {
+    margin: 26px 0 0; padding: 20px 24px; border-radius: 12px;
+    background: color-mix(in srgb, var(--bad) 9%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--bad) 30%, var(--line));
+  }
+  .trap h3 { margin: 0 0 8px; font-family: var(--font-display); font-size: 1.15rem; }
+  .trap p { margin: 0; max-width: var(--measure); }
+
+  .code-index {
+    margin-top: 26px; padding: 22px 24px; background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 12px;
+  }
+  .code-index h3 { font-family: var(--font-display); margin: 0 0 12px; font-size: 1.2rem; }
+  .code-index ul { margin: 0; padding-left: 0; list-style: none; }
+  .code-index li { padding: 5px 0; border-bottom: 1px dashed var(--line); font-size: .92rem; }
+  .code-index li:last-child { border-bottom: 0; }
+  .code-index .what { color: var(--ink); }
+  .code-index .where { font-family: var(--font-mono); font-size: .82em; color: var(--accent); }
+
+  a.backlink { color: var(--accent); }
+  footer.end {
+    max-width: 940px; margin: 60px auto 0; padding: 26px 24px 0;
+    border-top: 1px solid var(--line); color: var(--muted); font-size: .88rem;
+  }
+  footer.end code { background: none; border: 0; padding: 0; }
+
+  @media (max-width: 640px) {
+    body { font-size: 16px; }
+    .keycard { grid-template-columns: 1fr; }
+    .keycard > div:first-child { border-right: 0; border-bottom: 1px solid var(--line); }
+    .metric { padding: 24px 20px 26px; }
+    .family { flex-direction: row; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    a { transition: color .15s ease; }
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <p class="eyebrow">Population-Synthetic · Comparison Pipeline</p>
+  <h1>Comparison metrics: a field guide</h1>
+  <p class="lede">
+    Every statistical metric the pipeline computes when it scores a <strong>synthetic
+    population</strong> against a <strong>real one</strong> — each with a plain-language
+    description, the formula in words, one clean worked example, and a purpose-built visual.
+    No prior knowledge of the codebase assumed.
+  </p>
+
+  <div class="keycard">
+    <div>
+      <div class="key-h"><span class="swatch a"></span> Population A — real / reference</div>
+      <p>The ground truth. E.g. the SCB-sampled Swedish population drawn from national
+         statistics. Teal bars everywhere below.</p>
+    </div>
+    <div>
+      <div class="key-h"><span class="swatch b"></span> Population B — synthetic</div>
+      <p>The population under test. E.g. LLM-generated personas. Ochre bars everywhere below.
+         Every metric asks: <em>how well does B reproduce A?</em></p>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <h2>The four families of question</h2>
+    <div class="toc-grid">
+      <ol>
+        <p class="toc-fam">1 · Marginal (univariate)</p>
+        <li><a href="#tv">Total variation distance <span class="fld">tv_distance</span></a></li>
+        <li><a href="#maxdiff">Max abs. proportion diff <span class="fld">max_diff</span></a></li>
+        <li><a href="#kl">KL divergence <span class="fld">kl_divergence</span></a></li>
+        <li><a href="#chisq">Chi-squared GoF <span class="fld">chi_sq_p</span></a></li>
+      </ol>
+      <ol>
+        <p class="toc-fam">2 · Joint (legacy)</p>
+        <li><a href="#joint">Joint chi-squared <span class="fld">joint_chi_sq</span></a></li>
+        <p class="toc-fam" style="margin-top:16px">3 · Coherence (legacy)</p>
+        <li><a href="#coherence">Coherence score <span class="fld">coherence.score</span></a></li>
+      </ol>
+      <ol>
+        <p class="toc-fam">4 · Multivariate / joint fidelity</p>
+        <li><a href="#c2st">C2ST classifier test <span class="fld">c2st</span></a></li>
+        <li><a href="#assoc">Cramér's V delta <span class="fld">association</span></a></li>
+        <li><a href="#jointtv">Grounded joint TV <span class="fld">joint_fidelity</span></a></li>
+        <li><a href="#kway">K-way plausibility <span class="fld">combination…</span></a></li>
+      </ol>
+    </div>
+  </nav>
+</header>
+
+<div class="wrap">
+
+<p style="max-width:var(--measure); color:var(--muted); margin:40px 0 0;">
+  A quick mental model: families 1–3 ask increasingly demanding questions, and family 4 adds
+  the strongest test of all — <em>can a classifier tell the two populations apart?</em>
+  The attribute list, allowed categories, and which pairs get the joint tests all live in the
+  per-country <strong>comparison scheme config</strong> — never in code.
+</p>
+
+<!-- ============ FAMILY 1 ============ -->
+<div class="family" id="fam1">
+  <div class="num">1</div>
+  <div class="txt">
+    <h2>Marginal metrics</h2>
+    <p>One attribute at a time: does each field have the right distribution <em>on its own?</em>
+       Think of it as comparing two bar charts.</p>
+  </div>
+</div>
+<hr class="family-rule">
+
+<p style="max-width:var(--measure); margin-top:22px;">
+  Every metric in this family scores <strong>one attribute</strong> by aggregating over
+  <strong>that attribute's own categories</strong> — the bars of its bar chart. The running
+  example throughout is the <code>education_level</code> distribution:
+</p>
+
+<figure class="viz" style="max-width:var(--measure);">
+  <div class="plot-wrap">
+  <svg viewBox="0 0 560 100" role="img" aria-label="Education level: Primary A20 B10, Secondary A50 B55, Tertiary A30 B35">
+    <!-- compact side-by-side table-as-figure -->
+    <text x="20" y="22" class="ax axmono">CATEGORY</text>
+    <text x="250" y="22" class="ax axmono" text-anchor="middle">REAL A</text>
+    <text x="400" y="22" class="ax axmono" text-anchor="middle">SYNTH B</text>
+    <line x1="20" y1="32" x2="540" y2="32" class="grid"/>
+    <text x="20" y="54" class="catlabel">Primary</text>
+    <rect x="180" y="44" width="140" height="12" rx="3" fill="var(--real-soft)"/>
+    <rect x="180" y="44" width="28" height="12" rx="3" class="barA"/>
+    <text x="250" y="54" class="vlabel" text-anchor="middle" fill="var(--ink)">20%</text>
+    <rect x="330" y="44" width="140" height="12" rx="3" fill="var(--syn-soft)"/>
+    <rect x="330" y="44" width="14" height="12" rx="3" class="barB"/>
+    <text x="400" y="54" class="vlabel" text-anchor="middle" fill="var(--ink)">10%</text>
+    <text x="20" y="76" class="catlabel">Secondary</text>
+    <rect x="180" y="66" width="140" height="12" rx="3" fill="var(--real-soft)"/>
+    <rect x="180" y="66" width="70" height="12" rx="3" class="barA"/>
+    <text x="250" y="76" class="vlabel" text-anchor="middle" fill="var(--ink)">50%</text>
+    <rect x="330" y="66" width="140" height="12" rx="3" fill="var(--syn-soft)"/>
+    <rect x="330" y="66" width="77" height="12" rx="3" class="barB"/>
+    <text x="400" y="76" class="vlabel" text-anchor="middle" fill="var(--ink)">55%</text>
+    <text x="20" y="98" class="catlabel">Tertiary</text>
+    <rect x="180" y="88" width="140" height="12" rx="3" fill="var(--real-soft)"/>
+    <rect x="180" y="88" width="42" height="12" rx="3" class="barA"/>
+    <text x="250" y="98" class="vlabel" text-anchor="middle" fill="var(--ink)">30%</text>
+    <rect x="330" y="88" width="140" height="12" rx="3" fill="var(--syn-soft)"/>
+    <rect x="330" y="88" width="49" height="12" rx="3" class="barB"/>
+    <text x="400" y="98" class="vlabel" text-anchor="middle" fill="var(--ink)">35%</text>
+  </svg>
+  </div>
+  <figcaption>The one distribution behind §1a–1d. B has too few <b>Primary</b>, slightly too many
+    Secondary and Tertiary.</figcaption>
+</figure>
+
+<!-- 1a TV -->
+<section class="metric" id="tv">
+  <div class="metric-head">
+    <h3>1a · Total Variation distance</h3>
+    <span class="field">tv_distance</span>
+  </div>
+  <div class="body-prose">
+    <p><span class="label-line">What it measures.</span> The single most intuitive "how
+      different are these two bar charts" number — the total probability mass you would have to
+      <em>move</em> to turn one distribution into the other.</p>
+    <p><span class="label-line">Formula in words.</span> Take the absolute difference in
+      proportion for each category, add them up, and halve the total.</p>
+    <div class="formula">TV = ½ · Σ |proportion_A(category) − proportion_B(category)|</div>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 300" role="img" aria-label="Grouped bar chart of education distribution with the moved mass highlighted">
+        <!-- gridlines 0,15,30,45,60 -->
+        <g class="ax axmono" text-anchor="end">
+          <text x="52" y="214">0</text><text x="52" y="169">15</text>
+          <text x="52" y="124">30</text><text x="52" y="79">45</text><text x="52" y="34">60</text>
+        </g>
+        <text x="18" y="125" class="ax axmono" transform="rotate(-90 18 125)" text-anchor="middle">percent</text>
+        <line x1="60" y1="210" x2="540" y2="210" class="grid"/>
+        <line x1="60" y1="165" x2="540" y2="165" class="grid"/>
+        <line x1="60" y1="120" x2="540" y2="120" class="grid"/>
+        <line x1="60" y1="75"  x2="540" y2="75"  class="grid"/>
+        <line x1="60" y1="30"  x2="540" y2="30"  class="grid"/>
+        <line x1="60" y1="210" x2="540" y2="210" class="baseline"/>
+        <!-- Primary -->
+        <rect x="97"  y="150" width="34" height="60"  rx="3" class="barA"/>
+        <rect x="139" y="180" width="34" height="30"  rx="3" class="barB"/>
+        <text x="114" y="144" class="vlabel" text-anchor="middle">20</text>
+        <text x="156" y="174" class="vlabel" text-anchor="middle">10</text>
+        <text x="135" y="234" class="catlabel" text-anchor="middle">Primary</text>
+        <!-- Secondary -->
+        <rect x="247" y="60"  width="34" height="150" rx="3" class="barA"/>
+        <rect x="289" y="45"  width="34" height="165" rx="3" class="barB"/>
+        <text x="264" y="54" class="vlabel" text-anchor="middle">50</text>
+        <text x="306" y="39" class="vlabel" text-anchor="middle">55</text>
+        <text x="285" y="234" class="catlabel" text-anchor="middle">Secondary</text>
+        <!-- Tertiary -->
+        <rect x="397" y="120" width="34" height="90"  rx="3" class="barA"/>
+        <rect x="439" y="105" width="34" height="105" rx="3" class="barB"/>
+        <text x="414" y="114" class="vlabel" text-anchor="middle">30</text>
+        <text x="456" y="99"  class="vlabel" text-anchor="middle">35</text>
+        <text x="435" y="234" class="catlabel" text-anchor="middle">Tertiary</text>
+        <!-- moved-mass strip -->
+        <text x="60" y="266" class="ax axmono">MASS MOVED  = ½ (10 + 5 + 5) pp</text>
+        <rect x="300" y="256" width="180" height="14" rx="4" fill="var(--line)"/>
+        <rect x="300" y="256" width="90"  height="14" rx="4" fill="var(--accent)"/>
+        <text x="490" y="267" class="vlabel" fill="var(--accent)">0.10</text>
+      </svg>
+      </div>
+      <div class="mini-legend"><span><i style="background:var(--real)"></i>Real A</span><span><i style="background:var(--syn)"></i>Synthetic B</span></div>
+      <figcaption>Per-category gaps are <b>0.10</b>, 0.05, 0.05 → sum 0.20, halved →
+        <b>TV = 0.10</b>. Ten percent of the mass sits in the wrong bar.</figcaption>
+    </figure>
+
+    <p><span class="label-line">How to read it.</span> Ranges from <strong>0 (identical)</strong>
+      to <strong>1 (no overlap)</strong>; lower is better. This is the metric behind the
+      <strong>TV-similarity radar</strong> — plotted as <code>similarity = 1 − TV</code>, so
+      higher is better on the radar:</p>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 300 300" role="img" aria-label="Radar chart of TV-similarity across six attributes">
+        <!-- grid hexagons -->
+        <polygon points="150,40 245.26,95 245.26,205 150,260 54.74,205 54.74,95" fill="none" class="grid"/>
+        <polygon points="150,95 197.63,122.5 197.63,177.5 150,205 102.37,177.5 102.37,122.5" fill="none" class="grid"/>
+        <!-- axes -->
+        <g class="grid">
+          <line x1="150" y1="150" x2="150" y2="40"/>
+          <line x1="150" y1="150" x2="245.26" y2="95"/>
+          <line x1="150" y1="150" x2="245.26" y2="205"/>
+          <line x1="150" y1="150" x2="150" y2="260"/>
+          <line x1="150" y1="150" x2="54.74" y2="205"/>
+          <line x1="150" y1="150" x2="54.74" y2="95"/>
+        </g>
+        <!-- data polygon (similarity values) -->
+        <polygon points="150,51 243.4,96.1 235.7,199.5 150,243.5 71.9,195.1 61.4,98.9"
+                 fill="var(--real-soft)" stroke="var(--real)" stroke-width="2"/>
+        <g fill="var(--real)"><circle cx="150" cy="51" r="3"/><circle cx="243.4" cy="96.1" r="3"/>
+          <circle cx="235.7" cy="199.5" r="3"/><circle cx="150" cy="243.5" r="3"/>
+          <circle cx="71.9" cy="195.1" r="3"/><circle cx="61.4" cy="98.9" r="3"/></g>
+        <!-- axis labels -->
+        <g class="ax" text-anchor="middle">
+          <text x="150" y="30">age_group</text>
+          <text x="270" y="92">sex</text>
+          <text x="272" y="212">education</text>
+          <text x="150" y="278">employment</text>
+          <text x="28" y="212">income</text>
+          <text x="30" y="92">marital</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption>Each spoke is one attribute's <b>1 − TV</b>. The whole demographic profile at a
+        glance; a dent points straight to the weakest field.</figcaption>
+    </figure>
+
+    <div class="callout">
+      <span class="k">Deep dive — why halve the sum?</span> Without the ½ you double-count the
+      displaced mass (every unit that leaves one category reappears in another) and TV loses its
+      clean 0-to-1 scale. See <a class="backlink" href="comparison-metrics/tv-distance-half-factor.md">the ½-factor note</a>.
+    </div>
+  </div>
+</section>
+
+<!-- 1b max_diff -->
+<section class="metric" id="maxdiff">
+  <div class="metric-head">
+    <h3>1b · Max absolute proportion difference</h3>
+    <span class="field">max_diff</span>
+  </div>
+  <div class="body-prose">
+    <p><span class="label-line">What it measures.</span> The single worst category — the largest
+      gap between A and B in any one bar. Where TV aggregates error across all categories,
+      <code>max_diff</code> reports the biggest single one.</p>
+    <div class="formula">max_diff = max over categories of |proportion_A − proportion_B|</div>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 240" role="img" aria-label="Per-category absolute gap chart, Primary highlighted as the maximum">
+        <g class="ax axmono" text-anchor="end">
+          <text x="52" y="194">0</text><text x="52" y="134">.05</text><text x="52" y="74">.10</text>
+        </g>
+        <line x1="60" y1="190" x2="540" y2="190" class="baseline"/>
+        <line x1="60" y1="130" x2="540" y2="130" class="grid"/>
+        <line x1="60" y1="70"  x2="540" y2="70"  class="grid"/>
+        <!-- gap bars: 0.10, 0.05, 0.05 ; scale 1200px/unit → .10=120px -->
+        <rect x="110" y="70"  width="70" height="120" rx="4" fill="var(--syn)"/>
+        <rect x="98"  y="58"  width="94" height="138" rx="6" fill="none" stroke="var(--bad)" stroke-width="2" stroke-dasharray="4 3"/>
+        <text x="145" y="60" class="vlabel" text-anchor="middle" fill="var(--bad)">0.10 ◀ max</text>
+        <text x="145" y="212" class="catlabel" text-anchor="middle">Primary</text>
+        <rect x="270" y="130" width="70" height="60" rx="4" fill="var(--syn)" opacity=".55"/>
+        <text x="305" y="122" class="vlabel" text-anchor="middle">0.05</text>
+        <text x="305" y="212" class="catlabel" text-anchor="middle">Secondary</text>
+        <rect x="430" y="130" width="70" height="60" rx="4" fill="var(--syn)" opacity=".55"/>
+        <text x="465" y="122" class="vlabel" text-anchor="middle">0.05</text>
+        <text x="465" y="212" class="catlabel" text-anchor="middle">Tertiary</text>
+      </svg>
+      </div>
+      <figcaption>Bars are the raw <b>|A − B|</b> gap per category. <b>max_diff = 0.10</b> at
+        Primary — the worst bar, even when TV looks modest.</figcaption>
+    </figure>
+
+    <p><span class="label-line">How to read it.</span> 0 to 1, lower is better. Its job is to
+      catch "mostly fine but one category is badly wrong" — a case TV can average away.</p>
+  </div>
+</section>
+
+<!-- 1c KL -->
+<section class="metric" id="kl">
+  <div class="metric-head">
+    <h3>1c · KL divergence</h3>
+    <span class="field">kl_divergence</span>
+  </div>
+  <div class="body-prose">
+    <p><span class="label-line">What it measures.</span> An information-theoretic "surprise" —
+      how many extra <strong>bits</strong> you waste, on average, encoding the synthetic
+      distribution with a code built for the real one. It punishes B for putting probability
+      where A has almost none more harshly than TV does.</p>
+    <div class="formula">D_KL(B ‖ A) = Σ p_B(c) · log₂( p_B(c) / p_A(c) )      (Laplace-smoothed)</div>
+    <p>Smoothing (add 1 to every count) means an empty category never causes a divide-by-zero or
+      an infinite result.</p>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 240" role="img" aria-label="Per-category contribution to KL divergence in bits, diverging around zero">
+        <!-- zero line at y=120 -->
+        <line x1="60" y1="120" x2="540" y2="120" class="baseline"/>
+        <text x="546" y="124" class="ax axmono">0 bits</text>
+        <line x1="60" y1="60"  x2="540" y2="60"  class="grid"/>
+        <line x1="60" y1="180" x2="540" y2="180" class="grid"/>
+        <text x="52" y="64"  class="ax axmono" text-anchor="end">+.08</text>
+        <text x="52" y="184" class="ax axmono" text-anchor="end">−.08</text>
+        <!-- Primary: -0.10 → below. scale 750px/unit → .10=75px -->
+        <rect x="110" y="120" width="70" height="75" rx="4" fill="var(--real)" opacity=".55"/>
+        <text x="145" y="212" class="vlabel" text-anchor="middle">−0.10</text>
+        <text x="145" y="232" class="catlabel" text-anchor="middle">Primary</text>
+        <!-- Secondary +0.076 → up 57px -->
+        <rect x="270" y="63" width="70" height="57" rx="4" fill="var(--syn)"/>
+        <text x="305" y="55" class="vlabel" text-anchor="middle">+0.076</text>
+        <text x="305" y="232" class="catlabel" text-anchor="middle">Secondary</text>
+        <!-- Tertiary +0.078 → up 58px -->
+        <rect x="430" y="62" width="70" height="58" rx="4" fill="var(--syn)"/>
+        <text x="465" y="54" class="vlabel" text-anchor="middle">+0.078</text>
+        <text x="465" y="232" class="catlabel" text-anchor="middle">Tertiary</text>
+      </svg>
+      </div>
+      <figcaption>Each category's <b>p_B · log₂(p_B/p_A)</b>. Terms can be negative (Primary, where
+        B under-shoots); the signed sum lands near <b>≈ 0.05 bits</b> — small, because the
+        distributions are close (smoothing pulls it further toward ~0.03).</figcaption>
+    </figure>
+
+    <p><span class="label-line">How to read it.</span> <strong>0 = identical</strong>; no upper
+      bound, higher is worse. It is <em>asymmetric</em> — the code computes B relative to A.
+      Best for ranking models, not as an absolute pass/fail.</p>
+  </div>
+</section>
+
+<!-- 1d chi sq -->
+<section class="metric" id="chisq">
+  <div class="metric-head">
+    <h3>1d · Chi-squared goodness-of-fit p-value</h3>
+    <span class="field">chi_sq_p</span>
+  </div>
+  <div class="body-prose">
+    <p><span class="label-line">What it measures.</span> A formal hypothesis test: <em>could
+      B's category counts plausibly have been drawn from A's distribution, or is the gap too big
+      to be chance?</em> It accounts for <strong>sample size</strong> — the same percentage gap
+      is more damning with 1,000 people than with 10.</p>
+    <p><span class="label-line">How it works.</span> Scale A's proportions up to B's sample size
+      to get <em>expected</em> counts, compare against B's <em>observed</em> counts via
+      <code>Σ (obs − exp)² / exp</code>, and convert to a p-value.</p>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 260" role="img" aria-label="Expected versus observed counts for n=1000, showing the Primary shortfall">
+        <g class="ax axmono" text-anchor="end">
+          <text x="52" y="214">0</text><text x="52" y="150">300</text><text x="52" y="86">600</text>
+        </g>
+        <text x="18" y="125" class="ax axmono" transform="rotate(-90 18 125)" text-anchor="middle">count (n = 1000)</text>
+        <line x1="60" y1="210" x2="540" y2="210" class="baseline"/>
+        <line x1="60" y1="146" x2="540" y2="146" class="grid"/>
+        <line x1="60" y1="82"  x2="540" y2="82"  class="grid"/>
+        <!-- scale 0.213px/count → 600≈128px. baseline 210 -->
+        <!-- Primary exp200 obs100 -->
+        <rect x="97"  y="167" width="34" height="43"  rx="3" class="barA"/>
+        <rect x="139" y="189" width="34" height="21"  rx="3" class="barB"/>
+        <text x="114" y="161" class="vlabel" text-anchor="middle">200</text>
+        <text x="156" y="183" class="vlabel" text-anchor="middle">100</text>
+        <line x1="97" y1="167" x2="173" y2="167" stroke="var(--bad)" stroke-width="1.5" stroke-dasharray="3 3"/>
+        <text x="135" y="234" class="catlabel" text-anchor="middle">Primary</text>
+        <!-- Secondary exp500 obs550 -->
+        <rect x="247" y="103" width="34" height="107" rx="3" class="barA"/>
+        <rect x="289" y="92"  width="34" height="118" rx="3" class="barB"/>
+        <text x="264" y="97" class="vlabel" text-anchor="middle">500</text>
+        <text x="306" y="86" class="vlabel" text-anchor="middle">550</text>
+        <text x="285" y="234" class="catlabel" text-anchor="middle">Secondary</text>
+        <!-- Tertiary exp300 obs350 -->
+        <rect x="397" y="146" width="34" height="64"  rx="3" class="barA"/>
+        <rect x="439" y="135" width="34" height="75"  rx="3" class="barB"/>
+        <text x="414" y="140" class="vlabel" text-anchor="middle">300</text>
+        <text x="456" y="129" class="vlabel" text-anchor="middle">350</text>
+        <text x="435" y="234" class="catlabel" text-anchor="middle">Tertiary</text>
+      </svg>
+      </div>
+      <div class="mini-legend"><span><i style="background:var(--real)"></i>Expected (from A)</span><span><i style="background:var(--syn)"></i>Observed (B)</span></div>
+      <figcaption>The Primary shortfall (100 observed vs <b>200</b> expected) dominates the
+        statistic.</figcaption>
+    </figure>
+
+    <div class="readout">
+      <span class="chip"><span class="dot bad"></span> Result: <b>χ² large → p &lt; 0.001</b></span>
+      <span class="chip">Flagged in the summary with a <b>*</b></span>
+    </div>
+
+    <p><span class="label-line">How to read it.</span> A p-value in [0, 1], and its direction is
+      the <em>opposite</em> of the distance metrics:</p>
+    <div class="readout">
+      <span class="chip"><span class="dot good"></span> High p (&gt; 0.05) → no significant difference → B matches A. Good.</span>
+      <span class="chip"><span class="dot bad"></span> Low p (&lt; 0.05) → significant divergence.</span>
+    </div>
+    <div class="callout warn">
+      <span class="k">⚠ Caveat.</span> With a tiny synthetic population (n &lt; 5) chi-squared is
+      unreliable and the report warns. And with very large n, even trivial differences read as
+      "significant" — so read <code>chi_sq_p</code> <em>alongside</em> TV, never instead of it.
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAMILY 2 ============ -->
+<div class="family" id="fam2">
+  <div class="num">2</div>
+  <div class="txt">
+    <h2>Joint distribution metric <span style="font-family:var(--font-body);font-size:1rem;color:var(--muted);font-weight:400">· legacy</span></h2>
+    <p>Do two attributes <em>relate to each other</em> the same way in both populations?</p>
+  </div>
+</div>
+<hr class="family-rule">
+
+<section class="metric" id="joint">
+  <div class="metric-head">
+    <h3>2a · Joint chi-squared p-value</h3>
+    <span class="field">joint_chi_sq</span>
+  </div>
+  <div class="body-prose">
+    <p><span class="label-line">What it measures.</span> The marginals check each attribute
+      alone. This checks whether <strong>two attributes co-vary</strong> the same way — e.g. is
+      the age × education <em>cross-tabulation</em> consistent between A and B? A model can get
+      every marginal perfect yet still pair young age with a doctorate too often; this is the
+      first test that catches it.</p>
+    <p><span class="label-line">How it works.</span> For each configured pair, build a
+      contingency table for A and for B, <strong>add them together</strong>, and run
+      <code>chi2_contingency</code> on the combined table.</p>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 250" role="img" aria-label="Two age-by-education cross-tabulation heatmaps for populations A and B">
+        <!-- Legend axis labels -->
+        <text x="150" y="20" text-anchor="middle" class="ax axmono" fill="var(--real)">POPULATION A · real</text>
+        <text x="410" y="20" text-anchor="middle" class="ax axmono" fill="var(--syn)">POPULATION B · synthetic</text>
+        <!-- generic 3x3 heatmaps: rows age (young/mid/old), cols edu (Pri/Sec/Ter) -->
+        <!-- A grid -->
+        <g font-size="11" class="axmono">
+          <text x="30" y="70" fill="var(--muted)">young</text>
+          <text x="30" y="115" fill="var(--muted)">mid</text>
+          <text x="30" y="160" fill="var(--muted)">old</text>
+          <text x="90"  y="195" fill="var(--muted)" text-anchor="middle">Pri</text>
+          <text x="135" y="195" fill="var(--muted)" text-anchor="middle">Sec</text>
+          <text x="180" y="195" fill="var(--muted)" text-anchor="middle">Ter</text>
+        </g>
+        <!-- A cells opacity encodes freq -->
+        <g stroke="var(--surface)" stroke-width="2">
+          <rect x="68" y="52" width="44" height="36" fill="var(--real)" opacity=".25"/>
+          <rect x="112" y="52" width="44" height="36" fill="var(--real)" opacity=".55"/>
+          <rect x="156" y="52" width="44" height="36" fill="var(--real)" opacity=".85"/>
+          <rect x="68" y="97" width="44" height="36" fill="var(--real)" opacity=".45"/>
+          <rect x="112" y="97" width="44" height="36" fill="var(--real)" opacity=".70"/>
+          <rect x="156" y="97" width="44" height="36" fill="var(--real)" opacity=".40"/>
+          <rect x="68" y="142" width="44" height="36" fill="var(--real)" opacity=".80"/>
+          <rect x="112" y="142" width="44" height="36" fill="var(--real)" opacity=".35"/>
+          <rect x="156" y="142" width="44" height="36" fill="var(--real)" opacity=".15"/>
+        </g>
+        <!-- B grid mirrored, slightly off in one cell -->
+        <g font-size="11" class="axmono">
+          <text x="350" y="195" fill="var(--muted)" text-anchor="middle">Pri</text>
+          <text x="395" y="195" fill="var(--muted)" text-anchor="middle">Sec</text>
+          <text x="440" y="195" fill="var(--muted)" text-anchor="middle">Ter</text>
+        </g>
+        <g stroke="var(--surface)" stroke-width="2">
+          <rect x="328" y="52" width="44" height="36" fill="var(--syn)" opacity=".20"/>
+          <rect x="372" y="52" width="44" height="36" fill="var(--syn)" opacity=".50"/>
+          <rect x="416" y="52" width="44" height="36" fill="var(--syn)" opacity=".90"/>
+          <rect x="328" y="97" width="44" height="36" fill="var(--syn)" opacity=".50"/>
+          <rect x="372" y="97" width="44" height="36" fill="var(--syn)" opacity=".65"/>
+          <rect x="416" y="97" width="44" height="36" fill="var(--syn)" opacity=".45"/>
+          <rect x="328" y="142" width="44" height="36" fill="var(--syn)" opacity=".55"/>
+          <rect x="372" y="142" width="44" height="36" fill="var(--syn)" opacity=".40"/>
+          <rect x="416" y="142" width="44" height="36" fill="var(--syn)" opacity=".30"/>
+        </g>
+        <rect x="416" y="142" width="44" height="36" fill="none" stroke="var(--bad)" stroke-width="2"/>
+        <text x="500" y="164" font-size="11" class="axmono" fill="var(--bad)">young·Ter</text>
+        <text x="500" y="177" font-size="11" class="axmono" fill="var(--bad)">over-coupled</text>
+      </svg>
+      </div>
+      <figcaption>Two age × education cross-tabs. B (ochre) puts too much mass in
+        <b>old · Tertiary</b> vs A — the co-variation the marginals can't see.</figcaption>
+    </figure>
+
+    <p><span class="label-line">How to read it.</span> A <strong>p-value</strong>; high = the
+      joint structure is consistent, low = significant difference in how the two attributes
+      co-vary.</p>
+    <div class="callout">
+      This legacy test pools A and B into one table, so it is a coarse "are these
+      distinguishable" signal. The newer <a class="backlink" href="#jointtv">grounded joint TV</a>
+      and <a class="backlink" href="#assoc">Cramér's V delta</a> give a finer, magnitude-based
+      read on the same idea.
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAMILY 3 ============ -->
+<div class="family" id="fam3">
+  <div class="num">3</div>
+  <div class="txt">
+    <h2>Individual coherence <span style="font-family:var(--font-body);font-size:1rem;color:var(--muted);font-weight:400">· legacy</span></h2>
+    <p>Are individual synthetic <em>people</em> realistic — not just the aggregates?</p>
+  </div>
+</div>
+<hr class="family-rule">
+
+<section class="metric" id="coherence">
+  <div class="metric-head">
+    <h3>3a · Coherence score</h3>
+    <span class="field">coherence.score</span>
+  </div>
+  <div class="body-prose">
+    <p><span class="label-line">What it measures.</span> A distribution can be right in aggregate
+      while still containing impossible individuals (a 7-year-old with a PhD and full-time job).
+      This scores the fraction of synthetic people whose <strong>combination</strong> of
+      attributes actually occurs in the real population.</p>
+    <p><span class="label-line">How it works.</span> From A, build a lookup of how often each
+      combination of the coherence attributes (e.g. <code>age × education × employment</code>)
+      occurs. For each synthetic individual, look up their exact combination: at or above a
+      probability threshold → <em>plausible</em>; otherwise → <em>flagged</em> for inspection.</p>
+    <div class="formula">score = n_plausible / n_total_B</div>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 250" role="img" aria-label="100-dot grid: 92 plausible synthetic people, 8 flagged">
+        <!-- 10x10 dot grid, 8 flagged -->
+        <g id="dots"></g>
+        <script type="application/json" id="dotcfg"></script>
+        <!-- dots drawn statically below -->
+        <!-- generated grid: cx=40+col*34, cy=20+row*22, r=7 ; flagged idx set -->
+        <!-- row0 --><g fill="var(--real)">
+        <circle cx="40" cy="20" r="7"/><circle cx="74" cy="20" r="7"/><circle cx="108" cy="20" r="7"/><circle cx="142" cy="20" r="7"/><circle cx="176" cy="20" r="7"/><circle cx="210" cy="20" r="7"/><circle cx="244" cy="20" r="7"/><circle cx="278" cy="20" r="7"/><circle cx="312" cy="20" r="7"/><circle cx="346" cy="20" r="7"/>
+        <circle cx="40" cy="42" r="7"/><circle cx="74" cy="42" r="7"/><circle cx="108" cy="42" r="7"/><circle cx="142" cy="42" r="7"/><circle cx="176" cy="42" r="7"/><circle cx="210" cy="42" r="7"/><circle cx="244" cy="42" r="7"/><circle cx="278" cy="42" r="7"/><circle cx="312" cy="42" r="7"/><circle cx="346" cy="42" r="7"/>
+        <circle cx="40" cy="64" r="7"/><circle cx="74" cy="64" r="7"/><circle cx="108" cy="64" r="7"/><circle cx="142" cy="64" r="7"/><circle cx="176" cy="64" r="7"/><circle cx="210" cy="64" r="7"/><circle cx="244" cy="64" r="7"/><circle cx="278" cy="64" r="7"/><circle cx="312" cy="64" r="7"/><circle cx="346" cy="64" r="7"/>
+        <circle cx="40" cy="86" r="7"/><circle cx="74" cy="86" r="7"/><circle cx="108" cy="86" r="7"/><circle cx="142" cy="86" r="7"/><circle cx="176" cy="86" r="7"/><circle cx="210" cy="86" r="7"/><circle cx="244" cy="86" r="7"/><circle cx="278" cy="86" r="7"/><circle cx="312" cy="86" r="7"/><circle cx="346" cy="86" r="7"/>
+        <circle cx="40" cy="108" r="7"/><circle cx="74" cy="108" r="7"/><circle cx="108" cy="108" r="7"/><circle cx="142" cy="108" r="7"/><circle cx="176" cy="108" r="7"/><circle cx="210" cy="108" r="7"/><circle cx="244" cy="108" r="7"/><circle cx="278" cy="108" r="7"/><circle cx="312" cy="108" r="7"/><circle cx="346" cy="108" r="7"/>
+        <circle cx="40" cy="130" r="7"/><circle cx="74" cy="130" r="7"/><circle cx="108" cy="130" r="7"/><circle cx="142" cy="130" r="7"/><circle cx="176" cy="130" r="7"/><circle cx="210" cy="130" r="7"/><circle cx="244" cy="130" r="7"/><circle cx="278" cy="130" r="7"/><circle cx="312" cy="130" r="7"/><circle cx="346" cy="130" r="7"/>
+        <circle cx="40" cy="152" r="7"/><circle cx="74" cy="152" r="7"/><circle cx="108" cy="152" r="7"/><circle cx="142" cy="152" r="7"/><circle cx="176" cy="152" r="7"/><circle cx="210" cy="152" r="7"/><circle cx="244" cy="152" r="7"/><circle cx="278" cy="152" r="7"/><circle cx="312" cy="152" r="7"/><circle cx="346" cy="152" r="7"/>
+        <circle cx="40" cy="174" r="7"/><circle cx="74" cy="174" r="7"/><circle cx="108" cy="174" r="7"/><circle cx="142" cy="174" r="7"/><circle cx="176" cy="174" r="7"/><circle cx="210" cy="174" r="7"/><circle cx="244" cy="174" r="7"/><circle cx="278" cy="174" r="7"/><circle cx="312" cy="174" r="7"/><circle cx="346" cy="174" r="7"/>
+        <circle cx="40" cy="196" r="7"/><circle cx="74" cy="196" r="7"/><circle cx="108" cy="196" r="7"/><circle cx="142" cy="196" r="7"/><circle cx="176" cy="196" r="7"/><circle cx="210" cy="196" r="7"/><circle cx="244" cy="196" r="7"/><circle cx="278" cy="196" r="7"/><circle cx="312" cy="196" r="7"/><circle cx="346" cy="196" r="7"/>
+        <circle cx="40" cy="218" r="7"/><circle cx="74" cy="218" r="7"/><circle cx="108" cy="218" r="7"/><circle cx="142" cy="218" r="7"/><circle cx="176" cy="218" r="7"/><circle cx="210" cy="218" r="7"/><circle cx="244" cy="218" r="7"/><circle cx="278" cy="218" r="7"/><circle cx="312" cy="218" r="7"/><circle cx="346" cy="218" r="7"/>
+        </g>
+        <!-- 8 flagged, overlaid -->
+        <g fill="var(--bad)">
+          <circle cx="176" cy="42" r="7"/><circle cx="312" cy="64" r="7"/><circle cx="74" cy="108" r="7"/>
+          <circle cx="278" cy="130" r="7"/><circle cx="142" cy="152" r="7"/><circle cx="346" cy="174" r="7"/>
+          <circle cx="40" cy="196" r="7"/><circle cx="210" cy="218" r="7"/>
+        </g>
+        <!-- readout -->
+        <text x="430" y="70" class="axmono" font-size="46" font-weight="700" fill="var(--good)">0.92</text>
+        <text x="430" y="96" class="ax axmono">coherence score</text>
+        <g font-size="12"><rect x="430" y="118" width="12" height="12" rx="3" fill="var(--real)"/>
+        <text x="450" y="128" class="ax">92 plausible</text>
+        <rect x="430" y="140" width="12" height="12" rx="3" fill="var(--bad)"/>
+        <text x="450" y="150" class="ax">8 flagged</text></g>
+      </svg>
+      </div>
+      <figcaption>Each dot is one synthetic person (per 100). <b>920 of 1,000</b> have
+        combinations well-supported in real data → score <b>0.92</b>; the other 80 land in the
+        flagged list.</figcaption>
+    </figure>
+
+    <p><span class="label-line">How to read it.</span> 0 to 1, <strong>higher is better</strong>
+      — a bluntly interpretable "what fraction of my synthetic people are demographically
+      possible."</p>
+  </div>
+</section>
+
+<!-- ============ FAMILY 4 ============ -->
+<div class="family" id="fam4">
+  <div class="num">4</div>
+  <div class="txt">
+    <h2>Multivariate / joint fidelity <span style="font-family:var(--font-body);font-size:1rem;color:var(--muted);font-weight:400">· new</span></h2>
+    <p>The deepest checks — whole-profile and pairwise structure, not just the shape of each field.</p>
+  </div>
+</div>
+<hr class="family-rule">
+
+<!-- 4a C2ST -->
+<section class="metric" id="c2st">
+  <div class="metric-head">
+    <h3>4a · C2ST — Classifier Two-Sample Test</h3>
+    <span class="field">c2st.auc / p_value</span>
+  </div>
+  <div class="body-prose">
+    <p><span class="label-line">What it measures.</span> The single strongest overall fidelity
+      test. If a machine-learning classifier <strong>cannot tell real profiles from synthetic
+      ones</strong>, the synthetic data is statistically indistinguishable from real — the gold
+      standard. If it separates them easily, something about the joint profile is off.</p>
+    <p><span class="label-line">How it works.</span> One-hot encode each whole profile; label
+      real <code>0</code> and synthetic <code>1</code>; <strong>balance the classes</strong> by
+      subsampling (real usually vastly outnumbers synthetic) and repeat; train with
+      cross-validation and measure <strong>ROC-AUC</strong>. Backend is cross-validated logistic
+      regression (scikit-learn) or a numpy nearest-centroid / linear-MMD surrogate; a permutation
+      test gives the p-value.</p>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 300" role="img" aria-label="ROC curves: a faithful synthetic near the diagonal, a poor one bowed to the corner">
+        <!-- axes box 60..300 x, 40..280 y -->
+        <line x1="60" y1="280" x2="60" y2="40" class="baseline"/>
+        <line x1="60" y1="280" x2="300" y2="280" class="baseline"/>
+        <text x="180" y="298" text-anchor="middle" class="ax">false-positive rate</text>
+        <text x="26" y="160" transform="rotate(-90 26 160)" text-anchor="middle" class="ax">true-positive rate</text>
+        <!-- diagonal -->
+        <line x1="60" y1="280" x2="300" y2="40" stroke="var(--line-strong)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="250" y="150" class="ax axmono" transform="rotate(-45 250 150)">chance · AUC 0.5</text>
+        <!-- good curve near diagonal (AUC 0.52) -->
+        <polyline points="60,280 120,210 180,150 240,93 300,40" fill="none" stroke="var(--real)" stroke-width="2.5"/>
+        <!-- bad curve bowed (AUC 0.95) -->
+        <polyline points="60,280 72,136 96,76 156,50 300,40" fill="none" stroke="var(--syn)" stroke-width="2.5"/>
+        <circle cx="180" cy="150" r="3.5" fill="var(--real)"/>
+        <circle cx="96" cy="76" r="3.5" fill="var(--syn)"/>
+
+        <!-- AUC scale on the right -->
+        <text x="360" y="60" class="ax axmono">AUC SCALE</text>
+        <rect x="360" y="72" width="170" height="12" rx="6" fill="none" stroke="var(--line-strong)"/>
+        <defs>
+          <linearGradient id="aucgrad" x1="0" x2="1">
+            <stop offset="0" stop-color="var(--good)"/>
+            <stop offset="1" stop-color="var(--bad)"/>
+          </linearGradient>
+        </defs>
+        <rect x="360" y="72" width="170" height="12" rx="6" fill="url(#aucgrad)" opacity=".85"/>
+        <text x="360" y="102" class="ax axmono">0.5</text>
+        <text x="530" y="102" class="ax axmono" text-anchor="end">1.0</text>
+        <!-- markers -->
+        <polygon points="367,66 373,66 370,72" fill="var(--real)"/>
+        <text x="360" y="126" class="axmono" font-size="12" fill="var(--real)">0.52 ▸ faithful</text>
+        <polygon points="520,66 526,66 523,72" fill="var(--syn)"/>
+        <text x="530" y="126" class="axmono" font-size="12" fill="var(--syn)" text-anchor="end">0.95 ▸ poor</text>
+
+        <!-- worked readouts -->
+        <g transform="translate(360,160)">
+          <rect x="0" y="0" width="170" height="54" rx="8" fill="var(--real-soft)" stroke="var(--line)"/>
+          <text x="12" y="22" font-size="12.5" fill="var(--ink)">AUC 0.52 · p 0.40</text>
+          <text x="12" y="42" font-size="11.5" fill="var(--good)">✓ indistinguishable</text>
+          <rect x="0" y="66" width="170" height="54" rx="8" fill="var(--syn-soft)" stroke="var(--line)"/>
+          <text x="12" y="88" font-size="12.5" fill="var(--ink)">AUC 0.95 · p 0.005</text>
+          <text x="12" y="108" font-size="11.5" fill="var(--bad)">✗ easily separated</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption>A curve hugging the diagonal (<b>AUC ≈ 0.5</b>) is the best outcome: the
+        classifier does no better than a coin flip. A bowed curve toward the top-left means the
+        joint distribution is clearly wrong.</figcaption>
+    </figure>
+
+    <p><span class="label-line">How to read it.</span> <strong>AUC ≈ 0.5</strong> →
+      indistinguishable (best); <strong>AUC → 1.0</strong> → trivially separable (worst). The
+      <code>p_value</code> tests whether an AUC above 0.5 is real or noise — a
+      <strong>high p is good</strong> (can't reject "indistinguishable").</p>
+  </div>
+</section>
+
+<!-- 4b association -->
+<section class="metric" id="assoc">
+  <div class="metric-head">
+    <h3>4b · Pairwise association fidelity — Cramér's V delta</h3>
+    <span class="field">association</span>
+  </div>
+  <div class="body-prose">
+    <p><span class="label-line">What it measures.</span> Whether the <strong>strength of
+      association between every pair of attributes</strong> is reproduced. Cramér's V is a 0–1
+      measure of how strongly two categorical variables are related (0 = independent, 1 = one
+      perfectly predicts the other). This computes V for each pair in both populations and reports
+      how far apart they are.</p>
+    <p><span class="label-line">How it works.</span> For each pair, compute the
+      <strong>bias-corrected (Bergsma) Cramér's V</strong> for A (<code>v_real</code>) and B
+      (<code>v_syn</code>), then <code>abs_delta_v = |v_real − v_syn|</code>. Summarised by
+      <code>mean_abs_delta_v</code> (average gap) and <code>frobenius_norm</code>
+      (root-sum-of-squares, penalising a few large errors).</p>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 260" role="img" aria-label="Association delta heatmap over four attributes, age-by-employment the hot cell">
+        <!-- 4 attrs: age, edu, emp, inc. lower triangle |Δv| -->
+        <!-- column headers -->
+        <g class="axmono" font-size="11.5" fill="var(--muted)" text-anchor="middle">
+          <text x="250" y="40">age</text><text x="320" y="40">education</text>
+          <text x="390" y="40">employ</text><text x="460" y="40">income</text>
+        </g>
+        <g class="axmono" font-size="11.5" fill="var(--muted)" text-anchor="end">
+          <text x="205" y="80">education</text><text x="205" y="120">employment</text>
+          <text x="205" y="160">income</text>
+        </g>
+        <!-- cells: value → color mix. helper: fill teal→ochre by magnitude via opacity of syn over neutral -->
+        <!-- row education (vs age) Δ0.04 -->
+        <rect x="220" y="60" width="60" height="36" rx="4" fill="var(--syn)" opacity=".16"/>
+        <text x="250" y="82" text-anchor="middle" font-size="12" class="axmono" fill="var(--ink)">.04</text>
+        <!-- row employment vs age Δ0.25 (hot) -->
+        <rect x="220" y="100" width="60" height="36" rx="4" fill="var(--syn)" opacity=".9"/>
+        <text x="250" y="122" text-anchor="middle" font-size="12" class="axmono" fill="#fff">.25</text>
+        <rect x="219" y="99" width="62" height="38" rx="5" fill="none" stroke="var(--bad)" stroke-width="2"/>
+        <!-- row employment vs education Δ0.05 -->
+        <rect x="290" y="100" width="60" height="36" rx="4" fill="var(--syn)" opacity=".20"/>
+        <text x="320" y="122" text-anchor="middle" font-size="12" class="axmono" fill="var(--ink)">.05</text>
+        <!-- row income vs age Δ0.06 -->
+        <rect x="220" y="140" width="60" height="36" rx="4" fill="var(--syn)" opacity=".24"/>
+        <text x="250" y="162" text-anchor="middle" font-size="12" class="axmono" fill="var(--ink)">.06</text>
+        <!-- row income vs education Δ0.08 -->
+        <rect x="290" y="140" width="60" height="36" rx="4" fill="var(--syn)" opacity=".30"/>
+        <text x="320" y="162" text-anchor="middle" font-size="12" class="axmono" fill="var(--ink)">.08</text>
+        <!-- row income vs employment Δ0.07 -->
+        <rect x="360" y="140" width="60" height="36" rx="4" fill="var(--syn)" opacity=".28"/>
+        <text x="390" y="162" text-anchor="middle" font-size="12" class="axmono" fill="var(--ink)">.07</text>
+        <!-- annotation of the featured pair -->
+        <g transform="translate(360,196)">
+          <text x="0" y="0" class="ax axmono" fill="var(--bad)">age ↔ employment</text>
+          <text x="0" y="18" font-size="12.5"><tspan fill="var(--real)">v_real 0.45</tspan><tspan fill="var(--muted)">  vs  </tspan><tspan fill="var(--syn)">v_syn 0.20</tspan></text>
+          <text x="0" y="36" font-size="12" fill="var(--muted)">B under-couples the pair · Δ = 0.25</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption>Each cell is <b>|v_real − v_syn|</b> for an attribute pair. Age ↔ employment is
+        strongly related in reality (older people retire) but the model under-couples it — the one
+        hot cell.</figcaption>
+    </figure>
+
+    <p><span class="label-line">How to read it.</span> <code>abs_delta_v</code>,
+      <code>mean_abs_delta_v</code>, <code>frobenius_norm</code> are all
+      <strong>≥ 0, lower is better</strong> (0 = association structure perfectly reproduced).
+      Unlike the joint chi-squared p-value, this gives a <strong>direction and magnitude</strong>
+      — you see <em>which</em> pair is wrong and by how much (also exported to CSV).</p>
+  </div>
+</section>
+
+<!-- 4c grounded joint TV -->
+<section class="metric" id="jointtv">
+  <div class="metric-head">
+    <h3>4c · Grounded joint total-variation distance</h3>
+    <span class="field">joint_fidelity.pairs</span>
+  </div>
+  <div class="body-prose">
+    <p><span class="label-line">What it measures.</span> The same TV idea as §1a, but on a
+      <strong>two-attribute joint distribution</strong> — the total misplaced mass across the full
+      x × y grid of a pair.</p>
+    <div class="formula">TV = ½ · Σ_cells |p_A(x, y) − p_B(x, y)|</div>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 250" role="img" aria-label="Signed difference heatmap over an age-by-income joint grid">
+        <text x="280" y="22" text-anchor="middle" class="ax axmono">SIGNED JOINT DIFFERENCE  ·  p_B − p_A  (age × income)</text>
+        <!-- axis labels -->
+        <g class="axmono" font-size="11" fill="var(--muted)">
+          <text x="150" y="72" text-anchor="end">young</text>
+          <text x="150" y="117" text-anchor="end">mid</text>
+          <text x="150" y="162" text-anchor="end">old</text>
+          <text x="205" y="195" text-anchor="middle">low</text>
+          <text x="285" y="195" text-anchor="middle">mid</text>
+          <text x="365" y="195" text-anchor="middle">high</text>
+        </g>
+        <!-- 3x3 signed cells: ochre = B surplus, teal = B deficit ; opacity ~ magnitude -->
+        <g stroke="var(--surface)" stroke-width="2">
+          <!-- young: low +, mid 0, high - -->
+          <rect x="165" y="55" width="80" height="36" fill="var(--syn)" opacity=".7"/>
+          <rect x="245" y="55" width="80" height="36" fill="var(--syn)" opacity=".15"/>
+          <rect x="325" y="55" width="80" height="36" fill="var(--real)" opacity=".55"/>
+          <!-- mid -->
+          <rect x="165" y="100" width="80" height="36" fill="var(--real)" opacity=".25"/>
+          <rect x="245" y="100" width="80" height="36" fill="var(--syn)" opacity=".2"/>
+          <rect x="325" y="100" width="80" height="36" fill="var(--syn)" opacity=".3"/>
+          <!-- old -->
+          <rect x="165" y="145" width="80" height="36" fill="var(--real)" opacity=".6"/>
+          <rect x="245" y="145" width="80" height="36" fill="var(--real)" opacity=".2"/>
+          <rect x="325" y="145" width="80" height="36" fill="var(--syn)" opacity=".5"/>
+        </g>
+        <!-- diverging legend -->
+        <text x="430" y="62" class="axmono" font-size="11" fill="var(--muted)">B deficit</text>
+        <rect x="430" y="70" width="16" height="16" fill="var(--real)" opacity=".6"/>
+        <text x="430" y="108" class="axmono" font-size="11" fill="var(--muted)">B surplus</text>
+        <rect x="430" y="116" width="16" height="16" fill="var(--syn)" opacity=".7"/>
+        <!-- grounded badge + TV -->
+        <rect x="430" y="150" width="112" height="26" rx="13" fill="var(--good)" opacity=".16" stroke="var(--good)"/>
+        <text x="486" y="167" text-anchor="middle" font-size="12" class="axmono" fill="var(--good)">✓ grounded</text>
+        <text x="430" y="200" class="axmono" font-size="13" fill="var(--ink)">TV = 0.18</text>
+      </svg>
+      </div>
+      <figcaption>Every cell's signed gap over the joint grid; TV sums their magnitudes and halves.
+        <b>Grounded</b> pairs have a real agency cross-tab behind them (defensible ground truth);
+        <b>reference</b> pairs are shown for context but not over-claimed.</figcaption>
+    </figure>
+
+    <p><span class="label-line">How to read it.</span> <strong>0 (identical joint) to 1
+      (disjoint), lower is better</strong>. Returns <code>NaN</code> when either population has no
+      individuals in the grid. The finer, magnitude-based complement to the legacy joint
+      chi-squared p-value.</p>
+  </div>
+</section>
+
+<!-- 4d k-way -->
+<section class="metric" id="kway">
+  <div class="metric-head">
+    <h3>4d · K-way combination plausibility</h3>
+    <span class="field">combination_plausibility.checks</span>
+  </div>
+  <div class="body-prose">
+    <p><span class="label-line">What it measures.</span> A generalisation of the coherence score
+      to arbitrary <strong>k-attribute combinations</strong>, splitting failures into two
+      severities instead of one pass/fail.</p>
+    <p><span class="label-line">How it works.</span> For each configured check (a tuple of k
+      attributes + a threshold), build A's joint probability table over that tuple, then classify
+      each synthetic individual:</p>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 190" role="img" aria-label="Segmented severity bar: 950 plausible, 30 rare, 20 impossible">
+        <text x="30" y="30" class="ax axmono">tuple (age_group, education_level, employment_status) · n = 1000</text>
+        <!-- segmented bar, width 500 from x=30 -->
+        <!-- plausible 950 → 475px ; rare 30 → 15px ; impossible 20 → 10px -->
+        <rect x="30"  y="50" width="475" height="46" rx="6" fill="var(--good)"/>
+        <rect x="505" y="50" width="15"  height="46" fill="var(--warn)"/>
+        <rect x="520" y="50" width="10"  height="46" rx="0" fill="var(--bad)"/>
+        <rect x="30" y="50" width="500" height="46" rx="6" fill="none" stroke="var(--line-strong)"/>
+        <text x="42" y="78" fill="#fff" font-size="14" font-weight="600">950 plausible</text>
+        <!-- legend -->
+        <g font-size="12.5" transform="translate(30,128)">
+          <rect x="0" y="0" width="13" height="13" rx="3" fill="var(--good)"/>
+          <text x="20" y="11" fill="var(--ink)"><tspan font-weight="600">plausible</tspan> — at/above threshold · 950</text>
+          <rect x="0" y="24" width="13" height="13" rx="3" fill="var(--warn)"/>
+          <text x="20" y="35" fill="var(--ink)"><tspan font-weight="600">rare</tspan> — exists in real, below threshold · 30 → fraction_rare 0.03</text>
+          <rect x="0" y="48" width="13" height="13" rx="3" fill="var(--bad)"/>
+          <text x="20" y="59" fill="var(--ink)"><tspan font-weight="600">impossible</tspan> — zero support / missing value · 20 → fraction_impossible 0.02</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption>The <b>2% impossible</b> are the ones to worry about — combinations the real
+        population <em>never</em> produced. Rare is a softer flag.</figcaption>
+    </figure>
+
+    <p><span class="label-line">How to read it.</span> <code>fraction_impossible</code> and
+      <code>fraction_rare</code> are <strong>≥ 0, lower is better</strong>;
+      <code>fraction_impossible = 0</code> means every synthetic profile is at least possible in
+      reality. <code>NaN</code> when B is empty.</p>
+  </div>
+</section>
+
+<!-- ============ CHEAT SHEET ============ -->
+<div class="family" style="margin-top:80px">
+  <div class="txt">
+    <h2 style="font-size:1.7rem">Cheat sheet — direction &amp; range at a glance</h2>
+  </div>
+</div>
+<hr class="family-rule">
+
+<div class="sheet-wrap">
+  <table class="sheet">
+    <thead>
+      <tr><th>Metric</th><th>Family</th><th>Range</th><th>Good value</th><th>Direction</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="m">tv_distance</span></td><td class="fam-tag">marginal</td><td class="num-c">0 – 1</td><td class="num-c">near 0</td><td><span class="dir worse">↓ lower better</span></td></tr>
+      <tr><td><span class="m">max_diff</span></td><td class="fam-tag">marginal</td><td class="num-c">0 – 1</td><td class="num-c">near 0</td><td><span class="dir worse">↓ lower better</span></td></tr>
+      <tr><td><span class="m">kl_divergence</span></td><td class="fam-tag">marginal</td><td class="num-c">0 – ∞</td><td class="num-c">near 0</td><td><span class="dir worse">↓ lower better</span></td></tr>
+      <tr><td><span class="m">chi_sq_p</span></td><td class="fam-tag">marginal</td><td class="num-c">0 – 1 · p</td><td class="num-c">&gt; 0.05</td><td><span class="dir better">↑ higher better</span></td></tr>
+      <tr><td><span class="m">joint_chi_sq</span></td><td class="fam-tag">joint</td><td class="num-c">0 – 1 · p</td><td class="num-c">high</td><td><span class="dir better">↑ higher better</span></td></tr>
+      <tr><td><span class="m">coherence.score</span></td><td class="fam-tag">coherence</td><td class="num-c">0 – 1</td><td class="num-c">near 1</td><td><span class="dir better">↑ higher better</span></td></tr>
+      <tr><td><span class="m">c2st.auc</span></td><td class="fam-tag">multivariate</td><td class="num-c">0.5 – 1</td><td class="num-c">near 0.5</td><td><span class="dir worse">↓ lower better</span></td></tr>
+      <tr><td><span class="m">c2st.p_value</span></td><td class="fam-tag">multivariate</td><td class="num-c">0 – 1 · p</td><td class="num-c">high</td><td><span class="dir better">↑ higher better</span></td></tr>
+      <tr><td><span class="m">abs_delta_v · mean_abs_delta_v</span></td><td class="fam-tag">multivariate</td><td class="num-c">0 – 1</td><td class="num-c">near 0</td><td><span class="dir worse">↓ lower better</span></td></tr>
+      <tr><td><span class="m">joint_tv</span></td><td class="fam-tag">multivariate</td><td class="num-c">0 – 1</td><td class="num-c">near 0</td><td><span class="dir worse">↓ lower better</span></td></tr>
+      <tr><td><span class="m">fraction_impossible · fraction_rare</span></td><td class="fam-tag">multivariate</td><td class="num-c">0 – 1</td><td class="num-c">near 0</td><td><span class="dir worse">↓ lower better</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="trap">
+  <h3>The one trap to remember</h3>
+  <p>The two <strong>p-value</strong> metrics (chi-squared GoF, joint chi-squared) and the
+    <strong>C2ST p-value</strong> run <em>opposite</em> to the distances — for those, a
+    <strong>high value is good</strong> (no detectable difference). Every
+    distance / divergence / AUC metric is "lower is better."</p>
+</div>
+
+<div class="code-index">
+  <h3>Where each metric lives in code</h3>
+  <ul>
+    <li><span class="what">Marginal (TV, max diff, KL, chi-squared)</span> — <span class="where">evaluator.py:_marginal_metrics</span></li>
+    <li><span class="what">Joint chi-squared</span> — <span class="where">evaluator.py:_joint_chi_sq</span></li>
+    <li><span class="what">Coherence</span> — <span class="where">evaluator.py:compute_coherence</span></li>
+    <li><span class="what">C2ST</span> — <span class="where">evaluator.py:_compute_c2st → multivariate.py:c2st</span></li>
+    <li><span class="what">Cramér's V association</span> — <span class="where">evaluator.py:_compute_association → multivariate.py:association_matrix / cramers_v</span></li>
+    <li><span class="what">Grounded joint TV</span> — <span class="where">evaluator.py:_compute_joint_fidelity → multivariate.py:joint_tv</span></li>
+    <li><span class="what">K-way combination plausibility</span> — <span class="where">evaluator.py:_compute_combination_plausibility</span></li>
+    <li><span class="what">Report assembly / CSV export</span> — <span class="where">evaluator.py:generate_report, write_csv_summary, write_association_csv</span></li>
+  </ul>
+</div>
+
+<footer class="end">
+  Scored attributes, category sets, joint pairs, coherence tuples, grounded-joint pairs,
+  combination checks, and C2ST tuning are all defined in the per-country comparison scheme config,
+  loaded via <code>analysis/comparison/scheme.py</code> — never hardcoded. · Source:
+  <code>docs/architecture/comparison-metrics.md</code>
+</footer>
+
+</div>
+</body>
+</html>
