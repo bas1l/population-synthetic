@@ -107,6 +107,49 @@ column layout is used for <b>both</b> populations, so the classifier compares li
 <blockquote><p><strong>Two different 0/1s — don't mix them up.</strong> The one-hot columns from Step 1 use 0/1 as <em>feature values</em> ("does this person have this category?"). The <strong>labels</strong> <code>0</code>/<code>1</code> here are something else: the classifier's <em>target</em>, marking which population a row came from — <strong>real = 0, synthetic = 1</strong>. Making synthetic the <code>1</code> means it is the class the test is trying to detect, so the AUC reads as "how well can a random <em>synthetic</em> profile be ranked as <em>more synthetic</em> than a random real one." The specific assignment is a convention — swapping the two labels flips the scores but leaves <code>|AUC − 0.5|</code> unchanged — but it must be consistent, and the code fixes real = 0 / synthetic = 1. Note the scale, too: a label is <strong>one number per person</strong> (the target), while the one-hot 0/1s are <strong>many numbers per person</strong> (the features); they never interact.</p></blockquote>
 <pre><code>AUC = ( Σ ranks(synthetic scores) − n_syn·(n_syn + 1)/2 ) / (n_syn · n_real)</code></pre>
 <p>with tie-aware average ranks (<code>scipy.rankdata</code>). A useful consequence: if the two populations are identical the scores are effectively constant, ties dominate, and the AUC comes out <strong>exactly 0.5</strong> — no spurious signal from a degenerate model.</p>
+<h3>Where each per-person score comes from</h3>
+<p>The "scores" that get ranked are <strong>the classifier's output for each held-out person</strong> — a single number saying "how synthetic does this profile look?" How it is computed depends on the backend:</p>
+<ul><li><strong>sklearn (logistic regression)</strong> — the score is <code>predict_proba(...)[:, 1]</code>, the model's estimated <strong>probability that the profile is synthetic</strong>:</li></ul>
+<pre><code>  z     = b + Σ (weight of each active one-hot column)      # the "logit"
+  score = σ(z) = 1 / (1 + e^(−z))                           # squashed into (0, 1)</code></pre>
+<p>Training picks the bias <code>b</code> and one weight per one-hot column; because the features are one-hot, only the person's <strong>active</strong> columns (one per attribute block) contribute to the sum. A higher <code>z</code> → a score nearer 1 → "looks synthetic."</p>
+<ul><li><strong>numpy / MMD (nearest-centroid)</strong> — the score is the raw projection <code>x · (μ_syn − μ_real)</code>, i.e. summing, over the person's active columns, how much more common that category is in synthetic than in real. It is <strong>not</strong> a probability in (0, 1) — but since the AUC only uses the <em>ranking</em>, that is fine.</li></ul>
+<p><strong>Example — how a <code>0.20</code> is produced (logistic backend).</strong> Take the real 35-year-old from Step 1 (active columns: age 30–39, sex F, edu Tertiary, emp Employed). Suppose training learned bias <code>b = −0.50</code> and column weights <code>−0.30, −0.20, −0.10, −0.29</code> for her four active columns. Then <code>z = −0.50 − 0.30 − 0.20 − 0.10 − 0.29 = −1.39</code>, and <code>score = σ(−1.39) = 1/(1 + e^{1.39}) ≈ 0.20</code>. A synthetic person scoring <code>0.30</code> simply had active-column weights summing to <code>z ≈ −0.85</code> (<code>σ(−0.85) = 0.30</code>). <strong>Every one of the six scores below is one person's <code>σ(z)</code> computed this same way</strong> — they are outputs, not inputs.</p>
+<figure class="viz">
+<div class="plot-wrap">
+<svg viewBox="0 0 560 232" role="img" aria-label="Scoring one person: sum the learned weights of the active one-hot columns to a logit, then apply the sigmoid to get 0.20">
+  <text x="20" y="20" class="mono ax">SCORING ONE PERSON &#183; logistic-regression backend</text>
+  <!-- left: weights of the active columns -->
+  <g class="mono" font-size="12">
+    <text x="30" y="52">age = 30&#8211;39</text><text x="272" y="52" text-anchor="end" fill="var(--muted)">&#8722;0.30</text>
+    <text x="30" y="72">sex = F</text><text x="272" y="72" text-anchor="end" fill="var(--muted)">&#8722;0.20</text>
+    <text x="30" y="92">education = Tertiary</text><text x="272" y="92" text-anchor="end" fill="var(--muted)">&#8722;0.10</text>
+    <text x="30" y="112">employment = Employed</text><text x="272" y="112" text-anchor="end" fill="var(--muted)">&#8722;0.29</text>
+    <text x="30" y="132">bias</text><text x="272" y="132" text-anchor="end" fill="var(--muted)">&#8722;0.50</text>
+  </g>
+  <line x1="30" y1="144" x2="272" y2="144" stroke="var(--line)"/>
+  <text x="30" y="166" class="mono hi" font-size="12.5">logit z = w&#183;x + b = &#8722;1.39</text>
+  <text x="292" y="120" font-size="22" fill="var(--muted)">&#8594;</text>
+  <!-- right: sigmoid -->
+  <text x="320" y="42" class="mono ax">&#963;(z) = 1 / (1 + e^&#8722;z)</text>
+  <line x1="320" y1="200" x2="530" y2="200" stroke="var(--line-strong)"/>
+  <line x1="320" y1="200" x2="320" y2="54"  stroke="var(--line-strong)"/>
+  <polyline points="320,197 346,193 372,183 399,161 425,127 451,93 478,71 504,61 530,57" fill="none" stroke="var(--real)" stroke-width="2.5"/>
+  <!-- mark z=-1.39 -> 0.20 -->
+  <line x1="388" y1="200" x2="388" y2="171" stroke="var(--syn)" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <line x1="320" y1="171" x2="388" y2="171" stroke="var(--syn)" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <circle cx="388" cy="171" r="4" fill="var(--syn)"/>
+  <text x="316" y="175" text-anchor="end" font-size="11.5" class="mono hi" fill="var(--syn)">0.20</text>
+  <text x="388" y="216" text-anchor="middle" font-size="11" class="mono" fill="var(--muted)">z = &#8722;1.39</text>
+  <text x="425" y="228" text-anchor="middle" font-size="10.5" fill="var(--muted)">logit z</text>
+  <text x="312" y="52" text-anchor="end" font-size="10.5" fill="var(--muted)">P(syn)</text>
+</svg>
+</div>
+<figcaption>The score is the classifier's output, not a raw input. sklearn sums the learned
+weights of the person's active one-hot columns into a logit <b>z</b>, then the sigmoid maps it to a
+probability: <b>z = &#8722;1.39 &#8594; &#963;(&#8722;1.39) &#8776; 0.20</b>. The MMD backend instead
+uses <b>x&#183;(&#956;_syn &#8722; &#956;_real)</b>; only the ranking feeds the AUC.</figcaption>
+</figure>
 <p><strong>Example (the rank formula on 6 people).</strong> Say the held-out "more synthetic" scores are, for 3 real and 3 synthetic people: real <code>{0.20, 0.40, 0.55}</code>, synthetic <code>{0.30, 0.60, 0.70}</code>. Ranking all six low→high, the synthetic scores land at ranks 2, 5, 6 (sum = 13). Then <code>AUC = (13 − 3·4/2) / (3·3) = (13 − 6)/9 = 0.78</code>. On our running example the classifier does far worse than that — <code>AUC ≈ 0.52</code>, a whisker above chance.</p>
 <figure class="viz">
 <div class="plot-wrap">

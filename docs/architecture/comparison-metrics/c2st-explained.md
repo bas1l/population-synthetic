@@ -173,6 +173,71 @@ with tie-aware average ranks (`scipy.rankdata`). A useful consequence: if the tw
 are identical the scores are effectively constant, ties dominate, and the AUC comes out
 **exactly 0.5** — no spurious signal from a degenerate model.
 
+### Where each per-person score comes from
+
+The "scores" that get ranked are **the classifier's output for each held-out person** — a single
+number saying "how synthetic does this profile look?" How it is computed depends on the backend:
+
+- **sklearn (logistic regression)** — the score is `predict_proba(...)[:, 1]`, the model's
+  estimated **probability that the profile is synthetic**:
+
+  ```
+  z     = b + Σ (weight of each active one-hot column)      # the "logit"
+  score = σ(z) = 1 / (1 + e^(−z))                           # squashed into (0, 1)
+  ```
+
+  Training picks the bias `b` and one weight per one-hot column; because the features are one-hot,
+  only the person's **active** columns (one per attribute block) contribute to the sum. A higher
+  `z` → a score nearer 1 → "looks synthetic."
+- **numpy / MMD (nearest-centroid)** — the score is the raw projection
+  `x · (μ_syn − μ_real)`, i.e. summing, over the person's active columns, how much more common
+  that category is in synthetic than in real. It is **not** a probability in (0, 1) — but since the
+  AUC only uses the *ranking*, that is fine.
+
+**Example — how a `0.20` is produced (logistic backend).** Take the real 35-year-old from Step 1
+(active columns: age 30–39, sex F, edu Tertiary, emp Employed). Suppose training learned bias
+`b = −0.50` and column weights `−0.30, −0.20, −0.10, −0.29` for her four active columns. Then
+`z = −0.50 − 0.30 − 0.20 − 0.10 − 0.29 = −1.39`, and `score = σ(−1.39) = 1/(1 + e^{1.39}) ≈ 0.20`.
+A synthetic person scoring `0.30` simply had active-column weights summing to `z ≈ −0.85`
+(`σ(−0.85) = 0.30`). **Every one of the six scores below is one person's `σ(z)` computed this
+same way** — they are outputs, not inputs.
+
+<figure class="viz">
+<div class="plot-wrap">
+<svg viewBox="0 0 560 232" role="img" aria-label="Scoring one person: sum the learned weights of the active one-hot columns to a logit, then apply the sigmoid to get 0.20">
+  <text x="20" y="20" class="mono ax">SCORING ONE PERSON &#183; logistic-regression backend</text>
+  <!-- left: weights of the active columns -->
+  <g class="mono" font-size="12">
+    <text x="30" y="52">age = 30&#8211;39</text><text x="272" y="52" text-anchor="end" fill="var(--muted)">&#8722;0.30</text>
+    <text x="30" y="72">sex = F</text><text x="272" y="72" text-anchor="end" fill="var(--muted)">&#8722;0.20</text>
+    <text x="30" y="92">education = Tertiary</text><text x="272" y="92" text-anchor="end" fill="var(--muted)">&#8722;0.10</text>
+    <text x="30" y="112">employment = Employed</text><text x="272" y="112" text-anchor="end" fill="var(--muted)">&#8722;0.29</text>
+    <text x="30" y="132">bias</text><text x="272" y="132" text-anchor="end" fill="var(--muted)">&#8722;0.50</text>
+  </g>
+  <line x1="30" y1="144" x2="272" y2="144" stroke="var(--line)"/>
+  <text x="30" y="166" class="mono hi" font-size="12.5">logit z = w&#183;x + b = &#8722;1.39</text>
+  <text x="292" y="120" font-size="22" fill="var(--muted)">&#8594;</text>
+  <!-- right: sigmoid -->
+  <text x="320" y="42" class="mono ax">&#963;(z) = 1 / (1 + e^&#8722;z)</text>
+  <line x1="320" y1="200" x2="530" y2="200" stroke="var(--line-strong)"/>
+  <line x1="320" y1="200" x2="320" y2="54"  stroke="var(--line-strong)"/>
+  <polyline points="320,197 346,193 372,183 399,161 425,127 451,93 478,71 504,61 530,57" fill="none" stroke="var(--real)" stroke-width="2.5"/>
+  <!-- mark z=-1.39 -> 0.20 -->
+  <line x1="388" y1="200" x2="388" y2="171" stroke="var(--syn)" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <line x1="320" y1="171" x2="388" y2="171" stroke="var(--syn)" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <circle cx="388" cy="171" r="4" fill="var(--syn)"/>
+  <text x="316" y="175" text-anchor="end" font-size="11.5" class="mono hi" fill="var(--syn)">0.20</text>
+  <text x="388" y="216" text-anchor="middle" font-size="11" class="mono" fill="var(--muted)">z = &#8722;1.39</text>
+  <text x="425" y="228" text-anchor="middle" font-size="10.5" fill="var(--muted)">logit z</text>
+  <text x="312" y="52" text-anchor="end" font-size="10.5" fill="var(--muted)">P(syn)</text>
+</svg>
+</div>
+<figcaption>The score is the classifier's output, not a raw input. sklearn sums the learned
+weights of the person's active one-hot columns into a logit <b>z</b>, then the sigmoid maps it to a
+probability: <b>z = &#8722;1.39 &#8594; &#963;(&#8722;1.39) &#8776; 0.20</b>. The MMD backend instead
+uses <b>x&#183;(&#956;_syn &#8722; &#956;_real)</b>; only the ranking feeds the AUC.</figcaption>
+</figure>
+
 **Example (the rank formula on 6 people).** Say the held-out "more synthetic" scores are, for
 3 real and 3 synthetic people: real `{0.20, 0.40, 0.55}`, synthetic `{0.30, 0.60, 0.70}`.
 Ranking all six low→high, the synthetic scores land at ranks 2, 5, 6 (sum = 13). Then
