@@ -24,6 +24,13 @@ To make each step concrete, one example runs through the whole note:
 
 ## Step 1 — encode the whole profile (one-hot)
 
+> **What's "one-hot"?** A classifier needs numbers, not category labels like "Tertiary". One-hot
+> encoding turns an attribute with *N* categories into *N* 0/1 columns and sets the column
+> matching the person's value to **1**, all the others to **0** — exactly one column is "hot" (on),
+> which is where the name comes from. It is used instead of numbering the categories `1, 2, 3`
+> because that would invent a false order and spacing (implying Tertiary is "3× Primary"); one-hot
+> keeps the categories on equal, independent footing.
+
 Each individual becomes a fixed-width feature vector via `one_hot_encode`. Columns are laid
 out block-by-block in `scheme.attributes` order; within a block, one column per category in
 `scheme.categories[attr]` order, so the encoding is **identical across both populations**. A
