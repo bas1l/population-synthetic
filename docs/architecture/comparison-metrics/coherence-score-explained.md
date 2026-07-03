@@ -15,6 +15,40 @@ and how the score relates to the newer k-way plausibility metric (§4d). It is t
 counterpart to the [TV ½-factor](tv-distance-half-factor.md) and
 [KL bits & log-ratio](kl-divergence-bits-and-log.md) notes.
 
+## The equations
+
+Three quantities, and only one of them is computed from the data.
+
+**1. The real-population probability of a combination `c`** — the empirical relative frequency
+in A, un-smoothed:
+
+```
+p_A(c) = N_A(c) / Σ_c' N_A(c')
+```
+
+where `N_A(c)` is the number of real individuals whose combination equals `c`, and the
+denominator sums over every combination — i.e. `total_A`, counting only real individuals with
+**no missing** coherence attribute. A combination unseen in A has `p_A(c) = 0`.
+
+**2. The threshold `τ`** — *not calculated from the data.* It is a fixed config constant,
+`τ = coherence_threshold` (`0.001` for the Swedish scheme; defaults to `0.001` when the key is
+absent). It is the same value regardless of population size, so `τ = 0.001` means "occurs in
+≥ 0.1 % of real A" — the corresponding head-count (≈ 10 people when |A| = 10,000) scales with
+A, but `τ` itself does not.
+
+**3. The score** — the fraction of synthetic people B whose combination clears the bar:
+
+```
+score = n_plausible / N_B
+      = ( 1 / N_B ) · Σ_{i ∈ B}  𝟙[ p_A(cᵢ) ≥ τ ]
+```
+
+where `cᵢ` is synthetic person `i`'s combination, `𝟙[·]` is 1 when the condition holds and 0
+otherwise, and `N_B` is the size of **all** of B (`self.n_b`). Two edge conventions:
+`p_A(cᵢ) = 0` when `cᵢ` is unseen in A *or* person `i` has any missing coherence attribute (so
+they are flagged); and `score = 0.0` when `N_B = 0`. The returned value is rounded to 4
+decimals. Equivalently: `score = 1 − (n_flagged / N_B)`.
+
 ## The joint table is empirical, from A, and un-smoothed
 
 From the **real** population A the evaluator counts every occurrence of the coherence tuple —
