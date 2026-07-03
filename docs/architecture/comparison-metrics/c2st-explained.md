@@ -148,11 +148,14 @@ can't game by guessing "real." Five such balanced draws are averaged.
 
 ## Step 3 — cross-validated AUC
 
-Per repeat, real (label `0`) and synthetic (label `1`) are stacked and run through
+Now the encoded, balanced rows are put to the classifier. Real (label `0`) and synthetic
+(label `1`) are stacked and run through
 [**stratified k-fold cross-validation**](k-fold-cross-validation-explained.md)
-(`eff_folds = max(2, min(folds, balanced_n))`, folds from config, default 5). Every row is
-scored while held out, and the pooled out-of-fold scores give one ROC-AUC. The AUC itself is
-computed by the **rank-based Mann–Whitney identity** (not a threshold sweep):
+(`eff_folds = max(2, min(folds, balanced_n))`, folds from config, default 5). Cross-validation
+is what keeps the result honest: every row is **scored while it is held out** of training, so no
+row is judged by a model that already learned from it. The output of this pass is one
+out-of-fold **score** per person — and the rest of the step explains what that score is and how
+the scores become an AUC.
 
 > **Two different 0/1s — don't mix them up.** The one-hot columns from Step 1 use 0/1 as
 > *feature values* ("does this person have this category?"). The **labels** `0`/`1` here are
@@ -165,13 +168,25 @@ computed by the **rank-based Mann–Whitney identity** (not a threshold sweep):
 > (the target), while the one-hot 0/1s are **many numbers per person** (the features); they never
 > interact.
 
-```
-AUC = ( Σ ranks(synthetic scores) − n_syn·(n_syn + 1)/2 ) / (n_syn · n_real)
-```
-
-with tie-aware average ranks (`scipy.rankdata`). A useful consequence: if the two populations
-are identical the scores are effectively constant, ties dominate, and the AUC comes out
-**exactly 0.5** — no spurious signal from a degenerate model.
+<figure class="viz">
+<div class="plot-wrap">
+<svg viewBox="0 0 340 188" role="img" aria-label="5-fold cross-validation grid: each fold is the held-out test set exactly once">
+  <text x="24" y="20" class="mono ax">5-FOLD CV &#183; each row scores 1 held-out fold</text>
+  <g>
+    <!-- row0 --><rect x="30"  y="34" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="58" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/>
+    <!-- row1 --><rect x="30"  y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="58" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="86" y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/>
+    <!-- row2 --><rect x="30"  y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="82" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="114" y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/>
+    <!-- row3 --><rect x="30"  y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="106" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="142" y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/>
+    <!-- row4 --><rect x="30"  y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="130" width="26" height="20" rx="3" fill="var(--syn)"/>
+  </g>
+  <rect x="30" y="164" width="12" height="12" rx="3" fill="var(--syn)"/><text x="48" y="174" font-size="11" fill="var(--muted)">test fold</text>
+  <rect x="110" y="164" width="12" height="12" rx="3" fill="var(--real-soft)"/><text x="128" y="174" font-size="11" fill="var(--muted)">train folds</text>
+</svg>
+</div>
+<figcaption>Stratified 5-fold CV rotates which fold is held out; every row is scored exactly once,
+out of fold. Those pooled out-of-fold scores are what the AUC (below) is computed from (the linked
+k-fold cross-validation note above has the full mechanics).</figcaption>
+</figure>
 
 ### Where each per-person score comes from
 
@@ -238,6 +253,20 @@ probability: <b>z = &#8722;1.39 &#8594; &#963;(&#8722;1.39) &#8776; 0.20</b>. Th
 uses <b>x&#183;(&#956;_syn &#8722; &#956;_real)</b>; only the ranking feeds the AUC.</figcaption>
 </figure>
 
+### From scores to the AUC
+
+With one score per person, the AUC measures **how well those scores separate the two classes** —
+the classifier's ability to rank a random synthetic person above a random real one. It is
+computed by the **rank-based Mann–Whitney identity** (not a threshold sweep):
+
+```
+AUC = ( Σ ranks(synthetic scores) − n_syn·(n_syn + 1)/2 ) / (n_syn · n_real)
+```
+
+with tie-aware average ranks (`scipy.rankdata`). A useful consequence: if the two populations
+are identical the scores are effectively constant, ties dominate, and the AUC comes out
+**exactly 0.5** — no spurious signal from a degenerate model.
+
 **Example (the rank formula on 6 people).** Say the held-out "more synthetic" scores are, for
 3 real and 3 synthetic people: real `{0.20, 0.40, 0.55}`, synthetic `{0.30, 0.60, 0.70}`.
 Ranking all six low→high, the synthetic scores land at ranks 2, 5, 6 (sum = 13). Then
@@ -283,38 +312,27 @@ by the count of real&#215;synthetic pairs (<b>3&#215;3 = 9</b>) &#8594; <b>7/9 &
 Perfectly mixed ranks would give exactly 0.5.</figcaption>
 </figure>
 
+Pooling **all** the out-of-fold scores this way — thousands of people, not just six — gives the
+single ROC-AUC for the repeat:
+
 <figure class="viz">
 <div class="plot-wrap">
-<svg viewBox="0 0 560 220" role="img" aria-label="5-fold cross-validation grid and the resulting ROC curve near the diagonal">
-  <!-- CV grid -->
-  <text x="24" y="20" class="mono ax">5-FOLD CV &#183; each row scores 1 held-out fold</text>
-  <g>
-    <!-- 5 rows x 5 cols; diagonal = test -->
-    <!-- row0 --><rect x="30"  y="34" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="58" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/>
-    <!-- row1 --><rect x="30"  y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="58" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="86" y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/>
-    <!-- row2 --><rect x="30"  y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="82" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="114" y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/>
-    <!-- row3 --><rect x="30"  y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="106" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="142" y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/>
-    <!-- row4 --><rect x="30"  y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="130" width="26" height="20" rx="3" fill="var(--syn)"/>
-  </g>
-  <g class="viz-legend" font-size="10.5"></g>
-  <rect x="30" y="164" width="12" height="12" rx="3" fill="var(--syn)"/><text x="48" y="174" font-size="11" fill="var(--muted)">test fold</text>
-  <rect x="110" y="164" width="12" height="12" rx="3" fill="var(--real-soft)"/><text x="128" y="174" font-size="11" fill="var(--muted)">train folds</text>
-  <!-- ROC -->
-  <text x="320" y="20" class="mono ax">POOLED ROC</text>
-  <line x1="330" y1="196" x2="330" y2="40" stroke="var(--line-strong)"/>
-  <line x1="330" y1="196" x2="510" y2="196" stroke="var(--line-strong)"/>
-  <line x1="330" y1="196" x2="510" y2="40" stroke="var(--line-strong)" stroke-dasharray="5 4"/>
-  <text x="455" y="132" transform="rotate(-45 455 132)" font-size="10.5" fill="var(--muted)">chance 0.5</text>
-  <polyline points="330,196 375,178 420,150 465,104 510,40" fill="none" stroke="var(--real)" stroke-width="2.5"/>
-  <circle cx="420" cy="150" r="3.5" fill="var(--real)"/>
-  <text x="510" y="214" text-anchor="end" font-size="11" fill="var(--muted)">FPR &#8594;</text>
-  <text x="332" y="36" font-size="11" fill="var(--muted)">TPR</text>
-  <text x="360" y="80" font-size="12" class="mono hi" fill="var(--real)">AUC &#8776; 0.52</text>
+<svg viewBox="0 0 250 224" role="img" aria-label="Pooled ROC curve hugging the diagonal at AUC about 0.52">
+  <text x="20" y="20" class="mono ax">POOLED ROC</text>
+  <line x1="30" y1="196" x2="30" y2="40" stroke="var(--line-strong)"/>
+  <line x1="30" y1="196" x2="210" y2="196" stroke="var(--line-strong)"/>
+  <line x1="30" y1="196" x2="210" y2="40" stroke="var(--line-strong)" stroke-dasharray="5 4"/>
+  <text x="150" y="130" transform="rotate(-45 150 130)" font-size="10.5" fill="var(--muted)">chance 0.5</text>
+  <polyline points="30,196 75,178 120,150 165,104 210,40" fill="none" stroke="var(--real)" stroke-width="2.5"/>
+  <circle cx="120" cy="150" r="3.5" fill="var(--real)"/>
+  <text x="210" y="214" text-anchor="end" font-size="11" fill="var(--muted)">FPR &#8594;</text>
+  <text x="32" y="36" font-size="11" fill="var(--muted)">TPR</text>
+  <text x="70" y="80" font-size="12" class="mono hi" fill="var(--real)">AUC &#8776; 0.52</text>
 </svg>
 </div>
-<figcaption>Left: 5-fold CV rotates which fold is held out; every row is scored exactly once,
-out of fold. Right: pooling those scores gives one ROC — here it hugs the diagonal
-(<b>AUC &#8776; 0.52</b>), the faithful-synthetic outcome.</figcaption>
+<figcaption>Pooling the out-of-fold scores gives one ROC curve. Here it hugs the diagonal
+(<b>AUC &#8776; 0.52</b>) — a random synthetic profile is barely more likely to be ranked
+"synthetic" than a random real one, the faithful-synthetic outcome.</figcaption>
 </figure>
 
 ## Step 4 — the permutation p-value
