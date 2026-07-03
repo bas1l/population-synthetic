@@ -181,6 +181,45 @@ far worse than that — `AUC ≈ 0.52`, a whisker above chance.
 
 <figure class="viz">
 <div class="plot-wrap">
+<svg viewBox="0 0 560 218" role="img" aria-label="Mann-Whitney AUC from ranking six scores: synthetic ranks 2+5+6=13 give AUC 7/9 = 0.78">
+  <text x="20" y="20" class="mono ax">RANK ALL 6 SCORES LOW &#8594; HIGH</text>
+  <text x="40"  y="44" font-size="10.5" fill="var(--muted)">lower &#183; "looks real"</text>
+  <text x="500" y="44" font-size="10.5" fill="var(--muted)" text-anchor="end">"looks synthetic" &#183; higher</text>
+  <!-- score cells, sorted ascending, coloured by class -->
+  <g text-anchor="middle" font-size="13">
+    <rect x="40"  y="52" width="70" height="38" rx="5" fill="var(--real)"/><text x="75"  y="76" fill="#fff">0.20</text>
+    <rect x="118" y="52" width="70" height="38" rx="5" fill="var(--syn)"/><text x="153" y="76" fill="#fff">0.30</text>
+    <rect x="196" y="52" width="70" height="38" rx="5" fill="var(--real)"/><text x="231" y="76" fill="#fff">0.40</text>
+    <rect x="274" y="52" width="70" height="38" rx="5" fill="var(--real)"/><text x="309" y="76" fill="#fff">0.55</text>
+    <rect x="352" y="52" width="70" height="38" rx="5" fill="var(--syn)"/><text x="387" y="76" fill="#fff">0.60</text>
+    <rect x="430" y="52" width="70" height="38" rx="5" fill="var(--syn)"/><text x="465" y="76" fill="#fff">0.70</text>
+  </g>
+  <!-- class + rank under each cell -->
+  <g text-anchor="middle" font-size="11" class="mono">
+    <text x="75"  y="106" fill="var(--real)">real</text><text x="75"  y="122" fill="var(--muted)">rank 1</text>
+    <text x="153" y="106" fill="var(--syn)">syn</text><text x="153" y="122" class="hi" fill="var(--syn)">rank 2</text>
+    <text x="231" y="106" fill="var(--real)">real</text><text x="231" y="122" fill="var(--muted)">rank 3</text>
+    <text x="309" y="106" fill="var(--real)">real</text><text x="309" y="122" fill="var(--muted)">rank 4</text>
+    <text x="387" y="106" fill="var(--syn)">syn</text><text x="387" y="122" class="hi" fill="var(--syn)">rank 5</text>
+    <text x="465" y="106" fill="var(--syn)">syn</text><text x="465" y="122" class="hi" fill="var(--syn)">rank 6</text>
+  </g>
+  <line x1="40" y1="138" x2="520" y2="138" stroke="var(--line)"/>
+  <!-- formula substitution -->
+  <g class="mono" font-size="13">
+    <text x="40" y="164" fill="var(--ink)">&#931; ranks(synthetic) = 2 + 5 + 6 = <tspan class="hi" fill="var(--syn)">13</tspan></text>
+    <text x="40" y="192" fill="var(--ink)">AUC = ( <tspan fill="var(--syn)">13</tspan> &#8722; n_syn(n_syn+1)/2 ) / ( n_syn&#183;n_real ) = (13 &#8722; 6) / 9</text>
+    <text x="470" y="192" fill="var(--ink)">= <tspan class="hi" fill="var(--real)">0.78</tspan></text>
+  </g>
+</svg>
+</div>
+<figcaption>The AUC is the synthetic scores' summed rank, rescaled: add their ranks
+(2+5+6 = <b>13</b>), subtract the smallest possible sum (<b>n_syn(n_syn+1)/2 = 6</b>), and divide
+by the count of real&#215;synthetic pairs (<b>3&#215;3 = 9</b>) &#8594; <b>7/9 &#8776; 0.78</b>.
+Perfectly mixed ranks would give exactly 0.5.</figcaption>
+</figure>
+
+<figure class="viz">
+<div class="plot-wrap">
 <svg viewBox="0 0 560 220" role="img" aria-label="5-fold cross-validation grid and the resulting ROC curve near the diagonal">
   <!-- CV grid -->
   <text x="24" y="20" class="mono ax">5-FOLD CV &#183; each row scores 1 held-out fold</text>
