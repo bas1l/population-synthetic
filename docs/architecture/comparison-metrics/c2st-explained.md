@@ -149,10 +149,21 @@ can't game by guessing "real." Five such balanced draws are averaged.
 ## Step 3 — cross-validated AUC
 
 Per repeat, real (label `0`) and synthetic (label `1`) are stacked and run through
-**stratified k-fold cross-validation** (`eff_folds = max(2, min(folds, balanced_n))`, folds
-from config, default 5). Every row is scored while held out, and the pooled out-of-fold scores
-give one ROC-AUC. The AUC itself is computed by the **rank-based Mann–Whitney identity** (not a
-threshold sweep):
+[**stratified k-fold cross-validation**](k-fold-cross-validation-explained.md)
+(`eff_folds = max(2, min(folds, balanced_n))`, folds from config, default 5). Every row is
+scored while held out, and the pooled out-of-fold scores give one ROC-AUC. The AUC itself is
+computed by the **rank-based Mann–Whitney identity** (not a threshold sweep):
+
+> **Two different 0/1s — don't mix them up.** The one-hot columns from Step 1 use 0/1 as
+> *feature values* ("does this person have this category?"). The **labels** `0`/`1` here are
+> something else: the classifier's *target*, marking which population a row came from —
+> **real = 0, synthetic = 1**. Making synthetic the `1` means it is the class the test is trying
+> to detect, so the AUC reads as "how well can a random *synthetic* profile be ranked as *more
+> synthetic* than a random real one." The specific assignment is a convention — swapping the two
+> labels flips the scores but leaves `|AUC − 0.5|` unchanged — but it must be consistent, and the
+> code fixes real = 0 / synthetic = 1. Note the scale, too: a label is **one number per person**
+> (the target), while the one-hot 0/1s are **many numbers per person** (the features); they never
+> interact.
 
 ```
 AUC = ( Σ ranks(synthetic scores) − n_syn·(n_syn + 1)/2 ) / (n_syn · n_real)
