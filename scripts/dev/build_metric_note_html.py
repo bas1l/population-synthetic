@@ -41,6 +41,11 @@ PAGE = """<!doctype html>
 </html>
 """
 
+# Block-level tags whose raw HTML (e.g. an inline <figure> holding an <svg>) is
+# passed through verbatim, so notes can embed hand-authored visuals. The block
+# must open at column 0 and close with the matching </tag> alone on its own line.
+BLOCK_HTML_TAGS = {"figure", "div", "svg", "table", "aside", "section", "details"}
+
 _CODE = re.compile(r"`([^`]+)`")
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 _BOLD = re.compile(r"\*\*([^*]+)\*\*")
@@ -116,6 +121,26 @@ def convert(md: str) -> tuple[str, str]:
             i += 1  # closing fence
             body = html.escape("\n".join(code), quote=False)
             out.append(f"<pre><code>{body}</code></pre>")
+            continue
+
+        # Raw HTML block (verbatim passthrough, e.g. an embedded <figure>/<svg>)
+        html_open = re.match(r"<([a-zA-Z][\w-]*)", stripped)
+        if html_open and html_open.group(1).lower() in BLOCK_HTML_TAGS:
+            tag = html_open.group(1)
+            close = f"</{tag}>"
+            buf = [line]
+            if close in line:  # single-line block
+                out.append(line)
+                i += 1
+                continue
+            i += 1
+            while i < n and lines[i].strip() != close:
+                buf.append(lines[i])
+                i += 1
+            if i < n:  # the closing line
+                buf.append(lines[i])
+                i += 1
+            out.append("\n".join(buf))
             continue
 
         # Heading
