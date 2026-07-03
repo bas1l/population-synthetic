@@ -29,7 +29,7 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   - `configurable` -- strategy-driven generation controlled by a simulation config JSON file with pluggable strategy definitions
 
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
-(`mapping/`, `comparison/`, `performance/`, `llm_metrics/`, plus a shared `utils/`):
+(`mapping/`, `comparison/`, `joint_fidelity/`, `performance/`, `llm_metrics/`, plus a shared `utils/`):
 
 - **`mapping/`** -- Transforms raw population data (national-statistics records *or* LLM-pipeline
   identities) into the canonical comparable schema. Holds the shared resolver `mapping_engine.py`,
@@ -41,6 +41,15 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   - `StatisticalEvaluator` (`evaluator.py`) computes per-field chi-squared tests and total variation distances
   - `charts` generates bar-chart and radar-chart PNGs via matplotlib
   - `scheme.py` -- the comparison-purpose bridge that reads the mapping config
+- **`joint_fidelity/`** -- Standalone multivariate joint-fidelity (sits after the map stage; driven by
+  `analyze_joint_fidelity.py`, depends only on `map_populations`). Recomputes the same
+  `multivariate` block the comparison evaluator produces -- via the shared
+  `StatisticalEvaluator.compute_multivariate()` over the mapped populations -- and persists it to its
+  own `{output_base}/03_Analysis/joint_fidelity/` folder (per-combo envelope JSON + association CSV +
+  `|ΔV|` heatmap, plus a per-country roll-up JSON/CSV and a cross-combo C2ST-vs-grounded-TV scatter).
+  `builder.py` (`build_joint_fidelity` envelope + `aggregate_joint_fidelity` roll-up + JSON/CSV writers),
+  `charts.py` (thin orchestration reusing `comparison.charts.plot_association_heatmap` + a self-contained
+  scatter). Additive: it never touches the comparison, performance, or paper outputs.
 - **`performance/`** -- Cross-model performance comparison (sits after the compare stage; driven by
   `compare_model_performance.py`). Consumes the per-combo comparison reports and ranks the
   model × strategy combos against each other per country -- per attribute (TV-similarity) and

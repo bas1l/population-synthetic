@@ -68,8 +68,9 @@ enabled chain GUI-side:
   `SKIPPED_GUARD` with a **loud** console banner; the run continues.
 - **Run** → on **exit code 0** the task is marked `COMPLETED`, which unlocks its
   dependents; the first nonzero exit fails the task (`FAILED`) and its
-  dependents dep-skip, while independent branches (the `compare_pops` side
-  branch and the isolated `llm_metrics` islands) still run.
+  dependents dep-skip, while independent branches (the `joint_fidelity` and
+  `compare_pops` side branches -- both `slugs`-dispatch, depending only on
+  `map_populations` -- and the isolated `llm_metrics` islands) still run.
 - **Abort** → `_kill_process_tree` on the live process; the current task and all
   not-yet-run tasks become `ABORTED`.
 
