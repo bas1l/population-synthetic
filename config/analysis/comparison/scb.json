@@ -36,12 +36,12 @@
     {
       "pair": ["age_group", "education_level"],
       "grounded": false,
-      "basis": "education_by_age (audit §2, 'conditioning lost'): education conditional on age_group but sex pooled; field is not API-identical."
+      "basis": "education_by_age (audit §2, 'conditioning lost'): education conditional on age_group but sex pooled; the joint is not API-identical."
     },
     {
       "pair": ["age_group", "employment_status"],
       "grounded": false,
-      "basis": "employment_by_age (audit §3): sex pooled and education ignored; field is not API-identical."
+      "basis": "employment_by_age (audit §3): sex pooled and education ignored; the joint is not API-identical."
     },
     {
       "pair": ["education_level", "employment_status"],
