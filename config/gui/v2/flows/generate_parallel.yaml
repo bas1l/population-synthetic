@@ -6,7 +6,10 @@ options:
   workers: 8                 # --workers
   retry-until-success: false # --retry-until-success (flag when true)
 selection:
-  models:     [claude_haiku]
-  strategies: [all_pick]
-  countries:  [swedish]
+  models: [claude_haiku, claude_opus, claude_sonnet, gemini_flash, 
+      ollama_deepseek_r1_14b, ollama_gemma4_e4b, ollama_llama31_8b, 
+      ollama_mistral_nemo_12b]
+  strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick, 
+      all_generate_pick, all_pick, all_pick_dag]
+  countries: [swedish]
 force: false                 # generate flows only
