@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading the KL divergence formula: bits and the log-ratio — comparison metrics</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<main class="note-wrap">
+<p class="breadcrumb"><a href="../comparison-metrics-report.html">&#9666; Comparison metrics — field guide</a></p>
+<h1>Reading the KL divergence formula: bits and the log-ratio</h1>
+<p>The Kullback–Leibler divergence of the synthetic distribution <strong>B</strong> from the real distribution <strong>A</strong> is:</p>
+<pre><code>D_KL(B ‖ A) = Σ_c p_B(c) · log₂( p_B(c) / p_A(c) )</code></pre>
+<p>This note unpacks that expression term by term, explains why the logarithm is <strong>base 2</strong>, why individual terms can be <strong>negative</strong> even though the total never is, and what Laplace smoothing does to the number. It is the KL counterpart to <a href="tv-distance-half-factor.html">Why total variation distance is multiplied by ½</a>.</p>
+<h2>The formula, one piece at a time</h2>
+<p>For each category <code>c</code> the sum contributes one term, <code>p_B(c) · log₂( p_B(c) / p_A(c) )</code>, built from two factors:</p>
+<ul><li><strong><code>log₂( p_B(c) / p_A(c) )</code> — the log-ratio, or "surprise" of that category.</strong> It compares how much probability B puts on <code>c</code> against how much A puts there.</li><li>If B and A agree on <code>c</code> (<code>p_B = p_A</code>), the ratio is 1 and <code>log₂(1) = 0</code> — the category contributes nothing.</li><li>If B <strong>over-represents</strong> <code>c</code> (<code>p_B &gt; p_A</code>), the ratio exceeds 1 and the log is <strong>positive</strong> — this is the case KL is designed to punish.</li><li>If B <strong>under-represents</strong> <code>c</code> (<code>p_B &lt; p_A</code>), the ratio is below 1 and the log is <strong>negative</strong>.</li><li><strong><code>p_B(c)</code> — the weight.</strong> Each log-ratio is multiplied by how often the category actually occurs <em>in B</em>. A category B almost never produces contributes almost nothing, no matter how wrong its ratio is. This weighting is exactly why KL is <strong>asymmetric</strong> (see below).</li></ul>
+<h2>Why the terms can be negative but the total cannot</h2>
+<p>The under-representing categories produce negative terms, so it looks as though the sum could dip below zero. It never does: for any two probability distributions, <code>D_KL(B ‖ A) ≥ 0</code>, with equality only when B and A are identical. This is <strong>Gibbs' inequality</strong>. The intuition is that the negative terms come from categories where B is small (<code>p_B &lt; p_A</code>), and they are weighted by that same small <code>p_B</code>, so they can never outweigh the positive terms. A negative <em>term</em> is normal; a negative <em>total</em> would signal a bug.</p>
+<h2>Why base 2 — the units are bits</h2>
+<p>The base of the logarithm sets the <strong>unit</strong> of the answer, and only rescales it by a constant, so it changes no rankings:</p>
+<div class="table-wrap"><table><thead><tr><th>Base</th><th>Unit</th><th>Conversion</th></tr></thead><tbody><tr><td>2</td><td><strong>bits</strong> (what the pipeline uses)</td><td>—</td></tr><tr><td>e</td><td>nats</td><td><code>1 nat = 1.4427 bits</code></td></tr><tr><td>10</td><td>bans / dits</td><td><code>1 ban ≈ 3.32 bits</code></td></tr></tbody></table></div>
+<p>Base 2 is chosen so the result reads as <strong>bits</strong>, which makes the coding interpretation concrete:</p>
+<blockquote><p>Build the optimal binary code for the <em>real</em> distribution A — Shannon's theory assigns a category with probability <code>p_A(c)</code> a codeword of length <code>−log₂ p_A(c)</code> bits. Now use that A-optimal code to transmit data that actually follows B. The <strong>average number of extra bits you waste per person</strong>, compared with the best possible code for B, is exactly <code>D_KL(B ‖ A)</code>.</p></blockquote>
+<p>So "KL = 0.05 bits" literally means: <em>encoding the synthetic population with a codebook tuned to the real one costs about 0.05 wasted bits per individual.</em> That is why the "How to read it" guidance frames KL as an information-theoretic surprise, and why 0 means the two distributions are indistinguishable to an optimal coder.</p>
+<h2>Why it is asymmetric</h2>
+<p>Because the weights are <code>p_B(c)</code> and the reference code is built from <code>p_A(c)</code>, swapping the two roles gives a different number: <code>D_KL(B ‖ A) ≠ D_KL(A ‖ B)</code> in general. The pipeline always computes <strong>B relative to A</strong> — "how many extra bits when the real distribution is the reference." This is why KL is best used for <em>ranking</em> candidates against a fixed real A, not as an absolute two-way distance (for a symmetric, bounded alternative, use TV from §1a).</p>
+<h2>Worked example</h2>
+<p>Using the <code>education_level</code> example from <a href="../comparison-metrics-report.html">comparison-metrics.md</a>:</p>
+<div class="table-wrap"><table><thead><tr><th>Category</th><th class="center"><code>p_A</code></th><th class="center"><code>p_B</code></th><th class="center">ratio <code>p_B/p_A</code></th><th class="center"><code>log₂(ratio)</code></th><th class="center">term <code>p_B·log₂</code></th></tr></thead><tbody><tr><td>Primary</td><td class="center">0.20</td><td class="center">0.10</td><td class="center">0.500</td><td class="center">−1.000</td><td class="center"><strong>−0.100</strong></td></tr><tr><td>Secondary</td><td class="center">0.50</td><td class="center">0.55</td><td class="center">1.100</td><td class="center">+0.138</td><td class="center"><strong>+0.076</strong></td></tr><tr><td>Tertiary</td><td class="center">0.30</td><td class="center">0.35</td><td class="center">1.167</td><td class="center">+0.222</td><td class="center"><strong>+0.078</strong></td></tr><tr><td><strong>Sum</strong></td><td class="center"></td><td class="center"></td><td class="center"></td><td class="center"></td><td class="center"><strong>≈ +0.053</strong></td></tr></tbody></table></div>
+<p>So <code>D_KL(B ‖ A) ≈ 0.05 bits</code>. Note the Primary term is <strong>negative</strong> (B under-shoots there, <code>0.10 &lt; 0.20</code>), but the two positive terms outweigh it, leaving a small positive total — as Gibbs' inequality guarantees. The value is small precisely because the two distributions are close.</p>
+<h2>What Laplace smoothing does to the number</h2>
+<p>The raw formula divides by <code>p_A(c)</code>, so a category that is <strong>empty in the real population</strong> (<code>p_A(c) = 0</code>) would make the ratio blow up to infinity. The pipeline avoids this by <strong>Laplace smoothing</strong> — adding 1 to every category count before converting counts to probabilities. Two consequences:</p>
+<ol><li><strong>No infinities or divide-by-zero.</strong> Every <code>p_A(c)</code> becomes strictly positive, so every log-ratio is finite.</li><li><strong>A slight shrink toward 0.</strong> Smoothing nudges both distributions a little closer to uniform, which trims the extreme log-ratios and pulls the divergence slightly <em>down</em>. The effect is tiny when sample sizes are large (adding 1 to counts in the thousands barely moves a proportion) and more noticeable for small populations — the same regime where the chi-squared test also becomes unreliable.</li></ol>
+<p>So the smoothed education divergence is a hair below the <code>≈ 0.05 bits</code> computed above from raw proportions; the exact shift depends on the underlying counts, not just the percentages.</p>
+</main>
+</body>
+</html>

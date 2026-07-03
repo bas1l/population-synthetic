@@ -287,9 +287,19 @@ data is statistically indistinguishable from real — the gold standard. If a cl
   here (can't reject "indistinguishable"). Balanced n and NaN-degradation for tiny B are
   reported alongside.
 
+The AUC is computed by the rank-based **Mann–Whitney identity** (so identical populations give
+exactly 0.5), and the p-value is an **add-one permutation** p-value
+`(1 + #{perm AUC ≥ observed}) / (1 + n_permutations)`, so it is never 0 and bottoms out near
+`1/201 ≈ 0.005`. The SCB scheme tunes it with `folds=5, method="sklearn", seed=42`; the
+primitive's `n_repeats=5, n_permutations=200` are used as-is.
+
 **Worked example:** AUC = 0.52, p = 0.40 → excellent: a trained classifier does barely
 better than a coin flip, so the whole-profile joint distribution is faithful. AUC = 0.95,
 p = 0.005 → poor: profiles are easy to tell apart.
+
+> **Deep dive:** the one-hot encoding, class balancing (`balanced_n = min(n_real, n_syn)`), the
+> Mann–Whitney AUC, the permutation p-value, and the sklearn-vs-MMD backends — see
+> [Reading the C2ST: how the classifier two-sample test is built](comparison-metrics/c2st-explained.md).
 
 ### 4b. Pairwise association fidelity — Cramér's V delta (`association`)
 
@@ -299,10 +309,12 @@ variables are related (0 = independent, 1 = one perfectly predicts the other). T
 computes V for each attribute pair in *both* populations and reports how far apart they
 are.
 
-**How it works (in words):** for each attribute pair, build the cross-tab and compute the
-**bias-corrected (Bergsma) Cramér's V** — a small-sample-corrected version of the
-chi-squared-based association strength. Do this for A (`v_real`) and B (`v_syn`), then take
-`abs_delta_v = |v_real − v_syn|` per pair. Summarised across all pairs by:
+**How it works (in words):** for **every unordered pair** of the scheme's attributes (all
+`15·14/2 = 105` pairs for the Swedish scheme, not just the three configured `joint_pairs`),
+build the cross-tab and compute the **bias-corrected (Bergsma) Cramér's V** — a
+small-sample-corrected version of the chi-squared-based association strength. Do this for A
+(`v_real`) and B (`v_syn`), then take `abs_delta_v = |v_real − v_syn|` per pair. Summarised
+across all pairs by:
 
 - `mean_abs_delta_v` — the average gap, and
 - `frobenius_norm` — the root-sum-of-squares of the gaps (penalises a few large errors).
@@ -318,6 +330,11 @@ low but this pair stands out in the per-pair table (also exported to CSV).
 lower is better** (0 = the association structure is perfectly reproduced). Unlike the joint
 chi-squared p-value, this gives a **direction and magnitude** — you can see *which* pair is
 wrong and by how much.
+
+> **Deep dive:** the full Bergsma-corrected V formula (φ², the corrected row/column counts),
+> why all 105 pairs are scored, and how `mean_abs_delta_v` vs `frobenius_norm` weight a single
+> broken pair differently — see
+> [Reading the association fidelity: Cramér's V delta](comparison-metrics/association-cramers-v-explained.md).
 
 ### 4c. Grounded joint total-variation distance (`joint_fidelity.pairs`)
 
@@ -338,6 +355,10 @@ present a made-up joint as if the agency published it.
 **How to read it:** **0 (identical joint) to 1 (disjoint), lower is better**. Returns
 `NaN` when either population has no individuals landing in the grid. It is the finer,
 magnitude-based complement to the legacy joint chi-squared p-value.
+
+> **Deep dive:** the per-population normalisation, the `NaN`-means-"not measurable" rule, and
+> the full SCB pair table (5 grounded vs 3 reference, with the audit basis for each) — see
+> [Reading the grounded joint TV: distance and the grounding flag](comparison-metrics/joint-tv-grounding-explained.md).
 
 ### 4d. K-way combination plausibility (`combination_plausibility.checks`)
 
@@ -365,7 +386,13 @@ worry about — real data never contained those combinations.
 
 **How to read it:** `fraction_impossible` and `fraction_rare` are **≥ 0, lower is better**;
 `fraction_impossible = 0` means every synthetic profile is at least possible in reality.
-`NaN` when B is empty.
+`NaN` when B is empty. For the same tuple and threshold this is exactly the coherence score
+split by severity: `fraction_impossible + fraction_rare = 1 − coherence.score`.
+
+> **Deep dive:** the exact three-way boundary rule (`p ≤ 0` impossible / `0 < p < threshold`
+> rare / `p ≥ threshold` plausible), the fraction equations, and the precise count-for-count
+> relationship to the §3a coherence score — see
+> [Reading k-way combination plausibility: the severity split](comparison-metrics/combination-plausibility-explained.md).
 
 ---
 

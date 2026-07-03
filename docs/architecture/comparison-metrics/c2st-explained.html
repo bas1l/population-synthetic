@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading the C2ST: how the classifier two-sample test is built — comparison metrics</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<main class="note-wrap">
+<p class="breadcrumb"><a href="../comparison-metrics-report.html">&#9666; Comparison metrics — field guide</a></p>
+<h1>Reading the C2ST: how the classifier two-sample test is built</h1>
+<p>The Classifier Two-Sample Test (C2ST) is the strongest single fidelity check in the stack. Its logic: <strong>if a classifier cannot tell real profiles from synthetic ones, the two are statistically indistinguishable.</strong> This note unpacks the machinery behind the two headline numbers — <code>auc</code> and <code>p_value</code> — because several non-obvious steps (class balancing, the rank-based AUC, the permutation p-value, the two backends) determine what those numbers mean. It lives alongside the <a href="tv-distance-half-factor.html">TV ½-factor</a>, <a href="kl-divergence-bits-and-log.html">KL bits &amp; log-ratio</a>, and <a href="coherence-score-explained.html">coherence-score</a> notes. Code: <code>multivariate.py:c2st</code> and <code>evaluator.py:_compute_c2st</code>.</p>
+<h2>Step 1 — encode the whole profile (one-hot)</h2>
+<p>Each individual becomes a fixed-width feature vector via <code>one_hot_encode</code>. Columns are laid out block-by-block in <code>scheme.attributes</code> order; within a block, one column per category in <code>scheme.categories[attr]</code> order, so the encoding is <strong>identical across both populations</strong>. A value outside an attribute's category set — a synthetic-only value or a <code>None</code> — leaves that attribute's whole block <strong>all-zero</strong> (an implicit "other"), rather than growing the matrix. So the classifier sees complete joint profiles, not one attribute at a time.</p>
+<h2>Step 2 — balance the classes</h2>
+<p>Real usually vastly outnumbers synthetic, and a classifier can score a high AUC just by exploiting that imbalance. So the classes are <strong>balanced by subsampling the larger down</strong> to:</p>
+<pre><code>balanced_n = min(n_real, n_syn)</code></pre>
+<p>drawn <strong>without replacement</strong>. This is repeated <code>n_repeats = 5</code> times (fresh subsample each time) and the results averaged, so the reported AUC/p-value are means over 5 balanced draws. If <code>balanced_n &lt; 2</code> (a tiny or failed synthetic population) both numbers degrade to <code>NaN</code> without error.</p>
+<h2>Step 3 — cross-validated AUC</h2>
+<p>Per repeat, real (label <code>0</code>) and synthetic (label <code>1</code>) are stacked and run through <strong>stratified k-fold cross-validation</strong> (<code>eff_folds = max(2, min(folds, balanced_n))</code>, folds from config, default 5). Every row is scored while held out, and the pooled out-of-fold scores give one ROC-AUC. The AUC itself is computed by the <strong>rank-based Mann–Whitney identity</strong> (not a threshold sweep):</p>
+<pre><code>AUC = ( Σ ranks(synthetic scores) − n_syn·(n_syn + 1)/2 ) / (n_syn · n_real)</code></pre>
+<p>with tie-aware average ranks (<code>scipy.rankdata</code>). A useful consequence: if the two populations are identical the classifier's scores are effectively constant, ties dominate, and the AUC comes out <strong>exactly 0.5</strong> — no spurious signal from a degenerate model.</p>
+<h2>Step 4 — the permutation p-value</h2>
+<p>An AUC slightly above 0.5 could be noise. To test that, the labels are <strong>shuffled</strong> <code>n_permutations = 200</code> times; for each shuffle the whole CV-AUC is recomputed, and the test counts how many permuted AUCs reach or exceed the observed one. The p-value uses the standard <strong>add-one</strong> estimator:</p>
+<pre><code>p_value = (1 + #{ perm AUC ≥ observed AUC }) / (1 + n_permutations)</code></pre>
+<p>Adding 1 to numerator and denominator means the p-value is never exactly 0 (the observed labelling is itself one valid arrangement) and is bounded below by <code>1/201 ≈ 0.005</code>. A <strong>high p-value is good</strong>: it says an AUC above 0.5 is not distinguishable from chance, i.e. the populations look the same to the classifier.</p>
+<h2>The two backends</h2>
+<p><code>method</code> resolves to the backend actually used, reported in the <code>method</code> field:</p>
+<div class="table-wrap"><table><thead><tr><th><code>method</code> config</th><th>Backend</th><th>What runs</th></tr></thead><tbody><tr><td><code>"sklearn"</code> / <code>"auto"</code></td><td><strong>sklearn</strong> if importable, else falls back to mmd</td><td>cross-validated <strong>logistic regression</strong> (<code>LogisticRegression(max_iter=1000)</code>, <code>predict_proba</code>)</td></tr><tr><td><code>"mmd"</code></td><td><strong>mmd</strong> (numpy/scipy only)</td><td>nearest-centroid / <strong>linear-MMD</strong> surrogate: direction <code>μ_syn − μ_real</code> from the training rows, each held-out row scored by its projection onto it</td></tr></tbody></table></div>
+<p>Any other value raises. The SCB scheme sets <code>method="sklearn"</code>, so with the <code>[analysis]</code> extra installed you get logistic-regression AUCs; without scikit-learn the module still runs via the MMD fallback. Config defaults when the <code>c2st</code> block is absent: <code>folds=5, method="auto", seed=0</code>; the primitive's own defaults <code>n_repeats=5, n_permutations=200</code> are used because the evaluator passes only method/folds/seed.</p>
+<h2>How to read the pair of numbers</h2>
+<ul><li><strong><code>auc</code> ≈ 0.5</strong> → indistinguishable (best); <code>auc → 1.0</code> → trivially separable (the joint profile is clearly wrong). This is the direction that matters — lower is better.</li><li><strong><code>p_value</code> high</strong> → cannot reject "indistinguishable" (good); low → the separability is real.</li><li><strong><code>balanced_n</code></strong> tells you how much data actually drove the test (the smaller population's size); a very small <code>balanced_n</code> means treat both numbers cautiously.</li><li>Because AUC is bounded below at 0.5 in interpretation but the raw statistic can dip slightly under 0.5 on noise, read "≈ 0.5" as the target, not "exactly 0.5."</li></ul>
+</main>
+</body>
+</html>

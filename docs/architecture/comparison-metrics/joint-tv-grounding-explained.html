@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading the grounded joint TV: distance and the grounding flag — comparison metrics</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<main class="note-wrap">
+<p class="breadcrumb"><a href="../comparison-metrics-report.html">&#9666; Comparison metrics — field guide</a></p>
+<h1>Reading the grounded joint TV: distance and the grounding flag</h1>
+<p>The grounded joint total-variation distance applies the same TV idea as the marginal <a href="tv-distance-half-factor.html">§1a TV distance</a> — but to a <strong>two-attribute joint distribution</strong> instead of a single attribute. Its two-part value (<code>joint_tv</code> plus a <code>grounded</code> flag) is what lets downstream reporting distinguish a <em>validated</em> joint from a merely <em>illustrative</em> one. This note covers the equation, the per-population normalisation, the <code>NaN</code> rule, and — the part that "misses information" in the one-liner — what <strong>grounding</strong> actually means. Code: <code>multivariate.py:joint_tv</code> and <code>evaluator.py:_compute_joint_fidelity</code>.</p>
+<h2>The equation</h2>
+<p>For a configured pair <code>(x, y)</code>, build each population's counts cross-tab over the scheme's <strong>fixed</strong> <code>x × y</code> category grid, normalise <strong>each population over its own in-grid mass</strong>, and sum the absolute cell differences, halved:</p>
+<pre><code>p_A(x,y) = count_A(x,y) / Σ count_A      p_B(x,y) = count_B(x,y) / Σ count_B
+
+joint_TV = ½ · Σ_cells | p_A(x,y) − p_B(x,y) |</code></pre>
+<p>The <code>½</code> is there for the same reason as in the marginal case — see the <a href="tv-distance-half-factor.html">½-factor note</a>: without it the displaced mass is double-counted and the metric loses its clean 0-to-1 scale. Values outside the grid (including <code>None</code>) are dropped before normalising, so each population's cells sum to 1 over the shared grid.</p>
+<ul><li><code>joint_TV = 0</code> → identical joints.</li><li><code>joint_TV = 1</code> → disjoint supports (no overlapping cells).</li><li><code>joint_TV = NaN</code> → <strong>either</strong> population has no in-grid observations for the pair (nothing to normalise); this is a "not measurable," not a "far apart."</li></ul>
+<h2>What "grounded" means — and why it matters</h2>
+<p>Each pair the evaluator scores comes from <code>scheme.grounded_joint_pairs</code>, and every entry carries two audit fields beyond the number:</p>
+<ul><li><strong><code>grounded</code> (bool)</strong> — <code>true</code> means the <em>real</em> population's joint over this pair is backed by an actual statistics-agency <strong>conditional cross-tabulation</strong>: the SCB sampler drew the two attributes with their real dependency preserved, so <code>p_A(x,y)</code> is a defensible ground truth. <code>false</code> means the reference joint is <strong>not</strong> API-identical — it is a marginal product or a forced-independence copy — so the pair is shown for context but must not be presented as agency-validated.</li><li><strong><code>basis</code> (str)</strong> — a free-text audit note recording <em>why</em> the pair is (or isn't) grounded, traceable to the SCB distribution-analysis audit.</li></ul>
+<p>This split exists so the paper (and any downstream reporting) does not over-claim: a low <code>joint_TV</code> on a <strong>grounded</strong> pair is real evidence the synthetic joint matches reality; a low <code>joint_TV</code> on a <strong>non-grounded</strong> pair only says the synthetic data matches a reference that was itself assembled from marginals — no agency ever published that joint.</p>
+<h2>The SCB pairs</h2>
+<p>The Swedish scheme configures <strong>eight</strong> pairs — five grounded, three reference:</p>
+<div class="table-wrap"><table><thead><tr><th>Pair</th><th class="center">Grounded?</th><th>Basis (abridged)</th></tr></thead><tbody><tr><td><code>age_group × biological_sex</code></td><td class="center">✅</td><td>SCB query separates sex; parser preserves the joint</td></tr><tr><td><code>age_group × civil_status</code></td><td class="center">✅</td><td>sampled conditional on (age, sex)</td></tr><tr><td><code>biological_sex × civil_status</code></td><td class="center">✅</td><td>sampled conditional on (age, sex)</td></tr><tr><td><code>age_group × income_source</code></td><td class="center">✅</td><td>sampled conditional on (employment, age)</td></tr><tr><td><code>employment_status × income_source</code></td><td class="center">✅</td><td>sampled conditional on (employment, age)</td></tr><tr><td><code>age_group × education_level</code></td><td class="center">❌</td><td>education conditional on age but <strong>sex pooled</strong> — not API-identical</td></tr><tr><td><code>age_group × employment_status</code></td><td class="center">❌</td><td>sex pooled, education ignored — not API-identical</td></tr><tr><td><code>education_level × employment_status</code></td><td class="center">❌</td><td><strong>forced independence</strong> — identical employment across education levels</td></tr></tbody></table></div>
+<h2>How to read it</h2>
+<ul><li><strong>0 to 1, lower is better</strong>; it is the finer, magnitude-based complement to the legacy joint chi-squared <strong>p-value</strong> (§2a), which only pools A and B into one table and returns a coarse "distinguishable?" signal.</li><li><strong>Read the <code>grounded</code> flag first.</strong> Only grounded pairs support a claim that the synthetic joint reproduces reality; treat non-grounded pairs as sanity context.</li><li>A <code>NaN</code> means "no in-grid data," not "bad" — check population coverage before interpreting.</li></ul>
+</main>
+</body>
+</html>

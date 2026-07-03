@@ -512,7 +512,7 @@
     <div class="callout">
       <span class="k">Deep dive — why halve the sum?</span> Without the ½ you double-count the
       displaced mass (every unit that leaves one category reappears in another) and TV loses its
-      clean 0-to-1 scale. See <a class="backlink" href="comparison-metrics/tv-distance-half-factor.md">the ½-factor note</a>.
+      clean 0-to-1 scale. See <a class="backlink" href="comparison-metrics/tv-distance-half-factor.html">the ½-factor note</a>.
     </div>
   </div>
 </section>
@@ -619,7 +619,7 @@
       <span class="k">Deep dive — the log-ratio &amp; base 2.</span> What each term means, why the
       base is 2 (bits vs nats), why terms can be negative yet the total never is, and how Laplace
       smoothing shifts the number. See
-      <a class="backlink" href="comparison-metrics/kl-divergence-bits-and-log.md">the bits &amp; log-ratio note</a>.
+      <a class="backlink" href="comparison-metrics/kl-divergence-bits-and-log.html">the bits &amp; log-ratio note</a>.
     </div>
   </div>
 </section>
@@ -898,7 +898,7 @@
       <span class="k">Deep dive — the plausibility threshold.</span> What the threshold really
       means, the two ways to be flagged, the missing-value trap, why the tuple stays small (curse
       of dimensionality), the "A is a finite sample" caveat, and how coherence relates to §4d. See
-      <a class="backlink" href="comparison-metrics/coherence-score-explained.md">the coherence-score note</a>.
+      <a class="backlink" href="comparison-metrics/coherence-score-explained.html">the coherence-score note</a>.
     </div>
   </div>
 </section>
@@ -986,7 +986,19 @@
     <p><span class="label-line">How to read it.</span> <strong>AUC ≈ 0.5</strong> →
       indistinguishable (best); <strong>AUC → 1.0</strong> → trivially separable (worst). The
       <code>p_value</code> tests whether an AUC above 0.5 is real or noise — a
-      <strong>high p is good</strong> (can't reject "indistinguishable").</p>
+      <strong>high p is good</strong> (can't reject "indistinguishable"). The AUC uses the
+      rank-based <strong>Mann–Whitney identity</strong> (identical populations give exactly 0.5);
+      the p-value is an <strong>add-one permutation</strong> value
+      <code>(1 + #{perm ≥ observed}) / (1 + n_permutations)</code>, so it never hits 0 (floor
+      ≈ 1/201). SCB tuning: <code>folds=5, method="sklearn", seed=42</code>; primitive defaults
+      <code>n_repeats=5, n_permutations=200</code>.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — how the test is built.</span> One-hot encoding, class balancing
+      (<code>balanced_n = min(n_real, n_syn)</code>), the Mann–Whitney AUC, the permutation
+      p-value, and the sklearn-vs-MMD backends. See
+      <a class="backlink" href="comparison-metrics/c2st-explained.html">the C2ST note</a>.
+    </div>
   </div>
 </section>
 
@@ -1058,7 +1070,17 @@
       <code>mean_abs_delta_v</code>, <code>frobenius_norm</code> are all
       <strong>≥ 0, lower is better</strong> (0 = association structure perfectly reproduced).
       Unlike the joint chi-squared p-value, this gives a <strong>direction and magnitude</strong>
-      — you see <em>which</em> pair is wrong and by how much (also exported to CSV).</p>
+      — you see <em>which</em> pair is wrong and by how much (also exported to CSV). Note it scores
+      <strong>every</strong> attribute pair (all 105 for the Swedish scheme), not just the
+      configured joint pairs.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — the V formula &amp; the summaries.</span> The full Bergsma
+      bias-correction (φ², corrected row/column counts), why all 105 pairs are scored, and how
+      <code>mean_abs_delta_v</code> vs <code>frobenius_norm</code> weight a single broken pair
+      differently. See
+      <a class="backlink" href="comparison-metrics/association-cramers-v-explained.html">the Cramér's V note</a>.
+    </div>
   </div>
 </section>
 
@@ -1121,7 +1143,15 @@
     <p><span class="label-line">How to read it.</span> <strong>0 (identical joint) to 1
       (disjoint), lower is better</strong>. Returns <code>NaN</code> when either population has no
       individuals in the grid. The finer, magnitude-based complement to the legacy joint
-      chi-squared p-value.</p>
+      chi-squared p-value. <strong>Read the <code>grounded</code> flag first</strong> — only
+      grounded pairs support a claim that the synthetic joint reproduces reality.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — normalisation &amp; grounding.</span> The per-population
+      normalisation, the <code>NaN</code>-means-"not measurable" rule, and the full SCB pair table
+      (5 grounded vs 3 reference, with the audit basis for each). See
+      <a class="backlink" href="comparison-metrics/joint-tv-grounding-explained.html">the grounded joint-TV note</a>.
+    </div>
   </div>
 </section>
 
@@ -1168,7 +1198,17 @@
     <p><span class="label-line">How to read it.</span> <code>fraction_impossible</code> and
       <code>fraction_rare</code> are <strong>≥ 0, lower is better</strong>;
       <code>fraction_impossible = 0</code> means every synthetic profile is at least possible in
-      reality. <code>NaN</code> when B is empty.</p>
+      reality. <code>NaN</code> when B is empty. For the same tuple and threshold this is exactly
+      the coherence score split by severity:
+      <code>fraction_impossible + fraction_rare = 1 − coherence.score</code>.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — the severity split.</span> The exact three-way boundary rule
+      (<code>p ≤ 0</code> impossible / <code>0 &lt; p &lt; threshold</code> rare / <code>p ≥
+      threshold</code> plausible), the fraction equations, and the count-for-count relationship to
+      the §3a coherence score. See
+      <a class="backlink" href="comparison-metrics/combination-plausibility-explained.html">the k-way plausibility note</a>.
+    </div>
   </div>
 </section>
 
