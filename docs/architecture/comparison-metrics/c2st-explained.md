@@ -31,6 +31,12 @@ value outside an attribute's category set — a synthetic-only value or a `None`
 attribute's whole block **all-zero** (an implicit "other"), rather than growing the matrix. So
 the classifier sees complete joint profiles, not one attribute at a time.
 
+> **What's a "block"?** Not a demographics term — it is the **contiguous run of one-hot columns
+> that encodes a single attribute** (one column per category of that attribute). So `education_level`
+> (3 categories) is a 3-column block. The whole vector is these per-attribute blocks laid end to
+> end, and each person has **exactly one lit column per block** (or an all-zero block if their value
+> isn't a known category). In short: attribute → a block; category → one column within it.
+
 **Example.** A real 35-year-old employed woman with a tertiary degree encodes to a 12-long
 vector with exactly **four** 1s — one lit column per attribute block. A synthetic person whose
 `employment_status` is `"student"` (not a scheme category) gets an **all-zero employment
