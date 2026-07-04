@@ -156,16 +156,22 @@
   <p class="hint">Cross-validation gives one out-of-fold <em>score</em> per person. The AUC is a pure
   ranking statistic on those scores: the chance a random synthetic person outranks a random real one.</p>
 
-  <div class="lab-sub">A · One person → one score</div>
-  <p class="hint">Here is the most synthetic-looking individual in your current population, and exactly
-  how their score is built: sum the per-attribute log-odds
-  <code>log(p_syn / p_real)</code> over the four categories they land in. A category that is more common
-  in synthetic than in real adds a positive term (looks synthetic); rarer adds a negative one. At
-  divergence 0 every ratio is 1, every term is <code>log 1 = 0</code>, so the score is 0.</p>
+  <div class="lab-sub">A · One person → one score → its rank</div>
+  <p class="hint">Every attribute has a <b>real</b> distribution and a <b>synthetic</b> distribution
+  over its categories — shown below for <b>age_group</b> (each bar is a category's probability; the
+  most synthetic-looking person's category is outlined). A person's score reads off their category's
+  bar in each chart and adds up <code>log(p_syn/p_real)</code> across all four attributes; that score
+  is what gets ranked. At divergence 0 the two distributions match, every term is <code>log 1 = 0</code>,
+  and the score is 0.</p>
+  <div class="lab-two">
+    <svg id="s3-dist-real" viewBox="0 0 270 182" role="img" aria-label="Real distribution of the illustrated attribute"></svg>
+    <svg id="s3-dist-syn" viewBox="0 0 270 182" role="img" aria-label="Synthetic distribution of the illustrated attribute"></svg>
+  </div>
   <div class="lab-readout">
     <table class="work-table" id="s3-person"></table>
     <div class="work-sum" id="s3-person-sum"></div>
   </div>
+  <svg id="s3-rankstrip" viewBox="0 0 560 86" role="img" aria-label="Where this person's score falls among all scores"></svg>
 
   <div class="lab-sub">B · The rank identity — a worked example you can drive</div>
   <p class="hint">Three real (teal) and three synthetic (orange) people. Drag a chip left/right (or
@@ -188,7 +194,11 @@
   synthetic people (that count comes straight from <b>balanced_n</b> in Step 2, capped at 300 for a
   snappy demo). Each person's score is the log-odds from part A; the <b>same rank formula</b> from part B,
   applied to all of them, is the AUC. At divergence 0 the two are identical → AUC is exactly 0.5 and
-  the ROC hugs the diagonal; turn the master knob up and the curve bows toward the top-left.</p>
+  the ROC hugs the diagonal; turn the master knob up and the curve bows toward the top-left. The ROC's
+  axes are the <b>FPR</b> — <b>false-positive rate</b>, the fraction of <em>real</em> people wrongly
+  ranked as synthetic — and the <b>TPR</b> — <b>true-positive rate</b>, the fraction of
+  <em>synthetic</em> people correctly ranked as synthetic; the <b>AUC</b> is the area under that
+  curve.</p>
   <div class="lab-two">
     <svg id="s3-roc" viewBox="0 0 260 240" role="img" aria-label="ROC curve for the generated population"></svg>
     <div class="lab-readout" id="s3-pop-out"></div>
@@ -532,7 +542,40 @@
     });
   })();
 
-  // ══ STEP 3A ══ one individual's score equation ═══════════════════════
+  // ══ STEP 3A ══ distributions + one individual's score & rank ═════════
+  var ILLUS = 0;   // attribute drawn as bar charts (age_group)
+
+  function drawDist(id, attr, probs, hiIdx, title, color, maxP) {
+    var svg = document.getElementById(id); clear(svg);
+    var X0 = 40, X1 = 258, base = 150, top = 40, n = attr.cats.length, slot = (X1 - X0) / n, bw = Math.min(42, slot * 0.62);
+    svg.appendChild(el("text", { x: 20, y: 18, class: "mono ax" }, title + " · " + attr.key));
+    svg.appendChild(el("line", { x1: X0, y1: base, x2: X1, y2: base, stroke: css("--line-strong") }));
+    attr.cats.forEach(function (c, i) {
+      var p = probs[i], h = Math.max(1, (base - top) * p / maxP), x = X0 + i * slot + (slot - bw) / 2, on = i === hiIdx;
+      svg.appendChild(el("rect", { x: x, y: base - h, width: bw, height: h, rx: 3, fill: color,
+        "fill-opacity": on ? 1 : 0.4, stroke: on ? css("--ink") : "none", "stroke-width": on ? 2 : 0 }));
+      svg.appendChild(el("text", { x: x + bw / 2, y: base - h - 5, "text-anchor": "middle", class: "mono", "font-size": 10, fill: on ? css("--ink") : css("--muted") }, p.toFixed(2)));
+      svg.appendChild(el("text", { x: x + bw / 2, y: base + 14, "text-anchor": "middle", "font-size": 9, fill: css("--muted") }, c));
+      if (on) svg.appendChild(el("text", { x: x + bw / 2, y: base + 27, "text-anchor": "middle", "font-size": 9.5, fill: color, "font-weight": 600 }, "▲ this person"));
+    });
+  }
+
+  function drawRankStrip(bestIdx) {
+    var svg = document.getElementById("s3-rankstrip"); clear(svg);
+    var sc = POP.scores, lab = POP.labels, N = sc.length;
+    var mn = Math.min.apply(null, sc), mx = Math.max.apply(null, sc), y = 46, X0 = 40, X1 = 520;
+    function px(v) { return (mx > mn) ? X0 + (v - mn) / (mx - mn) * (X1 - X0) : (X0 + X1) / 2; }
+    svg.appendChild(el("text", { x: 20, y: 18, class: "mono ax" }, "WHERE THIS PERSON RANKS · every score, sorted low → high"));
+    svg.appendChild(el("line", { x1: X0, y1: y, x2: X1, y2: y, stroke: css("--line-strong") }));
+    sc.forEach(function (s, i) { svg.appendChild(el("circle", { cx: px(s), cy: y, r: 2.5, fill: lab[i] === 1 ? css("--syn") : css("--real"), "fill-opacity": 0.3 })); });
+    var bx = px(sc[bestIdx]), R = Math.round(rankdata(sc)[bestIdx]);
+    svg.appendChild(el("line", { x1: bx, y1: y - 18, x2: bx, y2: y + 10, stroke: css("--good"), "stroke-width": 2 }));
+    svg.appendChild(el("circle", { cx: bx, cy: y, r: 4.5, fill: css("--good") }));
+    svg.appendChild(el("text", { x: Math.max(X0 + 26, Math.min(bx, X1 - 26)), y: y - 24, "text-anchor": "middle", class: "mono", "font-size": 11.5, fill: css("--good"), "font-weight": 600 }, "rank " + R + " of " + N));
+    svg.appendChild(el("text", { x: X0, y: y + 26, "font-size": 10, fill: css("--muted") }, 'lower · "looks real"'));
+    svg.appendChild(el("text", { x: X1, y: y + 26, "text-anchor": "end", "font-size": 10, fill: css("--muted") }, '"looks synthetic" · higher'));
+  }
+
   function renderS3person() {
     var t = document.getElementById("s3-person"), sum = document.getElementById("s3-person-sum");
     if (!POP.cats.length) { t.innerHTML = ""; sum.innerHTML = ""; return; }
@@ -540,24 +583,32 @@
     var half = POP.cats.length / 2, best = half, bestS = -Infinity;
     for (var i = half; i < POP.cats.length; i++) { if (POP.scores[i] > bestS) { bestS = POP.scores[i]; best = i; } }
     var cat = POP.cats[best], pSyn = pSynAt(S.d), z = 0;
+    // (1) the two distribution visuals for one attribute, person's category highlighted
+    var a0 = ATTRS[ILLUS], hi = cat[ILLUS], maxP = Math.max.apply(null, a0.real.concat(pSyn[ILLUS]));
+    drawDist("s3-dist-real", a0, a0.real, hi, "REAL", css("--real"), maxP);
+    drawDist("s3-dist-syn", a0, pSyn[ILLUS], hi, "SYNTHETIC", css("--syn"), maxP);
+    // (2) the per-attribute score build-up
     t.innerHTML = "<thead><tr><th>attribute</th><th>category</th><th>p_real</th><th>p_syn</th><th>log(p_syn/p_real)</th></tr></thead>";
     var body = "";
     ATTRS.forEach(function (a, k) {
       var ps = pSyn[k][cat[k]], pr = a.real[cat[k]];
       var term = Math.log(Math.max(FLOOR, ps) / Math.max(FLOOR, pr)); z += term;
       var cls = term > 1e-9 ? "sy" : (term < -1e-9 ? "rl" : "");
-      body += "<tr><td>" + a.key.split("_")[0] + "</td><td>" + a.cats[cat[k]] + "</td><td>" +
+      body += "<tr><td>" + a.key.split("_")[0] + (k === ILLUS ? " ▲" : "") + "</td><td>" + a.cats[cat[k]] + "</td><td>" +
         pr.toFixed(2) + "</td><td>" + ps.toFixed(2) + '</td><td class="' + cls + '">' +
         (term >= 0 ? "+" : "") + term.toFixed(2) + "</td></tr>";
     });
     t.innerHTML += "<tbody>" + body + "</tbody>";
     sum.innerHTML =
-      "z = Σ log(p_syn/p_real) = " +
+      "score  z = Σ log(p_syn/p_real) = " +
       ATTRS.map(function (a, k) { var term = Math.log(Math.max(FLOOR, pSyn[k][cat[k]]) / Math.max(FLOOR, a.real[cat[k]])); return (term >= 0 ? "+" : "") + term.toFixed(2); }).join(" ") +
       " = <span class=\"big\">" + z.toFixed(2) + "</span>" +
       (Math.abs(z) < 1e-9
-        ? ' <span class="good">(divergence 0 → all terms log 1 = 0)</span>'
-        : ' <span class="bad">→ this profile looks synthetic</span>');
+        ? ' <span class="good">(divergence 0 → all terms log 1 = 0, score 0)</span>'
+        : ' <span class="bad">→ looks synthetic</span>') +
+      '<br><span style="color:var(--muted)">Its rank is where this score falls among all scores below.</span>';
+    // (3) the rank position among the whole population
+    drawRankStrip(best);
   }
 
   // ══ STEP 3C ══ population + ROC ══════════════════════════════════════
