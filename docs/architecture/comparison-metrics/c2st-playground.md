@@ -1,0 +1,671 @@
+# The C2ST, hands-on: an interactive walkthrough
+
+This is the interactive companion to the [C2ST deep-dive note](c2st-explained.md). It rebuilds the
+same four steps — **one-hot encode → balance the classes → cross-validated Mann–Whitney AUC →
+permutation p-value** — but here *you* drive them. Everything on this page is **one linked
+pipeline**: the master *synthetic divergence* knob at the top and the class counts in Step 2 flow
+downward, so a change in one step ripples through the AUC and p-value below. Nothing is sent
+anywhere; the maths matches the code in `multivariate.py:c2st`.
+
+<section class="c2st-lab" id="c2st-lab">
+<style>
+.c2st-lab { margin: 26px 0; font-family: var(--font-body); color: var(--ink); }
+.c2st-lab * { box-sizing: border-box; }
+
+.lab-scenario {
+  padding: 14px 18px; background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 1px solid var(--accent); border-radius: 12px; margin-bottom: 6px;
+}
+.lab-scenario .sc-head { font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
+.lab-scenario .sc-hint { font-size: .85rem; color: var(--muted); margin: 0 0 10px; max-width: 70ch; }
+.lab-scenario .sc-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lab-scenario input[type=range] { width: min(360px, 60vw); accent-color: var(--accent); }
+.lab-scenario .sc-val { font-family: var(--font-mono); font-weight: 600; font-size: 1.05rem; color: var(--accent); min-width: 3.5ch; }
+
+.lab-step { margin: 8px 0 4px; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.lab-step h3 { font-family: var(--font-body); font-weight: 700; font-size: 1.12rem; margin: 0 0 6px; }
+.lab-step h3 .step-n { font-family: var(--font-mono); font-size: .8rem; color: var(--accent); background: var(--real-soft); padding: 2px 8px; border-radius: 6px; margin-right: 8px; }
+.lab-step p.hint { font-size: .92rem; color: var(--muted); margin: 6px 0 16px; max-width: 68ch; }
+.lab-flow { text-align: center; color: var(--muted); font-family: var(--font-mono); font-size: .78rem; letter-spacing: .03em; margin: 4px 0; }
+.lab-flow b { color: var(--accent); }
+
+.lab-controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-end; margin: 14px 0 6px; }
+.lab-field { display: flex; flex-direction: column; gap: 5px; font-size: .82rem; color: var(--muted); }
+.lab-field select {
+  font-size: .9rem; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--line-strong);
+  background: var(--surface-2); color: var(--ink); min-width: 150px;
+}
+.lab-field input[type=range] { width: 190px; accent-color: var(--accent); }
+.lab-check { display: inline-flex; align-items: center; gap: 8px; font-size: .88rem; color: var(--ink); }
+.lab-check input { accent-color: var(--syn); width: 16px; height: 16px; }
+
+.lab-btn {
+  font-family: var(--font-body); font-size: .88rem; font-weight: 600; cursor: pointer;
+  padding: 8px 15px; border-radius: 9px; border: 1px solid var(--accent);
+  background: var(--accent); color: #fff;
+}
+.lab-btn.ghost { background: var(--surface); color: var(--accent); }
+.lab-btn:hover:not(:disabled) { filter: brightness(1.06); }
+.lab-btn:disabled { opacity: .5; cursor: default; }
+
+.lab-readout {
+  font-family: var(--font-mono); font-size: .9rem; line-height: 1.7;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px;
+  padding: 12px 15px; margin-top: 14px;
+}
+.lab-readout .big { font-size: 1.15rem; font-weight: 600; }
+.lab-readout .good { color: var(--good); }
+.lab-readout .bad { color: var(--bad); }
+.lab-readout .warn { color: var(--warn); }
+.lab-readout .pill { display: inline-block; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; }
+.lab-two { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+.lab-two > * { flex: 1 1 240px; min-width: 0; }
+.lab-sub { font-family: var(--font-body); font-weight: 700; font-size: .98rem; margin: 20px 0 4px; }
+
+.c2st-lab svg { display: block; width: 100%; height: auto; max-width: 560px; margin: 6px auto; }
+.c2st-lab svg text { font-family: var(--font-body); fill: var(--ink); }
+.c2st-lab svg .mono { font-family: var(--font-mono); }
+.c2st-lab svg .ax { fill: var(--muted); font-size: 12px; }
+
+.lab-chip { cursor: grab; }
+.lab-chip:active { cursor: grabbing; }
+.lab-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.work-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: .86rem; margin: 6px 0 2px; }
+.work-table th, .work-table td { padding: 5px 8px; text-align: center; border-bottom: 1px solid var(--line); }
+.work-table th { color: var(--muted); font-weight: 600; font-size: .76rem; text-transform: uppercase; letter-spacing: .03em; }
+.work-table td.rl { color: var(--real); font-weight: 600; }
+.work-table td.sy { color: var(--syn); font-weight: 600; }
+.work-table tr.is-syn { background: var(--syn-soft); }
+.work-sum { font-family: var(--font-mono); font-size: .92rem; margin-top: 8px; line-height: 1.7; }
+.work-sum .big { font-size: 1.15rem; font-weight: 600; }
+
+.lab-verdict {
+  margin-top: 16px; padding: 16px 18px; border-radius: 11px; border: 1px solid var(--line);
+  font-family: var(--font-body); background: var(--surface-2);
+}
+.lab-verdict.ok  { border-color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
+.lab-verdict.no  { border-color: var(--bad);  background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
+.lab-verdict .vhead { font-weight: 700; font-size: 1.05rem; }
+.lab-verdict .vhead.ok { color: var(--good); }
+.lab-verdict .vhead.no { color: var(--bad); }
+</style>
+
+<div class="lab-scenario">
+  <div class="sc-head">Scenario — synthetic divergence <span class="sc-val" id="scDivVal">0.00</span></div>
+  <p class="sc-hint">The one master knob: how far the synthetic population's marginals drift from the
+  real ones. <b>0 = a perfect twin</b>; higher = more different. Every step below reacts to it — the
+  profile's score in Step 1, the population and ROC in Step 3, the p-value and verdict in Step 4.</p>
+  <div class="sc-row">
+    <span class="lab-field" style="color:var(--muted);font-size:.8rem">twin&nbsp;0.0</span>
+    <input type="range" id="scDiv" min="0" max="100" step="1" value="0" aria-label="synthetic divergence">
+    <span class="lab-field" style="color:var(--muted);font-size:.8rem">very&nbsp;different&nbsp;1.0</span>
+  </div>
+</div>
+
+<!-- ══ STEP 1 ══ one-hot encode + score -->
+<div class="lab-step">
+  <h3><span class="step-n">STEP 1</span>Encode a whole profile (one-hot) → a score</h3>
+  <p class="hint">A classifier needs numbers, not labels. Each attribute with <em>N</em> categories
+  becomes an <em>N</em>-cell block; the person's value lights exactly one cell per block. That vector
+  collapses to a single <em>score</em> — "how synthetic does this profile look?" — via the log-odds
+  <code>Σ log(p_syn/p_real)</code>, evaluated at the divergence above. The table below shows the
+  arithmetic: for each category you pick, <code>p_real</code> is its share of the real population and
+  <code>p_syn</code> its share of the synthetic one, and their log ratio is that attribute's
+  contribution to the score (equal shares → <code>log 1 = 0</code>). That score is exactly what Step 3
+  ranks. Set employment to <em>student</em> — a value the scheme doesn't know — and its whole block
+  goes all-zero ("other"), contributing nothing.</p>
+  <div class="lab-controls">
+    <label class="lab-field">age_group<select id="s1-age"></select></label>
+    <label class="lab-field">sex<select id="s1-sex"></select></label>
+    <label class="lab-field">education_level<select id="s1-edu"></select></label>
+    <label class="lab-field">employment_status<select id="s1-emp"></select></label>
+    <label class="lab-check"><input type="checkbox" id="s1-oov"> employment = "student" (out-of-vocabulary)</label>
+  </div>
+  <svg id="s1-svg" viewBox="0 0 560 170" role="img" aria-label="One-hot vector for the chosen profile"></svg>
+  <div class="lab-readout" id="s1-out"></div>
+</div>
+
+<div class="lab-flow">↓ &nbsp;the score above is one of the numbers the classifier ranks&nbsp; ↓</div>
+
+<!-- ══ STEP 2 ══ balance -->
+<div class="lab-step">
+  <h3><span class="step-n">STEP 2</span>Balance the classes</h3>
+  <p class="hint">Real usually vastly outnumbers synthetic, and a classifier can score high just by
+  always guessing "real". So both classes are subsampled to
+  <code>balanced_n = min(n_real, n_syn)</code>. <b>This number sets how many people Steps 3 &amp; 4
+  actually work with</b> — drag the sliders and watch the live population downstream grow or shrink.
+  Push the synthetic count below 2 to see the degenerate <code>NaN</code> case the code guards
+  against.</p>
+  <div class="lab-controls">
+    <label class="lab-field">n_real = <span id="s2-nr-val" class="mono"></span><input type="range" id="s2-nr" min="1" max="10000" step="1"></label>
+    <label class="lab-field">n_syn = <span id="s2-ns-val" class="mono"></span><input type="range" id="s2-ns" min="0" max="5000" step="1"></label>
+  </div>
+  <svg id="s2-svg" viewBox="0 0 560 210" role="img" aria-label="Class balancing bars"></svg>
+  <div class="lab-readout" id="s2-out"></div>
+</div>
+
+<div class="lab-flow">↓ &nbsp;<b>balanced_n</b> per class flows into the population below&nbsp; ↓</div>
+
+<!-- ══ STEP 3 ══ scores -> AUC + ROC -->
+<div class="lab-step">
+  <h3><span class="step-n">STEP 3</span>Scores → Mann–Whitney AUC</h3>
+  <p class="hint">Cross-validation gives one out-of-fold <em>score</em> per person. The AUC is a pure
+  ranking statistic on those scores: the chance a random synthetic person outranks a random real one.</p>
+
+  <div class="lab-sub">A · One person → one score</div>
+  <p class="hint">Here is the most synthetic-looking individual in your current population, and exactly
+  how their score is built: sum the per-attribute log-odds
+  <code>log(p_syn / p_real)</code> over the four categories they land in. A category that is more common
+  in synthetic than in real adds a positive term (looks synthetic); rarer adds a negative one. At
+  divergence 0 every ratio is 1, every term is <code>log 1 = 0</code>, so the score is 0.</p>
+  <div class="lab-readout">
+    <table class="work-table" id="s3-person"></table>
+    <div class="work-sum" id="s3-person-sum"></div>
+  </div>
+
+  <div class="lab-sub">B · The rank identity — a worked example you can drive</div>
+  <p class="hint">Three real (teal) and three synthetic (orange) people. Drag a chip left/right (or
+  focus it and use ← →) to change its score; the worked calculation under it re-runs live. Or press
+  <b>Load 6 from your population</b> to pull six real people sampled at the current divergence, so this
+  little example uses the very same data as the population below. Line every chip up equal and the
+  AUC snaps to exactly <strong>0.500</strong>.</p>
+  <svg id="s3-rank" viewBox="0 0 560 130" role="img" aria-label="Six draggable score chips on a number line"></svg>
+  <div class="lab-controls">
+    <button class="lab-btn ghost" id="s3-load" type="button">Load 6 from your population</button>
+    <button class="lab-btn ghost" id="s3-reset" type="button">Reset textbook example</button>
+  </div>
+  <div class="lab-readout">
+    <table class="work-table" id="s3-work"></table>
+    <div class="work-sum" id="s3-work-sum"></div>
+  </div>
+
+  <div class="lab-sub">C · The whole population — the identical formula, at scale</div>
+  <p class="hint">Now <span id="s3b-n" class="mono">150</span> real + <span id="s3b-n2" class="mono">150</span>
+  synthetic people (that count comes straight from <b>balanced_n</b> in Step 2, capped at 300 for a
+  snappy demo). Each person's score is the log-odds from part A; the <b>same rank formula</b> from part B,
+  applied to all of them, is the AUC. At divergence 0 the two are identical → AUC is exactly 0.5 and
+  the ROC hugs the diagonal; turn the master knob up and the curve bows toward the top-left.</p>
+  <div class="lab-two">
+    <svg id="s3-roc" viewBox="0 0 260 240" role="img" aria-label="ROC curve for the generated population"></svg>
+    <div class="lab-readout" id="s3-pop-out"></div>
+  </div>
+</div>
+
+<div class="lab-flow">↓ &nbsp;the population's <b>observed AUC</b> is what Step 4 tests&nbsp; ↓</div>
+
+<!-- ══ STEP 4 ══ permutation p-value + verdict -->
+<div class="lab-step">
+  <h3><span class="step-n">STEP 4</span>The permutation p-value &amp; the verdict</h3>
+  <p class="hint">An AUC just above 0.5 could be noise. Shuffle the real/synthetic labels many times —
+  destroying any real difference — and recompute the AUC each time. The <em>observed</em> AUC (from
+  Step 3B) is significant only if few shuffles beat it.
+  <code>p = (1 + #{perm ≥ observed}) / (1 + n_perm)</code>, floored at ≈ 1/201. A <strong>high p is
+  good</strong>. Move the master knob, then re-run to watch the verdict flip.</p>
+  <div class="lab-controls">
+    <button class="lab-btn" id="s4-run" type="button">Shuffle labels ×200</button>
+    <span class="mono" id="s4-status" style="color:var(--muted);font-size:.85rem;"></span>
+  </div>
+  <svg id="s4-hist" viewBox="0 0 560 220" role="img" aria-label="Null distribution of permuted AUCs with the observed AUC marked"></svg>
+  <div class="lab-verdict" id="s4-verdict">
+    <div class="vhead">Run the shuffle to see the verdict.</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var lab = document.getElementById("c2st-lab");
+  if (!lab) return;
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, text) {
+    var n = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function css(v) { return getComputedStyle(lab).getPropertyValue(v).trim() || v; }
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+  function fmt(x) { return (x % 1 === 0) ? x.toFixed(0) : x.toFixed(1); }
+
+  // ── shared statistics ────────────────────────────────────────────────
+  function rankdata(a) {                     // tie-aware average ranks (1-based)
+    var n = a.length, idx = a.map(function (_, i) { return i; });
+    idx.sort(function (i, j) { return a[i] - a[j]; });
+    var r = new Array(n), i = 0;
+    while (i < n) {
+      var j = i;
+      while (j + 1 < n && a[idx[j + 1]] === a[idx[i]]) j++;
+      var avg = (i + j) / 2 + 1;
+      for (var k = i; k <= j; k++) r[idx[k]] = avg;
+      i = j + 1;
+    }
+    return r;
+  }
+  function auc(scores, labels) {             // label 1 = synthetic (positive)
+    var r = rankdata(scores), R = 0, m = 0, nn = 0;
+    for (var i = 0; i < labels.length; i++) {
+      if (labels[i] === 1) { R += r[i]; m++; } else nn++;
+    }
+    if (m === 0 || nn === 0) return NaN;
+    return (R - m * (m + 1) / 2) / (m * nn);
+  }
+  function rocPoints(scores, labels) {
+    var P = 0, N = 0, i;
+    for (i = 0; i < labels.length; i++) { if (labels[i] === 1) P++; else N++; }
+    var order = scores.map(function (_, k) { return k; });
+    order.sort(function (a, b) { return scores[b] - scores[a]; });
+    var tp = 0, fp = 0, prev = Infinity, pts = [{ x: 0, y: 0 }];
+    for (i = 0; i < order.length; i++) {
+      var k = order[i];
+      if (scores[k] !== prev) { pts.push({ x: fp / N, y: tp / P }); prev = scores[k]; }
+      if (labels[k] === 1) tp++; else fp++;
+    }
+    pts.push({ x: 1, y: 1 });
+    return pts;
+  }
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function sampleCat(probs, rng) {
+    var u = rng(), c = 0;
+    for (var i = 0; i < probs.length; i++) { c += probs[i]; if (u <= c) return i; }
+    return probs.length - 1;
+  }
+  function mix(a, b, d) {
+    var out = a.map(function (v, i) { return (1 - d) * v + d * b[i]; });
+    var s = out.reduce(function (p, v) { return p + v; }, 0);
+    return out.map(function (v) { return v / s; });
+  }
+
+  var ATTRS = [
+    { key: "age_group",         cats: ["18–29", "30–39", "40–59", "60+"],   real: [0.20, 0.25, 0.35, 0.20], target: [0.38, 0.30, 0.22, 0.10] },
+    { key: "sex",               cats: ["Male", "Female"],                   real: [0.50, 0.50],             target: [0.64, 0.36] },
+    { key: "education_level",   cats: ["Primary", "Secondary", "Tertiary"], real: [0.25, 0.45, 0.30],       target: [0.14, 0.38, 0.48] },
+    { key: "employment_status", cats: ["Employed", "Unemployed", "Retired"], real: [0.60, 0.15, 0.25],      target: [0.42, 0.31, 0.27] }
+  ];
+  var FLOOR = 1e-6;
+  function pSynAt(dPct) { var d = dPct / 100; return ATTRS.map(function (a) { return mix(a.real, a.target, d); }); }
+
+  // ── shared state: one master divergence + the Step-2 counts ───────────
+  var S = { d: 0, nr: 10000, ns: 1000 };
+  function balancedN() { return Math.min(S.nr, S.ns); }
+  function nLive() { return Math.max(2, Math.min(balancedN(), 300)); }   // capped for a snappy demo
+  var POP = { scores: [], labels: [], cats: [], auc: 0.5, token: "" };
+
+  function genPop(dPct, nPer) {
+    var rng = mulberry32(20240703), pSyn = pSynAt(dPct), scores = [], labels = [], catsAll = [];
+    function scoreOf(cat) {
+      var z = 0;
+      for (var k = 0; k < ATTRS.length; k++) {
+        z += Math.log(Math.max(FLOOR, pSyn[k][cat[k]]) / Math.max(FLOOR, ATTRS[k].real[cat[k]]));
+      }
+      return z;
+    }
+    for (var side = 0; side < 2; side++) {
+      var probs = side === 0 ? ATTRS.map(function (a) { return a.real; }) : pSyn;
+      for (var i = 0; i < nPer; i++) {
+        var cat = [];
+        for (var k = 0; k < ATTRS.length; k++) cat.push(sampleCat(probs[k], rng));
+        scores.push(scoreOf(cat)); labels.push(side); catsAll.push(cat);
+      }
+    }
+    return { scores: scores, labels: labels, cats: catsAll };
+  }
+  function rebuildPop() {
+    var g = genPop(S.d, nLive());
+    POP.scores = g.scores; POP.labels = g.labels; POP.cats = g.cats;
+    POP.auc = auc(g.scores, g.labels);
+    POP.token = S.d + "|" + nLive();
+  }
+
+  // ══ STEP 1 ═══════════════════════════════════════════════════════════
+  var s1id = { age_group: "s1-age", sex: "s1-sex", education_level: "s1-edu", employment_status: "s1-emp" };
+  ATTRS.forEach(function (a) {
+    var sel = document.getElementById(s1id[a.key]);
+    a.cats.forEach(function (c, i) { var o = document.createElement("option"); o.value = i; o.textContent = c; sel.appendChild(o); });
+    sel.value = a.cats.length > 1 ? 1 : 0;
+    sel.addEventListener("change", renderS1);
+  });
+  document.getElementById("s1-emp").value = 0;
+  document.getElementById("s1-age").value = 1;
+  document.getElementById("s1-oov").addEventListener("change", renderS1);
+
+  function renderS1() {
+    var svg = document.getElementById("s1-svg"); clear(svg);
+    var oov = document.getElementById("s1-oov").checked;
+    document.getElementById("s1-emp").disabled = oov;
+    var chosen = {};
+    ATTRS.forEach(function (a) { chosen[a.key] = +document.getElementById(s1id[a.key]).value; });
+    var pSyn = pSynAt(S.d);
+
+    var x = 20, y = 56, cell = 30, gap = 4, blockGap = 20, lit = css("--real"), off = css("--surface"), line = css("--line");
+    svg.appendChild(el("text", { x: 20, y: 26, class: "mono ax" }, "ONE PROFILE → 12-CELL VECTOR (one lit cell per block)"));
+    var lbl = [], z = 0, terms = [];
+    ATTRS.forEach(function (a, ai) {
+      var isEmp = a.key === "employment_status";
+      var litIdx = (isEmp && oov) ? -1 : chosen[a.key];
+      if (litIdx >= 0) {
+        var ps = pSyn[ai][litIdx], pr = a.real[litIdx], term = Math.log(Math.max(FLOOR, ps) / Math.max(FLOOR, pr));
+        z += term;
+        terms.push({ key: a.key.split("_")[0], cat: a.cats[litIdx], ps: ps, pr: pr, term: term, oov: false });
+      } else {
+        terms.push({ key: a.key.split("_")[0], oov: true });
+      }
+      var bx = x;
+      a.cats.forEach(function (c, i) {
+        var on = i === litIdx;
+        svg.appendChild(el("rect", { x: x, y: y, width: cell, height: cell, rx: 4, fill: on ? lit : off, stroke: on ? lit : line }));
+        svg.appendChild(el("text", { x: x + cell / 2, y: y + cell / 2 + 4, "text-anchor": "middle", "font-size": 12, fill: on ? "#fff" : css("--muted") }, on ? "1" : "0"));
+        x += cell + gap;
+      });
+      lbl.push({ cx: (bx + x - gap) / 2, t: a.key.split("_")[0] });
+      x += blockGap;
+    });
+    lbl.forEach(function (L) { svg.appendChild(el("text", { x: L.cx, y: y + cell + 20, "text-anchor": "middle", class: "mono ax", "font-size": 11 }, L.t)); });
+
+    var out = document.getElementById("s1-out"), parts = [];
+    ATTRS.forEach(function (a) {
+      var isEmp = a.key === "employment_status";
+      parts.push(a.key + " = " + ((isEmp && oov) ? '"student" → block all-zero' : a.cats[chosen[a.key]]));
+    });
+    var litCount = oov ? 3 : 4;
+    var rows = terms.map(function (o) {
+      if (o.oov) return "<tr><td>" + o.key + '</td><td>"student" → all-zero</td><td>—</td><td>—</td><td>0.00</td></tr>';
+      var cls = o.term > 1e-9 ? "sy" : (o.term < -1e-9 ? "rl" : "");
+      return "<tr><td>" + o.key + "</td><td>" + o.cat + "</td><td>" + o.ps.toFixed(2) + "</td><td>" + o.pr.toFixed(2) +
+        '</td><td class="' + cls + '">' + (o.term >= 0 ? "+" : "") + o.term.toFixed(2) + "</td></tr>";
+    }).join("");
+    var sumTerms = terms.map(function (o) { var t = o.oov ? 0 : o.term; return (t >= 0 ? "+" : "") + t.toFixed(2); }).join(" ");
+    out.innerHTML =
+      parts.join("<br>") +
+      '<br><span class="pill">' + litCount + " lit cells of 12</span>" +
+      (oov ? ' — employment block <span class="warn">all-zero ("other")</span>.' : ".") +
+      '<table class="work-table" style="margin-top:10px"><thead><tr><th>attribute</th><th>your category</th>' +
+      "<th>p_syn</th><th>p_real</th><th>log(p_syn/p_real)</th></tr></thead><tbody>" + rows + "</tbody></table>" +
+      '<div class="work-sum">p_real = this category’s share of the <b>real</b> population · p_syn = its share of the ' +
+      "<b>synthetic</b> population at divergence " + (S.d / 100).toFixed(2) + ".<br>" +
+      "score  z = Σ log(p_syn/p_real) = " + sumTerms + ' = <span class="big">' + z.toFixed(2) + "</span>" +
+      (Math.abs(z) < 1e-9
+        ? ' <span class="good">(divergence 0 → p_syn = p_real, every term is log 1 = 0)</span>'
+        : (z > 0 ? ' <span class="bad">→ looks more synthetic</span>' : " → looks more real")) +
+      '<br><span style="color:var(--muted)">Step 3 ranks exactly this kind of score.</span></div>';
+  }
+
+  // ══ STEP 2 ═══════════════════════════════════════════════════════════
+  var nr = document.getElementById("s2-nr"), ns = document.getElementById("s2-ns");
+  nr.value = S.nr; ns.value = S.ns;
+  nr.addEventListener("input", function () { S.nr = +nr.value; onCountsChange(); });
+  ns.addEventListener("input", function () { S.ns = +ns.value; onCountsChange(); });
+  function onCountsChange() { renderS2(); rebuildPop(); renderS3person(); renderS3pop(); invalidateS4(); }
+
+  function renderS2() {
+    var Nr = S.nr, Ns = S.ns, bal = Math.min(Nr, Ns);
+    document.getElementById("s2-nr-val").textContent = Nr.toLocaleString();
+    document.getElementById("s2-ns-val").textContent = Ns.toLocaleString();
+    var svg = document.getElementById("s2-svg"); clear(svg);
+    var maxN = Math.max(Nr, Ns, 1), H = 120, base = 165, realC = css("--real"), synC = css("--syn");
+    function bars(x0, label, a, b) {
+      svg.appendChild(el("text", { x: x0, y: 22, class: "mono ax" }, label));
+      svg.appendChild(el("line", { x1: x0, y1: base, x2: x0 + 210, y2: base, stroke: css("--line-strong") }));
+      var ha = Math.max(2, H * a / maxN), hb = Math.max(2, H * b / maxN);
+      svg.appendChild(el("rect", { x: x0 + 30, y: base - ha, width: 54, height: ha, rx: 4, fill: realC }));
+      svg.appendChild(el("text", { x: x0 + 57, y: base + 18, "text-anchor": "middle", "font-size": 11, fill: css("--muted") }, "real"));
+      svg.appendChild(el("text", { x: x0 + 57, y: base - ha - 6, "text-anchor": "middle", "font-size": 11, class: "mono" }, a.toLocaleString()));
+      svg.appendChild(el("rect", { x: x0 + 120, y: base - hb, width: 54, height: hb, rx: 4, fill: synC }));
+      svg.appendChild(el("text", { x: x0 + 147, y: base + 18, "text-anchor": "middle", "font-size": 11, fill: css("--muted") }, "syn"));
+      svg.appendChild(el("text", { x: x0 + 147, y: base - hb - 6, "text-anchor": "middle", "font-size": 11, class: "mono" }, b.toLocaleString()));
+    }
+    bars(20, "BEFORE · imbalanced", Nr, Ns);
+    svg.appendChild(el("text", { x: 268, y: 105, "font-size": 22, fill: css("--muted") }, "→"));
+    bars(320, "AFTER · balanced (min)", bal, bal);
+    var out = document.getElementById("s2-out");
+    if (bal < 2) {
+      out.innerHTML = '<span class="big">balanced_n = min(' + Nr.toLocaleString() + ", " + Ns.toLocaleString() + ") = " + bal +
+        '</span><br><span class="bad">balanced_n &lt; 2 → the test degrades to NaN without error.</span>';
+    } else {
+      out.innerHTML = '<span class="big">balanced_n = min(' + Nr.toLocaleString() + ", " + Ns.toLocaleString() + ") = " + bal.toLocaleString() +
+        "</span><br>Steps 3 &amp; 4 use <span class=\"pill\">" + nLive() + " per class</span>" +
+        (bal > 300 ? " (capped from " + bal.toLocaleString() + " for the live demo)." : ".");
+    }
+  }
+
+  // ══ STEP 3A ══ draggable rank calculator + worked example ═════════════
+  var TEXTBOOK = [
+    { s: 0.20, lab: 0 }, { s: 0.40, lab: 0 }, { s: 0.55, lab: 0 },
+    { s: 0.30, lab: 1 }, { s: 0.60, lab: 1 }, { s: 0.70, lab: 1 }
+  ];
+  var CHIP = TEXTBOOK.map(function (c) { return { s: c.s, lab: c.lab }; });
+  var RX0 = 40, RX1 = 500, RY = 44;
+  function sx(v) { return RX0 + v * (RX1 - RX0); }
+  function xs(px) { return Math.max(0, Math.min(1, (px - RX0) / (RX1 - RX0))); }
+
+  function renderS3rank() {
+    var svg = document.getElementById("s3-rank"); clear(svg);
+    var realC = css("--real"), synC = css("--syn");
+    svg.appendChild(el("line", { x1: RX0, y1: RY + 26, x2: RX1, y2: RY + 26, stroke: css("--line-strong") }));
+    svg.appendChild(el("text", { x: RX0, y: 22, "font-size": 10.5, fill: css("--muted") }, 'lower · "looks real"'));
+    svg.appendChild(el("text", { x: RX1, y: 22, "font-size": 10.5, fill: css("--muted"), "text-anchor": "end" }, '"looks synthetic" · higher'));
+    CHIP.forEach(function (c, i) {
+      var cx = sx(c.s), col = c.lab === 1 ? synC : realC;
+      var g = el("g", { class: "lab-chip", tabindex: 0, "data-i": i, role: "slider",
+        "aria-label": (c.lab === 1 ? "synthetic" : "real") + " score", "aria-valuenow": c.s.toFixed(2), "aria-valuemin": 0, "aria-valuemax": 1 });
+      g.appendChild(el("rect", { x: cx - 26, y: RY, width: 52, height: 30, rx: 6, fill: col }));
+      g.appendChild(el("text", { x: cx, y: RY + 20, "text-anchor": "middle", fill: "#fff", "font-size": 12.5 }, c.s.toFixed(2)));
+      svg.appendChild(g);
+    });
+    renderWork();
+  }
+
+  function renderWork() {
+    var scores = CHIP.map(function (c) { return c.s; });
+    var ranks = rankdata(scores);
+    var rows = CHIP.map(function (c, i) { return { s: c.s, lab: c.lab, r: ranks[i] }; })
+      .sort(function (a, b) { return a.s - b.s; });
+    var t = document.getElementById("s3-work");
+    t.innerHTML = "<thead><tr><th>order</th><th>score</th><th>class</th><th>rank</th></tr></thead>";
+    var body = "";
+    rows.forEach(function (o, i) {
+      body += '<tr class="' + (o.lab === 1 ? "is-syn" : "") + '"><td>' + (i + 1) + "</td><td>" + o.s.toFixed(2) +
+        '</td><td class="' + (o.lab === 1 ? "sy\">syn" : "rl\">real") + "</td><td>" + fmt(o.r) + "</td></tr>";
+    });
+    t.innerHTML += "<tbody>" + body + "</tbody>";
+
+    var synRanks = [];
+    CHIP.forEach(function (c, i) { if (c.lab === 1) synRanks.push(ranks[i]); });
+    var R = synRanks.reduce(function (p, v) { return p + v; }, 0);
+    var m = 3, n = 3, a = (R - m * (m + 1) / 2) / (m * n);
+    document.getElementById("s3-work-sum").innerHTML =
+      "Σ ranks(synthetic) = " + synRanks.map(fmt).join(" + ") + " = <b>" + fmt(R) + "</b><br>" +
+      "AUC = ( <b>" + fmt(R) + "</b> − m(m+1)/2 ) / ( m·n ) = ( " + fmt(R) + " − 6 ) / 9 = " +
+      '<span class="big">' + a.toFixed(3) + "</span>" +
+      (Math.abs(a - 0.5) < 1e-9 ? '  <span class="good">← exactly 0.5, no separation</span>' : "");
+  }
+
+  document.getElementById("s3-reset").addEventListener("click", function () {
+    CHIP = TEXTBOOK.map(function (c) { return { s: c.s, lab: c.lab }; });
+    renderS3rank();
+  });
+  document.getElementById("s3-load").addEventListener("click", function () {
+    var g = genPop(S.d, 3);                       // 3 real + 3 synthetic from the live population
+    var mn = Math.min.apply(null, g.scores), mx = Math.max.apply(null, g.scores);
+    for (var i = 0; i < 6; i++) {
+      CHIP[i].s = (mx > mn) ? (g.scores[i] - mn) / (mx - mn) : 0.5;   // normalise to 0..1, ranks preserved
+      CHIP[i].lab = g.labels[i];
+    }
+    renderS3rank();
+  });
+
+  (function bindDrag() {
+    var svg = document.getElementById("s3-rank"), active = null;
+    function pt(evt) {
+      var r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+      var cx = (evt.touches ? evt.touches[0].clientX : evt.clientX);
+      return vb.x + (cx - r.left) / r.width * vb.width;
+    }
+    svg.addEventListener("pointerdown", function (e) {
+      var g = e.target.closest(".lab-chip"); if (!g) return;
+      active = +g.getAttribute("data-i"); g.focus(); e.preventDefault();
+    });
+    window.addEventListener("pointermove", function (e) {
+      if (active == null) return;
+      CHIP[active].s = xs(pt(e)); renderS3rank();
+      var g = svg.querySelector('[data-i="' + active + '"]'); if (g) g.focus();
+      e.preventDefault();
+    });
+    window.addEventListener("pointerup", function () { active = null; });
+    svg.addEventListener("keydown", function (e) {
+      var g = e.target.closest(".lab-chip"); if (!g) return;
+      var i = +g.getAttribute("data-i"), step = e.shiftKey ? 0.1 : 0.02;
+      if (e.key === "ArrowRight") CHIP[i].s = Math.min(1, CHIP[i].s + step);
+      else if (e.key === "ArrowLeft") CHIP[i].s = Math.max(0, CHIP[i].s - step);
+      else return;
+      renderS3rank(); svg.querySelector('[data-i="' + i + '"]').focus(); e.preventDefault();
+    });
+  })();
+
+  // ══ STEP 3A ══ one individual's score equation ═══════════════════════
+  function renderS3person() {
+    var t = document.getElementById("s3-person"), sum = document.getElementById("s3-person-sum");
+    if (!POP.cats.length) { t.innerHTML = ""; sum.innerHTML = ""; return; }
+    // pick the most synthetic-looking individual (max score among the synthetic half)
+    var half = POP.cats.length / 2, best = half, bestS = -Infinity;
+    for (var i = half; i < POP.cats.length; i++) { if (POP.scores[i] > bestS) { bestS = POP.scores[i]; best = i; } }
+    var cat = POP.cats[best], pSyn = pSynAt(S.d), z = 0;
+    t.innerHTML = "<thead><tr><th>attribute</th><th>category</th><th>p_syn</th><th>p_real</th><th>log(p_syn/p_real)</th></tr></thead>";
+    var body = "";
+    ATTRS.forEach(function (a, k) {
+      var ps = pSyn[k][cat[k]], pr = a.real[cat[k]];
+      var term = Math.log(Math.max(FLOOR, ps) / Math.max(FLOOR, pr)); z += term;
+      var cls = term > 1e-9 ? "sy" : (term < -1e-9 ? "rl" : "");
+      body += "<tr><td>" + a.key.split("_")[0] + "</td><td>" + a.cats[cat[k]] + "</td><td>" +
+        ps.toFixed(2) + "</td><td>" + pr.toFixed(2) + '</td><td class="' + cls + '">' +
+        (term >= 0 ? "+" : "") + term.toFixed(2) + "</td></tr>";
+    });
+    t.innerHTML += "<tbody>" + body + "</tbody>";
+    sum.innerHTML =
+      "z = Σ log(p_syn/p_real) = " +
+      ATTRS.map(function (a, k) { var term = Math.log(Math.max(FLOOR, pSyn[k][cat[k]]) / Math.max(FLOOR, a.real[cat[k]])); return (term >= 0 ? "+" : "") + term.toFixed(2); }).join(" ") +
+      " = <span class=\"big\">" + z.toFixed(2) + "</span>" +
+      (Math.abs(z) < 1e-9
+        ? ' <span class="good">(divergence 0 → all terms log 1 = 0)</span>'
+        : ' <span class="bad">→ this profile looks synthetic</span>');
+  }
+
+  // ══ STEP 3C ══ population + ROC ══════════════════════════════════════
+  function renderS3pop() {
+    document.getElementById("s3b-n").textContent = nLive();
+    document.getElementById("s3b-n2").textContent = nLive();
+    var a = POP.auc;
+    var svg = document.getElementById("s3-roc"); clear(svg);
+    var X0 = 34, X1 = 224, Y0 = 200, Y1 = 30;
+    function px(x) { return X0 + x * (X1 - X0); }
+    function py(y) { return Y0 - y * (Y0 - Y1); }
+    svg.appendChild(el("text", { x: 20, y: 18, class: "mono ax" }, "POOLED ROC"));
+    svg.appendChild(el("line", { x1: X0, y1: Y0, x2: X0, y2: Y1, stroke: css("--line-strong") }));
+    svg.appendChild(el("line", { x1: X0, y1: Y0, x2: X1, y2: Y0, stroke: css("--line-strong") }));
+    svg.appendChild(el("line", { x1: X0, y1: Y0, x2: X1, y2: Y1, stroke: css("--line-strong"), "stroke-dasharray": "5 4" }));
+    var pts = rocPoints(POP.scores, POP.labels);
+    svg.appendChild(el("polyline", { points: pts.map(function (o) { return px(o.x) + "," + py(o.y); }).join(" "), fill: "none", stroke: css("--real"), "stroke-width": 2.5 }));
+    svg.appendChild(el("text", { x: X1, y: Y0 + 16, "text-anchor": "end", "font-size": 11, fill: css("--muted") }, "FPR →"));
+    svg.appendChild(el("text", { x: X0 + 2, y: Y1 - 4, "font-size": 11, fill: css("--muted") }, "TPR"));
+    svg.appendChild(el("text", { x: X0 + 40, y: 54, class: "mono", "font-size": 13, fill: css("--real"), "font-weight": 600 }, "AUC ≈ " + a.toFixed(3)));
+    var near = Math.abs(a - 0.5) < 0.03;
+    document.getElementById("s3-pop-out").innerHTML =
+      "divergence = " + (S.d / 100).toFixed(2) + " · " + nLive() + " real + " + nLive() + " synthetic<br>" +
+      '<span class="big">observed AUC = ' + a.toFixed(3) + "</span><br>" +
+      (near ? '<span class="good">≈ 0.5 → looks indistinguishable so far</span>' : '<span class="bad">&gt; 0.5 → the classifier is separating them</span>') +
+      '<br><span style="color:var(--muted)">Step 4 tests whether this is real or noise.</span>';
+  }
+
+  // ══ STEP 4 ══ permutation p-value ════════════════════════════════════
+  function invalidateS4() {
+    var vd = document.getElementById("s4-verdict");
+    if (vd && vd.dataset.token != null && vd.dataset.token !== POP.token) {
+      vd.className = "lab-verdict";
+      vd.innerHTML = '<div class="vhead">Inputs changed — re-run the shuffle.</div>';
+    }
+  }
+  function shuffle(arr, rng) {
+    for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)), t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+  }
+  document.getElementById("s4-run").addEventListener("click", function () {
+    var scores = POP.scores, labels = POP.labels.slice(), obs = POP.auc, tok = POP.token;
+    var NPERM = 200, perms = [], ge = 0, done = 0;
+    var btn = document.getElementById("s4-run"), status = document.getElementById("s4-status");
+    btn.disabled = true;
+    var rng = mulberry32(99);
+    (function batch() {
+      var end = Math.min(done + 20, NPERM);
+      for (; done < end; done++) {
+        shuffle(labels, rng);
+        var a = auc(scores, labels); perms.push(a);
+        if (a >= obs - 1e-12) ge++;
+      }
+      status.textContent = done + " / " + NPERM + " shuffles";
+      drawHist(perms, obs, ge, done);
+      if (done < NPERM) requestAnimationFrame(batch);
+      else { btn.disabled = false; finish(perms, obs, ge, tok); }
+    })();
+  });
+
+  function drawHist(perms, obs, ge, done) {
+    var svg = document.getElementById("s4-hist"); clear(svg);
+    var X0 = 50, X1 = 520, base = 170, top = 30, lo = 0.30, hi = 0.90, BINS = 24;
+    function px(v) { return X0 + (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (X1 - X0); }
+    var counts = new Array(BINS).fill(0);
+    perms.forEach(function (a) { counts[Math.floor((Math.max(lo, Math.min(hi - 1e-9, a)) - lo) / (hi - lo) * BINS)]++; });
+    var maxC = Math.max(1, Math.max.apply(null, counts)), bw = (X1 - X0) / BINS;
+    counts.forEach(function (c, i) {
+      var h = (base - top) * c / maxC, binMid = lo + (i + 0.5) / BINS * (hi - lo);
+      svg.appendChild(el("rect", { x: X0 + i * bw + 1, y: base - h, width: bw - 2, height: h, fill: binMid >= obs - 1e-9 ? css("--syn-soft") : css("--real-soft") }));
+    });
+    svg.appendChild(el("line", { x1: X0, y1: base, x2: X1, y2: base, stroke: css("--line-strong") }));
+    var ox = px(obs);
+    svg.appendChild(el("line", { x1: ox, y1: top - 8, x2: ox, y2: base + 6, stroke: css("--good"), "stroke-width": 2 }));
+    svg.appendChild(el("text", { x: Math.min(ox, X1 - 4), y: top - 12, "text-anchor": "middle", class: "mono", "font-size": 11, fill: css("--good"), "font-weight": 600 }, "observed " + obs.toFixed(3) + (obs > hi ? " ▸" : "")));
+    [0.3, 0.5, 0.7, 0.9].forEach(function (t) { svg.appendChild(el("text", { x: px(t), y: base + 18, "text-anchor": "middle", class: "ax mono", "font-size": 11 }, t.toFixed(1))); });
+    svg.appendChild(el("text", { x: (X0 + X1) / 2, y: base + 40, "text-anchor": "middle", "font-size": 11, fill: css("--muted") }, "permuted AUC (null) — shaded orange = perms ≥ observed"));
+    var p = (1 + ge) / (1 + done);
+    svg.appendChild(el("text", { x: X0, y: 20, class: "mono", "font-size": 12, fill: css("--ink") }, "p = (1 + " + ge + ") / (1 + " + done + ") ≈ " + p.toFixed(3)));
+  }
+
+  function finish(perms, obs, ge, tok) {
+    var p = (1 + ge) / (1 + perms.length);
+    var vd = document.getElementById("s4-verdict");
+    vd.dataset.token = tok;
+    var indistinguishable = (Math.abs(obs - 0.5) < 0.05) && (p > 0.05);
+    vd.className = "lab-verdict " + (indistinguishable ? "ok" : "no");
+    vd.innerHTML =
+      '<div class="vhead ' + (indistinguishable ? "ok" : "no") + '">' + (indistinguishable ? "✓ Indistinguishable" : "✗ Separable") + "</div>" +
+      '<div style="margin-top:6px;font-size:.95rem">observed AUC = <b>' + obs.toFixed(3) + "</b> · p ≈ <b>" + p.toFixed(3) + "</b> (floor ≈ 0.005)<br>" +
+      (indistinguishable
+        ? "The AUC sits inside the shuffled-label null and many permutations match or beat it — we <b>cannot reject</b> “indistinguishable”. The faithful-synthetic outcome."
+        : "The observed AUC lands in the tail; almost no shuffle reaches it, so the separability is <b>real</b>. Lower the master divergence knob to recover.") +
+      "</div>";
+  }
+
+  // ── master divergence knob wires the whole pipeline ───────────────────
+  document.getElementById("scDiv").addEventListener("input", function (e) {
+    S.d = +e.target.value;
+    document.getElementById("scDivVal").textContent = (S.d / 100).toFixed(2);
+    renderS1(); rebuildPop(); renderS3person(); renderS3pop(); invalidateS4();
+  });
+
+  // initial paint
+  rebuildPop();
+  renderS1(); renderS2(); renderS3rank(); renderS3person(); renderS3pop();
+})();
+</script>
+</section>
+
+Once the classifier genuinely cannot beat a coin flip — **AUC ≈ 0.5 with a high p-value** — the
+synthetic population is statistically indistinguishable from the real one on the joint profile. That
+is the single strongest fidelity signal in the stack. For the full mechanics behind each step, read
+the [C2ST deep-dive note](c2st-explained.md); for how it sits among the other metrics, see the
+[comparison-metrics field guide](../comparison-metrics-report.html).

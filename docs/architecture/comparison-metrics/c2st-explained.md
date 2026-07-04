@@ -10,6 +10,10 @@ backends) determine what those numbers mean. It lives alongside the
 and [coherence-score](coherence-score-explained.md) notes. Code: `multivariate.py:c2st` and
 `evaluator.py:_compute_c2st`.
 
+> **Try it hands-on.** Every step below has a live, interactive twin in the
+> [C2ST playground](c2st-playground.md) — drive the one-hot encoding, class balancing, the
+> rank-based AUC, and the permutation p-value yourself and watch the two headline numbers respond.
+
 ## The running example
 
 To make each step concrete, one example runs through the whole note:
