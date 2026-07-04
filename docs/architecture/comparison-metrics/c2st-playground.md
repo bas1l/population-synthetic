@@ -351,9 +351,9 @@ anywhere; the maths matches the code in `multivariate.py:c2st`.
       var isEmp = a.key === "employment_status";
       var litIdx = (isEmp && oov) ? -1 : chosen[a.key];
       if (litIdx >= 0) {
-        var ps = pSyn[ai][litIdx], pr = a.real[litIdx], term = Math.log(Math.max(FLOOR, ps) / Math.max(FLOOR, pr));
+        var ps = pSyn[ai][litIdx], pr = a.real[litIdx], pt = a.target[litIdx], term = Math.log(Math.max(FLOOR, ps) / Math.max(FLOOR, pr));
         z += term;
-        terms.push({ key: a.key.split("_")[0], cat: a.cats[litIdx], ps: ps, pr: pr, term: term, oov: false });
+        terms.push({ key: a.key.split("_")[0], cat: a.cats[litIdx], ps: ps, pr: pr, pt: pt, term: term, oov: false });
       } else {
         terms.push({ key: a.key.split("_")[0], oov: true });
       }
@@ -374,22 +374,31 @@ anywhere; the maths matches the code in `multivariate.py:c2st`.
       var isEmp = a.key === "employment_status";
       parts.push(a.key + " = " + ((isEmp && oov) ? '"student" → block all-zero' : a.cats[chosen[a.key]]));
     });
-    var litCount = oov ? 3 : 4;
+    var litCount = oov ? 3 : 4, d = S.d / 100;
     var rows = terms.map(function (o) {
-      if (o.oov) return "<tr><td>" + o.key + '</td><td>"student" → all-zero</td><td>—</td><td>—</td><td>0.00</td></tr>';
+      if (o.oov) return "<tr><td>" + o.key + '</td><td>"student" → all-zero</td><td>—</td><td>—</td><td>—</td><td>0.00</td></tr>';
       var cls = o.term > 1e-9 ? "sy" : (o.term < -1e-9 ? "rl" : "");
-      return "<tr><td>" + o.key + "</td><td>" + o.cat + "</td><td>" + o.ps.toFixed(2) + "</td><td>" + o.pr.toFixed(2) +
-        '</td><td class="' + cls + '">' + (o.term >= 0 ? "+" : "") + o.term.toFixed(2) + "</td></tr>";
+      return "<tr><td>" + o.key + "</td><td>" + o.cat + "</td><td>" + o.pr.toFixed(2) + "</td><td>" + o.pt.toFixed(2) +
+        "</td><td>" + o.ps.toFixed(2) + '</td><td class="' + cls + '">' + (o.term >= 0 ? "+" : "") + o.term.toFixed(2) + "</td></tr>";
     }).join("");
     var sumTerms = terms.map(function (o) { var t = o.oov ? 0 : o.term; return (t >= 0 ? "+" : "") + t.toFixed(2); }).join(" ");
+    // one concrete worked example of the p_syn blend (first real attribute)
+    var eg = terms.filter(function (o) { return !o.oov; })[0], egLine = "";
+    if (eg) {
+      egLine = "e.g. " + eg.key + ": p_syn = (1 − " + d.toFixed(2) + ")·" + eg.pr.toFixed(2) + " + " + d.toFixed(2) +
+        "·" + eg.pt.toFixed(2) + " = " + ((1 - d) * eg.pr + d * eg.pt).toFixed(2) + ".<br>";
+    }
     out.innerHTML =
       parts.join("<br>") +
       '<br><span class="pill">' + litCount + " lit cells of 12</span>" +
       (oov ? ' — employment block <span class="warn">all-zero ("other")</span>.' : ".") +
       '<table class="work-table" style="margin-top:10px"><thead><tr><th>attribute</th><th>your category</th>' +
-      "<th>p_syn</th><th>p_real</th><th>log(p_syn/p_real)</th></tr></thead><tbody>" + rows + "</tbody></table>" +
-      '<div class="work-sum">p_real = this category’s share of the <b>real</b> population · p_syn = its share of the ' +
-      "<b>synthetic</b> population at divergence " + (S.d / 100).toFixed(2) + ".<br>" +
+      "<th>p_real</th><th>p_target</th><th>p_syn</th><th>log(p_syn/p_real)</th></tr></thead><tbody>" + rows + "</tbody></table>" +
+      '<div class="work-sum"><b>p_real</b> = category share in the <b>real</b> population (fixed). ' +
+      "<b>p_target</b> = its share in the fully-diverged “very different” population (fixed). " +
+      "<b>p_syn</b> is the blend at the current divergence <b>d = " + d.toFixed(2) + "</b>:<br>" +
+      "p_syn = (1 − d)·p_real + d·p_target &nbsp; → &nbsp; d = 0 gives p_syn = p_real, d = 1 gives p_syn = p_target.<br>" +
+      egLine +
       "score  z = Σ log(p_syn/p_real) = " + sumTerms + ' = <span class="big">' + z.toFixed(2) + "</span>" +
       (Math.abs(z) < 1e-9
         ? ' <span class="good">(divergence 0 → p_syn = p_real, every term is log 1 = 0)</span>'
@@ -536,19 +545,22 @@ anywhere; the maths matches the code in `multivariate.py:c2st`.
     // pick the most synthetic-looking individual (max score among the synthetic half)
     var half = POP.cats.length / 2, best = half, bestS = -Infinity;
     for (var i = half; i < POP.cats.length; i++) { if (POP.scores[i] > bestS) { bestS = POP.scores[i]; best = i; } }
-    var cat = POP.cats[best], pSyn = pSynAt(S.d), z = 0;
-    t.innerHTML = "<thead><tr><th>attribute</th><th>category</th><th>p_syn</th><th>p_real</th><th>log(p_syn/p_real)</th></tr></thead>";
+    var cat = POP.cats[best], pSyn = pSynAt(S.d), z = 0, d = S.d / 100;
+    t.innerHTML = "<thead><tr><th>attribute</th><th>category</th><th>p_real</th><th>p_target</th><th>p_syn</th><th>log(p_syn/p_real)</th></tr></thead>";
     var body = "";
     ATTRS.forEach(function (a, k) {
-      var ps = pSyn[k][cat[k]], pr = a.real[cat[k]];
+      var ps = pSyn[k][cat[k]], pr = a.real[cat[k]], pt = a.target[cat[k]];
       var term = Math.log(Math.max(FLOOR, ps) / Math.max(FLOOR, pr)); z += term;
       var cls = term > 1e-9 ? "sy" : (term < -1e-9 ? "rl" : "");
       body += "<tr><td>" + a.key.split("_")[0] + "</td><td>" + a.cats[cat[k]] + "</td><td>" +
-        ps.toFixed(2) + "</td><td>" + pr.toFixed(2) + '</td><td class="' + cls + '">' +
+        pr.toFixed(2) + "</td><td>" + pt.toFixed(2) + "</td><td>" + ps.toFixed(2) + '</td><td class="' + cls + '">' +
         (term >= 0 ? "+" : "") + term.toFixed(2) + "</td></tr>";
     });
     t.innerHTML += "<tbody>" + body + "</tbody>";
+    var eg0 = { pr: ATTRS[0].real[cat[0]], pt: ATTRS[0].target[cat[0]], key: ATTRS[0].key.split("_")[0] };
     sum.innerHTML =
+      "p_syn = (1 − d)·p_real + d·p_target, d = " + d.toFixed(2) + " &nbsp; (e.g. " + eg0.key + ": (1 − " + d.toFixed(2) + ")·" +
+      eg0.pr.toFixed(2) + " + " + d.toFixed(2) + "·" + eg0.pt.toFixed(2) + " = " + ((1 - d) * eg0.pr + d * eg0.pt).toFixed(2) + ").<br>" +
       "z = Σ log(p_syn/p_real) = " +
       ATTRS.map(function (a, k) { var term = Math.log(Math.max(FLOOR, pSyn[k][cat[k]]) / Math.max(FLOOR, a.real[cat[k]])); return (term >= 0 ? "+" : "") + term.toFixed(2); }).join(" ") +
       " = <span class=\"big\">" + z.toFixed(2) + "</span>" +
