@@ -12,7 +12,7 @@ from population_synthetic._paths import PROJECT_ROOT
 
 VALID_AXES = {"models", "strategies", "countries"}
 
-VALID_PROVIDERS = {"gemini", "claude", "ollama", "openai_compat"}
+VALID_PROVIDERS = {"gemini", "claude", "ollama", "openai_compat", "openrouter"}
 VALID_MODES = {"batch", "configurable"}
 
 

@@ -87,6 +87,7 @@ top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
 - `GEMINI_API_KEY` environment variable required for identity generation with `--provider gemini` (raises `ValueError` if missing)
 - `--provider claude` requires the `claude` CLI on PATH; raises `RuntimeError` at construction if not found; no extra API key needed (Claude Code manages its own auth)
+- `OPENROUTER_API_KEY` environment variable required for identity generation with `--provider openrouter` (raises `ValueError` if missing)
 - Population generation (SCB/SSB scripts) does not require any API keys
 
 ## Documentation

@@ -43,6 +43,10 @@ python scripts/generate/generate_identity.py --provider gemini --mode configurab
 python scripts/generate/generate_identity.py --provider claude --model sonnet --mode configurable \
     --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json
 
+# Generate a persona identity via explicit CLI args (OpenRouter, requires OPENROUTER_API_KEY)
+python scripts/generate/generate_identity.py --provider openrouter --model openai/gpt-4o --mode configurable \
+    --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json
+
 # Compare two population files
 python scripts/analyze/score_fidelity.py pop_a.json pop_b.json
 

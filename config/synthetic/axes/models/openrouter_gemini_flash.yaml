@@ -1,0 +1,13 @@
+id: "openrouter_gemini_flash"
+label: "OpenRouter Gemini Flash 1.5"
+model_config:
+  provider: "openrouter"
+  model: "google/gemini-flash-1.5"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+parameters:
+  parallel:
+    workers: 4

@@ -168,8 +168,21 @@ def _generate_one(
             )
             with _active_clients_lock:
                 _active_clients.add(client)
+        elif provider == "openrouter":
+            from population_synthetic.clients.openai_compat_client import OpenAICompatClient
+            # base_url and api_key_env_var are structural defaults; axis files may override.
+            client = OpenAICompatClient(
+                model_name=model,
+                base_url=base_url or "https://openrouter.ai/api/v1",
+                api_key_env_var=api_key_env_var or "OPENROUTER_API_KEY",
+                default_config=cfg,
+                provider_tag="openrouter",
+                default_headers={"X-Title": "population-synthetic"},
+            )
+            with _active_clients_lock:
+                _active_clients.add(client)
         else:
-            raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini', 'claude', 'ollama', or 'openai_compat'.")
+            raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini', 'claude', 'ollama', 'openai_compat', or 'openrouter'.")
         generator = FactoryIdentityGenerator.create_generator(mode, client)
         generator.retry_until_success = retry_until_success
         generator.use_structured_output = structured_output
@@ -224,13 +237,16 @@ def main() -> None:
     parser.add_argument(
         "--provider",
         default=None,
-        choices=["gemini", "claude", "ollama", "openai_compat"],
-        help="LLM provider to use: gemini, claude, ollama, or openai_compat (default: gemini)",
+        choices=["gemini", "claude", "ollama", "openai_compat", "openrouter"],
+        help="LLM provider to use: gemini, claude, ollama, openai_compat, or openrouter (default: gemini)",
     )
     parser.add_argument(
         "--model",
         default=None,
-        help="Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet, ollama -> llama3.2, openai_compat -> mistral-large-latest",
+        help=(
+            "Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet, "
+            "ollama -> llama3.2, openai_compat -> mistral-large-latest, openrouter -> openai/gpt-4o"
+        ),
     )
     parser.add_argument(
         "--base-url",
@@ -427,6 +443,8 @@ def main() -> None:
         model = "llama3.2"
     elif args.provider == "openai_compat":
         model = "mistral-large-latest"
+    elif args.provider == "openrouter":
+        model = "openai/gpt-4o"
     else:
         model = "sonnet"
 

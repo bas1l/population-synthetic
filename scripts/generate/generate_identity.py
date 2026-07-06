@@ -29,8 +29,11 @@ Modes:
     configurable  Configurable strategy with simulation config file (requires --strategy).
 
 Providers:
-    gemini  Use Google Gemini via GeminiClient (default model: gemini-2.5-flash).
-    claude  Use Claude via ClaudeCodeClient subprocess wrapper (default model: sonnet).
+    gemini        Use Google Gemini via GeminiClient (default model: gemini-2.5-flash).
+    claude        Use Claude via ClaudeCodeClient subprocess wrapper (default model: sonnet).
+    ollama        Use a local Ollama server (default model: llama3.2; requires --base-url).
+    openai_compat Use any OpenAI-compatible endpoint (default model: mistral-large-latest; requires --base-url).
+    openrouter    Use OpenRouter's aggregated catalog (default model: openai/gpt-4o; requires OPENROUTER_API_KEY).
 """
 
 import argparse
@@ -84,8 +87,8 @@ def main() -> None:
     parser.add_argument(
         "--provider",
         default=None,
-        choices=["gemini", "claude", "ollama", "openai_compat"],
-        help="LLM provider to use: gemini, claude, ollama, or openai_compat (default: gemini)",
+        choices=["gemini", "claude", "ollama", "openai_compat", "openrouter"],
+        help="LLM provider to use: gemini, claude, ollama, openai_compat, or openrouter (default: gemini)",
     )
     parser.add_argument(
         "--base-url",
@@ -105,7 +108,10 @@ def main() -> None:
     parser.add_argument(
         "--model",
         default=None,
-        help="Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet",
+        help=(
+            "Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet, "
+            "ollama -> llama3.2, openai_compat -> mistral-large-latest, openrouter -> openai/gpt-4o"
+        ),
     )
     parser.add_argument(
         "--log-llm",
@@ -262,8 +268,19 @@ def main() -> None:
             api_key_env_var=args.api_key_env or "OPENAI_API_KEY",
             default_config=generation_config,
         )
+    elif args.provider == "openrouter":
+        from population_synthetic.clients.openai_compat_client import OpenAICompatClient
+        # base_url and api_key_env_var are structural defaults; axis files may override.
+        client = OpenAICompatClient(
+            model_name=args.model or "openai/gpt-4o",
+            base_url=args.base_url or "https://openrouter.ai/api/v1",
+            api_key_env_var=args.api_key_env or "OPENROUTER_API_KEY",
+            default_config=generation_config,
+            provider_tag="openrouter",
+            default_headers={"X-Title": "population-synthetic"},
+        )
     else:
-        raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini', 'claude', 'ollama', or 'openai_compat'.")
+        raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini', 'claude', 'ollama', 'openai_compat', or 'openrouter'.")
 
     logger.info("Model: %s", client.get_current_configuration()["model"])
     generator = FactoryIdentityGenerator.create_generator(args.mode, client)
