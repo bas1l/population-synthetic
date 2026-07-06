@@ -185,6 +185,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                 raw = self.client.generate_content(
                     prompt, system_instruction=system_instruction, **extra
                 )
+                meta = getattr(self.client, "last_metadata", None) or {}
                 parsed = self._extract_json(raw)
                 value = (
                     self._extract_expected_key(parsed, expected_key)
@@ -202,9 +203,22 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                         attempt=attempt + 1,
                         persona_id=self.persona_id,
                         call_index=call_index,
+                        provider=meta.get("provider"),
+                        model=meta.get("model"),
+                        request_sent_at=meta.get("request_sent_at"),
+                        response_received_at=meta.get("response_received_at"),
+                        elapsed_ms=meta.get("elapsed_ms"),
+                        prompt_tokens=meta.get("prompt_tokens"),
+                        completion_tokens=meta.get("completion_tokens"),
+                        total_tokens=meta.get("total_tokens"),
                     ))
                 return value
             except (json.JSONDecodeError, KeyError, RuntimeError) as e:
+                meta = getattr(self.client, "last_metadata", None) or {}
+                if isinstance(e, (json.JSONDecodeError, KeyError)):
+                    error_category = "invalid_response"
+                else:
+                    error_category = meta.get("error_category") or "unknown"
                 if self.interaction_collector and log_category:
                     self.interaction_collector.record(LLMInteractionEntry(
                         category=log_category,
@@ -217,6 +231,15 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                         attempt=attempt + 1,
                         persona_id=self.persona_id,
                         call_index=call_index,
+                        provider=meta.get("provider"),
+                        model=meta.get("model"),
+                        request_sent_at=meta.get("request_sent_at"),
+                        response_received_at=meta.get("response_received_at"),
+                        elapsed_ms=meta.get("elapsed_ms"),
+                        prompt_tokens=meta.get("prompt_tokens"),
+                        completion_tokens=meta.get("completion_tokens"),
+                        total_tokens=meta.get("total_tokens"),
+                        error_category=error_category,
                     ))
                 last_error = e
                 raw_snippet = raw[:500] if raw else "(no response)"

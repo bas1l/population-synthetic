@@ -163,15 +163,32 @@ class OpenAICompatClient:
             "base_url": self.base_url,
             "timestamp": datetime.now().isoformat(),
             "api_params": api_params,
+            "request_sent_at": None,
+            "response_received_at": None,
+            "elapsed_ms": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "status": None,
+            "error_category": None,
+            "error": None,
         }
         self._last_execution_metadata = metadata
         self._execution_history.append(metadata)
 
+        def _fail(category: str, message: str) -> RuntimeError:
+            metadata["status"] = "error"
+            metadata["error_category"] = category
+            metadata["error"] = message
+            return RuntimeError(message)
+
         last_error: Exception | None = None
+        last_error_category: str = "unknown"
         for attempt in range(self._max_retries):
             try:
                 response_format = response_format_strict
 
+                metadata["request_sent_at"] = datetime.now().isoformat()
                 t0 = time.perf_counter()
                 try:
                     completion = self._client.chat.completions.create(
@@ -194,24 +211,34 @@ class OpenAICompatClient:
                             **api_params,
                         )
                     else:
-                        raise RuntimeError(
-                            f"Provider returned 400 Bad Request: {exc}"
+                        raise _fail(
+                            "model_limitation", f"Provider returned 400 Bad Request: {exc}"
                         ) from exc
 
                 elapsed_ms = (time.perf_counter() - t0) * 1000
+                metadata["response_received_at"] = datetime.now().isoformat()
+                metadata["elapsed_ms"] = elapsed_ms
 
                 content = completion.choices[0].message.content
                 if not isinstance(content, str):
-                    raise RuntimeError(
-                        f"Unexpected content type from provider: {type(content)!r}"
+                    raise _fail(
+                        "invalid_response", f"Unexpected content type from provider: {type(content)!r}"
                     )
 
                 usage = completion.usage
                 prompt_tokens = usage.prompt_tokens if usage else None
                 completion_tokens = usage.completion_tokens if usage else None
+                total_tokens = (
+                    prompt_tokens + completion_tokens
+                    if prompt_tokens is not None and completion_tokens is not None
+                    else None
+                )
                 metadata["prompt_tokens"] = prompt_tokens
                 metadata["completion_tokens"] = completion_tokens
-                metadata["elapsed_ms"] = elapsed_ms
+                metadata["total_tokens"] = total_tokens
+                metadata["status"] = "ok"
+                metadata["error_category"] = None
+                metadata["error"] = None
 
                 self.logger.info(
                     "openai_compat call: model=%s base_url=%s elapsed_ms=%.0f "
@@ -225,33 +252,40 @@ class OpenAICompatClient:
                 )
                 return content.strip()
 
-            except (
-                openai.AuthenticationError,
-                openai.PermissionDeniedError,
-                openai.NotFoundError,
-            ) as e:
-                raise RuntimeError(
-                    f"Fatal provider error (no retry): {type(e).__name__}: {e}"
+            except (openai.AuthenticationError, openai.PermissionDeniedError) as e:
+                raise _fail(
+                    "auth", f"Fatal provider error (no retry): {type(e).__name__}: {e}"
+                ) from e
+
+            except openai.NotFoundError as e:
+                raise _fail(
+                    "model_limitation", f"Fatal provider error (no retry): {type(e).__name__}: {e}"
                 ) from e
 
             except RuntimeError:
                 raise
 
-            except (
-                openai.RateLimitError,
-                openai.APIConnectionError,
-                openai.APITimeoutError,
-                openai.InternalServerError,
-            ) as e:
+            except openai.RateLimitError as e:
                 last_error = e
+                last_error_category = "rate_limit"
+            except openai.APIConnectionError as e:
+                last_error = e
+                last_error_category = "network"
+            except openai.APITimeoutError as e:
+                last_error = e
+                last_error_category = "timeout"
+            except openai.InternalServerError as e:
+                last_error = e
+                last_error_category = "network"
 
             except openai.APIStatusError as e:
                 # Catch-all for any remaining 4xx that aren't handled above.
                 if e.status_code is not None and 400 <= e.status_code < 500:
-                    raise RuntimeError(
-                        f"Fatal provider error HTTP {e.status_code} (no retry): {e}"
+                    raise _fail(
+                        "model_limitation", f"Fatal provider error HTTP {e.status_code} (no retry): {e}"
                     ) from e
                 last_error = e
+                last_error_category = "network"
 
             if attempt < self._max_retries - 1:
                 delay = min(self._base_delay * (2**attempt), self._max_delay)
@@ -268,6 +302,7 @@ class OpenAICompatClient:
         self.logger.error(
             "generate_content failed after %d attempts: %s", self._max_retries, last_error
         )
-        raise RuntimeError(
-            f"OpenAI-compat generation failed after {self._max_retries} attempts: {last_error}"
+        raise _fail(
+            last_error_category,
+            f"OpenAI-compat generation failed after {self._max_retries} attempts: {last_error}",
         )

@@ -232,7 +232,13 @@ class ClaudeCodeClient:
         self._proc.stdin.write(json.dumps(msg) + "\n")
         self._proc.stdin.flush()
 
-    def _read_until_result(self, timeout: float) -> str:
+    def _read_until_result(self, timeout: float) -> tuple[str, dict[str, Any]]:
+        """Read NDJSON messages until the ``result`` message arrives.
+
+        Returns ``(result_text, usage)`` where ``usage`` is the raw ``usage`` dict from
+        the CLI's ``result`` message (``{}`` if the CLI omitted it — degrade gracefully,
+        never fail the call over missing usage).
+        """
         deadline = time.monotonic() + timeout
         skip_types = {"system", "rate_limit_event", "assistant", "stream_event"}
 
@@ -270,7 +276,10 @@ class ClaudeCodeClient:
                     error_detail = msg.get("result") or msg.get("error") or str(msg)
                     raise RuntimeError(f"claude CLI returned an error result: {error_detail}")
                 result = msg.get("result", "")
-                return result.strip() if isinstance(result, str) else result
+                usage = msg.get("usage") or {}
+                if not isinstance(usage, dict):
+                    usage = {}
+                return (result.strip() if isinstance(result, str) else result), usage
 
             # Unknown type — skip rather than raise so forward-compat is preserved
             self.logger.debug("Ignoring unknown claude message type: %s", msg_type)
@@ -286,33 +295,77 @@ class ClaudeCodeClient:
         target_model = effective_config.pop("model", self.default_model_name)
         system_instruction = effective_config.pop("system_instruction", None)
 
-        metadata = {
+        metadata: dict[str, Any] = {
+            "provider": "claude",
             "model": target_model,
             "config": effective_config,
             "timestamp": datetime.now().isoformat(),
+            "request_sent_at": None,
+            "response_received_at": None,
+            "elapsed_ms": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "status": None,
+            "error_category": None,
+            "error": None,
         }
         self._last_execution_metadata = metadata
         self._execution_history.append(metadata)
 
+        def _fail(category: str, message: str) -> None:
+            metadata["status"] = "error"
+            metadata["error_category"] = category
+            metadata["error"] = message
+
         last_error: Exception | None = None
+        last_error_category: str = "unknown"
         for attempt in range(self._max_retries):
             try:
+                metadata["request_sent_at"] = datetime.now().isoformat()
                 self._ensure_process(target_model, system_instruction)
                 launch_ms = self._last_launch_ms
 
                 t_inf_start = time.perf_counter()
                 self._send_prompt(prompt)
-                result = self._read_until_result(self._timeout)
+                result, usage = self._read_until_result(self._timeout)
                 t_inference_ms = (time.perf_counter() - t_inf_start) * 1000
 
+                metadata["response_received_at"] = datetime.now().isoformat()
+                metadata["elapsed_ms"] = launch_ms + t_inference_ms
+
+                prompt_tokens = usage.get("input_tokens")
+                completion_tokens = usage.get("output_tokens")
+                total_tokens = (
+                    prompt_tokens + completion_tokens
+                    if prompt_tokens is not None and completion_tokens is not None
+                    else None
+                )
+                metadata["prompt_tokens"] = prompt_tokens
+                metadata["completion_tokens"] = completion_tokens
+                metadata["total_tokens"] = total_tokens
+                metadata["status"] = "ok"
+                metadata["error_category"] = None
+                metadata["error"] = None
+
                 self.logger.info(
-                    "claude call: model=%s t_launch_ms=%.0f t_inference_ms=%.0f%s",
-                    target_model, launch_ms, t_inference_ms, format_corr_token(),
+                    "claude call: model=%s t_launch_ms=%.0f t_inference_ms=%.0f "
+                    "prompt_tokens=%s completion_tokens=%s%s",
+                    target_model, launch_ms, t_inference_ms, prompt_tokens, completion_tokens,
+                    format_corr_token(),
                 )
                 return result
 
             except (RuntimeError, subprocess.TimeoutExpired, OSError) as e:
                 last_error = e
+                if isinstance(e, subprocess.TimeoutExpired):
+                    last_error_category = "timeout"
+                elif isinstance(e, OSError) or "process terminated unexpectedly" in str(e):
+                    last_error_category = "network"
+                elif "returned an error result" in str(e):
+                    last_error_category = "model_limitation"
+                else:
+                    last_error_category = "unknown"
                 self._close_process()
                 if attempt < self._max_retries - 1:
                     delay = min(self._base_delay * (2 ** attempt), self._max_delay)
@@ -325,6 +378,10 @@ class ClaudeCodeClient:
 
         self.logger.error(
             "generate_content failed after %d attempts: %s", self._max_retries, last_error
+        )
+        _fail(
+            last_error_category,
+            f"claude CLI failed after {self._max_retries} attempts: {last_error}",
         )
         raise RuntimeError(
             f"claude CLI failed after {self._max_retries} attempts: {last_error}"

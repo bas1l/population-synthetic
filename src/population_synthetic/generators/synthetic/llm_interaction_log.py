@@ -28,6 +28,17 @@ class LLMInteractionEntry:
     # ``None`` for legacy entries and single-run callers that don't set it.
     persona_id: str | None = None
     call_index: int | None = None
+    # Standardized per-call telemetry (mirrors the client's ``last_metadata`` contract).
+    # ``None`` for legacy entries and providers that don't populate a given field.
+    provider: str | None = None
+    model: str | None = None
+    request_sent_at: str | None = None
+    response_received_at: str | None = None
+    elapsed_ms: float | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    error_category: str | None = None
 
 
 class LLMInteractionCollector:

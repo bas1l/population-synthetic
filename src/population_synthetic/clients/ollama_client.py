@@ -191,13 +191,30 @@ class OllamaClient:
             "base_url": self.base_url,
             "timestamp": datetime.now().isoformat(),
             "options": options,
+            "request_sent_at": None,
+            "response_received_at": None,
+            "elapsed_ms": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "status": None,
+            "error_category": None,
+            "error": None,
         }
         self._last_execution_metadata = metadata
         self._execution_history.append(metadata)
 
+        def _fail(category: str, message: str) -> RuntimeError:
+            metadata["status"] = "error"
+            metadata["error_category"] = category
+            metadata["error"] = message
+            return RuntimeError(message)
+
         last_error: Exception | None = None
+        last_error_category: str = "unknown"
         for attempt in range(self._max_retries):
             try:
+                metadata["request_sent_at"] = datetime.now().isoformat()
                 t0 = time.perf_counter()
                 resp = self._session.post(
                     f"{self.base_url}/api/chat",
@@ -205,23 +222,30 @@ class OllamaClient:
                     timeout=self._timeout,
                 )
                 elapsed_ms = (time.perf_counter() - t0) * 1000
+                metadata["response_received_at"] = datetime.now().isoformat()
+                metadata["elapsed_ms"] = elapsed_ms
 
                 if resp.status_code == 404:
                     body = _safe_json(resp)
                     err_msg = body.get("error", "") if isinstance(body, dict) else str(body)
                     if "model" in err_msg.lower() or "not found" in err_msg.lower():
-                        raise RuntimeError(
+                        raise _fail(
+                            "model_limitation",
                             f"Model '{target_model}' not found on Ollama server at {self.base_url}. "
-                            f"Run 'ollama pull {target_model}' on the server."
+                            f"Run 'ollama pull {target_model}' on the server.",
                         )
-                    raise RuntimeError(
-                        f"Ollama returned 404: {err_msg}"
-                    )
+                    raise _fail("model_limitation", f"Ollama returned 404: {err_msg}")
 
                 if 400 <= resp.status_code < 500:
                     body = _safe_json(resp)
-                    raise RuntimeError(
-                        f"Ollama returned client error HTTP {resp.status_code}: {body}"
+                    if resp.status_code in (401, 403):
+                        category = "auth"
+                    elif resp.status_code == 429:
+                        category = "rate_limit"
+                    else:
+                        category = "model_limitation"
+                    raise _fail(
+                        category, f"Ollama returned client error HTTP {resp.status_code}: {body}"
                     )
 
                 resp.raise_for_status()
@@ -229,15 +253,23 @@ class OllamaClient:
                 data = resp.json()
                 content = data["message"]["content"]
                 if not isinstance(content, str):
-                    raise RuntimeError(
-                        f"Unexpected content type from Ollama: {type(content)!r}"
+                    raise _fail(
+                        "invalid_response", f"Unexpected content type from Ollama: {type(content)!r}"
                     )
 
                 prompt_tokens = data.get("prompt_eval_count")
                 completion_tokens = data.get("eval_count")
+                total_tokens = (
+                    prompt_tokens + completion_tokens
+                    if prompt_tokens is not None and completion_tokens is not None
+                    else None
+                )
                 metadata["prompt_tokens"] = prompt_tokens
                 metadata["completion_tokens"] = completion_tokens
-                metadata["elapsed_ms"] = elapsed_ms
+                metadata["total_tokens"] = total_tokens
+                metadata["status"] = "ok"
+                metadata["error_category"] = None
+                metadata["error"] = None
 
                 self.logger.info(
                     "ollama call: model=%s base_url=%s elapsed_ms=%.0f "
@@ -254,14 +286,25 @@ class OllamaClient:
             except RuntimeError:
                 raise
 
-            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            except requests.exceptions.ConnectionError as e:
                 last_error = e
+                last_error_category = "network"
+            except requests.exceptions.Timeout as e:
+                last_error = e
+                last_error_category = "timeout"
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and 400 <= e.response.status_code < 500:
-                    raise RuntimeError(
-                        f"Ollama returned client error HTTP {e.response.status_code}: {e}"
+                    if e.response.status_code in (401, 403):
+                        category = "auth"
+                    elif e.response.status_code == 429:
+                        category = "rate_limit"
+                    else:
+                        category = "model_limitation"
+                    raise _fail(
+                        category, f"Ollama returned client error HTTP {e.response.status_code}: {e}"
                     ) from e
                 last_error = e
+                last_error_category = "network"
 
             if attempt < self._max_retries - 1:
                 delay = min(self._base_delay * (2 ** attempt), self._max_delay)
@@ -278,8 +321,9 @@ class OllamaClient:
         self.logger.error(
             "generate_content failed after %d attempts: %s", self._max_retries, last_error
         )
-        raise RuntimeError(
-            f"Ollama generation failed after {self._max_retries} attempts: {last_error}"
+        raise _fail(
+            last_error_category,
+            f"Ollama generation failed after {self._max_retries} attempts: {last_error}",
         )
 
 

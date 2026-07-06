@@ -9,6 +9,11 @@ small two-persona run that exercises every metric family:
 - multiple categories with a shared value (so entropy is non-trivial),
 - a retry entry (``step`` ending in ``_retry``) carrying an ``error``,
 - token + latency data on every call (so the token-gated metrics compute).
+
+``JSONL_NATIVE_ENTRIES`` (Phase 4) instead mimics the *raw* output of
+:func:`interaction_parser.parse_interactions` for a run with no text log at
+all -- telemetry (tokens, timestamps, ``error_category``) lives only on the
+JSONL entries themselves, as written by the generator/clients (Phases 1-3).
 """
 
 from __future__ import annotations
@@ -112,6 +117,60 @@ ENRICHED_ENTRIES: list[dict[str, Any]] = [
 ]
 
 RUN_SUMMARY: dict[str, Any] = {"elapsed_s": 12.0, "success": 2, "failed": 0}
+
+# JSONL-native telemetry entries (Phases 1-3): these mimic the *raw* output of
+# interaction_parser.parse_interactions() -- i.e. no joiner.join_entries() call
+# and no text log at all -- for a run where the generator copied
+# provider/model/timestamps/tokens/error_category straight from the client's
+# `last_metadata` into the crash-safe JSONL.  Proves the token-gated aggregator
+# metrics compute from JSONL-native tokens alone, and that a structured
+# `error_category` is surfaced per-category even with no log-joined data.
+JSONL_NATIVE_ENTRIES: list[dict[str, Any]] = [
+    {
+        "category": "first_name",
+        "method": "pick",
+        "step": "pick",
+        "prompt": "pick a first name",
+        "raw_response": '{"value": "Anna"}',
+        "parsed_value": {"value": "Anna"},
+        "error": None,
+        "attempt": 1,
+        "timestamp": "2026-07-06T10:00:00.000000",
+        "persona_id": "persona_00001",
+        "call_index": 1,
+        "provider": "ollama",
+        "model": "llama3.1:8b",
+        "request_sent_at": "2026-07-06T10:00:00.000000",
+        "response_received_at": "2026-07-06T10:00:00.500000",
+        "elapsed_ms": 500.0,
+        "prompt_tokens": 100,
+        "completion_tokens": 10,
+        "total_tokens": 110,
+        "error_category": None,
+    },
+    {
+        "category": "age",
+        "method": "generate_evaluate_pick",
+        "step": "pick_retry",
+        "prompt": "pick one age",
+        "raw_response": "",
+        "parsed_value": None,
+        "error": "ConnectionError: could not reach host",
+        "attempt": 1,
+        "timestamp": "2026-07-06T10:00:01.000000",
+        "persona_id": "persona_00001",
+        "call_index": 2,
+        "provider": "ollama",
+        "model": "llama3.1:8b",
+        "request_sent_at": "2026-07-06T10:00:01.000000",
+        "response_received_at": None,
+        "elapsed_ms": 300.0,
+        "prompt_tokens": None,
+        "completion_tokens": None,
+        "total_tokens": None,
+        "error_category": "network",
+    },
+]
 
 
 def entries_without_tokens() -> list[dict[str, Any]]:

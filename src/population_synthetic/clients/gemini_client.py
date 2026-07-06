@@ -9,11 +9,14 @@ from __future__ import annotations
 import copy
 import logging
 import os
+import time
 from datetime import datetime
 from typing import Any
 
 from google import genai
 from google.genai import types
+
+from population_synthetic.clients.call_context import format_corr_token
 
 
 class GeminiClient:
@@ -169,10 +172,21 @@ class GeminiClient:
         effective_config_params.update(kwargs)
 
         # Capture Metadata for Provenance/Sidecar files
-        metadata = {
+        metadata: dict[str, Any] = {
+            "provider": "gemini",
+            "model": target_model,
             "model_name": target_model,
             "generation_config": effective_config_params,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "request_sent_at": None,
+            "response_received_at": None,
+            "elapsed_ms": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "status": None,
+            "error_category": None,
+            "error": None,
         }
 
         # Update state and history
@@ -181,11 +195,19 @@ class GeminiClient:
 
         self.logger.debug(f"Sending request to model: {target_model} with config: {effective_config_params}")
 
+        def _fail(category: str, message: str) -> None:
+            metadata["status"] = "error"
+            metadata["error_category"] = category
+            metadata["error"] = message
+
         try:
             # Create the Configuration Object
             generation_config = (
                 types.GenerateContentConfig(**effective_config_params) if effective_config_params else None
             )
+
+            metadata["request_sent_at"] = datetime.now().isoformat()
+            t0 = time.perf_counter()
 
             # Call the API
             response = self.client.models.generate_content(
@@ -194,18 +216,58 @@ class GeminiClient:
                 config=generation_config
             )
 
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            metadata["response_received_at"] = datetime.now().isoformat()
+            metadata["elapsed_ms"] = elapsed_ms
+
             text = getattr(response, 'text', None)
             if not isinstance(text, str) or not text.strip():
                 # response.text is None when the completion is safety-blocked or
                 # empty. Fail loudly rather than returning a repr of the SDK
                 # object, which would surface downstream as a bogus JSON parse
                 # error far from the real cause.
+                _fail(
+                    "model_limitation",
+                    f"Gemini returned no usable text for model {target_model} "
+                    f"(safety-blocked or empty response): {response!r}",
+                )
                 raise RuntimeError(
                     f"Gemini returned no usable text for model {target_model} "
                     f"(safety-blocked or empty response): {response!r}"
                 )
+
+            usage = getattr(response, "usage_metadata", None)
+            prompt_tokens = getattr(usage, "prompt_token_count", None) if usage is not None else None
+            completion_tokens = getattr(usage, "candidates_token_count", None) if usage is not None else None
+            total_tokens = getattr(usage, "total_token_count", None) if usage is not None else None
+            if total_tokens is None and prompt_tokens is not None and completion_tokens is not None:
+                total_tokens = prompt_tokens + completion_tokens
+
+            metadata["prompt_tokens"] = prompt_tokens
+            metadata["completion_tokens"] = completion_tokens
+            metadata["total_tokens"] = total_tokens
+            metadata["status"] = "ok"
+            metadata["error_category"] = None
+            metadata["error"] = None
+
+            self.logger.info(
+                "gemini call: model=%s elapsed_ms=%.0f prompt_tokens=%s completion_tokens=%s%s",
+                target_model, elapsed_ms, prompt_tokens, completion_tokens, format_corr_token(),
+            )
             return text
 
+        except RuntimeError:
+            raise
+
         except Exception as e:
+            exc_name = type(e).__name__.lower()
+            exc_msg = str(e).lower()
+            if any(kw in exc_name or kw in exc_msg for kw in ("connection", "network", "dns", "resolve")):
+                category = "network"
+            elif any(kw in exc_name or kw in exc_msg for kw in ("deadline", "timeout", "timed out")):
+                category = "timeout"
+            else:
+                category = "unknown"
+            _fail(category, str(e))
             self.logger.error(f"Generation failed for model {target_model}: {e}")
             raise RuntimeError(f"Gemini Generation Error: {e}") from e
