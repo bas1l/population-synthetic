@@ -6,7 +6,7 @@ per-attribute JSON files (or a single monolithic file) into one dict.
 :func:`load_index` reads the per-country ``_index.json`` master that lists the
 comparison attributes (attribute → filename). The cross-attribute statistics
 (joint pairs, coherence attributes/threshold) live in a separate comparison-analysis
-config (``config/analysis/comparison/{country}.json``), not the mapping index.
+config (``config/analysis/fidelity/{country}.json``), not the mapping index.
 """
 
 from __future__ import annotations

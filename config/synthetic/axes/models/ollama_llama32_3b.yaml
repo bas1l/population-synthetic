@@ -11,4 +11,6 @@ model_config:
     max_output_tokens: 2048
 parameters:
   parallel:
-    workers: 1
+    # VRAM-max knee per docs/development/ollama-parallelism-poc/REPORT.md (peak 2.28x).
+    # Only effective if the server's OLLAMA_NUM_PARALLEL matches; else requests queue.
+    workers: 10

@@ -81,8 +81,18 @@ class PopulationSummaryPanel(QWidget):
     # Public API
     # ------------------------------------------------------------------
 
-    def populate_combos(self, combos: list[tuple[str, str, str]]) -> None:
-        """(Re)build the table from *combos* and kick a background count refresh."""
+    def populate_combos(
+        self,
+        combos: list[tuple[str, str, str]],
+        total_override: int | None = None,
+    ) -> None:
+        """(Re)build the table from *combos* and kick a background count refresh.
+
+        *total_override* is the flow YAML's ``n`` option (what the GUI actually
+        sends to the script as ``--n``); when given it is the per-combo total
+        for every row. When ``None`` each row falls back to
+        ``compose_manifest(...).parallel_n`` (the experiment-defaults value).
+        """
         self._generation += 1
         self._combos = list(combos)
         self._totals = []
@@ -111,7 +121,7 @@ class PopulationSummaryPanel(QWidget):
                 continue
 
             workers = str(cfg.parallel_workers) if cfg.parallel_workers is not None else _DASH
-            total = cfg.parallel_n
+            total = total_override if total_override is not None else cfg.parallel_n
             generated = f"{_PENDING} / {total}" if total is not None else _PENDING
             self._set_row(row, [*axis_cols, cfg.provider or _DASH, workers, generated])
 

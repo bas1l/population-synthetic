@@ -12,4 +12,6 @@ model_config:
 parameters:
   structured_output: true
   parallel:
-    workers: 1
+    # VRAM-max knee per docs/development/ollama-parallelism-poc/REPORT.md (peak 2.26x).
+    # Only effective if the server's OLLAMA_NUM_PARALLEL matches; else requests queue.
+    workers: 7

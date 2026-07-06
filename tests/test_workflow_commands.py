@@ -109,7 +109,7 @@ tasks:
 
   compare:
     label: Compare
-    script: scripts/analyze/compare_all_pipelines.py
+    script: scripts/analyze/score_fidelity_all.py
     dispatch: slugs
     enabled: true
     min_combos: 2
@@ -142,7 +142,7 @@ def test_task_accessors(model):
     meta = model.get_task_meta("compare")
     assert meta == {
         "label": "Compare",
-        "script": "scripts/analyze/compare_all_pipelines.py",
+        "script": "scripts/analyze/score_fidelity_all.py",
         "dispatch": "slugs",
         "supports_force": False,
         "min_combos": 2,

@@ -114,12 +114,12 @@ data-driven with no code branch: Italy's `_index.json` simply omits `income_sour
 
 The cross-attribute statistics — `joint_pairs`, `coherence_attributes` and
 `coherence_threshold` — are evaluator tuning rather than mapping, so they live in a
-**separate comparison-analysis config**, `config/analysis/comparison/{scb,istat}.json`,
+**separate comparison-analysis config**, `config/analysis/fidelity/{scb,istat}.json`,
 one file per country. Keeping them out of `_index.json` means the mapping index says
 only *which attributes exist*, while the analysis config says *which cross-attribute
 tests the evaluator runs and at what threshold*.
 
-`analysis/comparison/scheme.py` (`ComparisonScheme` / `load_scheme`) is unchanged in
+`analysis/fidelity/scheme.py` (`ComparisonScheme` / `load_scheme`) is unchanged in
 *interface* — `StatisticalEvaluator`, `charts.py`, and the compare scripts still
 receive one `ComparisonScheme` — but it now **sources** the marginal axis from
 `_index.json` + each file's `values`, and the cross-attribute fields

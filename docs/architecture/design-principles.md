@@ -32,7 +32,7 @@ being in a given category* are not.
 HARD RULE. Domain content that belongs in config -- the comparison attribute list / axis order,
 category values, per-attribute matcher rules, joint/coherence attribute pairs, sex-harmonization
 maps, and any similar attribute-name or category-value literal -- must be read from the config
-files (`config/mapping/{scb,istat}/`, `config/analysis/comparison/*.json`, etc.), never duplicated
+files (`config/mapping/{scb,istat}/`, `config/analysis/fidelity/*.json`, etc.), never duplicated
 as an in-code default or `attr or DEFAULT` fallback. Config is authoritative; there is no second
 copy in Python to "fall back" to. If the config is missing, empty, or malformed, **fail loudly**
 (raise) -- a fail-fast crash is the expected, correct behavior, not a silent revert to a baked-in

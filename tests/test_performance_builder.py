@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from population_synthetic.analysis.performance.builder import (
+from population_synthetic.analysis.model_ranking.builder import (
     build_performance_comparison,
     write_performance_csv,
     write_performance_json,

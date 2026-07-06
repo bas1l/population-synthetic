@@ -24,7 +24,7 @@ Usage:
     --charts DIR      Write analytics charts (PNG) to this directory.
     --verbose         Also print per-persona breakdown after the run summary.
     --all             Discover every run under {output_base}/01_Raw/ and analyse
-                      each one into the derived llm_metrics/{slug}/ folder.
+                      each one into the derived run_analytics/{slug}/ folder.
     --model-id/--strategy-id/--country-id
                       Axis mode: resolve the run dir to {output_base}/01_Raw/{slug}
                       and analyse that single run (all three required together).
@@ -57,15 +57,15 @@ from typing import Any
 import yaml
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.analysis.llm_metrics.per_run.aggregator import compute_metrics
-from population_synthetic.analysis.llm_metrics.per_run.charts import plot_run_charts
-from population_synthetic.analysis.llm_metrics.per_run.console_report import print_metrics
-from population_synthetic.analysis.llm_metrics.per_run.interaction_parser import (
+from population_synthetic.analysis.run_analytics.per_run.aggregator import compute_metrics
+from population_synthetic.analysis.run_analytics.per_run.charts import plot_run_charts
+from population_synthetic.analysis.run_analytics.per_run.console_report import print_metrics
+from population_synthetic.analysis.run_analytics.per_run.interaction_parser import (
     find_interaction_file,
     parse_interactions,
 )
-from population_synthetic.analysis.llm_metrics.per_run.joiner import join_entries
-from population_synthetic.analysis.llm_metrics.per_run.log_parser import (
+from population_synthetic.analysis.run_analytics.per_run.joiner import join_entries
+from population_synthetic.analysis.run_analytics.per_run.log_parser import (
     find_log_files,
     parse_log_file,
     parse_run_summary,
@@ -111,12 +111,12 @@ def _derive_output_defaults(
         return None, None
 
     slug = run_dir_resolved.name
-    # New layout: llm_metrics is a single master folder under 03_Analysis, with
+    # New layout: run_analytics is a single master folder under 03_Analysis, with
     # one subfolder per config combination (slug) nested inside it.
     task_dir = (
         Path(output_base)
         / analytics.get("analysis_subdir", "03_Analysis")
-        / analytics.get("task_subdir", "llm_metrics")
+        / analytics.get("task_subdir", "run_analytics")
         / slug
     )
     default_json = task_dir / analytics.get("json_filename", "run_analytics.json")
@@ -251,7 +251,7 @@ def _write_json(metrics: dict[str, Any], run_dir: Path, output_path: Path) -> No
 # ---------------------------------------------------------------------------
 
 def _run_all(cfg: dict) -> None:
-    """Analyse every run under {output_base}/01_Raw/ into llm_metrics/{slug}/."""
+    """Analyse every run under {output_base}/01_Raw/ into run_analytics/{slug}/."""
     output_base = cfg.get("output_base")
     if not output_base:
         print("Error: --all requires 'output_base' in config/analysis/analyze_defaults.yaml", file=sys.stderr)
@@ -339,7 +339,7 @@ def main() -> None:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Analyse every run under {output_base}/01_Raw/ into llm_metrics/{slug}/.",
+        help="Analyse every run under {output_base}/01_Raw/ into run_analytics/{slug}/.",
     )
     parser.add_argument(
         "--model-id",

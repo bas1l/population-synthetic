@@ -101,7 +101,7 @@ actions:
   - id: compare_synth_real
     label: "Compare Synthetic to Real"
     group: analysis
-    script: scripts/analyze/compare_all_pipelines.py
+    script: scripts/analyze/score_fidelity_all.py
     requires_manifest: false
     axis_mode: batch
     parameters:
@@ -119,7 +119,7 @@ actions:
   - id: compare_pops
     label: "Compare Two Populations"
     group: analysis
-    script: scripts/analyze/compare_populations.py
+    script: scripts/analyze/score_fidelity.py
     requires_manifest: false
     axis_mode: batch
     min_combos: 2
@@ -140,7 +140,7 @@ actions:
   - id: model_performance
     label: "Model Performance (models x methods)"
     group: analysis
-    script: scripts/analyze/compare_model_performance.py
+    script: scripts/analyze/rank_models.py
     requires_manifest: false
     axis_mode: batch
     min_combos: 2
@@ -182,7 +182,7 @@ actions:
   - id: llm_metrics_cross_run
     label: "LLM Metrics (cross-run)"
     group: analysis
-    script: scripts/analyze/compare_runs.py
+    script: scripts/analyze/compare_run_analytics.py
     requires_manifest: false
     axis_mode: batch
     parameters:

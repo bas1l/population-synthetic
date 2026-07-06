@@ -9,12 +9,17 @@ import csv
 import json
 import math
 
-from population_synthetic.analysis.comparison.evaluator import (
+from population_synthetic.analysis.fidelity.evaluator import (
     StatisticalEvaluator,
     write_association_csv,
+    write_c2st_csv,
+    write_coherence_csv,
+    write_combination_plausibility_csv,
     write_csv_summary,
+    write_joint_chi_sq_csv,
+    write_joint_fidelity_csv,
 )
-from population_synthetic.analysis.comparison.scheme import (
+from population_synthetic.analysis.fidelity.scheme import (
     C2STConfig,
     CombinationCheck,
     ComparisonScheme,
@@ -411,3 +416,95 @@ def test_write_association_csv_one_row_per_pair(tmp_path):
         rows = list(csv.DictReader(f))
     assert len(rows) == 6
     assert {"attr_x", "attr_y", "v_real", "v_syn", "abs_delta_v"} == set(rows[0])
+
+
+# --- multivariate + legacy metric CSV writers ----------------------------
+
+
+def _mv_report(tmp_path=None):
+    scheme = _mv_scheme()
+    ev = StatisticalEvaluator(_pop(_mv_population(20)), _pop(_mv_population(10)), scheme=scheme)
+    return ev.generate_report()
+
+
+def test_write_c2st_csv_single_row(tmp_path):
+    report = _mv_report()
+    out = tmp_path / "run_c2st.csv"
+    write_c2st_csv(report, out)
+    with open(out, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert {"auc", "p_value", "method", "balanced_n"} == set(rows[0])
+
+
+def test_write_joint_fidelity_csv_one_row_per_pair(tmp_path):
+    report = _mv_report()
+    out = tmp_path / "run_joint_fidelity.csv"
+    write_joint_fidelity_csv(report, out)
+    with open(out, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    # _mv_scheme configures 2 grounded_joint_pairs (one grounded, one reference).
+    assert len(rows) == 2
+    assert {"attr_x", "attr_y", "joint_tv", "grounded", "basis"} == set(rows[0])
+    bases = {r["basis"] for r in rows}
+    assert bases == {"audit", "reference"}
+
+
+def test_write_combination_plausibility_csv_one_row_per_check(tmp_path):
+    report = _mv_report()
+    out = tmp_path / "run_combination_plausibility.csv"
+    write_combination_plausibility_csv(report, out)
+    with open(out, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    # attributes tuple is serialised as a " | "-joined string.
+    assert rows[0]["attributes"] == "age_group | education_level | employment_status"
+    assert rows[0]["k"] == "3"
+
+
+def test_write_joint_chi_sq_csv_splits_pair_key(tmp_path):
+    report = _mv_report()
+    out = tmp_path / "run_joint_chi_sq.csv"
+    write_joint_chi_sq_csv(report, out)
+    with open(out, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    # _mv_scheme configures one joint pair: age_group x education_level.
+    assert len(rows) == 1
+    assert rows[0]["attr_x"] == "age_group"
+    assert rows[0]["attr_y"] == "education_level"
+    assert rows[0]["pair"] == "age_group_x_education_level"
+
+
+def test_write_coherence_csv_lists_flagged(tmp_path):
+    a = [_person(i, age_group="25-34", education_level="University Degree",
+                 employment_status="Employed") for i in range(10)]
+    b = [_person(0, age_group="75-85", education_level="No Formal Education",
+                 employment_status="Employed")]
+    ev = StatisticalEvaluator(_pop(a), _pop(b), scheme=_COHERENCE_SCHEME)
+    report = {"coherence": ev.compute_coherence()}
+    out = tmp_path / "run_coherence.csv"
+    write_coherence_csv(report, out)
+    with open(out, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert {"id", "age_group", "education_level", "employment_status", "probability"} == set(rows[0])
+    assert rows[0]["id"] == "0"
+
+
+def test_new_csv_writers_header_only_when_block_absent(tmp_path):
+    # An empty report has none of the blocks -> every writer emits a header-only file.
+    empty: dict = {}
+    for writer, name in [
+        (write_c2st_csv, "c2st"),
+        (write_joint_fidelity_csv, "joint_fidelity"),
+        (write_combination_plausibility_csv, "combination_plausibility"),
+        (write_joint_chi_sq_csv, "joint_chi_sq"),
+        (write_coherence_csv, "coherence"),
+    ]:
+        out = tmp_path / f"empty_{name}.csv"
+        writer(empty, out)
+        with open(out, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        assert reader.fieldnames  # header written
+        assert rows == []          # no data rows, no raise

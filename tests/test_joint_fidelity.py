@@ -1,8 +1,8 @@
 """Unit tests for the standalone joint_fidelity process (builder + driver).
 
-Covers the envelope shape returned by ``build_joint_fidelity`` (the four multivariate
+Covers the envelope shape returned by ``build_multivariate_fidelity`` (the four multivariate
 sub-blocks + identity fields), the per-combo roll-up produced by
-``aggregate_joint_fidelity``, and an end-to-end driver smoke test that seeds a minimal
+``aggregate_multivariate_fidelity``, and an end-to-end driver smoke test that seeds a minimal
 mapped output tree and asserts the joint_fidelity/ folder + files appear. Metric
 correctness itself is covered in tests/test_multivariate.py and is not duplicated here.
 """
@@ -11,13 +11,13 @@ import json
 
 import pytest
 
-from population_synthetic.analysis.comparison.scheme import (
+from population_synthetic.analysis.fidelity.scheme import (
     ComparisonScheme,
     GroundedJointPair,
 )
-from population_synthetic.analysis.joint_fidelity.builder import (
-    aggregate_joint_fidelity,
-    build_joint_fidelity,
+from population_synthetic.analysis.multivariate_fidelity.builder import (
+    aggregate_multivariate_fidelity,
+    build_multivariate_fidelity,
 )
 
 _AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85"]
@@ -66,12 +66,12 @@ def _real_and_synth():
     return real, synth
 
 
-# --- build_joint_fidelity ------------------------------------------------
+# --- build_multivariate_fidelity ------------------------------------------------
 
 
-def test_build_joint_fidelity_returns_well_formed_envelope():
+def test_build_multivariate_fidelity_returns_well_formed_envelope():
     real, synth = _real_and_synth()
-    envelope = build_joint_fidelity(
+    envelope = build_multivariate_fidelity(
         real, synth, _scheme(), slug="swedish_all_pick_claude_sonnet", country="swedish"
     )
     assert envelope["slug"] == "swedish_all_pick_claude_sonnet"
@@ -88,17 +88,17 @@ def test_build_joint_fidelity_returns_well_formed_envelope():
     assert pairs[0]["grounded"] is True
 
 
-# --- aggregate_joint_fidelity --------------------------------------------
+# --- aggregate_multivariate_fidelity --------------------------------------------
 
 
-def test_aggregate_joint_fidelity_one_row_per_combo():
+def test_aggregate_multivariate_fidelity_one_row_per_combo():
     real, synth = _real_and_synth()
     scheme = _scheme()
     envelopes = [
-        build_joint_fidelity(real, synth, scheme, slug=slug, country="swedish")
+        build_multivariate_fidelity(real, synth, scheme, slug=slug, country="swedish")
         for slug in ("swedish_all_pick_claude_sonnet", "swedish_all_pick_claude_haiku")
     ]
-    rows = aggregate_joint_fidelity(envelopes)
+    rows = aggregate_multivariate_fidelity(envelopes)
     assert len(rows) == 2
     expected_cols = {
         "slug", "strategy", "model", "c2st_auc",
@@ -121,8 +121,8 @@ def _load_driver():
 
     from population_synthetic._paths import PROJECT_ROOT
 
-    path = PROJECT_ROOT / "scripts" / "analyze" / "analyze_joint_fidelity.py"
-    spec = importlib.util.spec_from_file_location("analyze_joint_fidelity", path)
+    path = PROJECT_ROOT / "scripts" / "analyze" / "score_multivariate_fidelity.py"
+    spec = importlib.util.spec_from_file_location("score_multivariate_fidelity", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -155,7 +155,7 @@ def test_driver_writes_joint_fidelity_tree(tmp_path, monkeypatch):
         driver.sys,
         "argv",
         [
-            "analyze_joint_fidelity.py",
+            "score_multivariate_fidelity.py",
             "--output-base", str(tmp_path),
             "--slug", "swedish_all_pick_claude_sonnet",
             "--no-charts",
@@ -163,17 +163,17 @@ def test_driver_writes_joint_fidelity_tree(tmp_path, monkeypatch):
     )
     driver.main()
 
-    joint_dir = tmp_path / "03_Analysis" / "joint_fidelity"
+    joint_dir = tmp_path / "03_Analysis" / "multivariate_fidelity"
     assert (joint_dir / "swedish_all_pick_claude_sonnet" / "swedish_all_pick_claude_sonnet.json").is_file()
     assert (
         joint_dir / "swedish_all_pick_claude_sonnet" / "swedish_all_pick_claude_sonnet_association.csv"
     ).is_file()
-    assert (joint_dir / "swedish_joint_fidelity.json").is_file()
-    assert (joint_dir / "swedish_joint_fidelity.csv").is_file()
+    assert (joint_dir / "swedish_multivariate_fidelity.json").is_file()
+    assert (joint_dir / "swedish_multivariate_fidelity.csv").is_file()
 
     # Non-regression: the driver must not write under comparison/ or performance/.
-    assert not (tmp_path / "03_Analysis" / "comparison").exists()
-    assert not (tmp_path / "03_Analysis" / "performance").exists()
+    assert not (tmp_path / "03_Analysis" / "fidelity").exists()
+    assert not (tmp_path / "03_Analysis" / "model_ranking").exists()
 
 
 if __name__ == "__main__":

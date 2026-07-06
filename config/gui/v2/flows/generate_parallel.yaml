@@ -2,13 +2,14 @@
 # options keys are CLI flag names; the GUI turns them into per-combo CLI args
 # (the script does NOT read this file).
 options:
-  n: 100                     # --n
-  workers: 8                 # --workers
+  n: 500                     # --n
+  workers: 3                 # --workers (applies to cloud combos; Ollama combos self-tune below)
+  ollama-auto-workers: true  # --ollama-auto-workers (flag when true): Ollama combos ignore
+                             #   `workers` above and use each model axis file's parallel.workers
+                             #   (VRAM-optimal per the parallelism POC). No-op for cloud providers.
   retry-until-success: false # --retry-until-success (flag when true)
 selection:
-  models: [claude_haiku, claude_opus, claude_sonnet, gemini_flash, 
-      ollama_deepseek_r1_14b, ollama_gemma4_e4b, ollama_llama31_8b, 
-      ollama_mistral_nemo_12b]
+  models: [claude_haiku]
   strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick, 
       all_generate_pick, all_pick, all_pick_dag]
   countries: [swedish]

@@ -18,8 +18,8 @@ Throughout, the two populations being compared are:
 Every individual is described by a set of categorical **attributes** (e.g. `age_group`,
 `sex`, `education_level`, `employment_status`). The exact attribute list, the allowed
 categories for each, and which pairs/tuples get the joint tests all live in config (the
-"comparison scheme") — not in code. The code (`analysis/comparison/evaluator.py` and
-`analysis/comparison/multivariate.py`) just applies the metrics to whatever the scheme
+"comparison scheme") — not in code. The code (`analysis/fidelity/evaluator.py` and
+`analysis/fidelity/multivariate.py`) just applies the metrics to whatever the scheme
 declares.
 
 > **Terminology — attribute vs. category (keep these two levels distinct).**
@@ -231,7 +231,7 @@ plausible* (≥ 10 people in a real population of 10,000). Because the table is 
 combination that **never appears in A** has probability exactly 0 — so flagging splits
 naturally into **impossible** (zero support, or a missing attribute value → probability 0)
 and **rare** (present in A but below the threshold). The tuple and threshold live in config
-(`config/analysis/comparison/{country}.json`); `coherence_attributes` is required and fails
+(`config/analysis/fidelity/{country}.json`); `coherence_attributes` is required and fails
 loud if absent, while `coherence_threshold` defaults to `0.001`.
 
 **Worked example:** with a real A of 10,000 (threshold ⇒ "≥ 10 occurrences") and a synthetic
@@ -419,15 +419,33 @@ is better."
 
 ## Where each metric lives in code
 
-- Marginal metrics (TV, max diff, KL, chi-squared): `analysis/comparison/evaluator.py:_marginal_metrics`
-- Joint chi-squared: `analysis/comparison/evaluator.py:_joint_chi_sq`
-- Coherence: `analysis/comparison/evaluator.py:compute_coherence`
+- Marginal metrics (TV, max diff, KL, chi-squared): `analysis/fidelity/evaluator.py:_marginal_metrics`
+- Joint chi-squared: `analysis/fidelity/evaluator.py:_joint_chi_sq`
+- Coherence: `analysis/fidelity/evaluator.py:compute_coherence`
 - C2ST: `evaluator.py:_compute_c2st` → `multivariate.py:c2st`
 - Cramér's V association: `evaluator.py:_compute_association` → `multivariate.py:association_matrix` / `cramers_v`
 - Grounded joint TV: `evaluator.py:_compute_joint_fidelity` → `multivariate.py:joint_tv`
 - K-way combination plausibility: `evaluator.py:_compute_combination_plausibility`
 - Report assembly / CSV export: `evaluator.py:generate_report`, `write_csv_summary`, `write_association_csv`
 
+## Table + figure artifacts per metric
+
+Every metric is written into the per-slug JSON report; most also emit a companion CSV table
+and PNG figure. The single fan-out point is
+`analysis/fidelity/artifacts.py:write_comparison_artifacts` (called by all three comparison
+drivers), which resolves CSVs as siblings of `{slug}.json` and figures into the `{slug}/`
+charts dir.
+
+| Metric | CSV writer (`evaluator.py`) | Figure (`charts.py`) | Artifact files |
+|--------|-----------------------------|----------------------|----------------|
+| Marginals | `write_csv_summary` | `plot_comparison_charts`, `plot_radar_comparison` | `{slug}.csv`, `{slug}_{attr}.png`, `{slug}_radar.png` |
+| Joint chi-squared *(legacy)* | `write_joint_chi_sq_csv` | `plot_joint_chi_sq` | `{slug}_joint_chi_sq.csv/.png` |
+| Coherence *(legacy)* | `write_coherence_csv` | `plot_coherence` | `{slug}_coherence.csv/.png` |
+| C2ST | `write_c2st_csv` | `plot_c2st` | `{slug}_c2st.csv/.png` |
+| Cramér's V association | `write_association_csv` | `plot_association_heatmap` | `{slug}_association.csv`, `{slug}_association_heatmap.png` |
+| Grounded joint TV | `write_joint_fidelity_csv` | `plot_joint_fidelity` | `{slug}_joint_fidelity.csv/.png` |
+| K-way combination plausibility | `write_combination_plausibility_csv` | `plot_combination_plausibility` | `{slug}_combination_plausibility.csv/.png` |
+
 The scored attributes, category sets, joint pairs, coherence tuples, grounded-joint pairs,
 combination checks, and C2ST tuning are all defined in the per-country comparison scheme
-config, loaded via `analysis/comparison/scheme.py` — never hardcoded.
+config, loaded via `analysis/fidelity/scheme.py` — never hardcoded.

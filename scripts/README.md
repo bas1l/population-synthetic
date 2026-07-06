@@ -22,13 +22,13 @@ all real logic lives in the `population_synthetic.*` package (installed via
 ### `analyze/` — compare and evaluate
 | Script | Purpose |
 | --- | --- |
-| `compare_populations.py` | Generic two-file statistical comparison |
-| `compare_pipeline_to_scb.py` | Compare LLM pipeline output against an SCB real population |
-| `compare_pipeline_to_istat.py` | Compare LLM pipeline output against an ISTAT real population |
-| `compare_all_pipelines.py` | Batch comparison over every model × strategy × country |
-| `compare_countries.py` | Cross-country marginals (Sweden vs Norway vs Italy) |
+| `score_fidelity.py` | Generic two-file statistical comparison |
+| `score_fidelity_sweden.py` | Compare LLM pipeline output against an SCB real population |
+| `score_fidelity_italy.py` | Compare LLM pipeline output against an ISTAT real population |
+| `score_fidelity_all.py` | Batch comparison over every model × strategy × country |
+| `compare_real_countries.py` | Cross-country marginals (Sweden vs Norway vs Italy) |
 | `analyze_run.py` | Per-run LLM interaction analytics (call counts, retries, tokens, latency) |
-| `compare_runs.py` | Cross-run scientific comparison of run analytics (Kruskal-Wallis + Dunn) |
+| `compare_run_analytics.py` | Cross-run scientific comparison of run analytics (Kruskal-Wallis + Dunn) |
 
 ### `dev/` — exploratory / one-off tooling
 | Script | Purpose |
@@ -43,10 +43,10 @@ all real logic lives in the `population_synthetic.*` package (installed via
 ## Pipeline chains
 
 - **Generate → evaluate population quality:**
-  `generate/generate_identities_parallel.py` → `analyze/compare_pipeline_to_{scb,istat}.py`
-  (or `analyze/compare_all_pipelines.py` for the full matrix).
+  `generate/generate_identities_parallel.py` → `analyze/score_fidelity_{sweden,italy}.py`
+  (or `analyze/score_fidelity_all.py` for the full matrix).
 - **Analyze LLM-call behaviour across runs:**
-  `analyze/analyze_run.py --all` → `analyze/compare_runs.py`.
+  `analyze/analyze_run.py --all` → `analyze/compare_run_analytics.py`.
 
 These are standalone CLIs, not an importable package — there is intentionally no
 `__init__.py` here.

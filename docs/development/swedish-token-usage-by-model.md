@@ -9,7 +9,7 @@ sections fall back to a retroactive `tiktoken` estimate. Each section states cle
 ## Claude Haiku — retroactive estimate (no real token data exists)
 
 Token usage is not recorded anywhere for Claude-based generation runs (haiku or sonnet). The
-`analysis/llm_metrics/` pipeline (`per_run/aggregator.py`, `joiner.py`, `log_parser.py`) is built to
+`analysis/run_analytics/` pipeline (`per_run/aggregator.py`, `joiner.py`, `log_parser.py`) is built to
 read `prompt_tokens`/`completion_tokens` from `llm_interactions.jsonl` and `logs/run_*.log`, but the
 `claude` CLI provider never logged token counts for any past run. As a control, the same pipeline
 does find token counts in Ollama-model run logs (e.g. `seed_034_all_pick_llama33`), so this is an
