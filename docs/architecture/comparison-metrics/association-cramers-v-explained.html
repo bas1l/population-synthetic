@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading the association fidelity: Cramér&#x27;s V delta — comparison metrics</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<main class="note-wrap">
+<p class="breadcrumb"><a href="../comparison-metrics-report.html">&#9666; Comparison metrics — field guide</a></p>
+<h1>Reading the association fidelity: Cramér's V delta</h1>
+<p>This metric asks whether the <strong>strength of association between every pair of attributes</strong> is reproduced. It computes a 0–1 association measure — the bias-corrected Cramér's V — for each attribute pair in <em>both</em> populations and reports how far apart they are. This note explains the V formula (including Bergsma's small-sample correction), which pairs are scored, and how the per-pair gaps roll up into <code>mean_abs_delta_v</code> and <code>frobenius_norm</code>. Code: <code>multivariate.py:cramers_v</code> / <code>association_matrix</code> and <code>evaluator.py:_compute_association</code>. See also the <a href="joint-tv-grounding-explained.html">joint-TV note</a>, which measures the same pairs a different way.</p>
+<h2>What Cramér's V is</h2>
+<p>Cramér's V summarises a contingency table's association as a single number in <code>[0, 1]</code>: <code>0</code> = the two attributes are independent, <code>1</code> = one perfectly predicts the other. It is built from the chi-squared statistic of the cross-tab, normalised by sample size and table shape so it is comparable across tables of different dimensions.</p>
+<h2>The bias-corrected (Bergsma) formula</h2>
+<p>The plain <code>V = sqrt( (χ²/n) / min(r−1, c−1) )</code> is biased upward for small samples — it reports spurious association even for independent data. The pipeline uses the <strong>Bergsma bias correction</strong>:</p>
+<pre><code>φ²        = χ² / n
+φ²_corr   = max( 0 , φ² − (r−1)(c−1)/(n−1) )
+r_corr    = r − (r−1)² / (n−1)
+c_corr    = c − (c−1)² / (n−1)
+
+V = sqrt( φ²_corr / min(r_corr − 1, c_corr − 1) )</code></pre>
+<p>where <code>n</code> is the table total and <code>r</code>, <code>c</code> are the numbers of <strong>observed</strong> rows/columns (all-zero rows and columns are trimmed first, so empty categories don't distort the shape). The <code>max(0, …)</code> floors the corrected φ² at zero, so an independent pair returns exactly <code>0.0</code> rather than a small positive artefact. Degenerate tables — total ≤ 1, fewer than two effective rows or columns, or a non-positive corrected denominator — return <code>0.0</code> with no divide-by-zero, so a tiny synthetic population never raises here.</p>
+<h2>Which pairs are scored</h2>
+<p><code>association_matrix</code> iterates <strong>every unordered pair</strong> of <code>scheme.attributes</code> — for the 15-attribute Swedish scheme that is all <code>15·14/2 = 105</code> pairs, not just the three configured <code>joint_pairs</code>. Each pair's cross-tab is built over the scheme's <strong>fixed category grid</strong> (values outside the grid, including <code>None</code>, are dropped), so the same grid is used for A and B. Pairs are keyed <code>(attr_x, attr_y)</code> with <code>attr_x</code> before <code>attr_y</code> in attribute order.</p>
+<h2>The delta and its summaries</h2>
+<p>For each shared pair the evaluator computes V in both populations and takes the absolute gap:</p>
+<pre><code>abs_delta_v(pair) = | V_real(pair) − V_syn(pair) |</code></pre>
+<p>Then two summaries over the vector of per-pair deltas:</p>
+<pre><code>mean_abs_delta_v = mean( abs_delta_v )                        # average gap
+frobenius_norm   = sqrt( Σ abs_delta_v² )                     # root-sum-of-squares</code></pre>
+<p>The two summaries answer different questions. <code>mean_abs_delta_v</code> is the typical error across all pairs; <code>frobenius_norm</code> (the Euclidean norm of the delta vector) <strong>penalises a few large errors</strong> more than many tiny ones, so a single badly-broken pair moves it more than it moves the mean. Both are <code>NaN</code> only when there are no pairs at all.</p>
+<h2>Worked example</h2>
+<p>Suppose <code>age_group ↔ employment_status</code> has <code>V_real = 0.45</code> (strongly related — older people retire) but <code>V_syn = 0.20</code> (the model under-couples them): <code>abs_delta_v = 0.25</code>. If the other 104 pairs match closely (say all <code>≤ 0.05</code>), <code>mean_abs_delta_v</code> stays low, but this pair dominates the <code>frobenius_norm</code> and stands out in the per-pair table (also exported to CSV via <code>write_association_csv</code>).</p>
+<h2>How to read it</h2>
+<ul><li><code>abs_delta_v</code>, <code>mean_abs_delta_v</code>, <code>frobenius_norm</code> are all <strong>≥ 0, lower is better</strong>; <code>0</code> means the association structure is perfectly reproduced.</li><li>Unlike the legacy joint chi-squared <strong>p-value</strong>, this gives a <strong>direction and magnitude</strong> — you can see <em>which</em> pair is wrong and by <em>how much</em>, and whether the model over- or under-couples it (compare <code>V_syn</code> against <code>V_real</code>).</li><li>Because it scores all pairs, scan the per-pair table for outliers rather than reading only the summary — a low mean can hide one broken pair that <code>frobenius_norm</code> will flag.</li></ul>
+</main>
+</body>
+</html>

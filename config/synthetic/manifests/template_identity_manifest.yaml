@@ -65,7 +65,7 @@ parameters:
     workers: 8
     output_dir: "data/identity/manifest_XXX"
 
-  # [OPTIONAL] Output directory for comparison results (compare_pipeline_to_scb.py).
+  # [OPTIONAL] Output directory for comparison results (score_fidelity_sweden.py).
   # When set, comparison JSON/CSV/charts are written here instead of the default
   # data/analysis/compare_with_scb02/ path. Can be overridden by --output at runtime.
   comparison_output_dir: null

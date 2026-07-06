@@ -339,7 +339,8 @@
       </ol>
       <ol>
         <p class="toc-fam">4 · Multivariate / joint fidelity</p>
-        <li><a href="#c2st">C2ST classifier test <span class="fld">c2st</span></a></li>
+        <li><a href="#c2st">C2ST classifier test <span class="fld">c2st</span></a>
+          <a href="comparison-metrics/c2st-playground.html" class="fld" style="text-decoration:none">▸ interactive</a></li>
         <li><a href="#assoc">Cramér's V delta <span class="fld">association</span></a></li>
         <li><a href="#jointtv">Grounded joint TV <span class="fld">joint_fidelity</span></a></li>
         <li><a href="#kway">K-way plausibility <span class="fld">combination…</span></a></li>
@@ -512,7 +513,7 @@
     <div class="callout">
       <span class="k">Deep dive — why halve the sum?</span> Without the ½ you double-count the
       displaced mass (every unit that leaves one category reappears in another) and TV loses its
-      clean 0-to-1 scale. See <a class="backlink" href="comparison-metrics/tv-distance-half-factor.md">the ½-factor note</a>.
+      clean 0-to-1 scale. See <a class="backlink" href="comparison-metrics/tv-distance-half-factor.html">the ½-factor note</a>.
     </div>
   </div>
 </section>
@@ -572,8 +573,14 @@
       distribution with a code built for the real one. It punishes B for putting probability
       where A has almost none more harshly than TV does.</p>
     <div class="formula">D_KL(B ‖ A) = Σ p_B(c) · log₂( p_B(c) / p_A(c) )      (Laplace-smoothed)</div>
-    <p>Smoothing (add 1 to every count) means an empty category never causes a divide-by-zero or
-      an infinite result.</p>
+    <p>Read each term as a <strong>log-ratio weighted by how often the category occurs in B</strong>:
+      <code>log₂(p_B/p_A)</code> is the "surprise" for that category — zero when B and A agree,
+      positive when B over-represents it, negative when B under-represents it — and the
+      <code>p_B(c)</code> in front weights it by B's own frequency. The <strong>base-2 log is what
+      puts the answer in bits</strong>: it is the extra bits per person you waste encoding B's data
+      with a code built for A. Individual terms can be negative, but the total is never below 0
+      (Gibbs' inequality). <strong>Laplace smoothing</strong> (add 1 to every count) keeps an empty
+      category from causing a divide-by-zero or an infinite result.</p>
 
     <figure class="viz">
       <div class="plot-wrap">
@@ -599,14 +606,22 @@
         <text x="465" y="232" class="catlabel" text-anchor="middle">Tertiary</text>
       </svg>
       </div>
-      <figcaption>Each category's <b>p_B · log₂(p_B/p_A)</b>. Terms can be negative (Primary, where
-        B under-shoots); the signed sum lands near <b>≈ 0.05 bits</b> — small, because the
-        distributions are close (smoothing pulls it further toward ~0.03).</figcaption>
+      <figcaption>Each category's <b>p_B · log₂(p_B/p_A)</b>: −0.100 + 0.076 + 0.078. Terms can be
+        negative (Primary, where B under-shoots), but the total is never below zero; here it sums to
+        <b>≈ 0.05 bits</b> — small, because the distributions are close. Laplace smoothing nudges it
+        slightly lower still.</figcaption>
     </figure>
 
     <p><span class="label-line">How to read it.</span> <strong>0 = identical</strong>; no upper
       bound, higher is worse. It is <em>asymmetric</em> — the code computes B relative to A.
       Best for ranking models, not as an absolute pass/fail.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — the log-ratio &amp; base 2.</span> What each term means, why the
+      base is 2 (bits vs nats), why terms can be negative yet the total never is, and how Laplace
+      smoothing shifts the number. See
+      <a class="backlink" href="comparison-metrics/kl-divergence-bits-and-log.html">the bits &amp; log-ratio note</a>.
+    </div>
   </div>
 </section>
 
@@ -792,11 +807,47 @@
       while still containing impossible individuals (a 7-year-old with a PhD and full-time job).
       This scores the fraction of synthetic people whose <strong>combination</strong> of
       attributes actually occurs in the real population.</p>
-    <p><span class="label-line">How it works.</span> From A, build a lookup of how often each
-      combination of the coherence attributes (e.g. <code>age × education × employment</code>)
-      occurs. For each synthetic individual, look up their exact combination: at or above a
-      probability threshold → <em>plausible</em>; otherwise → <em>flagged</em> for inspection.</p>
+    <p><span class="label-line">How it works.</span> From A, build a lookup of the
+      <strong>empirical</strong> (un-smoothed) probability of each combination of the coherence
+      attributes (Swedish scheme: <code>age_group × education_level × employment_status</code>).
+      For each synthetic individual, look up their exact combination: at or above the
+      <strong>threshold</strong> → <em>plausible</em>; below it → <em>flagged</em> (its id, attribute
+      values and probability recorded for inspection).</p>
     <div class="formula">score = n_plausible / n_total_B</div>
+    <p><span class="label-line">The threshold is the whole test.</span> The Swedish scheme sets
+      <code>coherence_threshold = 0.001</code> — a combination must occur in at least <strong>0.1 %
+      of the real population</strong> to count as plausible (≥ 10 people in a real A of 10,000).
+      Because the table is un-smoothed, a combination that never appears in A has probability
+      <em>exactly 0</em>, so "flagged" splits into two zones:</p>
+
+    <figure class="viz">
+      <div class="plot-wrap">
+      <svg viewBox="0 0 560 168" role="img" aria-label="Probability threshold number line with impossible, rare, and plausible zones">
+        <!-- flagged bracket over the two below-threshold zones -->
+        <path d="M50 46 L50 36 L330 36 L330 46" fill="none" stroke="var(--bad)" stroke-width="1.5"/>
+        <text x="190" y="28" text-anchor="middle" class="ax axmono" fill="var(--bad)">FLAGGED · recorded for inspection</text>
+        <!-- zones (axis is schematic, not to scale) -->
+        <rect x="50"  y="72" width="58"  height="34" rx="6" fill="var(--bad)"  opacity=".82"/>
+        <rect x="110" y="72" width="218" height="34"       fill="var(--warn)" opacity=".82"/>
+        <rect x="330" y="72" width="190" height="34" rx="6" fill="var(--good)" opacity=".85"/>
+        <!-- threshold marker -->
+        <line x1="330" y1="62" x2="330" y2="120" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="330" y="136" text-anchor="middle" class="axmono" font-size="12" fill="var(--ink)">threshold = 0.001</text>
+        <!-- zone value labels -->
+        <text x="79"  y="94" text-anchor="middle" font-size="11.5" fill="#fff">p = 0</text>
+        <text x="219" y="94" text-anchor="middle" font-size="12" fill="#fff">0 &lt; p &lt; 0.001</text>
+        <text x="425" y="94" text-anchor="middle" font-size="12" fill="#fff">p ≥ 0.001</text>
+        <!-- captions -->
+        <text x="79"  y="158" text-anchor="middle" class="ax" font-size="11">impossible</text>
+        <text x="219" y="158" text-anchor="middle" class="ax" font-size="11">rare</text>
+        <text x="425" y="158" text-anchor="middle" class="ax" font-size="11">plausible</text>
+      </svg>
+      </div>
+      <figcaption>A synthetic person's combination probability in real A decides their fate
+        (axis schematic, not to scale). <b>Impossible</b> = zero support or a missing attribute;
+        <b>rare</b> = seen in A but below 0.1 %. The legacy score lumps both as flagged;
+        <a class="backlink" href="#kway">§4d</a> splits them by severity.</figcaption>
+    </figure>
 
     <figure class="viz">
       <div class="plot-wrap">
@@ -840,7 +891,16 @@
 
     <p><span class="label-line">How to read it.</span> 0 to 1, <strong>higher is better</strong>
       — a bluntly interpretable "what fraction of my synthetic people are demographically
-      possible."</p>
+      possible." But a high score is <em>cheap</em> when the threshold is low (it mostly rules out
+      the impossible, not the merely unusual), and it treats A as ground truth even though A is a
+      finite sample — so read it alongside the threshold value and §4d's impossible/rare split.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — the plausibility threshold.</span> What the threshold really
+      means, the two ways to be flagged, the missing-value trap, why the tuple stays small (curse
+      of dimensionality), the "A is a finite sample" caveat, and how coherence relates to §4d. See
+      <a class="backlink" href="comparison-metrics/coherence-score-explained.html">the coherence-score note</a>.
+    </div>
   </div>
 </section>
 
@@ -927,7 +987,21 @@
     <p><span class="label-line">How to read it.</span> <strong>AUC ≈ 0.5</strong> →
       indistinguishable (best); <strong>AUC → 1.0</strong> → trivially separable (worst). The
       <code>p_value</code> tests whether an AUC above 0.5 is real or noise — a
-      <strong>high p is good</strong> (can't reject "indistinguishable").</p>
+      <strong>high p is good</strong> (can't reject "indistinguishable"). The AUC uses the
+      rank-based <strong>Mann–Whitney identity</strong> (identical populations give exactly 0.5);
+      the p-value is an <strong>add-one permutation</strong> value
+      <code>(1 + #{perm ≥ observed}) / (1 + n_permutations)</code>, so it never hits 0 (floor
+      ≈ 1/201). SCB tuning: <code>folds=5, method="sklearn", seed=42</code>; primitive defaults
+      <code>n_repeats=5, n_permutations=200</code>.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — how the test is built.</span> One-hot encoding, class balancing
+      (<code>balanced_n = min(n_real, n_syn)</code>), the Mann–Whitney AUC, the permutation
+      p-value, and the sklearn-vs-MMD backends. See
+      <a class="backlink" href="comparison-metrics/c2st-explained.html">the C2ST note</a>, or drive
+      every step yourself in the
+      <a class="backlink" href="comparison-metrics/c2st-playground.html">interactive playground</a>.
+    </div>
   </div>
 </section>
 
@@ -999,7 +1073,17 @@
       <code>mean_abs_delta_v</code>, <code>frobenius_norm</code> are all
       <strong>≥ 0, lower is better</strong> (0 = association structure perfectly reproduced).
       Unlike the joint chi-squared p-value, this gives a <strong>direction and magnitude</strong>
-      — you see <em>which</em> pair is wrong and by how much (also exported to CSV).</p>
+      — you see <em>which</em> pair is wrong and by how much (also exported to CSV). Note it scores
+      <strong>every</strong> attribute pair (all 105 for the Swedish scheme), not just the
+      configured joint pairs.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — the V formula &amp; the summaries.</span> The full Bergsma
+      bias-correction (φ², corrected row/column counts), why all 105 pairs are scored, and how
+      <code>mean_abs_delta_v</code> vs <code>frobenius_norm</code> weight a single broken pair
+      differently. See
+      <a class="backlink" href="comparison-metrics/association-cramers-v-explained.html">the Cramér's V note</a>.
+    </div>
   </div>
 </section>
 
@@ -1062,7 +1146,15 @@
     <p><span class="label-line">How to read it.</span> <strong>0 (identical joint) to 1
       (disjoint), lower is better</strong>. Returns <code>NaN</code> when either population has no
       individuals in the grid. The finer, magnitude-based complement to the legacy joint
-      chi-squared p-value.</p>
+      chi-squared p-value. <strong>Read the <code>grounded</code> flag first</strong> — only
+      grounded pairs support a claim that the synthetic joint reproduces reality.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — normalisation &amp; grounding.</span> The per-population
+      normalisation, the <code>NaN</code>-means-"not measurable" rule, and the full SCB pair table
+      (5 grounded vs 3 reference, with the audit basis for each). See
+      <a class="backlink" href="comparison-metrics/joint-tv-grounding-explained.html">the grounded joint-TV note</a>.
+    </div>
   </div>
 </section>
 
@@ -1109,7 +1201,17 @@
     <p><span class="label-line">How to read it.</span> <code>fraction_impossible</code> and
       <code>fraction_rare</code> are <strong>≥ 0, lower is better</strong>;
       <code>fraction_impossible = 0</code> means every synthetic profile is at least possible in
-      reality. <code>NaN</code> when B is empty.</p>
+      reality. <code>NaN</code> when B is empty. For the same tuple and threshold this is exactly
+      the coherence score split by severity:
+      <code>fraction_impossible + fraction_rare = 1 − coherence.score</code>.</p>
+
+    <div class="callout">
+      <span class="k">Deep dive — the severity split.</span> The exact three-way boundary rule
+      (<code>p ≤ 0</code> impossible / <code>0 &lt; p &lt; threshold</code> rare / <code>p ≥
+      threshold</code> plausible), the fraction equations, and the count-for-count relationship to
+      the §3a coherence score. See
+      <a class="backlink" href="comparison-metrics/combination-plausibility-explained.html">the k-way plausibility note</a>.
+    </div>
   </div>
 </section>
 
@@ -1161,13 +1263,16 @@
     <li><span class="what">Grounded joint TV</span> — <span class="where">evaluator.py:_compute_joint_fidelity → multivariate.py:joint_tv</span></li>
     <li><span class="what">K-way combination plausibility</span> — <span class="where">evaluator.py:_compute_combination_plausibility</span></li>
     <li><span class="what">Report assembly / CSV export</span> — <span class="where">evaluator.py:generate_report, write_csv_summary, write_association_csv</span></li>
+    <li><span class="what">Per-metric CSV tables (C2ST, joint TV, k-way, joint chi-sq, coherence)</span> — <span class="where">evaluator.py:write_c2st_csv, write_joint_fidelity_csv, write_combination_plausibility_csv, write_joint_chi_sq_csv, write_coherence_csv</span></li>
+    <li><span class="what">Per-metric figures (C2ST, joint TV, k-way, joint chi-sq, coherence)</span> — <span class="where">charts.py:plot_c2st, plot_joint_fidelity, plot_combination_plausibility, plot_joint_chi_sq, plot_coherence</span></li>
+    <li><span class="what">Artifact fan-out (one writer, all drivers)</span> — <span class="where">artifacts.py:write_comparison_artifacts</span></li>
   </ul>
 </div>
 
 <footer class="end">
   Scored attributes, category sets, joint pairs, coherence tuples, grounded-joint pairs,
   combination checks, and C2ST tuning are all defined in the per-country comparison scheme config,
-  loaded via <code>analysis/comparison/scheme.py</code> — never hardcoded. · Source:
+  loaded via <code>analysis/fidelity/scheme.py</code> — never hardcoded. · Source:
   <code>docs/architecture/comparison-metrics.md</code>
 </footer>
 

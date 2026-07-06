@@ -432,7 +432,9 @@ class FlowRunnerWindow(QMainWindow):
             self._options_panel.populate(model)
             self.refresh_dag(model)
             # Preview existing on-disk counts and expose the Configure/Summary toggle.
-            self._summary_panel.populate_combos(self._axis_selector.checked_combos())
+            self._summary_panel.populate_combos(
+                self._axis_selector.checked_combos(), self._effective_total()
+            )
             self._view_toggle_bar.setVisible(True)
             self._show_configure_page()
         else:  # workflow
@@ -447,6 +449,19 @@ class FlowRunnerWindow(QMainWindow):
         """Re-check the previously loaded flow's button after a cancelled switch."""
         if self._current_entry is not None:
             self._flow_selector.select_entry(self._current_entry)
+
+    def _effective_total(self) -> int | None:
+        """The flow YAML's ``n`` option (what the GUI sends as ``--n``), or None.
+
+        None => the summary panel falls back to ``compose_manifest().parallel_n``
+        (flows without an ``n`` option, e.g. analysis flows). Uses
+        ``get_options().get("n")`` — a native-typed plain dict — rather than
+        ``get_option("n")``, which raises KeyError on flows lacking the key.
+        """
+        if self._model is None:
+            return None
+        n = self._model.get_options().get("n")
+        return int(n) if isinstance(n, int) and not isinstance(n, bool) and n > 0 else None
 
     def _on_option_changed(self, _key: str) -> None:
         """FlowOptionsPanel wrote through the model (now dirty) — reflect it in the title."""
@@ -464,7 +479,9 @@ class FlowRunnerWindow(QMainWindow):
             self.refresh_dag(self._model)
             # Only re-glob counts while idle — during a run the summary_timer owns refreshes.
             if self._runner is None:
-                self._summary_panel.populate_combos(self._axis_selector.checked_combos())
+                self._summary_panel.populate_combos(
+                    self._axis_selector.checked_combos(), self._effective_total()
+                )
 
     # ------------------------------------------------------------------
     # Workflow graph interaction
@@ -598,7 +615,7 @@ class FlowRunnerWindow(QMainWindow):
             axis_mode="per_combo",
         )
         # Rebuild the summary for exactly the combos about to run and auto-show it.
-        self._summary_panel.populate_combos(combos)
+        self._summary_panel.populate_combos(combos, self._effective_total())
         self._show_summary_page()
 
         runner = CombinationRunner(combos, action, options, force)

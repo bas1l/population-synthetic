@@ -97,20 +97,20 @@ Modes:
 
 ```bash
 # Compare two population files
-python scripts/analyze/compare_populations.py pop_a.json pop_b.json --output report.json
+python scripts/analyze/score_fidelity.py pop_a.json pop_b.json --output report.json
 
 # Compare pipeline output against an SCB reference (via manifest)
-python scripts/analyze/compare_pipeline_to_scb.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
+python scripts/analyze/score_fidelity_sweden.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
 
 # Compare pipeline output against an SCB reference (via explicit path)
-python scripts/analyze/compare_pipeline_to_scb.py --seed-root path/to/pipeline_output/ \
+python scripts/analyze/score_fidelity_sweden.py --seed-root path/to/pipeline_output/ \
     --reference scb_population.json --output comparison_report.json
 
 # Compare pipeline output against an ISTAT reference (Italy)
-python scripts/analyze/compare_pipeline_to_istat.py --model-id claude_haiku --strategy-id all_pick --country-id italian
+python scripts/analyze/score_fidelity_italy.py --model-id claude_haiku --strategy-id all_pick --country-id italian
 
 # Compare every model x strategy x country combination against country references (batch)
-python scripts/analyze/compare_all_pipelines.py --country swedish --country italian
+python scripts/analyze/score_fidelity_all.py --country swedish --country italian
 ```
 
 Comparison produces per-field chi-squared tests, total variation distances, similarity scores, a bar chart per demographic attribute, a radar chart, a JSON report, and a CSV marginals summary.
@@ -135,7 +135,7 @@ python scripts/analyze/analyze_run.py path/to/batch_run_dir/ --output run_analyt
 python scripts/analyze/analyze_run.py --all
 
 # Cross-run scientific comparison of LLM metrics (requires --all first)
-python scripts/analyze/compare_runs.py
+python scripts/analyze/compare_run_analytics.py
 ```
 
 ### Launch the GUI
@@ -182,7 +182,7 @@ src/population_synthetic/
             manifest_loader.py                Manifest + axis-composition loader
             llm_interaction_log.py            Incremental JSONL interaction logging
 
-    comparison/           Statistical evaluation and charting (population quality vs reference)
+    fidelity/             Statistical evaluation and charting (population quality vs reference)
         evaluator.py      StatisticalEvaluator (chi-squared, TV distance)
         normalizer.py     Schema normalization (raw -> canonical field names; country-agnostic)
         charts.py         Bar-chart and radar-chart generation

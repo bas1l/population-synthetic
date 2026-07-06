@@ -20,6 +20,7 @@
   "per_category": {
     "age": {
       "call_count": 4,
+      "error_category_counts": {},
       "error_taxonomy": {
         "JSONDecodeError": 1
       },
@@ -31,6 +32,7 @@
     },
     "first_name": {
       "call_count": 2,
+      "error_category_counts": {},
       "error_taxonomy": {},
       "method_retry_counts": {},
       "retry_count": 0,

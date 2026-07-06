@@ -29,7 +29,7 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   - `configurable` -- strategy-driven generation controlled by a simulation config JSON file with pluggable strategy definitions
 
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
-(`mapping/`, `comparison/`, `joint_fidelity/`, `performance/`, `llm_metrics/`, plus a shared `utils/`):
+(`mapping/`, `fidelity/`, `multivariate_fidelity/`, `model_ranking/`, `run_analytics/`, plus a shared `utils/`):
 
 - **`mapping/`** -- Transforms raw population data (national-statistics records *or* LLM-pipeline
   identities) into the canonical comparable schema. Holds the shared resolver `mapping_engine.py`,
@@ -37,21 +37,21 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   `extractor.py` / `normalizer.py` facades. The **unified symmetric mapping config** and the
   real/synthetic mapper hierarchies are documented on their own page — see
   [Comparison & mapping](comparison-mapping.md).
-- **`comparison/`** -- Statistical evaluation and charting (population quality vs the real population):
+- **`fidelity/`** -- Statistical evaluation and charting (population quality vs the real population):
   - `StatisticalEvaluator` (`evaluator.py`) computes per-field chi-squared tests and total variation distances
   - `charts` generates bar-chart and radar-chart PNGs via matplotlib
   - `scheme.py` -- the comparison-purpose bridge that reads the mapping config
-- **`joint_fidelity/`** -- Standalone multivariate joint-fidelity (sits after the map stage; driven by
-  `analyze_joint_fidelity.py`, depends only on `map_populations`). Recomputes the same
+- **`multivariate_fidelity/`** -- Standalone multivariate fidelity (sits after the map stage; driven by
+  `score_multivariate_fidelity.py`, depends only on `map_populations`). Recomputes the same
   `multivariate` block the comparison evaluator produces -- via the shared
   `StatisticalEvaluator.compute_multivariate()` over the mapped populations -- and persists it to its
-  own `{output_base}/03_Analysis/joint_fidelity/` folder (per-combo envelope JSON + association CSV +
+  own `{output_base}/03_Analysis/multivariate_fidelity/` folder (per-combo envelope JSON + association CSV +
   `|ΔV|` heatmap, plus a per-country roll-up JSON/CSV and a cross-combo C2ST-vs-grounded-TV scatter).
-  `builder.py` (`build_joint_fidelity` envelope + `aggregate_joint_fidelity` roll-up + JSON/CSV writers),
-  `charts.py` (thin orchestration reusing `comparison.charts.plot_association_heatmap` + a self-contained
+  `builder.py` (`build_multivariate_fidelity` envelope + `aggregate_multivariate_fidelity` roll-up + JSON/CSV writers),
+  `charts.py` (thin orchestration reusing `fidelity.charts.plot_association_heatmap` + a self-contained
   scatter). Additive: it never touches the comparison, performance, or paper outputs.
-- **`performance/`** -- Cross-model performance comparison (sits after the compare stage; driven by
-  `compare_model_performance.py`). Consumes the per-combo comparison reports and ranks the
+- **`model_ranking/`** -- Cross-model performance comparison (sits after the compare stage; driven by
+  `rank_models.py`). Consumes the per-combo comparison reports and ranks the
   model × strategy combos against each other per country -- per attribute (TV-similarity) and
   overall -- with Kruskal-Wallis + Dunn/Holm factor tests. `loader.py` (`ComboPerformance` DTO +
   report discovery via `mapped/_index.json`), `builder.py` (`build_performance_comparison` +
@@ -64,14 +64,14 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
     `STRATEGY_COMPLEXITY_ORDER` (strategy chart ordering)
   - `_stats.py` -- stdlib numeric primitives (median, percentile, Shannon entropy); no external dep
   - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected); carries the
-    scipy/numpy dependency surface, shared by the llm_metrics cross-run and performance processes
-- **`llm_metrics/`** -- post-run LLM-call analytics; detailed below.
+    scipy/numpy dependency surface, shared by the run_analytics cross-run and model_ranking processes
+- **`run_analytics/`** -- post-run LLM-call analytics; detailed below.
 
 **`gui_v2/`** -- the **primary** GUI: a config-driven PyQt5 "Flow Runner" (`python -m population_synthetic.gui_v2.main`). `FlowRunnerWindow` is driven by a two-tier editable-YAML config (`config/gui/v2/menu.yaml` catalogue + one round-trip YAML per flow under `config/gui/v2/flows/`), translates flow YAML into CLI invocations of the existing scripts, and adds a DAG-based Analysis Workflow. It reuses several `gui/` widgets and runners as substrate (see below). Full contracts in [gui_v2 Flow Runner](../development/gui-v2.md).
 
 **`gui/`** -- the **deprecated** original PyQt5 launcher (`python -m population_synthetic.gui.main`, emits a `DeprecationWarning`). Superseded by `gui_v2` but **not removed**: it is retained as a fallback and, more importantly, as the shared-widget substrate `gui_v2` imports (`CombinationRunner`, `_kill_process_tree`, `ConsoleWidget`, `DagGraphWidget`, `CheckableAxisList`, `PersonaCountWorker`). `LauncherWindow` presents action groups (Generate, Compare) defined in `config/gui/launcher.yaml`. Axis selection uses checkbox lists (`CheckableAxisList` x3 inside `ExperimentSelector`) rather than dropdowns, so a single launch runs the full **cartesian product** of selected models x strategies x countries -- `ExperimentSelection.combinations()` enumerates the tuples via `itertools.product`, `ManifestOverview` previews them in a table, and `CombinationRunner` (QThread) runs each as a `--model-id/--strategy-id/--country-id` subprocess with live console streaming and process-tree abort. Selections persist to `config/gui/state.json`.
 
-**`analysis/llm_metrics/`** -- Post-processing analytics for identity generation runs (LLM call behaviour, distinct from `analysis/comparison/` which scores population quality). Named for its output subdir `03_Analysis/llm_metrics/`. Organised as a **two-level pipeline** split across two subpackages: `per_run/` (pipeline A, driven by `analyze_run.py`) turns one run into per-persona analytics + a report; `cross_run/` (pipeline B, driven by `compare_runs.py`) consumes many runs' analytics and produces a cross-run comparison. The numeric primitives and hypothesis tests both levels use live in the cross-process `analysis/utils/` (`_stats.py` / `stats_tests.py`). `per_run/` and `cross_run/` never import each other -- only through `analysis/utils`.
+**`analysis/run_analytics/`** -- Post-processing analytics for identity generation runs (LLM call behaviour, distinct from `analysis/fidelity/` which scores population quality). Named for its output subdir `03_Analysis/run_analytics/`. Organised as a **two-level pipeline** split across two subpackages: `per_run/` (pipeline A, driven by `analyze_run.py`) turns one run into per-persona analytics + a report; `cross_run/` (pipeline B, driven by `compare_run_analytics.py`) consumes many runs' analytics and produces a cross-run comparison. The numeric primitives and hypothesis tests both levels use live in the cross-process `analysis/utils/` (`_stats.py` / `stats_tests.py`). `per_run/` and `cross_run/` never import each other -- only through `analysis/utils`.
 
 - **`per_run/`** -- single-run pipeline (parse -> join -> aggregate -> visualize/report):
   - `interaction_parser.py` / `log_parser.py` -- Parse `llm_interactions.jsonl` and log files from run output

@@ -12,7 +12,7 @@ import json
 import pytest
 
 from population_synthetic.analysis.mapping.real_mapper.mappings import load_index
-from population_synthetic.analysis.comparison.scheme import ComparisonScheme, load_scheme
+from population_synthetic.analysis.fidelity.scheme import ComparisonScheme, load_scheme
 
 _ANALYSIS_FILENAME = "_analysis.json"
 
@@ -320,10 +320,10 @@ def test_c2st_malformed_raises(tmp_path, c2st, exc):
 
 def test_production_scb_config_grounded_pairs_load(tmp_path):
     # The real SCB analysis config should parse and expose the grounded flag per pair.
-    from population_synthetic.analysis.comparison.scheme import _load_analysis_config
+    from population_synthetic.analysis.fidelity.scheme import _load_analysis_config
     from population_synthetic._paths import PROJECT_ROOT
 
-    path = PROJECT_ROOT / "config" / "analysis" / "comparison" / "scb.json"
+    path = PROJECT_ROOT / "config" / "analysis" / "fidelity" / "scb.json"
     (_, _, _, grounded_pairs, combination_checks, c2st_config) = _load_analysis_config(path)
     assert any(gp.grounded for gp in grounded_pairs)
     assert any(not gp.grounded for gp in grounded_pairs)

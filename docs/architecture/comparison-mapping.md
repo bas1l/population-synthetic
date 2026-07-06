@@ -5,7 +5,7 @@
 > [Axis composition](axis-composition.md) · [Configuration](configuration.md) · [Commands](commands.md)
 
 How the `analysis/mapping/` package maps both a **real** (national-statistics) population and a
-**synthetic** (pipeline) population onto one canonical schema so the `analysis/comparison/`
+**synthetic** (pipeline) population onto one canonical schema so the `analysis/fidelity/`
 package can score them against each other. This is the densest part of the architecture; for the deeper rationale see
 [`../real_mapper_philosophy.md`](../real_mapper_philosophy.md) and the per-country
 config READMEs (`config/mapping/scb/README.md`, `config/mapping/istat/README.md`).
@@ -25,26 +25,26 @@ Missing/empty seed roots warn and skip, never crash.
 
 **Stage 2 (compare)** -- the three comparison scripts perform **no** mapping; they `json.load` the
 pre-mapped files (a missing mapped file raises a clear "Run scripts/analyze/map_populations.py
-first." error) and run the existing evaluator/chart path. `compare_all_pipelines.py` iterates
-`mapped/_index.json` (imports zero mappers); `compare_pipeline_to_scb.py` /
-`compare_pipeline_to_istat.py` resolve mapped files from `--mapped-dir` (default
+first." error) and run the existing evaluator/chart path. `score_fidelity_all.py` iterates
+`mapped/_index.json` (imports zero mappers); `score_fidelity_sweden.py` /
+`score_fidelity_italy.py` resolve mapped files from `--mapped-dir` (default
 `{output_base}/03_Analysis/mapped`) + `{slug}`, or take explicit `--mapped-synthetic` /
 `--mapped-real`. All comparison artifacts land under
-`{output_base}/03_Analysis/comparison/{slug}/` (per-target JSON report + CSV + 15 bar charts +
+`{output_base}/03_Analysis/fidelity/{slug}/` (per-target JSON report + CSV + 15 bar charts +
 radar + `{slug}_association.csv` and `{slug}_association_heatmap.png` from the multivariate block),
-with the summary and `{country}_radar_grid.png` at `.../comparison/`. `compare_model_performance.py`
-additionally emits a cross-combo `{country}_c2st_vs_tv.png` under `.../performance/`.
+with the summary and `{country}_radar_grid.png` at `.../fidelity/`. `rank_models.py`
+additionally emits a cross-combo `{country}_c2st_vs_tv.png` under `.../model_ranking/`.
 
 The **multivariate / joint-fidelity** block (C2ST, pairwise Cramér's-V association, per-pair joint
 TV, k-way combination plausibility -- defined via the scheme's `grounded_joint_pairs` /
 `combination_checks` / `c2st` tuning) is also available as a **standalone process**:
-`analyze_joint_fidelity.py` recomputes only that block (through the shared
+`score_multivariate_fidelity.py` recomputes only that block (through the shared
 `StatisticalEvaluator.compute_multivariate()`) over the same `mapped/_index.json` targets and writes
-it to its own `{output_base}/03_Analysis/joint_fidelity/` folder -- per-combo envelope JSON +
+it to its own `{output_base}/03_Analysis/multivariate_fidelity/` folder -- per-combo envelope JSON +
 `{slug}_association.csv` + `{slug}_association_heatmap.png`, plus a per-country roll-up
-`{country}_joint_fidelity.json`/`.csv` and a cross-combo `{country}_c2st_vs_grounded_tv.png`. It
-depends only on `map_populations` and is fully additive: it never writes under `.../comparison/` or
-`.../performance/`. See the `joint_fidelity/` subpackage in
+`{country}_multivariate_fidelity.json`/`.csv` and a cross-combo `{country}_c2st_vs_grounded_tv.png`. It
+depends only on `map_populations` and is fully additive: it never writes under `.../fidelity/` or
+`.../model_ranking/`. See the `multivariate_fidelity/` subpackage in
 [Sub-packages](sub-packages.md).
 
 `analysis/utils/country_config.py` is the shared country resolver -- `real_for_country`,
@@ -74,8 +74,8 @@ key order = axis order) -- pure mapping scope; country scope is data-driven (Ita
 `income_source`). The cross-attribute statistics (`joint_pairs`/`coherence_attributes`/
 `coherence_threshold`, plus the multivariate tuning `grounded_joint_pairs`/`combination_checks`/`c2st`)
 are evaluator tuning, not mapping, and live in a separate
-comparison-analysis config `config/analysis/comparison/{scb,istat}.json` (one file per country)
-read by `analysis/comparison/scheme.py`. There is no `_scheme.json` filter and no
+comparison-analysis config `config/analysis/fidelity/{scb,istat}.json` (one file per country)
+read by `analysis/fidelity/scheme.py`. There is no `_scheme.json` filter and no
 `output_categories`/`real_*`/`pipeline_*` dual vocabulary -- the scored axis simply *is* each
 file's `values` because both mappers emit only declared values. See
 `config/mapping/{scb,istat}/README.md` and [`../real_mapper_philosophy.md`](../real_mapper_philosophy.md).
@@ -123,5 +123,5 @@ side. `get_synthetic_mapper(country)` is the factory; text helpers live in
   mapper exists and the principle that governs it.
 - [Design principles](design-principles.md) — the "config is the single source of truth" and
   "full comparison output" hard rules that this package enforces.
-- [Configuration](configuration.md) — the `config/mapping/*` and `config/analysis/comparison/*`
+- [Configuration](configuration.md) — the `config/mapping/*` and `config/analysis/fidelity/*`
   files these mappers read.

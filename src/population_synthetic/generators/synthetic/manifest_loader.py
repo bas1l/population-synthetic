@@ -217,7 +217,7 @@ def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> Manife
 
     slug = axis_slug(model_id, strategy_id, country_id)
     parallel_output_dir = _resolve_path(f"{output_base}/01_Raw/{slug}")
-    comparison_output_dir = _resolve_path(f"{output_base}/03_Analysis/comparison/{slug}")
+    comparison_output_dir = _resolve_path(f"{output_base}/03_Analysis/fidelity/{slug}")
 
     return ManifestConfig(
         name=name,

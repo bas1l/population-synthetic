@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from population_synthetic.analysis.performance.loader import (
+from population_synthetic.analysis.model_ranking.loader import (
     extract_combo_performance,
     load_combo_performances,
 )
