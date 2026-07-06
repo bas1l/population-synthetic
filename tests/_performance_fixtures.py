@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from population_synthetic.analysis.performance.loader import ComboPerformance
+from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 
 ATTRIBUTES = ["age_group", "biological_sex", "education_level"]
 
@@ -31,6 +31,7 @@ def make_report(
     n_synth: int = 100,
     flagged: list[dict[str, Any]] | None = None,
     multivariate: dict[str, Any] | None = None,
+    joint_chi_sq: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """A minimal comparison-report dict shaped like StatisticalEvaluator.generate_report.
 
@@ -53,7 +54,7 @@ def make_report(
             "population_b": {"source": "pipeline", "n": n_synth},
         },
         "marginals": marginals,
-        "joint_chi_sq": {},
+        "joint_chi_sq": joint_chi_sq or {},
         "coherence": {
             "score": coherence_score,
             "n_plausible": int(round(coherence_score * n_synth)),
@@ -71,8 +72,15 @@ def make_multivariate(
     c2st_auc: float = 0.62,
     mean_delta_v: float = 0.11,
     pairs: list[dict[str, Any]] | None = None,
+    joint_fidelity_pairs: list[dict[str, Any]] | None = None,
+    combination_checks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """A minimal ``multivariate`` block matching the evaluator's report shape."""
+    """A minimal ``multivariate`` block matching the evaluator's report shape.
+
+    *joint_fidelity_pairs* / *combination_checks* default to empty blocks (the
+    JSON-only degenerate case); pass explicit lists to exercise the grounded
+    joint-TV and k-way plausibility table/figure writers.
+    """
     if pairs is None:
         pairs = [
             {"attr_x": "age_group", "attr_y": "biological_sex",
@@ -85,8 +93,8 @@ def make_multivariate(
     return {
         "c2st": {"auc": c2st_auc, "p_value": 0.01, "method": "sklearn", "balanced_n": 100},
         "association": {"pairs": pairs, "mean_abs_delta_v": mean_delta_v, "frobenius_norm": 0.2},
-        "joint_fidelity": {"pairs": []},
-        "combination_plausibility": {"checks": []},
+        "joint_fidelity": {"pairs": joint_fidelity_pairs or []},
+        "combination_plausibility": {"checks": combination_checks or []},
     }
 
 
@@ -137,7 +145,7 @@ def build_workspace(
     skipped during mapping. Returns *tmp_path* (the output_base).
     """
     mapped_dir = tmp_path / "03_Analysis" / "mapped"
-    comparison_dir = tmp_path / "03_Analysis" / "comparison"
+    comparison_dir = tmp_path / "03_Analysis" / "fidelity"
     mapped_dir.mkdir(parents=True, exist_ok=True)
 
     index = []

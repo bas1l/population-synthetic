@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import csv
 
-from population_synthetic.analysis.comparison.charts import plot_association_heatmap
-from population_synthetic.analysis.performance.builder import (
+from population_synthetic.analysis.fidelity.charts import plot_association_heatmap
+from population_synthetic.analysis.model_ranking.builder import (
     build_performance_comparison,
     write_performance_csv,
 )
-from population_synthetic.analysis.performance.charts import plot_c2st_vs_tv
+from population_synthetic.analysis.model_ranking.charts import plot_c2st_vs_tv
 from tests._performance_fixtures import ATTRIBUTES, make_combo, make_multivariate, make_report
 
 # --- association heatmap (comparison level) -----------------------------------

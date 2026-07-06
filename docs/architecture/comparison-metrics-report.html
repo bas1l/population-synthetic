@@ -1263,13 +1263,16 @@
     <li><span class="what">Grounded joint TV</span> — <span class="where">evaluator.py:_compute_joint_fidelity → multivariate.py:joint_tv</span></li>
     <li><span class="what">K-way combination plausibility</span> — <span class="where">evaluator.py:_compute_combination_plausibility</span></li>
     <li><span class="what">Report assembly / CSV export</span> — <span class="where">evaluator.py:generate_report, write_csv_summary, write_association_csv</span></li>
+    <li><span class="what">Per-metric CSV tables (C2ST, joint TV, k-way, joint chi-sq, coherence)</span> — <span class="where">evaluator.py:write_c2st_csv, write_joint_fidelity_csv, write_combination_plausibility_csv, write_joint_chi_sq_csv, write_coherence_csv</span></li>
+    <li><span class="what">Per-metric figures (C2ST, joint TV, k-way, joint chi-sq, coherence)</span> — <span class="where">charts.py:plot_c2st, plot_joint_fidelity, plot_combination_plausibility, plot_joint_chi_sq, plot_coherence</span></li>
+    <li><span class="what">Artifact fan-out (one writer, all drivers)</span> — <span class="where">artifacts.py:write_comparison_artifacts</span></li>
   </ul>
 </div>
 
 <footer class="end">
   Scored attributes, category sets, joint pairs, coherence tuples, grounded-joint pairs,
   combination checks, and C2ST tuning are all defined in the per-country comparison scheme config,
-  loaded via <code>analysis/comparison/scheme.py</code> — never hardcoded. · Source:
+  loaded via <code>analysis/fidelity/scheme.py</code> — never hardcoded. · Source:
   <code>docs/architecture/comparison-metrics.md</code>
 </footer>
 

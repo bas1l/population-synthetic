@@ -143,10 +143,10 @@ can be compared apples-to-apples.
 - `_index.json` — a manifest listing every mapped target, its person count, and how many were
   skipped as unmappable.
 
-### Stage B — Compare (`compare_pipeline_to_scb.py` / `compare_all_pipelines.py`)
+### Stage B — Compare (`score_fidelity_sweden.py` / `score_fidelity_all.py`)
 
 Scores **one synthetic population against the real baseline**, per attribute. Output lands in
-`03_Analysis/comparison/{run}/` and, for each run, contains:
+`03_Analysis/fidelity/{run}/` and, for each run, contains:
 
 - **15 per-attribute bar charts** — `{run}_{attribute}.png`, each overlaying the synthetic
   distribution against SCB for one attribute (e.g. `..._age_group.png`, `..._region.png`).
@@ -161,7 +161,7 @@ Scores **one synthetic population against the real baseline**, per attribute. Ou
     combination is realistic, plus a list of flagged implausible individuals.
 - **1 CSV** — `{run}.csv` — the same marginal metrics as a spreadsheet, one row per attribute.
 
-**Batch aggregate** (when comparing all runs at once), written to `03_Analysis/comparison/`:
+**Batch aggregate** (when comparing all runs at once), written to `03_Analysis/fidelity/`:
 
 - `swedish_radar_grid.png` — a grid of every run's radar chart (rows = models, columns =
   strategies) for at-a-glance visual comparison.
@@ -171,7 +171,7 @@ Scores **one synthetic population against the real baseline**, per attribute. Ou
 > (completely different). The pipeline reports it as **TV-similarity = 1 − TV-distance**, so higher
 > is better. A perfect population would score 1.0 on every attribute.
 
-### Stage C — Rank (`compare_model_performance.py`) → `03_Analysis/performance/`
+### Stage C — Rank (`rank_models.py`) → `03_Analysis/model_ranking/`
 
 Consumes all the Stage-B reports and answers **"which model + strategy is best for Sweden?"**
 
@@ -186,15 +186,15 @@ Consumes all the Stage-B reports and answers **"which model + strategy is best f
 - `swedish_by_attribute/{attribute}_bars.png` — 15 optional charts, one per attribute, comparing
   all models × strategies on that single attribute.
 
-### Stage D — LLM-call analytics (`analyze_run.py`, `compare_runs.py`) → `03_Analysis/llm_metrics/`
+### Stage D — LLM-call analytics (`analyze_run.py`, `compare_run_analytics.py`) → `03_Analysis/run_analytics/`
 
 This stage ignores demographic accuracy and instead profiles the **generation process itself** —
 how the LLM behaved while producing a run.
 
-- Per run: `llm_metrics/{run}/run_analytics.json` + a `charts/` folder with up to 9 PNGs
+- Per run: `run_analytics/{run}/run_analytics.json` + a `charts/` folder with up to 9 PNGs
   (call counts per category, retry rates, answer diversity/entropy, prompt-size growth,
   wall-clock per persona, token consumption, latency, …).
-- Cross-run (`compare_runs.py`): `llm_metrics/_comparison/` — compares those process metrics
+- Cross-run (`compare_run_analytics.py`): `run_analytics/_comparison/` — compares those process metrics
   across models and strategies (retry rate, success rate, speed, verbosity, token cost) with the
   same Kruskal–Wallis + Dunn significance testing.
 
@@ -234,11 +234,11 @@ The headline deliverable is the **Swedish leaderboard**. As currently generated 
 |-----------|-----------|
 | The real Swedish reference population | `03_Analysis/mapped/real_swedish.json` (10,000 people) |
 | A raw synthetic run | `01_Raw/swedish_{strategy}_{model}/persona_XXXXX/identity.json` |
-| Accuracy charts for one run | `03_Analysis/comparison/swedish_{strategy}_{model}/` |
+| Accuracy charts for one run | `03_Analysis/fidelity/swedish_{strategy}_{model}/` |
 | Accuracy numbers for one run | same folder, `{run}.json` and `{run}.csv` |
-| The overall winner ranking | `03_Analysis/performance/swedish_leaderboard.png` + `swedish_performance.{json,csv}` |
-| Where each combo wins/loses | `03_Analysis/performance/swedish_heatmap.png` |
-| How the LLM behaved during generation | `03_Analysis/llm_metrics/{run}/` |
+| The overall winner ranking | `03_Analysis/model_ranking/swedish_leaderboard.png` + `swedish_performance.{json,csv}` |
+| Where each combo wins/loses | `03_Analysis/model_ranking/swedish_heatmap.png` |
+| How the LLM behaved during generation | `03_Analysis/run_analytics/{run}/` |
 
 *(`output_base` root is currently `F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data`, configured
 in `config/synthetic/experiment_defaults.yaml` and `config/analysis/analyze_defaults.yaml`.)*

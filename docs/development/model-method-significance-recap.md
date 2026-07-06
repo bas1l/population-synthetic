@@ -5,7 +5,7 @@
 
 ## Where the discussion stands
 
-The new `analysis/performance/` process (`scripts/analyze/compare_model_performance.py`, GUI action
+The new `analysis/model_ranking/` process (`scripts/analyze/rank_models.py`, GUI action
 "Model Performance") ranks model × strategy combos per country against the real baseline and tests
 factor impact statistically:
 

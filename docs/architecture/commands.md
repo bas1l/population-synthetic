@@ -44,7 +44,7 @@ python scripts/generate/generate_identity.py --provider claude --model sonnet --
     --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json
 
 # Compare two population files
-python scripts/analyze/compare_populations.py pop_a.json pop_b.json
+python scripts/analyze/score_fidelity.py pop_a.json pop_b.json
 
 # Map stage: map the targeted synthetic populations + their real populations to the canonical schema
 # (reads config/analysis/comparison_targets.yaml; writes {output_base}/03_Analysis/mapped/).
@@ -53,22 +53,22 @@ python scripts/analyze/map_populations.py
 python scripts/analyze/map_populations.py --targets config/analysis/comparison_targets.yaml
 
 # Compare pipeline output against the SCB real population (consumes pre-mapped files; via manifest)
-python scripts/analyze/compare_pipeline_to_scb.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
+python scripts/analyze/score_fidelity_sweden.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
 
 # Compare pipeline output against the SCB real population (explicit mapped-file paths)
-python scripts/analyze/compare_pipeline_to_scb.py \
+python scripts/analyze/score_fidelity_sweden.py \
     --mapped-synthetic {output_base}/03_Analysis/mapped/<slug>.json \
     --mapped-real {output_base}/03_Analysis/mapped/real_swedish.json
 
 # Compare pipeline output against the ISTAT real population (Italy; consumes pre-mapped files)
-python scripts/analyze/compare_pipeline_to_istat.py --model-id claude_haiku --strategy-id all_pick --country-id italian
+python scripts/analyze/score_fidelity_italy.py --model-id claude_haiku --strategy-id all_pick --country-id italian
 
 # Compare every mapped target against country real populations (batch; iterates mapped/_index.json)
-python scripts/analyze/compare_all_pipelines.py --country swedish --country italian
+python scripts/analyze/score_fidelity_all.py --country swedish --country italian
 
 # Cross-model performance comparison: rank model x strategy combos per country against the real
-# baseline (consumes the comparison reports; run compare_all_pipelines.py first)
-python scripts/analyze/compare_model_performance.py --country swedish --per-attribute-charts
+# baseline (consumes the comparison reports; run score_fidelity_all.py first)
+python scripts/analyze/rank_models.py --country swedish --per-attribute-charts
 
 # Extract demographic profiles from a pipeline output tree into a single population file
 python scripts/generate/extract_population_from_pipeline.py --seed-root path/to/pipeline_output/ \
@@ -83,11 +83,11 @@ python scripts/analyze/analyze_run.py path/to/batch_run_dir/ --output run_analyt
 # Analyse with per-persona breakdown
 python scripts/analyze/analyze_run.py path/to/run_dir/ --verbose
 
-# Batch-analyse every run under {output_base}/01_Raw/ into 03_Analysis/llm_metrics/{slug}/
+# Batch-analyse every run under {output_base}/01_Raw/ into 03_Analysis/run_analytics/{slug}/
 python scripts/analyze/analyze_run.py --all
 
 # Cross-run scientific comparison of LLM metrics (Kruskal-Wallis + Dunn); requires --all first
-python scripts/analyze/compare_runs.py
+python scripts/analyze/compare_run_analytics.py
 
 # Generate identities via axis composition (model × strategy × country)
 python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id swedish
@@ -103,7 +103,7 @@ python -m population_synthetic.gui_v2.main
 ruff check src/
 ```
 
-A pytest suite lives under `tests/` (covers the `analysis/llm_metrics/` layer and `clients/call_context`).
+A pytest suite lives under `tests/` (covers the `analysis/run_analytics/` layer and `clients/call_context`).
 Run it with `pytest` (requires `pip install -e ".[dev]"`).
 
 ## See also

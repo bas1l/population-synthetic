@@ -37,16 +37,19 @@ from typing import Any
 import yaml
 
 from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.mapping.real_mapper import load_real_population
+from population_synthetic.analysis.mapping.real_mapper import map_population as map_real
+from population_synthetic.analysis.mapping.synthetic_mapper import (
+    load_synthetic_population,
+)
+from population_synthetic.analysis.mapping.synthetic_mapper import (
+    map_population as map_synthetic,
+)
 from population_synthetic.analysis.utils.country_config import (
     infer_country,
     known_country_ids,
     mappings_for_country,
     real_for_country,
-)
-from population_synthetic.analysis.mapping.real_mapper import load_real_population, map_population as map_real
-from population_synthetic.analysis.mapping.synthetic_mapper import (
-    load_synthetic_population,
-    map_population as map_synthetic,
 )
 from population_synthetic.generators.synthetic.manifest_loader import compose_manifest, load_manifest
 
@@ -204,7 +207,7 @@ def _map_one_target(
     else:
         seed_root = manifest.parallel_output_dir
 
-        # Seed-root guards (mirroring compare_all_pipelines.py): warn & skip, never crash.
+        # Seed-root guards (mirroring score_fidelity_all.py): warn & skip, never crash.
         if seed_root is None or not seed_root.exists():
             print(f"  SKIP: parallel_output_dir does not exist: {seed_root}")
             return _skipped_entry(slug, country)
@@ -257,7 +260,7 @@ def _upsert_index_entry(index_path: Path, entry: dict[str, Any]) -> None:
     """Insert or replace the ``_index.json`` entry for ``entry['slug']``, leaving the rest.
 
     Axis single-target runs (one per GUI combo) must never clobber the sibling slugs that
-    compare_all_pipelines.py iterates, so we merge into the existing index rather than
+    score_fidelity_all.py iterates, so we merge into the existing index rather than
     rewriting it wholesale.
     """
     entries: list[dict[str, Any]] = []

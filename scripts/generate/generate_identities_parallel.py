@@ -58,7 +58,6 @@ from pathlib import Path
 
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
 from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
-from population_synthetic.utils import should_process_task
 
 _SCRIPT_START_TIME = time.time()
 
@@ -134,10 +133,10 @@ def _generate_one(
     persona_dir = output_dir / f"persona_{index:05d}"
     out_file = persona_dir / "identity.json"
 
-    if not should_process_task(input_paths=config_path, output_paths=out_file, force=force):
+    if not force and out_file.exists():
         with _progress_lock:
             _completed += 1
-            return index, True, "skipped (up-to-date)"
+        return index, True, "skipped (exists)"
 
     cfg = generation_config or {}
 
@@ -268,6 +267,14 @@ def main() -> None:
         default=None,
         help="Use JSON-Schema–constrained decoding for Ollama (default: off)",
     )
+    parser.add_argument(
+        "--ollama-auto-workers",
+        action="store_true",
+        default=False,
+        help="For Ollama models only: override --workers with the model axis file's "
+             "parallel.workers (the per-model VRAM-optimal value from the parallelism POC). "
+             "No-op for cloud providers. Default: off.",
+    )
     args = parser.parse_args()
 
     axis_ids = [args.model_id, args.strategy_id, args.country_id]
@@ -352,6 +359,26 @@ def main() -> None:
     if args.structured_output is None:
         args.structured_output = False
 
+    # Ollama-only: prefer the model axis file's per-model VRAM-optimal worker count
+    # over whatever --workers was passed (e.g. the GUI's global default). This lets a
+    # mixed cloud+local batch keep a single global --workers for cloud combos while each
+    # Ollama combo self-tunes to its VRAM ceiling. No-op for cloud providers.
+    if args.ollama_auto_workers and args.provider == "ollama":
+        if m is not None and m.parallel_workers is not None:
+            if args.workers != m.parallel_workers:
+                logger.info(
+                    "ollama-auto-workers: overriding --workers %d with model axis value %d",
+                    args.workers,
+                    m.parallel_workers,
+                )
+            args.workers = m.parallel_workers
+        else:
+            logger.warning(
+                "ollama-auto-workers set but no axis parallel.workers available "
+                "(no manifest/axis composed); keeping --workers %d",
+                args.workers,
+            )
+
     if not args.mode or not args.config:
         parser.error("Either --manifest or both --mode and --config are required")
     if not args.n:
@@ -423,6 +450,7 @@ def main() -> None:
             "log_llm": args.log_llm,
             "n": args.n,
             "workers": args.workers,
+            "ollama_auto_workers": args.ollama_auto_workers,
             "output_dir": args.output_dir,
             "force": args.force,
             "retry_until_success": args.retry_until_success,

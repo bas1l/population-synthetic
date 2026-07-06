@@ -107,7 +107,7 @@ Generate two populations with different seeds to test sampling stability:
 ```bash
 python scripts/generate/generate_scb_population.py --n 500 --output scb_pop_a.json --seed 42
 python scripts/generate/generate_scb_population.py --n 500 --output scb_pop_b.json --seed 99
-python scripts/analyze/compare_populations.py scb_pop_a.json scb_pop_b.json --output comparison.json
+python scripts/analyze/score_fidelity.py scb_pop_a.json scb_pop_b.json --output comparison.json
 ```
 
 ### Pipeline vs SCB
@@ -124,7 +124,7 @@ python scripts/generate/extract_population_from_pipeline.py \
     --output pipeline_pop.json
 
 # 3. Compare (SCB as reference, pipeline as observed)
-python scripts/analyze/compare_populations.py scb_pop.json pipeline_pop.json --output comparison.json
+python scripts/analyze/score_fidelity.py scb_pop.json pipeline_pop.json --output comparison.json
 ```
 
 The first argument is treated as the **reference** (expected) and the second as the **observed** population.
@@ -162,7 +162,7 @@ education_level            0.201        0.006      0.042      0.040
 - **Grounded joint TV:** per-pair joint total-variation distance, each pair labelled `grounded` (a real API conditional cross-tab) or not, from the SCB distribution audit (`scb_population_distribution_analysis.md`).
 - **Combination plausibility:** the k-way generalisation of individual coherence; the fraction of B individuals whose configured attribute tuple is impossible (zero real support) or rare (below threshold).
 
-Extra artifacts: a `{run}_association.csv` (one row per attribute pair), a per-comparison `{prefix}_association_heatmap.png` (from `compare_pipeline_to_scb.py`), and a cross-combo `{country}_c2st_vs_tv.png` scatter (from `compare_model_performance.py`).
+Extra artifacts: a `{run}_association.csv` (one row per attribute pair), a per-comparison `{prefix}_association_heatmap.png` (from `score_fidelity_sweden.py`), and a cross-combo `{country}_c2st_vs_tv.png` scatter (from `rank_models.py`).
 
 ## Attribute Categories
 

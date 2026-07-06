@@ -2,8 +2,8 @@
 
 Slug decomposition against the axis-ID registries (``decompose_slug`` /
 ``diagnose_slug``) and the presentation ordering of the strategy axis
-(:data:`STRATEGY_COMPLEXITY_ORDER`). Both are consumed by the comparison,
-llm_metrics cross-run, and performance processes, so they live in the
+(:data:`STRATEGY_COMPLEXITY_ORDER`). Both are consumed by the fidelity,
+run_analytics cross-run, and model-ranking processes, so they live in the
 cross-process ``analysis/utils`` layer rather than in any one pipeline.
 """
 

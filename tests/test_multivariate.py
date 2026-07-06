@@ -15,7 +15,7 @@ import math
 import numpy as np
 import pytest
 
-from population_synthetic.analysis.comparison.multivariate import (
+from population_synthetic.analysis.fidelity.multivariate import (
     _sklearn_available,
     association_matrix,
     c2st,
@@ -23,7 +23,7 @@ from population_synthetic.analysis.comparison.multivariate import (
     joint_tv,
     one_hot_encode,
 )
-from population_synthetic.analysis.comparison.scheme import ComparisonScheme
+from population_synthetic.analysis.fidelity.scheme import ComparisonScheme
 
 _AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85"]
 

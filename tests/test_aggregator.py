@@ -11,9 +11,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from population_synthetic.analysis.llm_metrics.per_run.aggregator import compute_metrics
+from population_synthetic.analysis.run_analytics.per_run.aggregator import compute_metrics
 
-from ._fixtures import ENRICHED_ENTRIES, RUN_SUMMARY, entries_without_tokens
+from ._fixtures import ENRICHED_ENTRIES, JSONL_NATIVE_ENTRIES, RUN_SUMMARY, entries_without_tokens
 
 _EXPECTED_PATH = Path(__file__).parent / "data" / "expected_metrics.json"
 
@@ -80,3 +80,34 @@ def test_empty_entries_returns_zeroed_structure():
     assert metrics["per_category"] == {}
     for key in _TOKEN_GATED_KEYS:
         assert metrics[key] is None
+
+
+# --- Phase 4: JSONL-native telemetry (no text log involved) -----------------
+
+def test_token_gated_metrics_compute_from_jsonl_native_telemetry_without_log():
+    """Token-gated metrics must compute directly from JSONL-native tokens.
+
+    ``JSONL_NATIVE_ENTRIES`` is never passed through joiner.join_entries() --
+    it represents a run whose text log is unavailable/lost, or was never
+    joined.  The token/timing fields live on the entries themselves (Phases
+    1-3), so ``compute_metrics`` must token-gate on them all the same.
+    """
+    metrics = compute_metrics(JSONL_NATIVE_ENTRIES, None)
+    for key in _TOKEN_GATED_KEYS:
+        assert metrics[key] is not None, f"{key} should compute from JSONL-native tokens"
+
+    assert metrics["summary"]["token_match_rate"] == 0.5  # one entry has tokens, one doesn't
+    per_persona = metrics["token_consumption_per_persona"]["persona_00001"]
+    assert per_persona["prompt_tokens"] == 100
+    assert per_persona["completion_tokens"] == 10
+
+
+def test_error_category_counts_surfaced_per_category():
+    """Structured error_category breakdown sits alongside the free-text taxonomy."""
+    per_category = compute_metrics(JSONL_NATIVE_ENTRIES, None)["per_category"]
+    assert per_category["age"]["error_category_counts"] == {"network": 1}
+    # Free-text taxonomy is unaffected by the new structured breakdown.
+    assert per_category["age"]["error_taxonomy"] == {"ConnectionError": 1}
+    # Categories with no errors report an empty structured breakdown, not a
+    # missing key.
+    assert per_category["first_name"]["error_category_counts"] == {}

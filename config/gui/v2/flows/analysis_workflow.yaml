@@ -17,7 +17,7 @@ tasks:
 
   compare_synth_real:
     label: Compare Synthetic to Real
-    script: scripts/analyze/compare_all_pipelines.py
+    script: scripts/analyze/score_fidelity_all.py
     dispatch: slugs
     enabled: true
     options:
@@ -28,7 +28,7 @@ tasks:
 
   joint_fidelity:
     label: Multivariate Joint Fidelity
-    script: scripts/analyze/analyze_joint_fidelity.py
+    script: scripts/analyze/score_multivariate_fidelity.py
     dispatch: slugs
     enabled: true
     options:
@@ -38,7 +38,7 @@ tasks:
 
   model_performance:
     label: Model Performance (models x methods)
-    script: scripts/analyze/compare_model_performance.py
+    script: scripts/analyze/rank_models.py
     dispatch: slugs
     enabled: true
     min_combos: 2                 # guard: loud skip below 2 checked combos
@@ -51,7 +51,7 @@ tasks:
 
   compare_pops:
     label: Compare Two Populations
-    script: scripts/analyze/compare_populations.py
+    script: scripts/analyze/score_fidelity.py
     dispatch: slugs
     enabled: false                # opt-in: needs EXACTLY 2 combos
     min_combos: 2
@@ -75,7 +75,7 @@ tasks:
 
   llm_metrics_cross_run:          # independent — isolated node
     label: LLM Metrics (cross-run)
-    script: scripts/analyze/compare_runs.py
+    script: scripts/analyze/compare_run_analytics.py
     dispatch: slugs
     enabled: false
     options:

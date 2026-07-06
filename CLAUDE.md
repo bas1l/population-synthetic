@@ -26,14 +26,14 @@ python scripts/generate/generate_scb_population.py --n 1000 --seed 42 --output s
 # Generate identities via axis composition (model × strategy × country)
 python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id swedish
 
-# Comparison is two-stage: MAP first, then COMPARE (compare consumes the pre-mapped files)
+# Fidelity scoring is two-stage: MAP first, then SCORE (scoring consumes the pre-mapped files)
 python scripts/analyze/map_populations.py
-python scripts/analyze/compare_pipeline_to_scb.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
+python scripts/analyze/score_fidelity_sweden.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
 
 python -m population_synthetic.gui_v2.main   # primary GUI: config-driven Flow Runner (requires ".[gui]")
 python -m population_synthetic.gui.main   # DEPRECATED original launcher (fallback only; requires ".[gui]")
 ruff check src/                       # lint (line-length 120, rules E/F/W/I)
-pytest                                # test suite (covers llm_metrics/ and clients/call_context)
+pytest                                # test suite (covers run_analytics/ and clients/call_context)
 ```
 
 **Full command catalog → [Command reference](docs/architecture/commands.md)** (`docs/architecture/commands.md`).
@@ -66,10 +66,10 @@ These are enforced guardrails, not suggestions. Full rationale in
 `generators/` -- `generators/real/` (per-country data layers over a shared parent) and
 `generators/synthetic/` (LLM persona generation) -- plus `analysis/` (the
 post-generation family, one subpackage per process: `mapping/` raw -> canonical schema,
-`comparison/` two-stage map -> compare statistical scoring + charts, `joint_fidelity/` standalone
-multivariate joint-fidelity (recomputes the `multivariate` block over the mapped populations into
-its own `03_Analysis/joint_fidelity/` folder), `performance/` cross-model
-ranking of the comparison reports (models × strategies per country), `llm_metrics/` post-run
+`fidelity/` two-stage map -> score statistical scoring + charts (synthetic vs real), `multivariate_fidelity/` standalone
+multivariate fidelity (recomputes the `multivariate` block over the mapped populations into
+its own `03_Analysis/multivariate_fidelity/` folder), `model_ranking/` cross-model
+ranking of the fidelity reports (models × strategies per country), `run_analytics/` post-run
 LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 

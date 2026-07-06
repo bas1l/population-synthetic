@@ -84,7 +84,7 @@ lowering it toward 0 makes it lenient, until at the limit only genuinely **zero-
 combinations are flagged.
 
 The threshold and the tuple both live in config
-(`config/analysis/comparison/{country}.json`), never in code. `coherence_attributes` is a
+(`config/analysis/fidelity/{country}.json`), never in code. `coherence_attributes` is a
 **required** key — a missing one raises loudly rather than falling back to a baked-in list —
 while `coherence_threshold` defaults to `0.001` when absent.
 

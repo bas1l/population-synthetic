@@ -28,3 +28,5 @@ config/gui/state.json
 # (…/Gauss/04_Dissemination/Manuscripts/40_llm-population-fidelity-benchmark/),
 # which is outside this repo. Keep the local drafting source out of git too.
 docs/paper/
+/tests
+/tests

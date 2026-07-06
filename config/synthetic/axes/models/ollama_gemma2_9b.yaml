@@ -11,4 +11,6 @@ model_config:
     max_output_tokens: 2048
 parameters:
   parallel:
+    # Single slot only per docs/development/ollama-parallelism-poc/REPORT.md
+    # (head_dim=256 => large KV; only 1 slot fits VRAM). No parallelism to gain.
     workers: 1

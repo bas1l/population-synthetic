@@ -29,8 +29,8 @@ can't be resolved without *guessing* its class, leave it unmapped — it correct
 - **Aliases:** `config/assets/scb_reference/category_mappings.json` (Sweden),
   `config/assets/istat_reference/category_mappings.json` (Italy) — `pipeline_label_mappings`.
 - **Harvester:** `scripts/_throwaway_harvest_unmapped.py` (Step 2 below).
-- **Comparison scripts:** `scripts/analyze/compare_pipeline_to_scb.py` (single run, Sweden),
-  `scripts/analyze/compare_pipeline_to_istat.py` (Italy), `scripts/analyze/compare_all_pipelines.py` (batch).
+- **Comparison scripts:** `scripts/analyze/score_fidelity_sweden.py` (single run, Sweden),
+  `scripts/analyze/score_fidelity_italy.py` (Italy), `scripts/analyze/score_fidelity_all.py` (batch).
 - **Worked examples / prior output:** `docs/swedish_model_state_and_mapping_2026-06-29.md`,
   `docs/swedish_mapping_fix_2026-05-29.md`.
 
@@ -124,17 +124,17 @@ the latter, don't add it.
 2. **No-regression on a clean run** (catches over-broad stems): regenerate a model that was
    already clean and confirm its target-field TV/unknown are essentially unchanged:
    ```
-   python scripts/analyze/compare_pipeline_to_scb.py --model-id claude_haiku --strategy-id all_pick \
+   python scripts/analyze/score_fidelity_sweden.py --model-id claude_haiku --strategy-id all_pick \
        --country-id <country> --no-charts --output <scratch>/check.json
    ```
-   (Italy: `scripts/analyze/compare_pipeline_to_istat.py`.)
+   (Italy: `scripts/analyze/score_fidelity_italy.py`.)
 3. **Honest-accounting awareness:** collapsing pass-through leaks makes `unknown_count_b`
    *rise* on noisy runs while TV holds/improves — that is correction, not regression. Confirm
    no attribute's TV gets worse anywhere.
 
 Then regenerate the full set and lint:
 ```
-python scripts/analyze/compare_all_pipelines.py --country <country>     # all reports + charts
+python scripts/analyze/score_fidelity_all.py --country <country>     # all reports + charts
 ruff check src/population_synthetic/comparison/extractor.py
 ```
 Confirm **no new** lint errors by diffing against the baseline:
@@ -159,7 +159,7 @@ Confirm **no new** lint errors by diffing against the baseline:
 | Mappings JSON | `config/assets/scb_reference/category_mappings.json` | `config/assets/istat_reference/category_mappings.json` |
 | Normalizer helpers | `_normalize_<attr>` | `_normalize_<attr>_it` |
 | Canonical label sets | `*_LABELS` | `*_LABELS_IT` |
-| Single-run compare | `scripts/analyze/compare_pipeline_to_scb.py` | `scripts/analyze/compare_pipeline_to_istat.py` |
+| Single-run compare | `scripts/analyze/score_fidelity_sweden.py` | `scripts/analyze/score_fidelity_italy.py` |
 | Batch / harvest | `--country swedish` | `--country italian` |
 
 When defining canonical-output sets (harvester, collapse checks), read the values the

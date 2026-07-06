@@ -7,7 +7,7 @@ that extension cannot silently regress it.
 
 from __future__ import annotations
 
-from population_synthetic.analysis.llm_metrics.per_run.joiner import join_entries
+from population_synthetic.analysis.run_analytics.per_run.joiner import join_entries
 
 
 def _log(ts, pt=100, ct=10, ms=500.0):
@@ -112,3 +112,57 @@ def test_corr_distinct_call_indices_not_confused():
     out = join_entries(jsonl, logs)
     assert out[0]["prompt_tokens"] == 10  # call_index 1
     assert out[1]["prompt_tokens"] == 20  # call_index 2
+
+
+# --- Phase 4: JSONL-native telemetry is preferred over the text-log join ----
+
+def test_jsonl_native_tokens_preferred_over_log_join():
+    # The JSONL entry already carries its own (non-None) telemetry -- the
+    # matched log record's values must NOT overwrite it.
+    jsonl = [
+        {
+            "timestamp": "2026-05-21T10:00:00.000000",
+            "prompt_tokens": 999,
+            "completion_tokens": 99,
+            "elapsed_ms": 42.0,
+        }
+    ]
+    logs = [_log("2026-05-21 10:00:00", pt=1, ct=1, ms=1.0)]
+    out = join_entries(jsonl, logs)
+    assert out[0]["prompt_tokens"] == 999
+    assert out[0]["completion_tokens"] == 99
+    assert out[0]["elapsed_ms"] == 42.0
+
+
+def test_jsonl_native_partial_fields_fill_from_log_only_where_missing():
+    # elapsed_ms is JSONL-native (non-None) and must survive; prompt/completion
+    # tokens are absent on the JSONL side and must be backfilled from the log.
+    jsonl = [
+        {
+            "timestamp": "2026-05-21T10:00:00.000000",
+            "elapsed_ms": 42.0,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+        }
+    ]
+    logs = [_log("2026-05-21 10:00:00", pt=100, ct=10, ms=500.0)]
+    out = join_entries(jsonl, logs)
+    assert out[0]["elapsed_ms"] == 42.0  # JSONL-native wins
+    assert out[0]["prompt_tokens"] == 100  # backfilled from the log
+    assert out[0]["completion_tokens"] == 10  # backfilled from the log
+
+
+def test_no_log_match_keeps_jsonl_native_values():
+    # No log entry matches at all -- JSONL-native telemetry must still surface.
+    jsonl = [
+        {
+            "timestamp": "2026-05-21T10:00:00.000000",
+            "prompt_tokens": 999,
+            "completion_tokens": 99,
+            "elapsed_ms": 42.0,
+        }
+    ]
+    out = join_entries(jsonl, [])
+    assert out[0]["prompt_tokens"] == 999
+    assert out[0]["completion_tokens"] == 99
+    assert out[0]["elapsed_ms"] == 42.0
