@@ -24,6 +24,8 @@ tasks:
       no-charts: false            # --no-charts (flag when true)
       radar-tv-only: false        # --radar-tv-only
       output-base:
+      n-synthetic:                # blank = no cap; integer = cap each population to this size
+      sample-seed: 0              # seed for the without-replacement draw (reproducible)
     depends_on: [map_populations]
 
   joint_fidelity:
@@ -34,6 +36,8 @@ tasks:
     options:
       no-charts: false            # --no-charts
       output-base:                # blank = script default
+      n-synthetic:                # blank = no cap; integer = cap each population to this size
+      sample-seed: 0              # seed for the without-replacement draw (reproducible)
     depends_on: [map_populations]
 
   model_performance:

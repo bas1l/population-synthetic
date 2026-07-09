@@ -14,12 +14,18 @@ Usage:
     python scripts/analyze/score_multivariate_fidelity.py --country swedish
     python scripts/analyze/score_multivariate_fidelity.py --slug swedish_all_pick_claude_sonnet
     python scripts/analyze/score_multivariate_fidelity.py --slug swedish_all_pick_claude_sonnet --no-charts
+    python scripts/analyze/score_multivariate_fidelity.py --n-synthetic 100 --sample-seed 0
 
 --country      Country axis ID filter (default: all countries in the mapped index). May be repeated.
 --slug         Exact slug filter ({country}_{strategy}_{model}). May be repeated. Keeps only the
                mapped entries whose slug is selected. Combines with --country.
 --output-base  Base output directory (the 03_Analysis parent). Default: experiment_defaults.yaml.
 --no-charts    Skip chart generation.
+--n-synthetic  Cap each synthetic population to this many individuals via a seeded without-replacement
+               draw, restoring equivalent population size for the size-sensitive metrics. Blank/omitted
+               = no cap. Populations smaller than N run in full with a loud warning. Use the same N and
+               --sample-seed as the fidelity run to draw the identical subset.
+--sample-seed  Seed for the without-replacement subsample draw (default 0; reproducible).
 
 Outputs, under {output_base}/03_Analysis/multivariate_fidelity/:
     {slug}/{slug}.json                          per-combo multivariate-fidelity envelope
@@ -51,6 +57,7 @@ from population_synthetic.analysis.multivariate_fidelity.charts import (
     plot_joint_association_heatmap,
 )
 from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.utils.sampling import subsample_population
 
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 
@@ -86,6 +93,22 @@ def _parse_args() -> argparse.Namespace:
         "--no-charts",
         action="store_true",
         help="Skip chart generation.",
+    )
+    parser.add_argument(
+        "--n-synthetic",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Cap each synthetic population to N individuals via a seeded without-replacement draw "
+        "(equivalent-size comparison). Blank/omitted = no cap. Smaller populations run in full with a "
+        "loud warning. Use the same N and --sample-seed as the fidelity run to draw the identical subset.",
+    )
+    parser.add_argument(
+        "--sample-seed",
+        type=int,
+        default=0,
+        metavar="SEED",
+        help="Seed for the --n-synthetic without-replacement subsample draw (default: 0; reproducible).",
     )
     return parser.parse_args()
 
@@ -197,6 +220,7 @@ def main() -> None:
 
             print(f"[{slug}] Processing...")
             synthetic_pop = _load_json(synthetic_path)
+            synthetic_pop = subsample_population(synthetic_pop, args.n_synthetic, args.sample_seed)
 
             n_synthetic = synthetic_pop["metadata"]["n"]
             if n_synthetic < 5:

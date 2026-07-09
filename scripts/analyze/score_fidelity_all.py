@@ -15,6 +15,7 @@ Usage:
     python scripts/analyze/score_fidelity_all.py --strategy all_pick --no-charts
     python scripts/analyze/score_fidelity_all.py --model claude_haiku --strategy all_pick --radar-tv-only
     python scripts/analyze/score_fidelity_all.py --slug swedish_all_pick_claude_haiku
+    python scripts/analyze/score_fidelity_all.py --n-synthetic 100 --sample-seed 0
 
 --country        Country axis ID filter (default: all countries in the mapped index). May be repeated.
 --model          Model axis ID filter (e.g. claude_haiku). May be repeated. Default: all models.
@@ -24,6 +25,10 @@ Usage:
 --output-base    Base output directory (the 03_Analysis parent). Default: experiment_defaults.yaml.
 --no-charts      Skip chart generation.
 --radar-tv-only  On radar chart, show only TV-similarity polygon (omit chi-squared overlay).
+--n-synthetic    Cap each synthetic population to this many individuals via a seeded without-replacement
+                 draw, restoring equivalent population size for the size-sensitive metrics. Blank/omitted
+                 = no cap (current behaviour). Populations smaller than N run in full with a loud warning.
+--sample-seed    Seed for the without-replacement subsample draw (default 0; reproducible).
 """
 
 import argparse
@@ -40,6 +45,7 @@ from population_synthetic.analysis.fidelity.evaluator import StatisticalEvaluato
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.utils.axes import decompose_slug
 from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.utils.sampling import subsample_population
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
@@ -97,6 +103,22 @@ def _parse_args() -> argparse.Namespace:
         "--radar-tv-only",
         action="store_true",
         help="On the radar chart, show only the TV-similarity polygon (omit chi-squared p-value overlay).",
+    )
+    parser.add_argument(
+        "--n-synthetic",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Cap each synthetic population to N individuals via a seeded without-replacement draw "
+        "(equivalent-size comparison). Blank/omitted = no cap. Smaller populations run in full with a "
+        "loud warning.",
+    )
+    parser.add_argument(
+        "--sample-seed",
+        type=int,
+        default=0,
+        metavar="SEED",
+        help="Seed for the --n-synthetic without-replacement subsample draw (default: 0; reproducible).",
     )
     return parser.parse_args()
 
@@ -268,6 +290,7 @@ def main() -> None:
 
             print(f"[{slug}] Processing...")
             synthetic_pop = _load_json(synthetic_path)
+            synthetic_pop = subsample_population(synthetic_pop, args.n_synthetic, args.sample_seed)
 
             n_synthetic = synthetic_pop["metadata"]["n"]
             if n_synthetic < 5:
