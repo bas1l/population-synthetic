@@ -70,6 +70,10 @@ python scripts/analyze/score_fidelity_italy.py --model-id claude_haiku --strateg
 # Compare every mapped target against country real populations (batch; iterates mapped/_index.json)
 python scripts/analyze/score_fidelity_all.py --country swedish --country italian
 
+# ... with every synthetic population capped to an equivalent size (seeded without-replacement draw;
+# blank/omitted --n-synthetic = no cap; undersize populations run in full with a loud warning)
+python scripts/analyze/score_fidelity_all.py --country swedish --n-synthetic 100 --sample-seed 0
+
 # Cross-model performance comparison: rank model x strategy combos per country against the real
 # baseline (consumes the comparison reports; run score_fidelity_all.py first)
 python scripts/analyze/rank_models.py --country swedish --per-attribute-charts

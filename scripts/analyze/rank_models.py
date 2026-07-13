@@ -25,6 +25,7 @@ Usage:
     python scripts/analyze/rank_models.py --slug swedish_all_pick_claude_haiku \
         --slug swedish_all_pick_gemini_flash
     python scripts/analyze/rank_models.py --per-attribute-charts --strict
+    python scripts/analyze/rank_models.py --force
 
 --country               Country axis ID filter. May be repeated. Default: all countries.
 --model                 Model axis ID filter. May be repeated. Default: all models.
@@ -35,6 +36,8 @@ Usage:
 --per-attribute-charts  Also write one grouped bar chart per demographic attribute.
 --strict                Fail when any selected combo lacks a comparison report
                         (default: warn and proceed with the combos that have one).
+--force                 Recompute a country even if its {country}_performance.json already
+                        exists (default: skip that country if present).
 """
 
 import argparse
@@ -100,6 +103,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--strict", action="store_true",
         help="Fail when any selected combo lacks a comparison report.",
+    )
+    parser.add_argument(
+        "--force", action="store_true",
+        help="Recompute a country even if its {country}_performance.json already exists "
+        "(default: skip that country if present).",
     )
     return parser.parse_args()
 
@@ -228,8 +236,21 @@ def main() -> None:
         sys.exit(1)
 
     processed = 0
+    skipped_existing = 0
     for country in sorted(by_country):
         country_records = by_country[country]
+
+        # Idempotent skip: a country's ranking is one unit of work, so if its performance
+        # JSON already exists and --force was not passed, skip the whole country (json/csv/
+        # charts) rather than recomputing. Tracked separately from `processed` so an all-skip
+        # run is distinguished from a genuine "nothing to compare" below.
+        perf_json = performance_dir / f"{country}_performance.json"
+        if not args.force and perf_json.exists():
+            print(f"=== {country.upper()} ===  SKIP (exists): {perf_json}")
+            print()
+            skipped_existing += 1
+            continue
+
         print(f"=== {country.upper()} ===  ({len(country_records)} combo(s))")
         if len(country_records) < 2:
             print(
@@ -277,6 +298,14 @@ def main() -> None:
         processed += 1
 
     if processed == 0:
+        if skipped_existing:
+            # Every eligible country already had its ranking on disk and was skipped -- that
+            # is a success (idempotent no-op), not the "nothing to compare" error below.
+            print(
+                f"All {skipped_existing} country/countries already have model-ranking outputs; "
+                "nothing recomputed (pass --force to recompute)."
+            )
+            return
         print(
             "ERROR: no country had the >=2 comparison reports needed to compare. "
             "Run scripts/analyze/score_fidelity_all.py first.",

@@ -77,3 +77,25 @@ enabled chain GUI-side:
 Node run-states are **transient** — per run, never written back to the YAML.
 The live node-state graph (`widgets/workflow_graph_view.py`) doubles as the run
 report.
+
+## Equivalent-size synthetic cap (`n-synthetic` / `sample-seed`)
+
+Synthetic populations now vary in size (models emit different persona counts),
+which biases the sample-size-sensitive fidelity metrics (C2ST, joint
+chi-squared, per-pair joint TV). The **Compare Synthetic to Real** and
+**Multivariate Joint Fidelity** task nodes therefore expose two options that
+restore an equivalent population size before scoring:
+
+- **`n-synthetic`** — blank (the default) means no cap, i.e. current behaviour.
+  An integer caps every synthetic population to that many individuals via a
+  seeded without-replacement draw. Populations smaller than N run in full with a
+  loud warning (the equalised size cannot be met).
+- **`sample-seed`** — the seed for that draw (default `0`). **Set the same
+  `n-synthetic` and `sample-seed` on both the Compare and the Multivariate
+  task** so they draw the identical subset of individuals — otherwise the
+  marginal and joint reports would be computed over different people.
+
+**Model Performance inherits the cap automatically.** The ranking node
+(`rank_models`) recomputes nothing: it consumes the capped fidelity reports and
+reads the `n` they record, so a capped Compare run feeds it a capped ranking. It
+therefore exposes no cap option of its own.
