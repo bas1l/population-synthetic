@@ -43,6 +43,10 @@ python scripts/generate/generate_identity.py --provider gemini --mode configurab
 python scripts/generate/generate_identity.py --provider claude --model sonnet --mode configurable \
     --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json
 
+# Generate a persona identity via explicit CLI args (OpenRouter, requires OPENROUTER_API_KEY)
+python scripts/generate/generate_identity.py --provider openrouter --model openai/gpt-4o --mode configurable \
+    --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json
+
 # Compare two population files
 python scripts/analyze/score_fidelity.py pop_a.json pop_b.json
 
@@ -65,6 +69,10 @@ python scripts/analyze/score_fidelity_italy.py --model-id claude_haiku --strateg
 
 # Compare every mapped target against country real populations (batch; iterates mapped/_index.json)
 python scripts/analyze/score_fidelity_all.py --country swedish --country italian
+
+# ... with every synthetic population capped to an equivalent size (seeded without-replacement draw;
+# blank/omitted --n-synthetic = no cap; undersize populations run in full with a loud warning)
+python scripts/analyze/score_fidelity_all.py --country swedish --n-synthetic 100 --sample-seed 0
 
 # Cross-model performance comparison: rank model x strategy combos per country against the real
 # baseline (consumes the comparison reports; run score_fidelity_all.py first)

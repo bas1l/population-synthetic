@@ -1,0 +1,13 @@
+id: "openrouter_mistral_medium"
+label: "OpenRouter Mistral Medium 3"
+model_config:
+  provider: "openrouter"
+  model: "mistralai/mistral-medium-3"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+parameters:
+  parallel:
+    workers: 4

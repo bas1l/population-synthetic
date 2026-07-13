@@ -20,10 +20,14 @@ tasks:
     script: scripts/analyze/score_fidelity_all.py
     dispatch: slugs
     enabled: true
+    supports_force: true          # node shows a Force checkbox -> --force
+    force: true
     options:
       no-charts: false            # --no-charts (flag when true)
       radar-tv-only: false        # --radar-tv-only
       output-base:
+      n-synthetic: '100'          # blank = no cap; integer = cap each population to this size
+      sample-seed: 0              # seed for the without-replacement draw (reproducible)
     depends_on: [map_populations]
 
   joint_fidelity:
@@ -31,9 +35,13 @@ tasks:
     script: scripts/analyze/score_multivariate_fidelity.py
     dispatch: slugs
     enabled: true
+    supports_force: true          # node shows a Force checkbox -> --force
+    force: true
     options:
       no-charts: false            # --no-charts
       output-base:                # blank = script default
+      n-synthetic: '100'          # blank = no cap; integer = cap each population to this size
+      sample-seed: 0              # seed for the without-replacement draw (reproducible)
     depends_on: [map_populations]
 
   model_performance:
@@ -42,6 +50,8 @@ tasks:
     dispatch: slugs
     enabled: true
     min_combos: 2                 # guard: loud skip below 2 checked combos
+    supports_force: true          # node shows a Force checkbox -> --force
+    force: true
     options:
       no-charts: false
       per-attribute-charts: false
@@ -56,6 +66,8 @@ tasks:
     enabled: false                # opt-in: needs EXACTLY 2 combos
     min_combos: 2
     max_combos: 2
+    supports_force: true          # node shows a Force checkbox -> --force
+    force: false
     options:
       output:                     # --output (blank = script default)
       no-charts: false
@@ -83,8 +95,7 @@ tasks:
     depends_on: []
 
 selection:                        # shared by ALL tasks in the chain
-  models: [claude_haiku, claude_opus, claude_sonnet, ollama_deepseek_r1_14b, 
-      ollama_gemma4_e4b, ollama_llama31_8b, ollama_mistral_nemo_12b]
+  models: [claude_haiku]
   strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick, 
       all_generate_pick, all_pick, all_pick_dag]
   countries: [swedish]

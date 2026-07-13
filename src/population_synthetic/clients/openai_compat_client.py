@@ -41,6 +41,8 @@ class OpenAICompatClient:
         base_delay: float = 2.0,
         max_delay: float = 30.0,
         timeout: int = 120,
+        provider_tag: str = "openai_compat",
+        default_headers: dict[str, Any] | None = None,
     ):
         api_key = os.environ.get(api_key_env_var)
         if not api_key:
@@ -53,6 +55,7 @@ class OpenAICompatClient:
         self._base_delay = base_delay
         self._max_delay = max_delay
         self._timeout = timeout
+        self._provider_tag = provider_tag
 
         logging.basicConfig(
             level=logging.INFO,
@@ -69,6 +72,7 @@ class OpenAICompatClient:
             api_key=api_key,
             timeout=timeout,
             max_retries=0,  # we handle retries ourselves
+            default_headers=default_headers,
         )
 
         self.logger.info(
@@ -158,7 +162,7 @@ class OpenAICompatClient:
             }
 
         metadata: dict[str, Any] = {
-            "provider": "openai_compat",
+            "provider": self._provider_tag,
             "model": target_model,
             "base_url": self.base_url,
             "timestamp": datetime.now().isoformat(),

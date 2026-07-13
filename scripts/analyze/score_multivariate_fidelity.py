@@ -14,12 +14,21 @@ Usage:
     python scripts/analyze/score_multivariate_fidelity.py --country swedish
     python scripts/analyze/score_multivariate_fidelity.py --slug swedish_all_pick_claude_sonnet
     python scripts/analyze/score_multivariate_fidelity.py --slug swedish_all_pick_claude_sonnet --no-charts
+    python scripts/analyze/score_multivariate_fidelity.py --n-synthetic 100 --sample-seed 0
+    python scripts/analyze/score_multivariate_fidelity.py --force
 
 --country      Country axis ID filter (default: all countries in the mapped index). May be repeated.
 --slug         Exact slug filter ({country}_{strategy}_{model}). May be repeated. Keeps only the
                mapped entries whose slug is selected. Combines with --country.
 --output-base  Base output directory (the 03_Analysis parent). Default: experiment_defaults.yaml.
 --no-charts    Skip chart generation.
+--n-synthetic  Cap each synthetic population to this many individuals via a seeded without-replacement
+               draw, restoring equivalent population size for the size-sensitive metrics. Blank/omitted
+               = no cap. Populations smaller than N run in full with a loud warning. Use the same N and
+               --sample-seed as the fidelity run to draw the identical subset.
+--sample-seed  Seed for the without-replacement subsample draw (default 0; reproducible).
+--force        Recompute a slug even if its multivariate_fidelity/{slug}/{slug}.json already exists
+               (default: reload the existing envelope so it still feeds the per-country roll-up).
 
 Outputs, under {output_base}/03_Analysis/multivariate_fidelity/:
     {slug}/{slug}.json                          per-combo multivariate-fidelity envelope
@@ -51,6 +60,7 @@ from population_synthetic.analysis.multivariate_fidelity.charts import (
     plot_joint_association_heatmap,
 )
 from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.utils.sampling import subsample_population
 
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 
@@ -86,6 +96,28 @@ def _parse_args() -> argparse.Namespace:
         "--no-charts",
         action="store_true",
         help="Skip chart generation.",
+    )
+    parser.add_argument(
+        "--n-synthetic",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Cap each synthetic population to N individuals via a seeded without-replacement draw "
+        "(equivalent-size comparison). Blank/omitted = no cap. Smaller populations run in full with a "
+        "loud warning. Use the same N and --sample-seed as the fidelity run to draw the identical subset.",
+    )
+    parser.add_argument(
+        "--sample-seed",
+        type=int,
+        default=0,
+        metavar="SEED",
+        help="Seed for the --n-synthetic without-replacement subsample draw (default: 0; reproducible).",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Recompute a slug even if its multivariate_fidelity/{slug}/{slug}.json already exists "
+        "(default: reload the existing envelope so it still feeds the per-country roll-up).",
     )
     return parser.parse_args()
 
@@ -180,6 +212,20 @@ def main() -> None:
                 print(f"[{slug}] SKIP: mapped synthetic file not found: {synthetic_path}")
                 continue
 
+            slug_dir = joint_dir / slug
+            envelope_path = slug_dir / f"{slug}.json"
+
+            # Idempotent skip: the stored {slug}.json IS the envelope (written by
+            # write_multivariate_fidelity_json), so reload it rather than recomputing and still
+            # append it to `envelopes` -- the per-country roll-up + C2ST scatter stay complete
+            # (Full comparison output invariant). Recompute only when forced or the envelope is absent.
+            if not args.force and envelope_path.exists():
+                envelope = _load_json(envelope_path)
+                envelopes.append(envelope)
+                print(f"[{slug}] SKIP (exists): {envelope_path}")
+                print()
+                continue
+
             if real_pop is None:
                 real_file = entry.get("real_file")
                 if real_file is None:
@@ -197,6 +243,7 @@ def main() -> None:
 
             print(f"[{slug}] Processing...")
             synthetic_pop = _load_json(synthetic_path)
+            synthetic_pop = subsample_population(synthetic_pop, args.n_synthetic, args.sample_seed)
 
             n_synthetic = synthetic_pop["metadata"]["n"]
             if n_synthetic < 5:
@@ -207,8 +254,7 @@ def main() -> None:
             )
             envelopes.append(envelope)
 
-            slug_dir = joint_dir / slug
-            output_path = write_multivariate_fidelity_json(envelope, slug_dir / f"{slug}.json")
+            output_path = write_multivariate_fidelity_json(envelope, envelope_path)
             print(f"  Report written to {output_path}")
 
             association_csv_path = slug_dir / f"{slug}_association.csv"

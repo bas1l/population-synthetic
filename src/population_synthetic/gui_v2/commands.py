@@ -87,12 +87,14 @@ def build_slugs_cmd(
     script: Path,
     combos: Sequence[Combo],
     options: Mapping[str, Any],
+    force: bool,
 ) -> list[str]:
     """ONE arg vector with one ``--slug {country}_{strategy}_{model}`` per combo.
 
     Slugs come from :func:`axis_slug` (the single source of truth for the slug
-    format); option args follow the slug list, mirroring the legacy launcher's
-    batch (``axis_mode: batch``) command shape.
+    format); ``--force`` (when requested) is inserted right after the script
+    path — before the slug list — then option args follow the slugs, mirroring
+    the legacy launcher's batch (``axis_mode: batch``) command shape.
 
     Raises:
         ValueError: If *combos* is empty (a ``--slug``-less invocation would
@@ -101,6 +103,8 @@ def build_slugs_cmd(
     if not combos:
         raise ValueError(f"build_slugs_cmd: no combos selected for {script}")
     cmd = [sys.executable, str(script)]
+    if force:
+        cmd.append("--force")
     for model_id, strategy_id, country_id in combos:
         cmd += ["--slug", axis_slug(model_id, strategy_id, country_id)]
     cmd += _option_args(options)
