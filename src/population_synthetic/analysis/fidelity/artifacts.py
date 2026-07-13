@@ -15,7 +15,11 @@ cycle is introduced.
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import stat
+import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +42,39 @@ from population_synthetic.analysis.fidelity.evaluator import (
     write_joint_chi_sq_csv,
     write_joint_fidelity_csv,
 )
+
+
+def _clear_readonly_and_retry(func, target, _exc) -> None:
+    """rmtree error handler: clear the read-only bit and retry the failed unlink/rmdir.
+
+    Accepts the three positional args of both ``shutil.rmtree(onerror=...)`` (<3.12) and
+    ``onexc=...`` (>=3.12); the third arg (exc-info tuple vs exception) is ignored.
+    """
+    os.chmod(target, stat.S_IWRITE)
+    func(target)
+
+
+def _rmtree_resilient(path: Path, *, attempts: int = 5, base_delay: float = 0.5) -> None:
+    """Recursively delete *path*, tolerating read-only files and transient sync locks.
+
+    A plain ``shutil.rmtree`` raises ``PermissionError`` (WinError 5) on Windows when a file
+    in the tree is read-only or momentarily locked -- the common case when the output lives
+    in a OneDrive/SharePoint-synced folder the sync engine is mid-upload on. The per-file
+    handler clears the read-only bit and retries the offending removal; the outer loop
+    retries the whole tree with exponential backoff to ride out a transient lock. Re-raises
+    the last error if every attempt fails (fail-fast invariant).
+    """
+    for attempt in range(attempts):
+        try:
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(path, onexc=_clear_readonly_and_retry)
+            else:
+                shutil.rmtree(path, onerror=_clear_readonly_and_retry)
+            return
+        except OSError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(base_delay * (2 ** attempt))
 
 
 def write_comparison_artifacts(
@@ -125,7 +162,7 @@ def _write_charts(
     """Render every figure into the charts dir."""
     charts_dir = Path(charts_dir) if charts_dir is not None else output_path.parent / output_path.stem
     if clean_charts_dir and charts_dir.exists():
-        shutil.rmtree(charts_dir)
+        _rmtree_resilient(charts_dir)
 
     plot_comparison_charts(
         real_pop,
