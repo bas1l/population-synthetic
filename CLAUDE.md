@@ -69,7 +69,10 @@ post-generation family, one subpackage per process: `mapping/` raw -> canonical 
 `fidelity/` two-stage map -> score statistical scoring + charts (synthetic vs real), `multivariate_fidelity/` standalone
 multivariate fidelity (recomputes the `multivariate` block over the mapped populations into
 its own `03_Analysis/multivariate_fidelity/` folder), `model_ranking/` cross-model
-ranking of the fidelity reports (models × strategies per country), `run_analytics/` post-run
+ranking of the fidelity reports (models × strategies per country), `method_significance/`
+per-category significance of the generation method vs model on TV fidelity (Page's L / Friedman /
+Nemenyi CD + a mixed-model interaction, categories as blocks; needs the `[analysis]` extra),
+`run_analytics/` post-run
 LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 

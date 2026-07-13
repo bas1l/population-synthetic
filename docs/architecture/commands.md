@@ -78,6 +78,11 @@ python scripts/analyze/score_fidelity_all.py --country swedish --n-synthetic 100
 # baseline (consumes the comparison reports; run score_fidelity_all.py first)
 python scripts/analyze/rank_models.py --country swedish --per-attribute-charts
 
+# Per-category method/model significance: which factor (generation method vs model) drives
+# per-attribute TV fidelity (Page's L + Friedman/Nemenyi CD + mixed-model interaction; consumes the
+# comparison reports; needs the [analysis] extra: pip install -e .[analysis])
+python scripts/analyze/analyze_method_significance.py --country swedish
+
 # Extract demographic profiles from a pipeline output tree into a single population file
 python scripts/generate/extract_population_from_pipeline.py --seed-root path/to/pipeline_output/ \
     --output pipeline_population.json

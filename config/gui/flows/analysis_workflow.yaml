@@ -59,6 +59,20 @@ tasks:
       output-base:
     depends_on: [compare_synth_real]
 
+  method_significance:
+    label: Method Significance (per-category)
+    script: scripts/analyze/analyze_method_significance.py
+    dispatch: slugs
+    enabled: true
+    min_combos: 2                 # guard: loud skip below 2 checked combos
+    supports_force: true          # node shows a Force checkbox -> --force
+    force: true
+    options:
+      no-charts: false
+      strict: false
+      output-base:
+    depends_on: [compare_synth_real]
+
   compare_pops:
     label: Compare Two Populations
     script: scripts/analyze/score_fidelity.py

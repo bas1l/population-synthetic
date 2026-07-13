@@ -112,10 +112,11 @@ def test_shipped_workflow_ordering():
     order = [task.name for task in _shipped_state().ordered_tasks()]
     assert set(order) == {
         "map_populations", "compare_synth_real", "joint_fidelity", "model_performance",
-        "compare_pops", "llm_metrics_per_run", "llm_metrics_cross_run",
+        "method_significance", "compare_pops", "llm_metrics_per_run", "llm_metrics_cross_run",
     }
     assert order.index("map_populations") < order.index("compare_synth_real")
     assert order.index("compare_synth_real") < order.index("model_performance")
+    assert order.index("compare_synth_real") < order.index("method_significance")
     assert order.index("map_populations") < order.index("compare_pops")
     assert order.index("map_populations") < order.index("joint_fidelity")
 

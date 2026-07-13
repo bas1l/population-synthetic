@@ -33,6 +33,8 @@ gui = [
 ]
 analysis = [
     "scikit-learn>=1.3",
+    "scikit-posthocs>=0.9",
+    "statsmodels>=0.14",
 ]
 
 [tool.setuptools.packages.find]
