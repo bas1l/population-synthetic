@@ -16,7 +16,7 @@ from PyQt5.QtCore import QLineF, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QKeySequence, QPainter, QPen
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsTextItem, QGraphicsView, QShortcut
 
-from population_synthetic.gui_v2.widgets.dag_graph_items import GRID_SIZE, DagCategoryNode, DagEdge
+from population_synthetic.gui.widgets.dag_graph_items import GRID_SIZE, DagCategoryNode, DagEdge
 
 _SPACING_FACTOR = 1.4
 _COLOR_GRID = QColor("#e8e8e8")  # faint grey; visible but unobtrusive against the scene background

@@ -38,7 +38,7 @@ all real logic lives in the `population_synthetic.*` package (installed via
 | `benchmark_claude_latency.py` | Benchmark one-shot vs persistent Claude CLI subprocess latency |
 
 ### Root
-- `launch_gui.py` — launches the primary Flow Runner GUI (`python -m population_synthetic.gui_v2.main`).
+- `launch_gui.py` — launches the primary Flow Runner GUI (`python -m population_synthetic.gui.main`).
 
 ## Pipeline chains
 

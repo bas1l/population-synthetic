@@ -13,7 +13,7 @@ headlessly; the Phase-7 ``WorkflowRunner`` (QThread) drives it.
 
 Execution contract: the GUI walks tasks in :meth:`WorkflowState.ordered_tasks`
 order and TRANSLATES each into CLI invocations of the task's script via the
-pure builders in :mod:`population_synthetic.gui_v2.commands` — the spawned
+pure builders in :mod:`population_synthetic.gui.commands` — the spawned
 scripts do NOT read the workflow YAML.
 """
 

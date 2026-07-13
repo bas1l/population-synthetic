@@ -1,7 +1,7 @@
 """Shared execution substrate: process-tree kill, action descriptor, combo runner.
 
-Extracted from the deprecated v1 launcher (``gui/launcher_config.py`` +
-``gui/main_window.py``) so ``gui_v2`` no longer needs to import from ``gui``.
+Extracted from the removed v1 launcher (``gui/launcher_config.py`` +
+``gui/main_window.py``) so this package is self-contained.
 ``_kill_process_tree`` force-kills a subprocess and all of its descendants.
 ``ActionEntry`` is the minimal descriptor ``CombinationRunner`` needs to build
 and label each per-combo subprocess invocation. ``CombinationRunner`` (a

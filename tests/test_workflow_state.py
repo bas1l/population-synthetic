@@ -1,4 +1,4 @@
-"""Headless tests for the gui_v2 workflow engine (``workflow_state.py``).
+"""Headless tests for the gui workflow engine (``workflow_state.py``).
 
 Covers fail-fast validation (unknown dep, cycles, missing script, bad
 dispatch, min>max), deterministic Kahn ordering for the shipped
@@ -13,9 +13,9 @@ import pytest
 import yaml
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.gui_v2.workflow_state import TaskStatus, WorkflowState
+from population_synthetic.gui.workflow_state import TaskStatus, WorkflowState
 
-SHIPPED_WORKFLOW = PROJECT_ROOT / "config" / "gui" / "v2" / "flows" / "analysis_workflow.yaml"
+SHIPPED_WORKFLOW = PROJECT_ROOT / "config" / "gui" / "flows" / "analysis_workflow.yaml"
 
 
 def _task(script: str = "task.py", dispatch: str = "per_combo", enabled: bool = True,

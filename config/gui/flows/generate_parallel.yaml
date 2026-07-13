@@ -1,4 +1,4 @@
-# config/gui/v2/flows/generate_parallel.yaml
+# config/gui/flows/generate_parallel.yaml
 # options keys are CLI flag names; the GUI turns them into per-combo CLI args
 # (the script does NOT read this file).
 options:

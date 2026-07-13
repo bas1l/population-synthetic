@@ -22,8 +22,8 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QCheckBox, QLabel, QVBoxLayout, QWidget
 
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
-from population_synthetic.gui_v2.flow_config_model import FlowConfigModel
-from population_synthetic.gui_v2.widgets.checkable_axis_list import CheckableAxisList
+from population_synthetic.gui.flow_config_model import FlowConfigModel
+from population_synthetic.gui.widgets.checkable_axis_list import CheckableAxisList
 
 # Axis keys in flow-YAML `selection:` order == cartesian-product significance
 # order (model-major, country fastest) — same ordering as the legacy

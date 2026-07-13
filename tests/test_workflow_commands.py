@@ -1,4 +1,4 @@
-"""Headless tests for the gui_v2 command builders and WorkflowConfigModel.
+"""Headless tests for the gui command builders and WorkflowConfigModel.
 
 Covers the pure ``build_per_combo_cmds`` / ``build_slugs_cmd`` arg vectors
 (bool→flag, None/blank→omit, slugs via ``axis_slug``) and the
@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from population_synthetic.gui_v2.commands import build_per_combo_cmds, build_slugs_cmd
-from population_synthetic.gui_v2.workflow_config_model import WorkflowConfigModel
+from population_synthetic.gui.commands import build_per_combo_cmds, build_slugs_cmd
+from population_synthetic.gui.workflow_config_model import WorkflowConfigModel
 
 SCRIPT = Path("scripts/analyze/map_populations.py")
 COMBOS = [
@@ -212,7 +212,7 @@ def test_to_plain_returns_plain_containers(model):
 def test_to_plain_feeds_workflow_state(model):
     """A to_plain() snapshot is directly consumable by WorkflowState."""
     from population_synthetic._paths import PROJECT_ROOT
-    from population_synthetic.gui_v2.workflow_state import WorkflowState
+    from population_synthetic.gui.workflow_state import WorkflowState
 
     state = WorkflowState(model.to_plain(), PROJECT_ROOT)
     state.validate()  # scripts exist in the real repo; DAG is acyclic

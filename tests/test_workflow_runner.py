@@ -1,4 +1,4 @@
-"""Headless tests for the gui_v2 workflow runner (``workflow_runner.py``).
+"""Headless tests for the gui workflow runner (``workflow_runner.py``).
 
 These exercise the Qt-free :func:`execute_workflow` decision core directly —
 no display, no real subprocesses, no ``QApplication``. The runner is factored
@@ -19,14 +19,14 @@ plus an abort marking the running + pending tasks ``ABORTED``.
 from __future__ import annotations
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.gui_v2.workflow_runner import (
+from population_synthetic.gui.workflow_runner import (
     ConsoleLine,
     FinishedAll,
     TaskFinished,
     TaskStarted,
     execute_workflow,
 )
-from population_synthetic.gui_v2.workflow_state import TaskStatus, WorkflowState
+from population_synthetic.gui.workflow_state import TaskStatus, WorkflowState
 
 COMBO_A = ("claude_haiku", "all_pick", "swedish")
 COMBO_B = ("claude_sonnet", "all_pick", "swedish")

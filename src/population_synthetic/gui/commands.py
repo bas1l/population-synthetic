@@ -18,7 +18,7 @@ Option translation rules (identical to the legacy launcher's
 - anything else     → ``--key str(value)``
 
 Option keys are the CLI flag names in dash form (``no-charts`` →
-``--no-charts``) — see the per-flow YAML headers under ``config/gui/v2/flows/``.
+``--no-charts``) — see the per-flow YAML headers under ``config/gui/flows/``.
 
 Note: ``three_axis`` script flows currently execute through the reused
 ``CombinationRunner`` (imported from the legacy ``gui.main_window``), which

@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
 )
 
 from population_synthetic.generators.synthetic.manifest_loader import compose_manifest, discover_axis_values
-from population_synthetic.gui_v2.widgets.persona_count_worker import PersonaCountWorker
+from population_synthetic.gui.widgets.persona_count_worker import PersonaCountWorker
 
 _DASH = "—"
 _PENDING = "…"

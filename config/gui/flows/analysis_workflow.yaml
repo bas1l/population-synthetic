@@ -95,7 +95,9 @@ tasks:
     depends_on: []
 
 selection:                        # shared by ALL tasks in the chain
-  models: [claude_haiku]
+  models: [claude_haiku, claude_opus, claude_sonnet, ollama_deepseek_r1_14b, 
+      ollama_gemma4_e4b, ollama_llama31_8b, ollama_mistral_nemo_12b, 
+      openrouter_glm_52]
   strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick, 
       all_generate_pick, all_pick, all_pick_dag]
   countries: [swedish]

@@ -7,7 +7,7 @@ convention (unknown task names and unknown option keys raise; nothing can be
 added from the GUI).
 
 :meth:`to_plain` snapshots the whole document into plain Python containers —
-the input shape :class:`~population_synthetic.gui_v2.workflow_state.WorkflowState`
+the input shape :class:`~population_synthetic.gui.workflow_state.WorkflowState`
 is built from, so a run is isolated from concurrent GUI edits.
 
 Execution contract: Save is persistence only — on Run the GUI TRANSLATES each
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from population_synthetic.gui_v2.flow_config_model import FlowConfigModel
+from population_synthetic.gui.flow_config_model import FlowConfigModel
 
 _MISSING = object()
 

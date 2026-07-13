@@ -7,7 +7,7 @@ persists dragged positions to a ``<config>.layout.json`` sidecar next to the
 flow YAML, and supports zoom / middle-click pan / ``Ctrl+0`` fit.
 
 Bound to a
-:class:`~population_synthetic.gui_v2.workflow_config_model.WorkflowConfigModel`.
+:class:`~population_synthetic.gui.workflow_config_model.WorkflowConfigModel`.
 Checkbox toggles re-emit as :attr:`enabled_changed` / :attr:`force_changed`
 (the window writes them through the model); :meth:`set_task_status` drives the
 per-node run-state overlay so the graph doubles as the live run report.
@@ -26,9 +26,9 @@ from PyQt5.QtCore import QPoint, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QKeySequence, QPainter
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsView, QShortcut
 
-from population_synthetic.gui_v2.widgets.workflow_graph_items import WorkflowEdge, WorkflowTaskNode
-from population_synthetic.gui_v2.workflow_config_model import WorkflowConfigModel
-from population_synthetic.gui_v2.workflow_state import TaskStatus
+from population_synthetic.gui.widgets.workflow_graph_items import WorkflowEdge, WorkflowTaskNode
+from population_synthetic.gui.workflow_config_model import WorkflowConfigModel
+from population_synthetic.gui.workflow_state import TaskStatus
 
 logger = logging.getLogger(__name__)
 

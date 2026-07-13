@@ -1,4 +1,4 @@
-"""Main window for the gui_v2 Flow Runner.
+"""Main window for the gui Flow Runner.
 
 Port of the reference AnalysisRunnerGUI ``runner_window.py`` (minus Prefect).
 Three-column splitter (FlowSelector | center | AxisSelector) over the reused
@@ -18,7 +18,7 @@ the title and confirm-discard on flow switch and close.
 
 Execution: Run saves the flow YAML, then — for ``kind: script`` — dispatches
 the checked axis combos through the reused :class:`CombinationRunner`
-(from :mod:`population_synthetic.gui_v2.execution`, one subprocess per combo,
+(from :mod:`population_synthetic.gui.execution`, one subprocess per combo,
 sequential); for ``kind: workflow`` it snapshots + validates a
 :class:`WorkflowState` and runs the enabled chain through
 :class:`WorkflowRunner`. Abort kills the whole process tree via the runner's
@@ -57,19 +57,19 @@ from PyQt5.QtWidgets import (
 
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
-from population_synthetic.gui_v2.execution import ActionEntry, CombinationRunner
-from population_synthetic.gui_v2.flow_config_model import FlowConfigModel
-from population_synthetic.gui_v2.menu_config import FlowEntry
-from population_synthetic.gui_v2.widgets.axis_selector import AxisSelector
-from population_synthetic.gui_v2.widgets.console_widget import ConsoleWidget
-from population_synthetic.gui_v2.widgets.dag_graph_widget import DagGraphWidget
-from population_synthetic.gui_v2.widgets.flow_options_panel import FlowOptionsPanel
-from population_synthetic.gui_v2.widgets.flow_selector import FlowSelector
-from population_synthetic.gui_v2.widgets.population_summary import PopulationSummaryPanel
-from population_synthetic.gui_v2.widgets.workflow_graph_view import WorkflowGraphView
-from population_synthetic.gui_v2.workflow_config_model import WorkflowConfigModel
-from population_synthetic.gui_v2.workflow_runner import WorkflowRunner
-from population_synthetic.gui_v2.workflow_state import TaskStatus, WorkflowState
+from population_synthetic.gui.execution import ActionEntry, CombinationRunner
+from population_synthetic.gui.flow_config_model import FlowConfigModel
+from population_synthetic.gui.menu_config import FlowEntry
+from population_synthetic.gui.widgets.axis_selector import AxisSelector
+from population_synthetic.gui.widgets.console_widget import ConsoleWidget
+from population_synthetic.gui.widgets.dag_graph_widget import DagGraphWidget
+from population_synthetic.gui.widgets.flow_options_panel import FlowOptionsPanel
+from population_synthetic.gui.widgets.flow_selector import FlowSelector
+from population_synthetic.gui.widgets.population_summary import PopulationSummaryPanel
+from population_synthetic.gui.widgets.workflow_graph_view import WorkflowGraphView
+from population_synthetic.gui.workflow_config_model import WorkflowConfigModel
+from population_synthetic.gui.workflow_runner import WorkflowRunner
+from population_synthetic.gui.workflow_state import TaskStatus, WorkflowState
 
 _BASE_TITLE = "Population Synth Flow Runner"
 
@@ -96,7 +96,7 @@ class _StrategyDagView(DagGraphWidget):
             data = yaml.safe_load(fh)
         if not isinstance(data, dict):
             raise ValueError(f"Strategy file must be a YAML mapping: {strategy_path}")
-        cache_dir = Path(tempfile.gettempdir()) / "population_synthetic_gui_v2" / "strategy_dag_cache"
+        cache_dir = Path(tempfile.gettempdir()) / "population_synthetic_gui" / "strategy_dag_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         json_path = cache_dir / f"{strategy_path.stem}.json"
         json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

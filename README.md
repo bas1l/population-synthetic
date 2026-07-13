@@ -10,7 +10,7 @@ Standalone toolkit for generating synthetic population profiles from real nation
 - **Identity Generation** -- LLM-based persona identity creation across multiple providers (Gemini, Claude CLI, Ollama, OpenAI-compatible European providers), with batch and configurable strategy modes, manifest bundles, and composable model x strategy x country axes
 - **Population Comparison** -- Statistical evaluation (chi-squared, total variation distance) and visual comparison (bar charts, radar plots) between any two population files, or between pipeline output and a national reference
 - **Run Analytics** -- Post-processing analytics on LLM generation runs (call counts, retry rates, token/latency distributions, value diversity) plus cross-run scientific comparison (Kruskal-Wallis + Dunn)
-- **GUI (Flow Runner)** -- Config-driven PyQt5 desktop launcher (`gui_v2`) to run generation, comparison, and DAG-based analysis workflows across the cartesian product of selected models, strategies, and countries.
+- **GUI (Flow Runner)** -- Config-driven PyQt5 desktop launcher (`gui`) to run generation, comparison, and DAG-based analysis workflows across the cartesian product of selected models, strategies, and countries.
 
 ## Installation
 
@@ -140,10 +140,10 @@ python scripts/analyze/compare_run_analytics.py
 
 ### Launch the GUI
 
-The primary GUI is the config-driven Flow Runner (`gui_v2`):
+The primary GUI is the config-driven Flow Runner (`gui`):
 
 ```bash
-python -m population_synthetic.gui_v2.main
+python -m population_synthetic.gui.main
 ```
 
 ## Environment
@@ -187,7 +187,7 @@ src/population_synthetic/
         per_run/          Single-run pipeline (parse -> join -> aggregate -> visualize/report)
         cross_run/        Cross-run pipeline (load -> test -> build -> visualize)
 
-    gui_v2/               PyQt5 Flow Runner -- sole GUI (menu.yaml + per-flow YAML, DAG workflow); execution.py holds the runner/kill-tree substrate
+    gui/               PyQt5 Flow Runner -- sole GUI (menu.yaml + per-flow YAML, DAG workflow); execution.py holds the runner/kill-tree substrate
 
     utils/                Pipeline utilities (should_process_task skip-if-done logic)
 
@@ -225,7 +225,7 @@ The output slug is `{country_id}_{strategy_id}_{model_id}`, and the run director
 - **API response caches (git-ignored):** `config/database/caches/scb/`, `config/database/caches/ssb/`, `config/database/caches/eurostat/`, `config/database/caches/istat/`
 - **Category label mappings:** `config/mapping/{scb,ssb,istat}/` -- one JSON file per demographic attribute (filename stem == top-level key), grouped by source agency. The loader merges every `*.json` in a country directory into a single dict
 - **Experiment / analytics defaults:** `config/synthetic/experiment_defaults.yaml`, `config/analysis/analyze_defaults.yaml`
-- **GUI config:** `config/gui/v2/menu.yaml` + `config/gui/v2/flows/*.yaml` (the Flow Runner GUI)
+- **GUI config:** `config/gui/menu.yaml` + `config/gui/flows/*.yaml` (the Flow Runner GUI)
 
 ## Data Sources
 

@@ -1,10 +1,10 @@
-"""Entry point for the gui_v2 Flow Runner.
+"""Entry point for the gui Flow Runner.
 
 Port of the reference AnalysisRunnerGUI launch script: sets High-DPI
 attributes BEFORE the ``QApplication`` is constructed, installs a
 ``sys.excepthook`` so unhandled exceptions in Qt slots are logged instead of
-silently crashing, parses ``config/gui/v2/menu.yaml``, and shows the
-:class:`FlowRunnerWindow`. Run as ``python -m population_synthetic.gui_v2.main``.
+silently crashing, parses ``config/gui/menu.yaml``, and shows the
+:class:`FlowRunnerWindow`. Run as ``python -m population_synthetic.gui.main``.
 """
 
 import logging
@@ -15,8 +15,8 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.gui_v2.main_window import FlowRunnerWindow
-from population_synthetic.gui_v2.menu_config import parse_menu_config
+from population_synthetic.gui.main_window import FlowRunnerWindow
+from population_synthetic.gui.menu_config import parse_menu_config
 
 # High-DPI awareness — must be set BEFORE QApplication is constructed, otherwise
 # showMaximized() on Windows with display scaling renders a ~half-screen window
@@ -46,9 +46,9 @@ def main() -> None:
     )
     _install_exception_hook()
 
-    menu_yaml = PROJECT_ROOT / "config" / "gui" / "v2" / "menu.yaml"
+    menu_yaml = PROJECT_ROOT / "config" / "gui" / "menu.yaml"
     if not menu_yaml.is_file():
-        print(f"Error: gui_v2 menu config not found at {menu_yaml}")
+        print(f"Error: gui menu config not found at {menu_yaml}")
         sys.exit(1)
 
     entries = parse_menu_config(menu_yaml, PROJECT_ROOT)
