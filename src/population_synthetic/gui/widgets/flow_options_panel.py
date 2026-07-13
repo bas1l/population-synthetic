@@ -43,8 +43,8 @@ from PyQt5.QtWidgets import (
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
-from population_synthetic.gui_v2.flow_config_model import FlowConfigModel
-from population_synthetic.gui_v2.widgets.collapsible_section import CollapsibleSection
+from population_synthetic.gui.flow_config_model import FlowConfigModel
+from population_synthetic.gui.widgets.collapsible_section import CollapsibleSection
 
 _COMPLEX_FG = QColor("#336699")
 

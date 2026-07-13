@@ -1,4 +1,4 @@
-# gui_v2 flow menu — flows grouped by category.
+# gui flow menu — flows grouped by category.
 # kind: script (default) = single-script flow with a top-level `script`;
 # kind: workflow          = DAG flow, scripts live per task in its config YAML.
 categories:
@@ -7,10 +7,10 @@ categories:
       - name: LLM Synthetic Population
         kind: script                 # default; may be omitted
         script: scripts/generate/generate_identities_parallel.py
-        config: config/gui/v2/flows/generate_parallel.yaml
+        config: config/gui/flows/generate_parallel.yaml
         axis_mode: three_axis
   - name: Analysis
     flows:
       - name: Analysis Workflow
         kind: workflow
-        config: config/gui/v2/flows/analysis_workflow.yaml
+        config: config/gui/flows/analysis_workflow.yaml

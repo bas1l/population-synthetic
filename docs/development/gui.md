@@ -1,25 +1,27 @@
-# gui_v2 — config-driven Flow Runner GUI
+# gui — config-driven Flow Runner GUI
 
-`gui_v2` (`python -m population_synthetic.gui_v2.main`, requires the `.[gui]`
-extra) is the **primary** PyQt5 launcher. The original `gui/` package
-(`python -m population_synthetic.gui.main`) is **deprecated** — it still runs as a
-fallback and emits a `DeprecationWarning`, but it is retained mainly because
-`gui_v2` reuses its widgets and runners (`CombinationRunner`, `_kill_process_tree`,
-`ConsoleWidget`, `DagGraphWidget`, `CheckableAxisList`, `PersonaCountWorker`) as
-shared substrate — so the package must not be removed. `gui_v2` adopts a two-tier,
-editable-YAML config model and a DAG-based Analysis Workflow. This page documents
-the three contracts a maintainer needs before changing it.
+`gui` (`python -m population_synthetic.gui.main`, requires the `.[gui]`
+extra) is the **sole** PyQt5 launcher — the deprecated v1 launcher package (the
+old `LauncherWindow`) has been removed. Its runner and widget substrate now
+lives inside `gui` itself: `gui/execution.py` holds `CombinationRunner`
+and `_kill_process_tree`, and `gui/widgets/` holds `console_widget.py`
+(`ConsoleWidget`), `dag_graph_widget.py`/`dag_graph_items.py` (`DagGraphWidget`),
+`checkable_axis_list.py` (`CheckableAxisList`), and `persona_count_worker.py`
+(`PersonaCountWorker`) — all self-contained. `gui` adopts a two-tier,
+editable-YAML config model and a DAG-based
+Analysis Workflow. This page documents the three contracts a maintainer needs
+before changing it.
 
 ## Two-tier config
 
-Configuration lives under `config/gui/v2/`:
+Configuration lives under `config/gui/`:
 
 - **`menu.yaml`** — the catalogue: categories → flows. Each flow entry is
   `{name, kind, script, config, axis_mode}`. `kind: script` (default) points at
   a single script; `kind: workflow` has **no** top-level `script` (scripts live
   per task in its config). Missing `script`/`config` *files* warn-and-skip;
   `kind`/`script` **mismatches raise** (fail-fast).
-- **one round-trip YAML per flow** (`config/gui/v2/flows/*.yaml`) — the flow's
+- **one round-trip YAML per flow** (`config/gui/flows/*.yaml`) — the flow's
   editable state: `options:` (keys are CLI flag names in dash form),
   `selection:` (checked `models`/`strategies`/`countries`), and `force:` for
   generate flows. The GUI loads it with ruamel round-trip, edits it in place,
@@ -34,9 +36,9 @@ the flow's `options` + `selection` into CLI invocations of the existing
 scripts (`--model-id/--strategy-id/--country-id` + override flags, `--force`,
 or `--slug` lists). There is **no** `--flow-config` argument, and one must never
 be added — the flow YAML is a GUI-side persistence/UX artifact only. This reuses
-the proven `CombinationRunner` + `_kill_process_tree` from `gui/main_window.py`
-verbatim, so no script rewrites are needed. The pure command builders live in
-`gui_v2/commands.py` (`build_per_combo_cmds`, `build_slugs_cmd`) and are shared
+the proven `CombinationRunner` + `_kill_process_tree` from `gui/execution.py`,
+so no script rewrites are needed. The pure command builders live in
+`gui/commands.py` (`build_per_combo_cmds`, `build_slugs_cmd`) and are shared
 by both single-script flows and workflow tasks. This invariant is asserted in
 inline comments in `main_window._on_run`, `workflow_runner.py`, and
 `commands.py`.
@@ -51,7 +53,7 @@ Dispatch shapes:
 
 ## Workflow contract — GUI-side dependency chaining
 
-The **Analysis Workflow** flow (`config/gui/v2/flows/analysis_workflow.yaml`) is
+The **Analysis Workflow** flow (`config/gui/flows/analysis_workflow.yaml`) is
 a DAG of tasks (`{script, dispatch, enabled, options, depends_on, min/max_combos}`).
 Ordering is **derived from `depends_on`** by topological sort (Kahn, YAML
 authoring order as the deterministic tie-break) — there is no hardcoded Python

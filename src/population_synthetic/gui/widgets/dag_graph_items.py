@@ -24,6 +24,7 @@ _CORNER_RADIUS = 6
 _BADGE_SIZE = 10
 _ARROW_SIZE = 8
 _CTRL_OFFSET = 60
+GRID_SIZE = 20  # scene-units; node positions snap to this grid (DagGraphView draws matching lines)
 
 _METHOD_COLORS = {
     "pick":                          ("#d0e8ff", "#2255aa"),
@@ -108,6 +109,13 @@ class DagCategoryNode(QGraphicsRectItem):
         return self.mapToScene(QPointF(r.left(), r.center().y()))
 
     def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemPositionChange:
+            # Snap the proposed top-left to the grid before the move commits. Snapping the
+            # anchor (not the center) keeps same-row nodes of differing widths left-aligned.
+            return QPointF(
+                round(value.x() / GRID_SIZE) * GRID_SIZE,
+                round(value.y() / GRID_SIZE) * GRID_SIZE,
+            )
         if change == QGraphicsItem.ItemPositionHasChanged:
             self.signals.position_changed.emit(self.name, value.x(), value.y())
         return super().itemChange(change, value)

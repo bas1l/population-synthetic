@@ -9,7 +9,7 @@ a live ``subprocess.Popen`` (streaming stdout, reused from the legacy
 
 Execution contract: on Run the GUI TRANSLATES each workflow task into CLI
 invocations of the task's script via the pure builders in
-:mod:`population_synthetic.gui_v2.commands` — the spawned scripts do NOT read
+:mod:`population_synthetic.gui.commands` — the spawned scripts do NOT read
 the workflow YAML (there is no ``--flow-config`` argument; do not add one).
 
 Execution semantics (per task, in :meth:`WorkflowState.ordered_tasks` order):
@@ -38,8 +38,8 @@ from pathlib import Path
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-from population_synthetic.gui_v2.commands import build_per_combo_cmds, build_slugs_cmd
-from population_synthetic.gui_v2.workflow_state import TaskStatus, WorkflowState, WorkflowTask
+from population_synthetic.gui.commands import build_per_combo_cmds, build_slugs_cmd
+from population_synthetic.gui.workflow_state import TaskStatus, WorkflowState, WorkflowTask
 
 Combo = tuple[str, str, str]
 
@@ -248,10 +248,10 @@ class WorkflowRunner(QThread):
 
     def abort(self) -> None:
         """Flag the run aborted and kill the live process tree (no orphans)."""
-        # Imported lazily: the legacy `gui.main_window` pulls in grandalf (a
-        # `[gui]` dep), which the Qt-free `execute_workflow` core and its
-        # headless tests must not require just to import this module.
-        from population_synthetic.gui.main_window import _kill_process_tree
+        # Imported lazily to keep this file's headless-testable `execute_workflow`
+        # core decoupled from the CombinationRunner/ActionEntry classes defined
+        # alongside `_kill_process_tree` in `gui.execution`.
+        from population_synthetic.gui.execution import _kill_process_tree
 
         self._abort_flag = True
         if self._process is not None:

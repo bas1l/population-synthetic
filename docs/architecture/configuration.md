@@ -17,7 +17,7 @@ The `config/` inventory: what each config tree holds and which code reads it.
 - **Experiment defaults:** `config/synthetic/experiment_defaults.yaml` -- base parameters including `output_base` path
 - **Comparison targets:** `config/analysis/comparison_targets.yaml` -- the explicit completeness list consumed by the map stage (`scripts/analyze/map_populations.py`). `targets:` is a list of entries, each either a plain manifest-path string (country inferred from the simulation-config filename) or a `{manifest, country}` mapping (explicit country override). The map stage processes only these targets -- it does not scan disk.
 - **Run-analytics defaults:** `config/analysis/analyze_defaults.yaml` -- `output_base` plus the `analytics` output layout used by `analyze_run.py` / `compare_run_analytics.py`: per-run analytics land in `{output_base}/03_Analysis/run_analytics/{slug}/` and cross-run comparison in `.../run_analytics/_comparison/`
-- **GUI config:** `config/gui/v2/menu.yaml` + `config/gui/v2/flows/*.yaml` -- the catalogue and per-flow round-trip YAML for the primary Flow Runner GUI (`gui_v2`; see [gui_v2 Flow Runner](../development/gui-v2.md)). `config/gui/launcher.yaml` -- action groups and parameter definitions for the **deprecated** original PyQt5 launcher (`gui`)
+- **GUI config:** `config/gui/menu.yaml` + `config/gui/flows/*.yaml` -- the catalogue and per-flow round-trip YAML for the Flow Runner GUI (`gui`; see [gui Flow Runner](../development/gui.md))
 
 ## See also
 

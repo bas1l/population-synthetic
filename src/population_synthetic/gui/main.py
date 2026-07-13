@@ -1,47 +1,62 @@
-"""Entry point for the **deprecated** original Population Synth PyQt5 launcher.
+"""Entry point for the gui Flow Runner.
 
-.. deprecated::
-    This ``LauncherWindow`` launcher has been superseded by the config-driven
-    Flow Runner GUI, ``python -m population_synthetic.gui_v2.main``, which is now
-    the primary GUI. This entry point still works as a fallback, but the ``gui/``
-    package is retained mainly because ``gui_v2`` reuses its widgets and runners
-    as shared substrate. New work should target ``gui_v2``.
-
-Creates the ``QApplication``, parses ``config/gui/launcher.yaml`` via
-``parse_launcher_config``, and shows the ``LauncherWindow``. Run as
-``python -m population_synthetic.gui.main``.
+Port of the reference AnalysisRunnerGUI launch script: sets High-DPI
+attributes BEFORE the ``QApplication`` is constructed, installs a
+``sys.excepthook`` so unhandled exceptions in Qt slots are logged instead of
+silently crashing, parses ``config/gui/menu.yaml``, and shows the
+:class:`FlowRunnerWindow`. Run as ``python -m population_synthetic.gui.main``.
 """
-import sys
-import warnings
 
-from PyQt5.QtGui import QFont
+import logging
+import sys
+import traceback
+
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.gui.launcher_config import parse_launcher_config
-from population_synthetic.gui.main_window import LauncherWindow
+from population_synthetic.gui.main_window import FlowRunnerWindow
+from population_synthetic.gui.menu_config import parse_menu_config
 
-_DEPRECATION_MESSAGE = (
-    "population_synthetic.gui.main is the deprecated original launcher. "
-    "Use the primary Flow Runner GUI instead: "
-    "python -m population_synthetic.gui_v2.main"
-)
+# High-DPI awareness — must be set BEFORE QApplication is constructed, otherwise
+# showMaximized() on Windows with display scaling renders a ~half-screen window
+# with a title bar drawn at the unscaled size.
+QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+
+_logger = logging.getLogger(__name__)
 
 
-def main():
-    warnings.warn(_DEPRECATION_MESSAGE, DeprecationWarning, stacklevel=2)
-    print(f"\n\033[33m[DEPRECATED] {_DEPRECATION_MESSAGE}\033[0m\n", file=sys.stderr)
+def _install_exception_hook() -> None:
+    """Replace sys.excepthook so that unhandled exceptions in Qt slots are
+    logged instead of silently crashing the application."""
+
+    def _hook(exc_type, exc_value, exc_tb):
+        msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        _logger.critical("Unhandled exception in Qt callback:\n%s", msg)
+        print(msg, file=sys.stderr, flush=True)
+
+    sys.excepthook = _hook
+
+
+def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    _install_exception_hook()
+
+    menu_yaml = PROJECT_ROOT / "config" / "gui" / "menu.yaml"
+    if not menu_yaml.is_file():
+        print(f"Error: gui menu config not found at {menu_yaml}")
+        sys.exit(1)
+
+    entries = parse_menu_config(menu_yaml, PROJECT_ROOT)
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Population Synth Launcher")
-    app.setFont(QFont(app.font().family(), 12))
+    app.setApplicationName("Population Synth Flow Runner")
 
-    launcher_yaml = PROJECT_ROOT / "config" / "gui" / "launcher.yaml"
-    config = parse_launcher_config(launcher_yaml)
-
-    window = LauncherWindow(config=config)
-    window.setWindowTitle("Population Synth Launcher")
-    window.resize(1300, 750)
+    window = FlowRunnerWindow(entries)
     window.show()
 
     sys.exit(app.exec_())

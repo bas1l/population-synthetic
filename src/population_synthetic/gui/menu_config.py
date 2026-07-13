@@ -1,4 +1,4 @@
-"""gui_v2 menu configuration — ``FlowEntry`` dataclass and ``menu.yaml`` parser.
+"""gui menu configuration — ``FlowEntry`` dataclass and ``menu.yaml`` parser.
 
 Port of the reference AnalysisRunnerGUI ``runner_config.py``. A flow entry may
 be a single-script flow (``kind: script``, the default) or a workflow flow
@@ -23,7 +23,7 @@ _VALID_KINDS = ("script", "workflow")
 
 @dataclass
 class FlowEntry:
-    """A single flow declared in ``config/gui/v2/menu.yaml``.
+    """A single flow declared in ``config/gui/menu.yaml``.
 
     Attributes:
         name: Display name shown on the flow button.
@@ -69,12 +69,12 @@ def parse_menu_config(yaml_path: Path, project_root: Path) -> list[FlowEntry]:
         data = yaml.safe_load(fh)
 
     if not isinstance(data, dict) or "categories" not in data:
-        raise ValueError(f"gui_v2 menu {yaml_path}: expected a top-level 'categories' mapping")
+        raise ValueError(f"gui menu {yaml_path}: expected a top-level 'categories' mapping")
 
     entries: list[FlowEntry] = []
     for category_block in data["categories"]:
         if not isinstance(category_block, dict) or "name" not in category_block:
-            raise ValueError(f"gui_v2 menu {yaml_path}: each category needs a 'name' key")
+            raise ValueError(f"gui menu {yaml_path}: each category needs a 'name' key")
         category: str = category_block["name"]
         for flow in category_block.get("flows", []):
             entry = _parse_flow(flow, category, yaml_path, project_root)
@@ -92,34 +92,34 @@ def _parse_flow(
 ) -> FlowEntry | None:
     """Validate one flow mapping; return an entry or ``None`` (warn-and-skip)."""
     if not isinstance(flow, dict) or "name" not in flow:
-        raise ValueError(f"gui_v2 menu {yaml_path}: each flow needs a 'name' key (category '{category}')")
+        raise ValueError(f"gui menu {yaml_path}: each flow needs a 'name' key (category '{category}')")
     name: str = flow["name"]
 
     kind: str = flow.get("kind", "script")
     if kind not in _VALID_KINDS:
         raise ValueError(
-            f"gui_v2 menu {yaml_path}: flow '{name}' has unknown kind '{kind}' (expected one of {_VALID_KINDS})"
+            f"gui menu {yaml_path}: flow '{name}' has unknown kind '{kind}' (expected one of {_VALID_KINDS})"
         )
 
     if kind == "workflow" and "script" in flow:
         raise ValueError(
-            f"gui_v2 menu {yaml_path}: flow '{name}' is 'kind: workflow' but declares a top-level "
+            f"gui menu {yaml_path}: flow '{name}' is 'kind: workflow' but declares a top-level "
             f"'script' — workflow scripts live per task in its config YAML"
         )
     if kind == "script" and "script" not in flow:
-        raise ValueError(f"gui_v2 menu {yaml_path}: flow '{name}' is 'kind: script' but has no 'script' key")
+        raise ValueError(f"gui menu {yaml_path}: flow '{name}' is 'kind: script' but has no 'script' key")
 
     if "config" not in flow:
-        raise ValueError(f"gui_v2 menu {yaml_path}: flow '{name}' has no 'config' key")
+        raise ValueError(f"gui menu {yaml_path}: flow '{name}' has no 'config' key")
 
     script = project_root / flow["script"] if kind == "script" else None
     config = project_root / flow["config"]
 
     if script is not None and not script.exists():
-        warnings.warn(f"gui_v2: skipping flow '{name}' — script not found: {script}", stacklevel=2)
+        warnings.warn(f"gui: skipping flow '{name}' — script not found: {script}", stacklevel=2)
         return None
     if not config.exists():
-        warnings.warn(f"gui_v2: skipping flow '{name}' — config not found: {config}", stacklevel=2)
+        warnings.warn(f"gui: skipping flow '{name}' — config not found: {config}", stacklevel=2)
         return None
 
     return FlowEntry(

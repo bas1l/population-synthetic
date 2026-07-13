@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from population_synthetic.gui_v2.menu_config import FlowEntry
+from population_synthetic.gui.menu_config import FlowEntry
 
 
 class FlowSelector(QWidget):

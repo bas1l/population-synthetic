@@ -1,8 +1,8 @@
 """AxisSelector — right column: three checkable axis lists bound to a flow YAML.
 
 Composes three reused :class:`CheckableAxisList` widgets (models, strategies,
-countries — imported unmodified from the legacy launcher, mirroring the
-legacy ``ExperimentSelector`` composition) populated from
+countries — mirroring the legacy ``ExperimentSelector`` composition)
+populated from
 ``discover_axis_values``, plus a "Combos: N" label showing the
 cartesian-product count and a "Force reprocessing" checkbox shown only for
 flows whose YAML declares a top-level ``force:`` key (generate flows).
@@ -22,8 +22,8 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QCheckBox, QLabel, QVBoxLayout, QWidget
 
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
+from population_synthetic.gui.flow_config_model import FlowConfigModel
 from population_synthetic.gui.widgets.checkable_axis_list import CheckableAxisList
-from population_synthetic.gui_v2.flow_config_model import FlowConfigModel
 
 # Axis keys in flow-YAML `selection:` order == cartesian-product significance
 # order (model-major, country fastest) — same ordering as the legacy

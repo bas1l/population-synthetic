@@ -6,13 +6,13 @@ Port of the reference AnalysisRunnerGUI ``dag_graph_items.py``
 :class:`QGraphicsProxyWidget`s, drawn gray @ 0.55 opacity when disabled, plus a
 directed :class:`WorkflowEdge`. New over the reference: a
 :meth:`WorkflowTaskNode.set_status` run-state overlay
-(:class:`~population_synthetic.gui_v2.workflow_state.TaskStatus`) so the graph
+(:class:`~population_synthetic.gui.workflow_state.TaskStatus`) so the graph
 doubles as the live run report.
 
 The ``Force`` checkbox is present only for tasks whose YAML declares
 ``supports_force: true``; the ``Enabled`` checkbox is always present. Checkbox
 toggles emit ``enabled_changed`` / ``force_changed`` for the view to write
-through :class:`~population_synthetic.gui_v2.workflow_config_model.WorkflowConfigModel`.
+through :class:`~population_synthetic.gui.workflow_config_model.WorkflowConfigModel`.
 """
 
 from __future__ import annotations
@@ -41,8 +41,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from population_synthetic.gui_v2.workflow_config_model import WorkflowConfigModel
-from population_synthetic.gui_v2.workflow_state import TaskStatus
+from population_synthetic.gui.workflow_config_model import WorkflowConfigModel
+from population_synthetic.gui.workflow_state import TaskStatus
 
 _NODE_H = 92
 _MIN_NODE_W = 200
