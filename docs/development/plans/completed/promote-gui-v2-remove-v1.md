@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-13
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-07-13 20:08
 **Base Branch:** `dev`
 > Note: the working tree was on `fix/fidelity-resilient-charts-cleanup` when this
 > plan was written. This feature must be **isolated** from that fix and from
