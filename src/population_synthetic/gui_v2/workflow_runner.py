@@ -132,7 +132,7 @@ def _run_task(
                 return code  # first nonzero exit fails the whole task
         return 0
     # dispatch == "slugs": one invocation total
-    cmd = build_slugs_cmd(task.script, combos, task.options)
+    cmd = build_slugs_cmd(task.script, combos, task.options, task.force)
     return run_cmd(cmd)
 
 

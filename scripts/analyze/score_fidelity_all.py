@@ -16,6 +16,7 @@ Usage:
     python scripts/analyze/score_fidelity_all.py --model claude_haiku --strategy all_pick --radar-tv-only
     python scripts/analyze/score_fidelity_all.py --slug swedish_all_pick_claude_haiku
     python scripts/analyze/score_fidelity_all.py --n-synthetic 100 --sample-seed 0
+    python scripts/analyze/score_fidelity_all.py --force
 
 --country        Country axis ID filter (default: all countries in the mapped index). May be repeated.
 --model          Model axis ID filter (e.g. claude_haiku). May be repeated. Default: all models.
@@ -29,6 +30,8 @@ Usage:
                  draw, restoring equivalent population size for the size-sensitive metrics. Blank/omitted
                  = no cap (current behaviour). Populations smaller than N run in full with a loud warning.
 --sample-seed    Seed for the without-replacement subsample draw (default 0; reproducible).
+--force          Recompute a slug even if its fidelity/{slug}/{slug}.json already exists (default:
+                 reload the existing per-slug report so it still feeds the summary + radar grid).
 """
 
 import argparse
@@ -119,6 +122,12 @@ def _parse_args() -> argparse.Namespace:
         default=0,
         metavar="SEED",
         help="Seed for the --n-synthetic without-replacement subsample draw (default: 0; reproducible).",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Recompute a slug even if its fidelity/{slug}/{slug}.json already exists "
+        "(default: reload the existing per-slug report so it still feeds the summary + radar grid).",
     )
     return parser.parse_args()
 
@@ -272,40 +281,50 @@ def main() -> None:
                 print(f"[{slug}] SKIP: mapped synthetic file not found: {synthetic_path}")
                 continue
 
-            if real_pop is None:
-                real_file = entry.get("real_file")
-                if real_file is None:
-                    print(f"[{slug}] SKIP: no mapped real population recorded for {country_id}.")
-                    continue
-                real_path = mapped_dir / real_file
-                if not real_path.exists():
-                    print(
-                        f"ERROR: mapped real population not found: {real_path}\n"
-                        "Run scripts/analyze/map_populations.py first.",
-                        file=sys.stderr,
-                    )
-                    sys.exit(1)
-                real_pop = _load_json(real_path)
-                real_label = real_path.stem
-
-            print(f"[{slug}] Processing...")
-            synthetic_pop = _load_json(synthetic_path)
-            synthetic_pop = subsample_population(synthetic_pop, args.n_synthetic, args.sample_seed)
-
-            n_synthetic = synthetic_pop["metadata"]["n"]
-            if n_synthetic < 5:
-                print(f"  WARNING: only {n_synthetic} extracted individuals -- statistical tests unreliable")
-
-            evaluator = StatisticalEvaluator(real_pop, synthetic_pop, scheme=scheme)
-            report = evaluator.generate_report()
-
             comparison_output_dir = comparison_dir / slug
             output_path = comparison_output_dir / f"{slug}.json"
-            write_comparison_artifacts(
-                report, real_pop, synthetic_pop, output_path, scheme,
-                slug=slug, real_label=real_label,
-                no_charts=args.no_charts, radar_tv_only=args.radar_tv_only,
-            )
+
+            # Idempotent skip: reload the existing per-slug report rather than recomputing, so it
+            # still contributes to the summary + radar grid (Full comparison output invariant). Only
+            # recompute when forced or the report is absent. `n` comes from the stored report's
+            # population_b block; the stored marginals/coherence feed the aggregates directly.
+            if not args.force and output_path.exists():
+                report = _load_json(output_path)
+                n_synthetic = report["metadata"]["population_b"]["n"]
+                print(f"[{slug}] SKIP (exists): {output_path}")
+            else:
+                if real_pop is None:
+                    real_file = entry.get("real_file")
+                    if real_file is None:
+                        print(f"[{slug}] SKIP: no mapped real population recorded for {country_id}.")
+                        continue
+                    real_path = mapped_dir / real_file
+                    if not real_path.exists():
+                        print(
+                            f"ERROR: mapped real population not found: {real_path}\n"
+                            "Run scripts/analyze/map_populations.py first.",
+                            file=sys.stderr,
+                        )
+                        sys.exit(1)
+                    real_pop = _load_json(real_path)
+                    real_label = real_path.stem
+
+                print(f"[{slug}] Processing...")
+                synthetic_pop = _load_json(synthetic_path)
+                synthetic_pop = subsample_population(synthetic_pop, args.n_synthetic, args.sample_seed)
+
+                n_synthetic = synthetic_pop["metadata"]["n"]
+                if n_synthetic < 5:
+                    print(f"  WARNING: only {n_synthetic} extracted individuals -- statistical tests unreliable")
+
+                evaluator = StatisticalEvaluator(real_pop, synthetic_pop, scheme=scheme)
+                report = evaluator.generate_report()
+
+                write_comparison_artifacts(
+                    report, real_pop, synthetic_pop, output_path, scheme,
+                    slug=slug, real_label=real_label,
+                    no_charts=args.no_charts, radar_tv_only=args.radar_tv_only,
+                )
 
             if decomposed is not None:
                 _, strategy_id, model_id = decomposed

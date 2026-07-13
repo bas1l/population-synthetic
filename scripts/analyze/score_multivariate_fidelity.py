@@ -15,6 +15,7 @@ Usage:
     python scripts/analyze/score_multivariate_fidelity.py --slug swedish_all_pick_claude_sonnet
     python scripts/analyze/score_multivariate_fidelity.py --slug swedish_all_pick_claude_sonnet --no-charts
     python scripts/analyze/score_multivariate_fidelity.py --n-synthetic 100 --sample-seed 0
+    python scripts/analyze/score_multivariate_fidelity.py --force
 
 --country      Country axis ID filter (default: all countries in the mapped index). May be repeated.
 --slug         Exact slug filter ({country}_{strategy}_{model}). May be repeated. Keeps only the
@@ -26,6 +27,8 @@ Usage:
                = no cap. Populations smaller than N run in full with a loud warning. Use the same N and
                --sample-seed as the fidelity run to draw the identical subset.
 --sample-seed  Seed for the without-replacement subsample draw (default 0; reproducible).
+--force        Recompute a slug even if its multivariate_fidelity/{slug}/{slug}.json already exists
+               (default: reload the existing envelope so it still feeds the per-country roll-up).
 
 Outputs, under {output_base}/03_Analysis/multivariate_fidelity/:
     {slug}/{slug}.json                          per-combo multivariate-fidelity envelope
@@ -109,6 +112,12 @@ def _parse_args() -> argparse.Namespace:
         default=0,
         metavar="SEED",
         help="Seed for the --n-synthetic without-replacement subsample draw (default: 0; reproducible).",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Recompute a slug even if its multivariate_fidelity/{slug}/{slug}.json already exists "
+        "(default: reload the existing envelope so it still feeds the per-country roll-up).",
     )
     return parser.parse_args()
 
@@ -203,6 +212,20 @@ def main() -> None:
                 print(f"[{slug}] SKIP: mapped synthetic file not found: {synthetic_path}")
                 continue
 
+            slug_dir = joint_dir / slug
+            envelope_path = slug_dir / f"{slug}.json"
+
+            # Idempotent skip: the stored {slug}.json IS the envelope (written by
+            # write_multivariate_fidelity_json), so reload it rather than recomputing and still
+            # append it to `envelopes` -- the per-country roll-up + C2ST scatter stay complete
+            # (Full comparison output invariant). Recompute only when forced or the envelope is absent.
+            if not args.force and envelope_path.exists():
+                envelope = _load_json(envelope_path)
+                envelopes.append(envelope)
+                print(f"[{slug}] SKIP (exists): {envelope_path}")
+                print()
+                continue
+
             if real_pop is None:
                 real_file = entry.get("real_file")
                 if real_file is None:
@@ -231,8 +254,7 @@ def main() -> None:
             )
             envelopes.append(envelope)
 
-            slug_dir = joint_dir / slug
-            output_path = write_multivariate_fidelity_json(envelope, slug_dir / f"{slug}.json")
+            output_path = write_multivariate_fidelity_json(envelope, envelope_path)
             print(f"  Report written to {output_path}")
 
             association_csv_path = slug_dir / f"{slug}_association.csv"

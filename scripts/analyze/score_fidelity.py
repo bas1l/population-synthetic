@@ -19,6 +19,9 @@ Slug mode (exactly two pre-mapped pipelines)
     decompose_slug and both slugs must share one country. Fails loudly if a mapped file is
     missing. The first slug is treated as pop_a (expected), the second as pop_b (observed).
 
+--force  Recompute even if the --output report already exists (default: skip if present).
+         python scripts/analyze/score_fidelity.py --slug A --slug B --force
+
 This is a thin CLI wrapper that delegates all heavy lifting to
 population_synthetic.analysis.fidelity.{evaluator, charts} and
 population_synthetic.analysis.mapping.normalizer.
@@ -144,6 +147,11 @@ def main() -> None:
     )
     parser.add_argument("--output", default="data/comparison_report.json", help="Output JSON report path")
     parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Recompute even if the --output report already exists (default: skip if present).",
+    )
+    parser.add_argument(
         "--charts-dir",
         default=None,
         help="Directory to write comparison chart PNGs. Defaults to data/analysis/<output_stem>/",
@@ -159,6 +167,13 @@ def main() -> None:
         help="On the radar chart, show only the TV-similarity polygon (omit chi-squared p-value overlay).",
     )
     args = parser.parse_args()
+
+    # Idempotent skip: the single JSON report is the unit of work here, so if it already
+    # exists and --force was not passed, skip before doing any heavy evaluation.
+    output_path = Path(args.output)
+    if not args.force and output_path.exists():
+        print(f"SKIP (exists): {output_path}")
+        sys.exit(0)
 
     if args.slugs is not None:
         # --- Slug mode: exactly two pre-mapped pipelines, country derived from the slugs.
@@ -186,7 +201,6 @@ def main() -> None:
     evaluator.print_summary(label_a, label_b)
 
     report = evaluator.generate_report()
-    output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
