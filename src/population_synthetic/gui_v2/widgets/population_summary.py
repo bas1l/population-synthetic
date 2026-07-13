@@ -3,8 +3,8 @@
 A ``QWidget`` with a ``QTableWidget`` listing each checked
 model/strategy/country combo with provider, workers, a ``generated / total``
 count and a progress bar. Counts come from re-globbing each combo's output dir
-off the UI thread via the legacy launcher's :class:`PersonaCountWorker` (reused
-by import), so the panel ticks up live while a generation run is in progress.
+off the UI thread via :class:`PersonaCountWorker`, so the panel ticks up live
+while a generation run is in progress.
 
 Unlike the legacy ``ManifestOverview`` (a static disk snapshot refreshed only
 on selection change), :meth:`refresh_counts` is driven by a repeating timer in
@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
 )
 
 from population_synthetic.generators.synthetic.manifest_loader import compose_manifest, discover_axis_values
-from population_synthetic.gui.widgets.manifest_overview import PersonaCountWorker
+from population_synthetic.gui_v2.widgets.persona_count_worker import PersonaCountWorker
 
 _DASH = "—"
 _PENDING = "…"

@@ -248,10 +248,10 @@ class WorkflowRunner(QThread):
 
     def abort(self) -> None:
         """Flag the run aborted and kill the live process tree (no orphans)."""
-        # Imported lazily: the legacy `gui.main_window` pulls in grandalf (a
-        # `[gui]` dep), which the Qt-free `execute_workflow` core and its
-        # headless tests must not require just to import this module.
-        from population_synthetic.gui.main_window import _kill_process_tree
+        # Imported lazily to keep this file's headless-testable `execute_workflow`
+        # core decoupled from the CombinationRunner/ActionEntry classes defined
+        # alongside `_kill_process_tree` in `gui_v2.execution`.
+        from population_synthetic.gui_v2.execution import _kill_process_tree
 
         self._abort_flag = True
         if self._process is not None:

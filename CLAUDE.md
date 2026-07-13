@@ -9,7 +9,7 @@ depth lives in the [architecture wiki](docs/architecture/README.md).
 **population-synthetic** is a standalone extraction from the `anxiety-synthetic` monorepo. It provides three capabilities:
 
 1. **Population Generation** -- Fetch real demographic distributions from national statistical APIs (SCB for Sweden, SSB for Norway, ISTAT/Eurostat for Italy) and sample statistically realistic population profiles via conditional chained sampling
-2. **Identity Generation** -- LLM-based persona identity creation using Gemini models with configurable strategy mode
+2. **Identity Generation** -- LLM-based persona identity creation via pluggable providers (Gemini, Claude CLI, OpenRouter) with configurable strategy mode
 3. **Population Comparison** -- Statistical evaluation and visual comparison between any two population files
 
 ## Quick Start
@@ -30,10 +30,10 @@ python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet
 python scripts/analyze/map_populations.py
 python scripts/analyze/score_fidelity_sweden.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
 
-python -m population_synthetic.gui_v2.main   # primary GUI: config-driven Flow Runner (requires ".[gui]")
-python -m population_synthetic.gui.main   # DEPRECATED original launcher (fallback only; requires ".[gui]")
+python -m population_synthetic.gui_v2.main   # GUI: config-driven Flow Runner (requires ".[gui]")
 ruff check src/                       # lint (line-length 120, rules E/F/W/I)
-pytest                                # test suite (covers run_analytics/ and clients/call_context)
+pytest                                # full suite (sampling, mapping, fidelity, multivariate, comparison, workflow, run_analytics)
+pytest tests/test_sampling.py::test_name   # run a single test (testpaths=tests/ is set in pyproject.toml)
 ```
 
 **Full command catalog → [Command reference](docs/architecture/commands.md)** (`docs/architecture/commands.md`).
@@ -56,7 +56,7 @@ These are enforced guardrails, not suggestions. Full rationale in
 [Design principles](docs/architecture/design-principles.md) (`docs/architecture/design-principles.md`).
 
 - **No synthetic distributions** -- Every probability distribution in population generation must come from a real statistical API response; no hardcoded probability tables, fallback distributions, or parametric approximations. If no API provides a field, **drop it** -- never invent values. (Structural constants like dataset IDs and label maps are fine.)
-- **Config is the single source of truth** -- Attribute lists / axis order / category values / matcher rules / joint-coherence pairs / sex-harmonization maps live **only** in config (`config/mapping/{scb,istat}/`, `config/analysis/comparison/*.json`). No in-code `attr or DEFAULT` fallback. Missing/empty/malformed config **fails loudly** (raise) -- never silently reverts to a baked-in list.
+- **Config is the single source of truth** -- Attribute lists / axis order / category values / matcher rules / joint-coherence pairs / sex-harmonization maps live **only** in config (`config/mapping/{scb,istat}/`, `config/analysis/fidelity/*.json`). No in-code `attr or DEFAULT` fallback. Missing/empty/malformed config **fails loudly** (raise) -- never silently reverts to a baked-in list.
 - **Full comparison output** -- A real-population comparison emits every artifact: a bar chart for each of the 15 `DEMOGRAPHIC_ATTRIBUTES`, the TV-similarity radar, the JSON report (marginals + joint chi-squared + coherence), and the CSV marginals. Skip a chart only when the attribute has zero data in **both** populations.
 - **Fail-fast** -- Raise loudly on unexpected or malformed input rather than silently defaulting.
 
@@ -70,7 +70,7 @@ post-generation family, one subpackage per process: `mapping/` raw -> canonical 
 multivariate fidelity (recomputes the `multivariate` block over the mapped populations into
 its own `03_Analysis/multivariate_fidelity/` folder), `model_ranking/` cross-model
 ranking of the fidelity reports (models × strategies per country), `run_analytics/` post-run
-LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
+LLM-call analytics, and `utils/` cross-process shared infra), plus `gui_v2/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
 | Topic | Page |

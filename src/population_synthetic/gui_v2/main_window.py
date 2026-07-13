@@ -18,7 +18,7 @@ the title and confirm-discard on flow switch and close.
 
 Execution: Run saves the flow YAML, then — for ``kind: script`` — dispatches
 the checked axis combos through the reused :class:`CombinationRunner`
-(imported from the legacy ``gui.main_window``, one subprocess per combo,
+(from :mod:`population_synthetic.gui_v2.execution`, one subprocess per combo,
 sequential); for ``kind: workflow`` it snapshots + validates a
 :class:`WorkflowState` and runs the enabled chain through
 :class:`WorkflowRunner`. Abort kills the whole process tree via the runner's
@@ -57,13 +57,12 @@ from PyQt5.QtWidgets import (
 
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
-from population_synthetic.gui.launcher_config import ActionEntry
-from population_synthetic.gui.main_window import CombinationRunner
-from population_synthetic.gui.widgets.console_widget import ConsoleWidget
-from population_synthetic.gui.widgets.dag_graph_widget import DagGraphWidget
+from population_synthetic.gui_v2.execution import ActionEntry, CombinationRunner
 from population_synthetic.gui_v2.flow_config_model import FlowConfigModel
 from population_synthetic.gui_v2.menu_config import FlowEntry
 from population_synthetic.gui_v2.widgets.axis_selector import AxisSelector
+from population_synthetic.gui_v2.widgets.console_widget import ConsoleWidget
+from population_synthetic.gui_v2.widgets.dag_graph_widget import DagGraphWidget
 from population_synthetic.gui_v2.widgets.flow_options_panel import FlowOptionsPanel
 from population_synthetic.gui_v2.widgets.flow_selector import FlowSelector
 from population_synthetic.gui_v2.widgets.population_summary import PopulationSummaryPanel

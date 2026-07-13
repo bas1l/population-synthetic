@@ -12,13 +12,14 @@ from pathlib import Path
 from grandalf.graphs import Edge as GEdge
 from grandalf.graphs import Graph, Vertex
 from grandalf.layouts import SugiyamaLayout
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QKeySequence, QPainter
+from PyQt5.QtCore import QLineF, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QColor, QKeySequence, QPainter, QPen
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsTextItem, QGraphicsView, QShortcut
 
-from population_synthetic.gui.widgets.dag_graph_items import DagCategoryNode, DagEdge
+from population_synthetic.gui_v2.widgets.dag_graph_items import GRID_SIZE, DagCategoryNode, DagEdge
 
 _SPACING_FACTOR = 1.4
+_COLOR_GRID = QColor("#e8e8e8")  # faint grey; visible but unobtrusive against the scene background
 
 
 class _VertexView:
@@ -131,6 +132,27 @@ class DagGraphView(QGraphicsView):
         # --- Load or fit ---
         if not self._load_layout():
             self.fit_all()
+
+    def drawBackground(self, painter: QPainter, rect) -> None:
+        """Paint a faint grid matching the node snap step (see ``GRID_SIZE``)."""
+        super().drawBackground(painter, rect)
+        # A zero-width pen is *cosmetic*: it stays 1 device-pixel wide at any zoom,
+        # so the grid reads as a hairline whether the view is zoomed in or out.
+        painter.setPen(QPen(_COLOR_GRID, 0))
+
+        first_x = rect.left() - (rect.left() % GRID_SIZE)
+        first_y = rect.top() - (rect.top() % GRID_SIZE)
+
+        lines: list[QLineF] = []
+        x = first_x
+        while x < rect.right():
+            lines.append(QLineF(x, rect.top(), x, rect.bottom()))
+            x += GRID_SIZE
+        y = first_y
+        while y < rect.bottom():
+            lines.append(QLineF(rect.left(), y, rect.right(), y))
+            y += GRID_SIZE
+        painter.drawLines(lines)
 
     def fit_all(self) -> None:
         bounding = self._scene.itemsBoundingRect()
