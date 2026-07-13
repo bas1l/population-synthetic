@@ -74,7 +74,7 @@ def test_per_combo_empty_combos_raises():
 # ---------------------------------------------------------------------------
 
 def test_slugs_single_vector_one_slug_per_combo():
-    cmd = build_slugs_cmd(SCRIPT, COMBOS, {"no-charts": True, "output-base": None})
+    cmd = build_slugs_cmd(SCRIPT, COMBOS, {"no-charts": True, "output-base": None}, force=False)
     # Slug format is {country}_{strategy}_{model} (axis_slug).
     assert cmd == [
         sys.executable, str(SCRIPT),
@@ -82,11 +82,19 @@ def test_slugs_single_vector_one_slug_per_combo():
         "--slug", "norwegian_free_gen_gemini_flash",
         "--no-charts",
     ]
+    assert "--force" not in cmd
+
+
+def test_slugs_with_force_inserts_flag():
+    cmd = build_slugs_cmd(SCRIPT, COMBOS, {"no-charts": True}, force=True)
+    # --force lands immediately after the script path, before the first --slug.
+    assert cmd[:3] == [sys.executable, str(SCRIPT), "--force"]
+    assert cmd.index("--force") < cmd.index("--slug")
 
 
 def test_slugs_empty_combos_raises():
     with pytest.raises(ValueError, match="no combos"):
-        build_slugs_cmd(SCRIPT, [], {})
+        build_slugs_cmd(SCRIPT, [], {}, force=False)
 
 
 # ---------------------------------------------------------------------------
