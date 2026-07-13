@@ -359,6 +359,11 @@ magnitude-based complement to the legacy joint chi-squared p-value.
 > **Deep dive:** the per-population normalisation, the `NaN`-means-"not measurable" rule, and
 > the full SCB pair table (5 grounded vs 3 reference, with the audit basis for each) — see
 > [Reading the grounded joint TV: distance and the grounding flag](comparison-metrics/joint-tv-grounding-explained.md).
+>
+> **Why only two attributes?** The pairwise scope is a deliberate design choice — the largest
+> joint that is both statistically estimable and backed by a real agency cross-tabulation, with
+> the whole-population question delegated to §4a C2ST. See
+> [Why the joint TV stays pairwise: two attributes, not all of them](comparison-metrics/joint-tv-why-pairwise.md).
 
 ### 4d. K-way combination plausibility (`combination_plausibility.checks`)
 
@@ -395,6 +400,41 @@ split by severity: `fraction_impossible + fraction_rare = 1 − coherence.score`
 > [Reading k-way combination plausibility: the severity split](comparison-metrics/combination-plausibility-explained.md).
 
 ---
+
+## 5. Per-category method/model significance (cross-combo)
+
+The metrics above score **one** synthetic population against the real baseline. A separate,
+strictly-downstream process — `analysis/method_significance/` (`analyze_method_significance.py`) —
+does not add a per-population metric; it takes the *whole grid* of per-attribute `tv_distance`
+values across every (model × method × category) combo and asks a hypothesis-testing question:
+**per country and per demographic attribute, does the generation method (the ordered strategy axis)
+or the model significantly drive TV fidelity, and does the method-trend differ by model?**
+
+The hard constraint is **n = 1 per (model, method, category) cell** — LLM generation has no seed, so
+there are no within-cell replicates. The escape is to treat the ~15 demographic categories as the
+blocking/replication factor, which maps the problem onto Demšar (2006), *Statistical Comparisons of
+Classifiers over Multiple Data Sets* (models = classifiers, categories = datasets). Because TV is
+bounded `[0, 1]` and heteroscedastic near 0, the headline tests are rank-based, every p-value carries
+an effect size, and multiplicity is always named.
+
+| Test | What it answers | Effect size | Multiplicity |
+|------|-----------------|-------------|--------------|
+| **Page's L** (ordered method trend, per attribute) | Does TV move monotonically along the 5 complexity-ordered methods? | linear + **quadratic** contrast (tests, doesn't assume, monotonicity) | BH-FDR across attributes |
+| **Friedman + Iman–Davenport** (model omnibus, per attribute) | Do models differ on TV within this attribute? | Kendall's W (0–1 concordance) | BH-FDR across attributes |
+| **Demšar model comparison** (overall) | Which models differ overall (categories as blocks)? | Nemenyi post-hoc → critical-difference (CD) diagram | Nemenyi CD |
+| **Page's L** (overall method trend) | Does complexity move TV across all category × model blocks? | z (direction) | — |
+| **Mixed model** `logit(TV) ~ model*method + (1\|category)` | Is the model × method **interaction** real, and which factor dominates? | η² variance shares (model / method / category / residual) | Wald joint test |
+
+**Descriptive-only guardrail:** the *per-category* model × method interaction is **not estimable** at
+n = 1 (zero residual df), so it is emitted **descriptively only** — a slope heatmap of the per-cell
+TV(method) trend — and **no p-value is claimed at that grain**. The overall interaction *is*
+estimable because the categories supply the replication. Every significance annotation on the charts
+is drawn from the **BH-corrected** p-values, never the raw ones. Outputs land under
+`03_Analysis/method_significance/` (`{country}_method_significance.json` / `.csv` + a slope heatmap,
+CD diagram, factor-dominance bar, and per-attribute trend facets). This process needs the optional
+`[analysis]` extra (statsmodels + scikit-posthocs). Design detail lives in the plan
+`docs/development/plans/…/per-category-method-model-significance.md` and the thread recap
+`docs/development/model-method-significance-recap.md`.
 
 ## Cheat sheet — direction and range at a glance
 

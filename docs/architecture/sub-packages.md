@@ -29,7 +29,8 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   - `configurable` -- strategy-driven generation controlled by a simulation config JSON file with pluggable strategy definitions
 
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
-(`mapping/`, `fidelity/`, `multivariate_fidelity/`, `model_ranking/`, `run_analytics/`, plus a shared `utils/`):
+(`mapping/`, `fidelity/`, `multivariate_fidelity/`, `model_ranking/`, `method_significance/`,
+`run_analytics/`, plus a shared `utils/`):
 
 - **`mapping/`** -- Transforms raw population data (national-statistics records *or* LLM-pipeline
   identities) into the canonical comparable schema. Holds the shared resolver `mapping_engine.py`,
@@ -57,14 +58,30 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   report discovery via `mapped/_index.json`), `builder.py` (`build_performance_comparison` +
   JSON/CSV writers), `charts.py` (heatmap, leaderboard, per-attribute bars). Never recomputes
   from populations.
+- **`method_significance/`** -- Per-category method/model significance (sits after the compare stage;
+  driven by `analyze_method_significance.py`). Reuses `model_ranking`'s `loader` to obtain the
+  (model × method × category) TV grid and asks, per country and per attribute, *which factor drives
+  TV fidelity -- the generation method (ordered strategy) or the model*. The `n = 1`-per-cell wall is
+  escaped by treating the demographic categories as the blocking/replication factor (Demšar 2006,
+  "classifiers over multiple data sets"): per attribute it runs Page's L (ordered method trend
+  + linear/quadratic contrast) and Friedman (model omnibus), BH-FDR corrected across attributes;
+  overall it runs the Demšar model comparison (Friedman → Nemenyi → critical-difference diagram),
+  a Page's L method trend, and a `logit(TV) ~ model*method + (1|category)` mixed model whose
+  interaction term is estimable. The per-category interaction is emitted **descriptively only**
+  (a slope heatmap) -- no p-value is claimed at that grain. `builder.py` (`build_method_significance`
+  + JSON/CSV writers), `charts.py` (per-attribute trend facets, slope heatmap, CD diagram,
+  factor-dominance bar). Needs the optional `[analysis]` extra (statsmodels + scikit-posthocs).
 - **`utils/`** -- cross-process shared infra:
   - `country_config.py` -- the shared country resolver (`real_for_country`, `mappings_for_country`,
     `known_country_ids`, `infer_country`) consumed by both the map stage and the comparison consumers
   - `axes.py` -- axis-vocabulary helpers: `decompose_slug` / `diagnose_slug` (slug -> axis IDs) and
     `STRATEGY_COMPLEXITY_ORDER` (strategy chart ordering)
   - `_stats.py` -- stdlib numeric primitives (median, percentile, Shannon entropy); no external dep
-  - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected); carries the
-    scipy/numpy dependency surface, shared by the run_analytics cross-run and model_ranking processes
+  - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected) for run_analytics /
+    model_ranking, plus the repeated-measures family for `method_significance` (Friedman +
+    Iman-Davenport + Kendall's W, Page's L trend, Nemenyi post-hoc + CD, Benjamini-Hochberg FDR,
+    Cliff's δ, and the logit-linked `MixedLM` interaction fit); carries the scipy/numpy surface and
+    lazily imports statsmodels + scikit-posthocs (the `[analysis]` extra) for the library-backed ones
 - **`run_analytics/`** -- post-run LLM-call analytics; detailed below.
 
 **`gui/`** -- the **sole** GUI: a config-driven PyQt5 "Flow Runner" (`python -m population_synthetic.gui.main`). `FlowRunnerWindow` is driven by a two-tier editable-YAML config (`config/gui/menu.yaml` catalogue + one round-trip YAML per flow under `config/gui/flows/`), translates flow YAML into CLI invocations of the existing scripts, and adds a DAG-based Analysis Workflow. The runner and widget substrate is self-contained inside the package (`execution.py` holds `CombinationRunner` + `_kill_process_tree`; `widgets/` holds `ConsoleWidget`, `DagGraphWidget`, `CheckableAxisList`, `PersonaCountWorker`) -- the deprecated v1 launcher it superseded has been removed. Full contracts in [gui Flow Runner](../development/gui.md).
