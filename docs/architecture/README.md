@@ -32,6 +32,7 @@ persona creation), and **population comparison** (statistical evaluation of any 
 | [`gui-dag-launcher-reference.md`](gui-dag-launcher-reference.md) | Standalone reference for the GUI-driven DAG pipeline launcher (generic, for external teams). |
 | [`dag-graph-view-reference.md`](dag-graph-view-reference.md) | The DAG graph-view widget reference. |
 | [`diagrams/`](diagrams/) | Architecture and strategy diagrams (real, synthetic strategies). |
+| [`sweden-generation-explorer.html`](sweden-generation-explorer.html) | Interactive Sweden (SCB) generation explorer: the per-individual conditional chained-sampling DAG, with a toggle that reveals the conditioning each SCB table supports but the sampler marginalizes away. |
 
 ## See also
 
