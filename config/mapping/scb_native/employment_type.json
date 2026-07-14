@@ -1,0 +1,467 @@
+{
+  "values": [
+    "Permanent Full-time",
+    "Permanent Part-time",
+    "Permanent Short Part-time",
+    "Temporary Full-time",
+    "Temporary Part-time",
+    "Temporary Short Part-time",
+    "Self-Employed Full-time",
+    "Self-Employed Part-time",
+    "Self-Employed Short Part-time",
+    "Not Applicable"
+  ],
+  "real": {
+    "Permanent Full-time": {
+      "attachment": {
+        "contains": [
+          "permanent employees"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "35+ hours"
+        ]
+      }
+    },
+    "Permanent Part-time": {
+      "attachment": {
+        "contains": [
+          "permanent employees"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "20-34 hours"
+        ]
+      }
+    },
+    "Permanent Short Part-time": {
+      "attachment": {
+        "contains": [
+          "permanent employees"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "1-19 hours"
+        ]
+      }
+    },
+    "Temporary Full-time": {
+      "attachment": {
+        "contains": [
+          "temporary employees"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "35+ hours"
+        ]
+      }
+    },
+    "Temporary Part-time": {
+      "attachment": {
+        "contains": [
+          "temporary employees"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "20-34 hours"
+        ]
+      }
+    },
+    "Temporary Short Part-time": {
+      "attachment": {
+        "contains": [
+          "temporary employees"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "1-19 hours"
+        ]
+      }
+    },
+    "Self-Employed Full-time": {
+      "attachment": {
+        "contains": [
+          "self-employed"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "35+ hours"
+        ]
+      }
+    },
+    "Self-Employed Part-time": {
+      "attachment": {
+        "contains": [
+          "self-employed"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "20-34 hours"
+        ]
+      }
+    },
+    "Self-Employed Short Part-time": {
+      "attachment": {
+        "contains": [
+          "self-employed"
+        ]
+      },
+      "hours": {
+        "contains": [
+          "1-19 hours"
+        ]
+      }
+    },
+    "absent": "Not Applicable"
+  },
+  "synthetic": {
+    "Permanent Full-time": {
+      "none_of": [
+        "deltid",
+        "part-time",
+        "part time",
+        "1-19",
+        "20-34",
+        "kort deltid",
+        "visstid",
+        "vikariat",
+        "projektanställ",
+        "provanställ",
+        "säsong",
+        "timanställ",
+        "behovsanställ",
+        "temporary",
+        "fixed-term",
+        "seasonal",
+        "self-employ",
+        "self employ",
+        "egenföretag",
+        "egen företag",
+        "enskild firma",
+        "frilans",
+        "freelan",
+        "näringsverksamhet",
+        "aktiebolag",
+        "pension",
+        "student",
+        "arbetslös",
+        "retired",
+        "unemployed"
+      ],
+      "all_of": [
+        [
+          "permanent",
+          "tillsvidare",
+          "fast anställ"
+        ],
+        [
+          "full",
+          "heltid",
+          "100%"
+        ]
+      ],
+      "equals": [
+        "tillsvidareanställning, heltid",
+        "heltidsanställning",
+        "heltidsanställd",
+        "permanent full-time",
+        "employed",
+        "employee",
+        "anställd",
+        "anställning",
+        "full-time",
+        "heltid"
+      ],
+      "contains": [
+        "tillsvidareanställning",
+        "heltidsanställning",
+        "heltidsanställd",
+        "permanent",
+        "tillsvidare",
+        "fast anställ",
+        "open-ended",
+        "salaried",
+        "full-time",
+        "full time",
+        "fulltime",
+        "heltid",
+        "employed",
+        "employee"
+      ]
+    },
+    "Permanent Part-time": {
+      "none_of": [
+        "visstid",
+        "vikariat",
+        "projektanställ",
+        "provanställ",
+        "säsong",
+        "timanställ",
+        "behovsanställ",
+        "temporary",
+        "self-employ",
+        "egenföretag",
+        "enskild firma",
+        "frilans",
+        "freelan",
+        "näringsverksamhet",
+        "aktiebolag",
+        "pension",
+        "student",
+        "arbetslös",
+        "retired",
+        "unemployed"
+      ],
+      "all_of": [
+        [
+          "permanent",
+          "tillsvidare",
+          "fast anställ"
+        ],
+        [
+          "part",
+          "deltid",
+          "50%",
+          "75%"
+        ]
+      ],
+      "equals": [
+        "tillsvidareanställning, deltid",
+        "permanent part-time",
+        "deltidsanställd"
+      ],
+      "contains": [
+        "deltidsanställ",
+        "deltid",
+        "part-time",
+        "part time"
+      ]
+    },
+    "Permanent Short Part-time": {
+      "all_of": [
+        [
+          "permanent",
+          "tillsvidare",
+          "fast anställ"
+        ],
+        [
+          "1-19",
+          "few hours",
+          "marginal",
+          "kort deltid",
+          "timmar i veckan"
+        ]
+      ]
+    },
+    "Temporary Full-time": {
+      "all_of": [
+        [
+          "temporary",
+          "visstid",
+          "vikariat",
+          "projektanställ",
+          "provanställ",
+          "säsong"
+        ],
+        [
+          "full",
+          "heltid",
+          "100%"
+        ]
+      ],
+      "equals": [
+        "visstidsanställning, heltid",
+        "temporary full-time"
+      ],
+      "contains": [
+        "visstidsanställning",
+        "projektanställning",
+        "provanställning",
+        "vikariat",
+        "temporary",
+        "visstid",
+        "fixed-term",
+        "seasonal",
+        "säsong"
+      ]
+    },
+    "Temporary Part-time": {
+      "all_of": [
+        [
+          "temporary",
+          "visstid",
+          "vikariat",
+          "projektanställ",
+          "provanställ",
+          "säsong",
+          "timanställ"
+        ],
+        [
+          "part",
+          "deltid",
+          "50%",
+          "75%"
+        ]
+      ],
+      "equals": [
+        "visstidsanställning, deltid",
+        "timanställning",
+        "temporary part-time"
+      ],
+      "contains": [
+        "timanställ",
+        "behovsanställ"
+      ]
+    },
+    "Temporary Short Part-time": {
+      "all_of": [
+        [
+          "temporary",
+          "visstid",
+          "vikariat",
+          "projektanställ",
+          "provanställ",
+          "timanställ"
+        ],
+        [
+          "1-19",
+          "few hours",
+          "marginal",
+          "kort deltid",
+          "timmar i veckan"
+        ]
+      ]
+    },
+    "Self-Employed Full-time": {
+      "all_of": [
+        [
+          "self-employ",
+          "self employ",
+          "egenföretagare",
+          "egen företag",
+          "enskild firma",
+          "frilans",
+          "freelan",
+          "näringsverksamhet",
+          "aktiebolag"
+        ],
+        [
+          "full",
+          "heltid",
+          "100%"
+        ]
+      ],
+      "equals": [
+        "egenföretagare",
+        "eget företag",
+        "enskild firma",
+        "frilansare",
+        "företagare",
+        "self-employed/freelance"
+      ],
+      "contains": [
+        "self-employed",
+        "self-employ",
+        "self employ",
+        "egenföretagare",
+        "enskild firma",
+        "egenanställd",
+        "aktiebolag",
+        "freelance",
+        "freelan",
+        "frilans",
+        "konsultanställning"
+      ]
+    },
+    "Self-Employed Part-time": {
+      "all_of": [
+        [
+          "self-employ",
+          "self employ",
+          "egenföretagare",
+          "egen företag",
+          "enskild firma",
+          "frilans",
+          "freelan",
+          "näringsverksamhet",
+          "aktiebolag"
+        ],
+        [
+          "part",
+          "deltid",
+          "50%",
+          "75%"
+        ]
+      ]
+    },
+    "Self-Employed Short Part-time": {
+      "all_of": [
+        [
+          "self-employ",
+          "self employ",
+          "egenföretagare",
+          "egen företag",
+          "enskild firma",
+          "frilans",
+          "freelan",
+          "näringsverksamhet",
+          "aktiebolag"
+        ],
+        [
+          "1-19",
+          "few hours",
+          "marginal",
+          "kort deltid",
+          "timmar i veckan"
+        ]
+      ]
+    },
+    "Not Applicable": {
+      "none_of": [
+        "jobb",
+        "job",
+        "arbet",
+        "assistant",
+        "anställ",
+        "worker",
+        "intern"
+      ],
+      "equals": [
+        "not applicable",
+        "ej tillämpbart",
+        "n/a",
+        "ingen anställning",
+        "ingen",
+        "ej anställd",
+        "ej tillämpligt",
+        "ej förvärvsarbetande",
+        "förvärvsarbetslös",
+        "pensionerad",
+        "pensionär",
+        "retired",
+        "student",
+        "studerande",
+        "arbetslös",
+        "arbetssökande"
+      ],
+      "contains": [
+        "ej tillämpligt",
+        "ej relevant",
+        "volontär",
+        "arbetsträning",
+        "student",
+        "pension",
+        "pensionär",
+        "pensioner"
+      ]
+    }
+  }
+}

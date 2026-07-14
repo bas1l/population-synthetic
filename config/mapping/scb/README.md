@@ -1,5 +1,18 @@
 # SCB (Sweden) comparison mapping config
 
+> **Tier note (2026-07-14).** This coarse schema is now the **(deferred) global /
+> cross-country tier**. The primary *within-country* Sweden comparison no longer uses
+> this directory — it uses the native high-fidelity tier
+> [`config/mapping/scb_native/`](../scb_native/README.md), which scores Sweden at the
+> real SCB data's own category resolution. This coarse schema is retained because its
+> value sets are chosen so that Sweden, Italy and Norway can eventually share **one**
+> cross-country comparison axis; the collapse that would feed it (native → global) is
+> **not implemented yet** (see the [Global tier (deferred)](#global-tier-deferred--design-only)
+> note below and the plan
+> `docs/development/plans/active/native-highfidelity-mapping-sweden.md`). 12 of the 15
+> attributes are identical between the two tiers; only `industry_sector`,
+> `employment_type` and `parental_structure` are coarser here.
+
 This directory is the **single source of truth** for how the population comparison
 maps both the SCB real population data and the LLM pipeline output into one shared
 canonical schema, and for which categories each attribute is scored on. One JSON
@@ -109,3 +122,47 @@ derived from it at scoring time.
 - `birth_location` is `["Sweden", "Europe (Other)", "Outside Europe"]` — there is no
   separate "Nordic Country" bucket; Nordic origins fold into `Europe (Other)`.
 - Sweden includes `income_source` (SCB provides the field); Italy's config omits it.
+
+## Global tier (deferred) — design only
+
+> **Not yet implemented.** This section sketches the intended future mechanism. No
+> global-collapse code exists today; the within-country tiers (`scb_native`, and later a
+> native `istat`) are the only mappers that run.
+
+The two-tier model separates two jobs the coarse schema used to do at once:
+
+1. **Native (within-country) tier** — `config/mapping/scb_native/` — maps raw SCB / raw
+   LLM text onto the **real data's own resolution**. This is what scores Sweden today.
+2. **Global (cross-country) tier** — this directory — a *coarser* shared axis onto which
+   several countries' native categories collapse so they can be compared to each other.
+
+When cross-country analysis is actually built, the global tier will **not** be a second
+raw→canonical mapping (that would re-author the synthetic free-text cascades a second time
+and create a second source of truth). Instead it becomes a thin downstream **native →
+global overlay**: a per-attribute **finite value → bucket lookup** keyed on the *native*
+canonical values (which are a small, closed set), **not** a free-text matcher.
+
+```
+raw SCB / LLM ──► NATIVE tier (scb_native) ──► within-country fidelity      (NOW)
+                        │
+                        └──► native→global value lookup ──► cross-country compare  (DEFERRED)
+```
+
+Design constraints for that overlay:
+
+- **Defined only for the attributes that actually collapse.** For Sweden that is
+  `industry_sector` (12 → 8/9), `employment_type` (9 → 6), `parental_structure` (6 → 3),
+  plus any attribute that needs cross-country harmonisation (e.g. aligning SCB regions,
+  Swedish `birth_location` buckets, and ISTAT equivalents onto one shared set).
+- **Identical attributes pass through native unchanged** — the 12 attributes whose native
+  and coarse value sets already match need no lookup; they are already on the shared axis.
+- **Finite value map, fail-loud.** Every native value maps to exactly one global bucket in
+  config; an unmapped native value raises rather than silently dropping (the closed native
+  vocabulary makes this a total, checkable map — no `on_miss` sink needed at this layer).
+- **Authored when cross-country analysis is built**, not before. Until then this coarse
+  schema stands in as the eventual global target so its buckets and history are preserved.
+
+**Italy** (`config/mapping/istat/`) follows the same pattern: it gets its **own native
+tier** (`istat_native`, by analogy to `scb_native`) authored to ISTAT's own resolution,
+and the same native → global overlay collapses both countries' native categories onto the
+shared global buckets. Norway would join identically.

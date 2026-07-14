@@ -10,8 +10,12 @@ from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSynt
 class SwedishSyntheticMapper(BaseSyntheticMapper):
     """Map Swedish (SCB) pipeline identities to the canonical schema.
 
-    Country divergence is entirely the mapping directory (``config/mapping/scb/``):
-    every label and keyword cascade lives there.
+    Country divergence is entirely the mapping directory
+    (``config/mapping/scb_native/``): every label and keyword cascade lives there.
+    This is the **native high-fidelity tier**; it must stay in sync with the
+    ``parameters.mappings`` path in ``config/synthetic/axes/countries/swedish.yaml``
+    (the single source of truth), which is asserted at scheme-load time by
+    ``country_config.assert_mapping_dir_consistency``.
     """
 
-    MAPPINGS_SUBDIR: ClassVar[str] = "scb"
+    MAPPINGS_SUBDIR: ClassVar[str] = "scb_native"

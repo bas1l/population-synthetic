@@ -22,6 +22,8 @@ from pathlib import Path
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
+_MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
+
 
 def _load_country_axes() -> dict[str, dict[str, Path]]:
     """Read the country axis YAMLs into ``{id: {"real": Path, "mappings": Path}}``.
@@ -81,6 +83,44 @@ def mappings_for_country(country_id: str) -> Path:
             f"'parameters.mappings' path."
         )
     return mappings
+
+
+def assert_mapping_dir_consistency(country_id: str) -> Path:
+    """Fail loud if the country's mapping directory is selected inconsistently.
+
+    The mapping directory (which ``values``/matchers score the within-country
+    fidelity) is chosen in three places: the country axis YAML
+    (``parameters.mappings`` -- the single source of truth), and the
+    ``MAPPINGS_SUBDIR`` class default on both the real and the synthetic mapper
+    (which also seeds the factory fallback and the scheme's default directory).
+    They MUST resolve to the same directory, or the real population, the synthetic
+    population, and the comparison scheme could be mapped/scored on different value
+    axes silently. This asserts they agree and returns the agreed directory.
+
+    Note: ``MAPPINGS_SUBDIR`` additionally seeds the analysis-tuning filename stem
+    (see ``fidelity.scheme._analysis_path``); that concern is decoupled there by
+    stripping the ``_native`` tier suffix, so the shared attribute-name-keyed
+    ``config/analysis/fidelity/{base}.json`` is reused across tiers.
+    """
+    yaml_dir = mappings_for_country(country_id)
+    # Lazy imports: keep this shared helper free of a load-time dependency on the
+    # mapper subpackages (which import nothing from here, but stay defensive).
+    from population_synthetic.analysis.mapping.real_mapper.factory import _mapper_class as _real_cls
+    from population_synthetic.analysis.mapping.synthetic_mapper.factory import _mapper_class as _syn_cls
+
+    class_dirs = {
+        "real_mapper.MAPPINGS_SUBDIR": (_MAPPINGS_ROOT / _real_cls(country_id).MAPPINGS_SUBDIR).resolve(),
+        "synthetic_mapper.MAPPINGS_SUBDIR": (_MAPPINGS_ROOT / _syn_cls(country_id).MAPPINGS_SUBDIR).resolve(),
+    }
+    disagreeing = {name: str(path) for name, path in class_dirs.items() if path != yaml_dir}
+    if disagreeing:
+        raise ValueError(
+            f"Mapping-directory drift for country {country_id!r}: the country axis YAML "
+            f"'parameters.mappings' resolves to {yaml_dir}, but these mapper class defaults "
+            f"disagree: {disagreeing}. Bring MAPPINGS_SUBDIR into sync with the YAML "
+            f"(the single source of truth) before mapping/scoring."
+        )
+    return yaml_dir
 
 
 def infer_country(config_path: str | Path) -> str:

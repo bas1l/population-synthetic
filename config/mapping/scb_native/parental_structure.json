@@ -1,0 +1,260 @@
+{
+  "values": [
+    "Natural Parents",
+    "Mother and Stepparent",
+    "Father and Stepparent",
+    "Single Mother",
+    "Single Father",
+    "Other Than Parents"
+  ],
+  "real": {
+    "Natural Parents": {
+      "equals": [
+        "Natural Parents",
+        "married or cohabiting natural parents"
+      ]
+    },
+    "Mother and Stepparent": {
+      "equals": [
+        "Mother and Stepparent",
+        "married or cohabiting mother and stepparent"
+      ]
+    },
+    "Father and Stepparent": {
+      "equals": [
+        "Father and Stepparent",
+        "married or cohabiting father and stepparent"
+      ]
+    },
+    "Single Mother": {
+      "equals": [
+        "Single Mother",
+        "single mother"
+      ]
+    },
+    "Single Father": {
+      "equals": [
+        "Single Father",
+        "single father"
+      ]
+    },
+    "Other Than Parents": {
+      "equals": [
+        "Other Than Parents",
+        "living with persons other than parents"
+      ]
+    }
+  },
+  "synthetic": {
+    "Natural Parents": {
+      "none_of": [
+        "stepparent",
+        "step-parent",
+        "stepfather",
+        "step-father",
+        "stepmother",
+        "step-mother",
+        "styvfar",
+        "styvmor",
+        "styvförälder",
+        "bonusfamilj",
+        "blended",
+        "single mother",
+        "single father",
+        "single-mother",
+        "single-father",
+        "lone mother",
+        "lone father",
+        "ensamstående",
+        "foster",
+        "familjehem"
+      ],
+      "equals": [
+        "Natural Parents",
+        "Both biological parents",
+        "Two biological parents",
+        "Two biological parents (married/cohabiting)",
+        "Two biological parents, cohabiting (sambo)",
+        "Two biological parents, married",
+        "Married biological parents",
+        "Cohabiting biological parents",
+        "Intact two-parent family",
+        "Nuclear family",
+        "Two-parent household",
+        "Two-parent",
+        "Two parents",
+        "Two parents (married)",
+        "Two married parents",
+        "Both parents",
+        "Both parents (married)",
+        "Both parents married",
+        "Married parents household",
+        "Two-parent family",
+        "Two-parent household (married)",
+        "Two-parent household with married parents",
+        "Tvåföräldershushåll",
+        "Tvåföräldersfamilj",
+        "Tvåföräldrarhushåll",
+        "Två föräldrar",
+        "Båda föräldrar",
+        "Båda föräldrarna",
+        "Två biologiska föräldrar",
+        "Kärnfamilj",
+        "Gift par med barn",
+        "Sambopar med barn",
+        "Gifta föräldrar",
+        "Sammanboende föräldrar"
+      ],
+      "contains": [
+        "biological parents",
+        "biological mother and father",
+        "natural parents",
+        "intact",
+        "nuclear",
+        "two married parents",
+        "married biological",
+        "cohabiting biological",
+        "both biological",
+        "two-parent",
+        "two parent",
+        "two parents",
+        "both parents",
+        "married parents",
+        "båda biologiska föräldra",
+        "biologiska föräldra",
+        "två föräldrar",
+        "tvåförälder",
+        "tvåföräldra",
+        "båda föräldra",
+        "kärnfamilj",
+        "gift par med barn",
+        "sambopar med barn",
+        "married couple with children",
+        "genitori biologici",
+        "famiglia nucleare"
+      ]
+    },
+    "Mother and Stepparent": {
+      "equals": [
+        "Mother and Stepparent",
+        "Mother and stepfather",
+        "Biological mother and stepfather",
+        "Blended family (mother and stepfather)",
+        "Bonusfamilj (mor och styvfar)"
+      ],
+      "contains": [
+        "mother and stepfather",
+        "mother and stepparent",
+        "biological mother and step",
+        "stepfather",
+        "step-father",
+        "styvfar",
+        "mor och styvfar",
+        "blended",
+        "stepfamily",
+        "step-family",
+        "bonusfamilj",
+        "ombildad famil",
+        "styvfamilj",
+        "stepparent"
+      ]
+    },
+    "Father and Stepparent": {
+      "equals": [
+        "Father and Stepparent",
+        "Father and stepmother",
+        "Biological father and stepmother",
+        "Blended family (father and stepmother)",
+        "Bonusfamilj (far och styvmor)"
+      ],
+      "contains": [
+        "father and stepmother",
+        "father and stepparent",
+        "biological father and step",
+        "stepmother",
+        "step-mother",
+        "styvmor",
+        "far och styvmor"
+      ]
+    },
+    "Single Mother": {
+      "equals": [
+        "Single Mother",
+        "Single mother",
+        "Single biological mother",
+        "Single-mother household",
+        "Biological mother only",
+        "Mother only",
+        "Ensamstående mor",
+        "Ensamstående mamma"
+      ],
+      "contains": [
+        "single mother",
+        "single-mother",
+        "lone mother",
+        "mother only",
+        "biological mother only",
+        "ensamstående mor",
+        "ensamstående mamma",
+        "widowed mother",
+        "madre sola",
+        "single mum"
+      ]
+    },
+    "Single Father": {
+      "equals": [
+        "Single Father",
+        "Single father",
+        "Single biological father",
+        "Single-father household",
+        "Biological father only",
+        "Father only",
+        "Ensamstående far",
+        "Ensamstående pappa"
+      ],
+      "contains": [
+        "single father",
+        "single-father",
+        "lone father",
+        "father only",
+        "biological father only",
+        "ensamstående far",
+        "ensamstående pappa",
+        "widowed father",
+        "padre solo",
+        "single dad"
+      ]
+    },
+    "Other Than Parents": {
+      "equals": [
+        "Other Than Parents",
+        "Living with persons other than parents",
+        "Living with relatives",
+        "Foster family",
+        "Guardian",
+        "Bor hos släkting",
+        "Familjehem"
+      ],
+      "contains": [
+        "other than parents",
+        "persons other than parents",
+        "grandparent",
+        "farfar",
+        "farmor",
+        "morfar",
+        "mormor",
+        "other relative",
+        "släkting",
+        "residential care",
+        "guardian",
+        "vårdnadshavare",
+        "foster",
+        "fosterhem",
+        "familjehem",
+        "orphan",
+        "ward",
+        "institution"
+      ]
+    }
+  }
+}
