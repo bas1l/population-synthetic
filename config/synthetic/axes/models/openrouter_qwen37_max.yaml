@@ -1,8 +1,8 @@
 id: "openrouter_qwen37_max"
-label: "OpenRouter Qwen 2.5 72B Instruct"
+label: "OpenRouter Qwen 3.7 Max"
 model_config:
   provider: "openrouter"
-  model: "qwen/qwen-2.5-72b-instruct"
+  model: "qwen/qwen3.7-max"
   generation_config:
     temperature: null
     top_p: null
