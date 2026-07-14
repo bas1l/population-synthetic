@@ -1,0 +1,42 @@
+# Consistency-scan rule config for Sweden (SCB), country-keyed by the real mapper's
+# MAPPINGS_SUBDIR stem ("scb"), same convention as config/analysis/fidelity/scb.json.
+#
+# PROVISIONAL SEED VALUES. These two rules and their thresholds (age >= 55 for
+# "retired", age >= 18 for "married") are a starting point to exercise the detection
+# mechanism, not a finalised domain judgement -- the "what counts as realistic" question
+# (hard-illegal vs soft-implausible, exact thresholds, which attribute combinations)
+# is an open discussion to iterate on with the user. Do not treat these values as
+# authoritative without that follow-up.
+#
+# Predicate grammar (see rules.py for the fail-fast loader/matcher):
+#   {attr: "label"}        -- categorical equality on a canonical label field
+#   {attr: [l1, l2]}       -- categorical membership
+#   {age: {min: N, max: M}} -- numeric range on the raw integer `age` (min/max both optional)
+#
+# A rule is a guarded requirement: an individual matching every predicate in `when`
+# but failing at least one predicate in `require` is a violation. `severity` is a
+# reporting bucket only (hard = logical impossibility, soft = statistical
+# implausibility); both are counted.
+#
+# Label equality is exact-match against the CANONICAL mapped value (the same casing
+# emitted by config/mapping/{scb,...}/*.json "values", e.g. "Married" not "married").
+#
+# KNOWN GAP (surfaced, not silently patched): the current config/mapping/scb/employment.json
+# only declares canonical values "Employed"/"Unemployed" -- there is no "Retired" category in
+# the mapped-population schema today, so `young_retiree` cannot currently match anything
+# (raw "retired"/pensioner AKU labels have no matcher and resolve to None, not a category).
+# The rule is kept as specified (provisional, per the plan) so it activates the moment a
+# "Retired" category is added to the employment mapping; until then its rate reads 0/n.
+
+rules:
+  - id: young_retiree
+    description: Retired individuals should not be younger than 55.
+    severity: hard
+    when: { employment_status: retired }
+    require: { age: { min: 55 } }
+
+  - id: minor_married
+    description: Married individuals should be adults.
+    severity: hard
+    when: { civil_status: Married }
+    require: { age: { min: 18 } }
