@@ -1,8 +1,8 @@
 id: "openrouter_deepseek_v4"
-label: "OpenRouter DeepSeek Chat"
+label: "OpenRouter DeepSeek V4 Pro"
 model_config:
   provider: "openrouter"
-  model: "deepseek/deepseek-chat"
+  model: "deepseek/deepseek-v4-pro"
   generation_config:
     temperature: null
     top_p: null

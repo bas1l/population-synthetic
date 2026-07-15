@@ -3,13 +3,13 @@
 # (the script does NOT read this file).
 options:
   n: 500                     # --n
-  workers: 3                 # --workers (applies to cloud combos; Ollama combos self-tune below)
+  workers: 16                # --workers (applies to cloud combos; Ollama combos self-tune below)
   ollama-auto-workers: true  # --ollama-auto-workers (flag when true): Ollama combos ignore
                              #   `workers` above and use each model axis file's parallel.workers
                              #   (VRAM-optimal per the parallelism POC). No-op for cloud providers.
   retry-until-success: false # --retry-until-success (flag when true)
 selection:
-  models: [claude_haiku]
+  models: [ollama_llama31_8b, ollama_mistral_nemo_12b]
   strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick, 
       all_generate_pick, all_pick, all_pick_dag]
   countries: [swedish]

@@ -1,8 +1,8 @@
 id: "openrouter_glm_52"
-label: "OpenRouter GLM-4 Plus"
+label: "OpenRouter GLM-5.2"
 model_config:
   provider: "openrouter"
-  model: "z-ai/glm-4-plus"
+  model: "z-ai/glm-5.2"
   generation_config:
     temperature: null
     top_p: null

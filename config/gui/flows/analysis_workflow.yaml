@@ -21,7 +21,7 @@ tasks:
     dispatch: slugs
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force
-    force: true
+    force: false
     options:
       no-charts: false            # --no-charts (flag when true)
       radar-tv-only: false        # --radar-tv-only
@@ -36,12 +36,24 @@ tasks:
     dispatch: slugs
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force
-    force: true
+    force: false
     options:
       no-charts: false            # --no-charts
       output-base:                # blank = script default
       n-synthetic: '100'          # blank = no cap; integer = cap each population to this size
       sample-seed: 0              # seed for the without-replacement draw (reproducible)
+    depends_on: [map_populations]
+
+  consistency_scan:
+    label: Consistency Scan (unrealistic combos)
+    script: scripts/analyze/scan_consistency.py
+    dispatch: slugs
+    enabled: true
+    supports_force: true
+    force: false
+    options:
+      no-charts: false
+      output-base:
     depends_on: [map_populations]
 
   model_performance:
@@ -51,7 +63,7 @@ tasks:
     enabled: true
     min_combos: 2                 # guard: loud skip below 2 checked combos
     supports_force: true          # node shows a Force checkbox -> --force
-    force: true
+    force: false
     options:
       no-charts: false
       per-attribute-charts: false
@@ -66,7 +78,7 @@ tasks:
     enabled: true
     min_combos: 2                 # guard: loud skip below 2 checked combos
     supports_force: true          # node shows a Force checkbox -> --force
-    force: true
+    force: false
     options:
       no-charts: false
       strict: false
