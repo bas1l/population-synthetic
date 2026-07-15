@@ -21,6 +21,16 @@ def main() -> None:
     parser.add_argument("--n", type=int, default=100, help="Number of individuals to generate")
     parser.add_argument("--output", type=str, default="data/scb_api/scb_population.json", help="Output file path")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
+    parser.add_argument(
+        "--merge-status-education",
+        action="store_true",
+        help=(
+            "Opt-in: condition employment_status on (age x education x sex) by merging "
+            "two REGISTER tables via the documented odds-multiplication derivation "
+            "(assumes no status x age x education interaction). Default OFF = the "
+            "single-table (age x sex) register path."
+        ),
+    )
     args = parser.parse_args()
 
     if args.seed is None:
@@ -28,10 +38,17 @@ def main() -> None:
     logger.info("Seed: %d", args.seed)
 
     client = SCBPxWebClient()
-    distributions = FetchService.load_all(client)
+    distributions = FetchService.load_all(client, merge_status_education=args.merge_status_education)
+    if args.merge_status_education:
+        logger.info(
+            "employment_status two-table MERGE enabled (all-register; assumes no "
+            "status x age x education interaction) -- see the merge spec"
+        )
 
     rng = np.random.default_rng(args.seed)
-    individuals = SampleService.sample_population(distributions, rng, args.n)
+    individuals = SampleService.sample_population(
+        distributions, rng, args.n, merge_status_education=args.merge_status_education
+    )
 
     _TABLE_CLASSIFICATION_MAP: dict[str, dict[str, str]] = {
         "BE/BE0101/BE0101A/BefolkningNy": {

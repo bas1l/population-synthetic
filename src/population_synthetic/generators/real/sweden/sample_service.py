@@ -15,42 +15,18 @@ from population_synthetic.generators.real.helpers import VALID_AGE_GROUPS, age_t
 
 _SEX_CODES: dict[str, str] = {"men": "1", "women": "2"}
 
-_SUN2020_TO_AKU_EDU: dict[str, str] = {
-    "förgymnasial utbildning kortare än 9 år": "förgymnasial utbildning",
-    "förgymnasial utbildning, 9 (10) år": "förgymnasial utbildning",
-    "gymnasial utbildning, högst 2 år": "gymnasial utbildning",
-    "gymnasial utbildning, 3 år": "gymnasial utbildning",
-    "eftergymnasial utbildning, kortare än 3 år": "eftergymnasial utbildning",
-    "eftergymnasial utbildning, 3 år eller längre": "eftergymnasial utbildning",
-    "forskarutbildning": "eftergymnasial utbildning",
-    "uppgift saknas": "förgymnasial utbildning",
-    "primary and secondary education less than 9 years (isced97 1)": "primary and lower secondary education",
-    "primary and secondary education 9-10 years (isced97 2)": "primary and lower secondary education",
-    "upper secondary education, 2 years or less (isced97 3c)": "upper secondary education",
-    "upper secondary education 3 years (isced97 3a)": "upper secondary education",
-    "post-secondary education, less than 3 years (isced97 4+5b)": "post secondary education",
-    "post-secondary education 3 years or more (isced97 5a)": "post secondary education",
-    "post-graduate education (isced97 6)": "post secondary education",
-    "no information about level of educational attainment": "primary and lower secondary education",
-}
-
-_AKU_TO_INC_EMP: dict[str, str] = {
-    "sysselsatta": "gainfully employed",
-    "employed": "gainfully employed",
-    "in employment": "gainfully employed",
-    "employed, thousands": "gainfully employed",
-    "arbetslösa": "unemployed",
-    "unemployed": "unemployed",
-    "unemployed, thousands": "unemployed",
-    "ej i arbetskraften - studerande": "students",
-    "not in labour force - students": "students",
-    "ej i arbetskraften - pensionärer": "retired",
-    "not in labour force - retired": "retired",
-    "ej i arbetskraften": "non gainfully employed",
-    "not in the labour force": "non gainfully employed",
-    "not in the labour force, thousands": "non gainfully employed",
-    "ej i arbetskraften - övriga": "non gainfully employed",
-    "not in labour force - other": "non gainfully employed",
+# Maps each canonical employment_status label (emitted by the register parser) to
+# the income_source table's `Sysselsattning` (employment status) category, so
+# Step 10 can look up the age-conditioned income-component mix. Every status must
+# resolve (fail-fast on an unmapped one). Sick/Other fold onto "non gainfully
+# employed" -- the income table's residual out-of-work category.
+_STATUS_TO_INC_EMP: dict[str, str] = {
+    "Employed": "gainfully employed",
+    "Unemployed": "unemployed",
+    "Student": "students",
+    "Retired": "retired",
+    "Sick Leave": "non gainfully employed",
+    "Other": "non gainfully employed",
 }
 
 _AGE_GROUP_TO_INC_AGE: dict[str, list[str]] = {
@@ -63,31 +39,15 @@ _AGE_GROUP_TO_INC_AGE: dict[str, list[str]] = {
     "75-85": ["80-", "80- years", "80- år"],
 }
 
-_IS_EMPLOYED_AKU: set[str] = {
-    "sysselsatta", "employed", "in employment", "employed, thousands",
-}
+# Only the register "Employed" status gates industry_sector (Step 6) and
+# employment_type (Step 7); the other five statuses are out of employment.
+_EMPLOYED_STATUSES: set[str] = {"Employed"}
 
 _SWEDEN_LABELS: set[str] = {
     "Sverige", "Sweden",
     "Born in Sweden", "born in Sweden",
     "Födda i Sverige", "födda i Sverige",
 }
-
-
-def _resolve_edu_key(education_level: str, sex_dists: dict) -> str | None:
-    if education_level in sex_dists:
-        return education_level
-    mapped = _SUN2020_TO_AKU_EDU.get(education_level)
-    if mapped and mapped in sex_dists:
-        return mapped
-    edu_lower = education_level.lower()
-    mapped = _SUN2020_TO_AKU_EDU.get(edu_lower)
-    if mapped and mapped in sex_dists:
-        return mapped
-    for key in sex_dists:
-        if key.lower() == edu_lower:
-            return key
-    return None
 
 
 def _resolve_inc_age_key(age_group: str, emp_dist: dict) -> str | None:
@@ -104,6 +64,7 @@ class SampleService:
         distributions: PopulationDistributions,
         rng: Generator,
         individual_id: int,
+        merge_status_education: bool = False,
     ) -> dict:
         # Step 1: joint (age, biological_sex)
         age_sex_keys = list(distributions.age_sex.keys())
@@ -133,30 +94,55 @@ class SampleService:
             )
         education_level = sample_from(rng, edu_dist)
 
-        # Step 3: employment | (sex_label, education_level)
-        sex_dists = distributions.employment_by_sex_education.get(sex_label, {})
-        edu_key = _resolve_edu_key(education_level, sex_dists)
-        if edu_key is None:
-            for fallback_sex in distributions.employment_by_sex_education:
-                if fallback_sex == sex_label:
-                    continue
-                opp_dists = distributions.employment_by_sex_education[fallback_sex]
-                edu_key = _resolve_edu_key(education_level, opp_dists)
-                if edu_key is not None:
-                    sex_dists = opp_dists
+        # Step 3: employment_status -- register labour status over the full
+        #         spectrum (employed/unemployed/students/retirees/sick/others).
+        #
+        # Default (merge OFF): conditioned on (age_group, sex) only -- the Phase-4
+        # single-table path. When the opt-in all-register MERGE is on, it is
+        # conditioned on (age_group, education, sex): the status<->education link is
+        # recovered from a SECOND register table (ArbStatusUtbM) via the documented
+        # odds-multiplication derivation. ASSUMPTION (merge only): no status x age x
+        # education interaction -- a documented derivation over real register
+        # margins, NOT a synthetic distribution (see the merge spec and
+        # parse_employment_status_combined). Falls back to the age x sex leg when a
+        # given (age, education, sex) cell is unavailable.
+        emp_dist = None
+        if merge_status_education and distributions.employment_status_by_edu is not None:
+            edu_key = education_level.casefold()
+            emp_by_edu = distributions.employment_status_by_edu
+            emp_dist = emp_by_edu.get((age_group, edu_key, sex_label))
+            if emp_dist is None:
+                for fallback_sex in {s for (_, _e, s) in emp_by_edu}:
+                    emp_dist = emp_by_edu.get((age_group, edu_key, fallback_sex))
+                    if emp_dist is not None:
+                        break
+        if emp_dist is None:
+            emp_dist = distributions.employment_by_sex_education.get((age_group, sex_label))
+        if emp_dist is None:
+            for fallback_sex in {s for (_, s) in distributions.employment_by_sex_education}:
+                emp_dist = distributions.employment_by_sex_education.get((age_group, fallback_sex))
+                if emp_dist is not None:
                     break
-        if edu_key is None:
+        if emp_dist is None:
             raise ValueError(
-                f"No employment distribution for sex={sex_label!r}, "
-                f"education={education_level!r}"
+                f"No employment_status distribution for age_group={age_group!r}, sex={sex_label!r}"
             )
-        emp_dist = sex_dists[edu_key]
         employment_status_label = sample_from(rng, emp_dist)
-        is_employed = employment_status_label in _IS_EMPLOYED_AKU
+        is_employed = employment_status_label in _EMPLOYED_STATUSES
 
-        # Step 4: remaining marginals (birth_location, region, parental_structure) +
-        #         socioeconomic -- conditional on (age_group, sex_label)
-        birth_location_label = sample_from(rng, distributions.birth_location)
+        # Step 4: birth_location -- conditional on (age_group, sex_label);
+        #         region + parental_structure marginal; socioeconomic conditional
+        bl_dist = distributions.birth_location.get((age_group, sex_label))
+        if bl_dist is None:
+            for fallback_sex in {s for (_, s) in distributions.birth_location}:
+                bl_dist = distributions.birth_location.get((age_group, fallback_sex))
+                if bl_dist is not None:
+                    break
+        if bl_dist is None:
+            raise ValueError(
+                f"No birth_location distribution for age_group={age_group!r}, sex={sex_label!r}"
+            )
+        birth_location_label = sample_from(rng, bl_dist)
         region_label = sample_from(rng, distributions.region)
         parental_structure_label = sample_from(rng, distributions.parental_structure)
 
@@ -183,10 +169,20 @@ class SampleService:
             raise ValueError(f"No civil_status distribution for age_group={age_group}, sex={sex_label}")
         civil_status_label = sample_from(rng, cs_dist)
 
-        # Step 6: industry_sector -- conditional on employment
+        # Step 6: industry_sector -- conditional on employment and (age_group, sex)
         industry_sector_raw: dict | None
         if is_employed:
-            industry_sector_label = sample_from(rng, distributions.industry_sector)
+            ind_dist = distributions.industry_sector.get((age_group, sex_label))
+            if ind_dist is None:
+                for fallback_sex in {s for (_, s) in distributions.industry_sector}:
+                    ind_dist = distributions.industry_sector.get((age_group, fallback_sex))
+                    if ind_dist is not None:
+                        break
+            if ind_dist is None:
+                raise ValueError(
+                    f"No industry_sector distribution for age_group={age_group!r}, sex={sex_label!r}"
+                )
+            industry_sector_label = sample_from(rng, ind_dist)
             industry_sector_raw = {"label": industry_sector_label}
         else:
             industry_sector_raw = None
@@ -218,14 +214,24 @@ class SampleService:
         else:
             employment_type_raw = None
 
-        # Step 8: housing_tenure -- marginal
-        housing_tenure_label = sample_from(rng, distributions.housing_tenure)
+        # Step 8: housing_tenure -- conditional on (age_group, sex_label)
+        ht_dist = distributions.housing_tenure.get((age_group, sex_label))
+        if ht_dist is None:
+            for fallback_sex in {s for (_, s) in distributions.housing_tenure}:
+                ht_dist = distributions.housing_tenure.get((age_group, fallback_sex))
+                if ht_dist is not None:
+                    break
+        if ht_dist is None:
+            raise ValueError(
+                f"No housing_tenure distribution for age_group={age_group!r}, sex={sex_label!r}"
+            )
+        housing_tenure_label = sample_from(rng, ht_dist)
 
         # Step 9: household_size -- marginal
         household_size_label = sample_from(rng, distributions.household_size)
 
         # Step 10: income_source -- conditional on (employment_status, age_group)
-        inc_emp_key = _AKU_TO_INC_EMP.get(employment_status_label)
+        inc_emp_key = _STATUS_TO_INC_EMP.get(employment_status_label)
         if inc_emp_key is None:
             raise ValueError(f"No income_source employment mapping for: {employment_status_label!r}")
         inc_age_key: str | None = None
@@ -292,5 +298,9 @@ class SampleService:
         distributions: PopulationDistributions,
         rng: Generator,
         n: int,
+        merge_status_education: bool = False,
     ) -> list[dict]:
-        return [SampleService.sample_one(distributions, rng, i) for i in range(n)]
+        return [
+            SampleService.sample_one(distributions, rng, i, merge_status_education)
+            for i in range(n)
+        ]

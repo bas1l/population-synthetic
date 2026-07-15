@@ -126,6 +126,38 @@ the current winner (see §6).
 sub-folders (each with `identity.json` + an `llm_interactions.jsonl` call log), a
 `manifest_snapshot.yaml` recording the exact config, and a `logs/` folder.
 
+### 4.3 SCB source provenance & units (the 2026-07 source switches)
+
+Following the [SCB source audit](reference/scb-pxweb-catalog/scb-source-audit.md), six attributes of
+the real baseline were moved onto their best-available SCB PxWeb table. Every distribution still comes
+from a real API response (or a documented sum over real cells) — the no-synthetic-distributions rule
+holds throughout. Key provenance notes a reader of the real baseline should know:
+
+| Attribute | SCB table (new source) | What changed | Units / definition |
+|-----------|------------------------|--------------|--------------------|
+| `education_level` | `UF0506B/UtbBefRegionR` | Age coverage 16–74 → **16–95+** (closes the 75+ attainment gap) | Register full-count, persons. Same 8-level ISCED97 labels as before. |
+| `socioeconomic_class` | `HE0110A/SamForvInk1a` | 5-year age bands → **single-year** age (folded into the pipeline groups) | Register income brackets, persons. 4-class derivation unchanged; sparse young×high-bracket cells are legitimately suppressed (null) and skipped, never zero-filled. |
+| `birth_location` | `BE0101E/FolkmFodlandHVD` | All-ages marginal → **age × sex conditional** (same table) | Register, persons. `OKANT` (unknown country of birth) has no canonical target and is dropped explicitly (mass renormalised over the 3 known SE/EU/non-EU buckets). |
+| `industry_sector` | `AM0210F/ArRegSNI2007Riket` | AKU working-age total → **register age × sex**; ~52 fine NACE SNI2007 codes summed up to the 12 canonical sectors | **Person counts, not thousands** (unit change from the old AKU table). Register "gainfully employed by region of residence" definition. |
+| `housing_tenure` | `HE0111A/HushallT31` | Dwelling-level marginal → **person-level tenure × age × sex**; `Boendeform` collapsed to 3 tenures | Register, persons. `SPBO`/`OB`/`ÖVRIGT`/`TOT` have no canonical tenure and are dropped explicitly. |
+| `employment_status` | `AM0210D/ArRegArbStatus` | Education-crossed AKU table with **no age** → **register status × age × sex**, 6 categories (Employed / Unemployed / Student / Retired / Sick Leave / Other) | Register full-count, persons. Loses the education cross (no 3-way table exists on the public API). |
+
+**75+ labour handling.** The labour registers (`ArRegArbStatus`, `ArRegSNI2007Riket`) cap at age 74.
+There is no labour-force status for 75+ anywhere on the public API, so the oldest real band (70-74 for
+status, 65-74 for industry) is applied to the 75-85 group — 75+ is modelled from real, retiree-dominated
+cells rather than an invented distribution, preserving the no-synthetic-distributions invariant.
+`education_level`, `socioeconomic_class`, `birth_location` and `housing_tenure` all now cover the full
+age range directly.
+
+**Register ↔ survey coherence (known modelling choice).** `employment_status` and `industry_sector`
+use the SCB **register** ("gainfully employed") definition, while `employment_type` (contract
+attachment × weekly hours) stays on the **AKU survey** ILO-employed definition — no register table
+carries the attachment×hours cross. The mix is **deliberate and documented, not silent**: within the
+sampler `employment_type` is attached only to register-`Employed` personas, so the attributes never
+contradict each other at the persona level. This is a modelling choice the maintainer may revisit; see
+the audit's [cross-cutting decision](reference/scb-pxweb-catalog/scb-source-audit.md#cross-cutting-findings)
+(Phase 5.1) for the full rationale.
+
 ---
 
 ## 5. What the analysis pipeline generates

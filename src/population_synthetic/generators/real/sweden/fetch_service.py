@@ -20,6 +20,7 @@ from .constants import (
     EDUCATION_TABLE,
     EMPLOYMENT_ATTACHMENT_TABLE,
     EMPLOYMENT_BY_EDUCATION_TABLE,
+    EMPLOYMENT_STATUS_EDU_TABLE,
     FAMILY_TABLE,
     FOREIGN_BORN_TABLE,
     HOUSEHOLD_SIZE_TABLE,
@@ -31,12 +32,22 @@ from .constants import (
     WORKING_HOURS_TABLE,
 )
 from .parsers import (
+    EMPLOYMENT_STATUS_AGE_BANDS,
+    EMPLOYMENT_STATUS_BASELINE_AGE,
+    EMPLOYMENT_STATUS_CONTENTS_CODES,
+    EMPLOYMENT_STATUS_EDU_AGE,
+    EMPLOYMENT_STATUS_EDU_CODES,
+    EMPLOYMENT_STATUS_EDU_STATUS_CODES,
+    HOUSING_BOENDEFORM_CODES,
+    INDUSTRY_AGE_BANDS,
+    INDUSTRY_SNI2007_CODES,
     parse_age_sex,
     parse_birth_country_detail,
     parse_birth_location,
     parse_civil_status_by_age_sex,
     parse_education_by_age,
     parse_employment_by_sex_education,
+    parse_employment_status_combined,
     parse_employment_type_combined,
     parse_household_size,
     parse_housing_tenure,
@@ -67,7 +78,12 @@ class FetchService:
 
     @staticmethod
     def fetch_education_by_age(client: SCBPxWebClient) -> tuple[dict, str]:
-        ages = [str(i) for i in range(18, 75)]
+        # UtbBefRegionR carries single-year Alder up to 95+ (vs the old
+        # Utbildning table's 16-74 cap plus a synthetic tot16-74 total), so
+        # request the full register range and let the parser drop ages that
+        # fall outside the pipeline's canonical groups. This closes the 75+
+        # education-attainment gap.
+        ages = [str(i) for i in range(16, 95)] + ["95+"]
         edu_levels = ["1", "2", "3", "4", "5", "6", "7", "US"]
         query = {
             "query": [
@@ -75,7 +91,7 @@ class FetchService:
                 {"code": "Alder", "selection": {"filter": "item", "values": ages}},
                 {"code": "UtbildningsNiva", "selection": {"filter": "item", "values": edu_levels}},
                 {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
-                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["UF0506A1"]}},
+                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["000000I2"]}},
                 {"code": "Tid", "selection": {"filter": "item", "values": ["2025"]}},
             ],
             "response": {"format": "json-stat2"},
@@ -88,13 +104,25 @@ class FetchService:
     def fetch_employment_by_sex_education(
         client: SCBPxWebClient,
     ) -> tuple[dict, str]:
+        # Register (ArRegArbStatus): labour-market status by 5-year age band x sex,
+        # over the full register spectrum. NOTE: despite the legacy method/field
+        # name ("by_sex_education"), this source carries NO education dimension --
+        # status is conditioned on age x sex. Each status is a separate ContentsCode
+        # measure (employed/unemployed/students/retirees/sick/others). Region="00"
+        # (Sweden), Fodelseregion="tot" (Swedish- and foreign-born), Tid="2024". The
+        # register's population is capped at age 74; the parser models ages 75+ from
+        # the oldest real band (see EMPLOYMENT_STATUS_AGE_BANDS).
         query = {
             "query": [
-                {"code": "Arbetskraftstillh", "selection": {"filter": "item", "values": ["SYS", "ALÖS"]}},
-                {"code": "UtbildningsNiva", "selection": {"filter": "item", "values": ["21", "3+4", "8"]}},
+                {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
                 {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
-                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["AM0401VR"]}},
-                {"code": "Tid", "selection": {"filter": "item", "values": ["2025"]}},
+                {"code": "Alder", "selection": {"filter": "item", "values": list(EMPLOYMENT_STATUS_AGE_BANDS)}},
+                {"code": "Fodelseregion", "selection": {"filter": "item", "values": ["tot"]}},
+                {
+                    "code": "ContentsCode",
+                    "selection": {"filter": "item", "values": list(EMPLOYMENT_STATUS_CONTENTS_CODES)},
+                },
+                {"code": "Tid", "selection": {"filter": "item", "values": ["2024"]}},
             ],
             "response": {"format": "json-stat2"},
         }
@@ -103,20 +131,85 @@ class FetchService:
         return result, EMPLOYMENT_BY_EDUCATION_TABLE
 
     @staticmethod
+    def fetch_employment_status(
+        client: SCBPxWebClient,
+    ) -> tuple[dict, str, str]:
+        # Phase 6 opt-in MERGE (all-register). Fetches BOTH register tables and
+        # derives P(status | age, education, sex) via the documented
+        # odds-multiplication (see parse_employment_status_combined and the merge
+        # spec). Called ONLY when the merge flag is on; when off, the generator
+        # uses the single-table fetch_employment_by_sex_education path unchanged.
+        #
+        # ASSUMPTION (surfaced here and at the Step 3 call site): no status x age x
+        # education interaction -- the two real 2-way register margins are combined
+        # into the maximum-entropy joint consistent with them. Both legs use the
+        # register "employed" definition; the AKU survey table is never mixed in.
+
+        # Age leg P(S|A,s) over the 5-year bands PLUS the 15-74 all-ages aggregate,
+        # which supplies the baseline P(S|s) (same table, same definition).
+        status_ages = list(EMPLOYMENT_STATUS_AGE_BANDS) + [EMPLOYMENT_STATUS_BASELINE_AGE]
+        query_status = {
+            "query": [
+                {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
+                {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
+                {"code": "Alder", "selection": {"filter": "item", "values": status_ages}},
+                {"code": "Fodelseregion", "selection": {"filter": "item", "values": ["tot"]}},
+                {
+                    "code": "ContentsCode",
+                    "selection": {"filter": "item", "values": list(EMPLOYMENT_STATUS_CONTENTS_CODES)},
+                },
+                {"code": "Tid", "selection": {"filter": "item", "values": ["2024"]}},
+            ],
+            "response": {"format": "json-stat2"},
+        }
+        raw_status = client.fetch_table(EMPLOYMENT_BY_EDUCATION_TABLE, query_status)
+
+        # Education leg P(S|E,s): status x education x sex, working-age 20-64 total.
+        # Monthly preliminary table -- use a recent full month for the shape.
+        query_edu = {
+            "query": [
+                {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
+                {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
+                {"code": "Alder", "selection": {"filter": "item", "values": [EMPLOYMENT_STATUS_EDU_AGE]}},
+                {
+                    "code": "UtbildningsNiva",
+                    "selection": {"filter": "item", "values": list(EMPLOYMENT_STATUS_EDU_CODES)},
+                },
+                {"code": "Fodelseregion", "selection": {"filter": "item", "values": ["tot"]}},
+                {
+                    "code": "ContentsCode",
+                    "selection": {"filter": "item", "values": list(EMPLOYMENT_STATUS_EDU_STATUS_CODES)},
+                },
+                {"code": "Tid", "selection": {"filter": "item", "values": ["2024M12"]}},
+            ],
+            "response": {"format": "json-stat2"},
+        }
+        raw_edu = client.fetch_table(EMPLOYMENT_STATUS_EDU_TABLE, query_edu)
+
+        result = parse_employment_status_combined(raw_status, raw_edu, age_group_map={})
+        return result, EMPLOYMENT_BY_EDUCATION_TABLE, EMPLOYMENT_STATUS_EDU_TABLE
+
+    @staticmethod
     def fetch_birth_location(client: SCBPxWebClient) -> tuple[dict, str]:
+        # FolkmFodlandHVD carries the age x sex breakdown behind the three
+        # birth-region buckets, so request single-year Alder and both sexes
+        # instead of the all-ages / both-sexes aggregate. OKANT ("unknown
+        # country of birth") is queried so the counts stay faithful to the
+        # true population; the parser drops it explicitly (no canonical target).
+        ages = [str(i) for i in range(18, 86)]
         query = {
             "query": [
-                {"code": "Fodelseland", "selection": {"filter": "item", "values": ["FSV", "FEU", "FUEU"]}},
+                {"code": "Fodelseland", "selection": {"filter": "item", "values": ["FSV", "FEU", "FUEU", "OKANT"]}},
                 {"code": "HDI", "selection": {"filter": "item", "values": ["TOT"]}},
-                {"code": "Kon", "selection": {"filter": "item", "values": ["1+2"]}},
-                {"code": "Alder", "selection": {"filter": "item", "values": ["TOT1"]}},
+                {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
+                {"code": "Alder", "selection": {"filter": "item", "values": ages}},
                 {"code": "ContentsCode", "selection": {"filter": "item", "values": ["000000N6"]}},
                 {"code": "Tid", "selection": {"filter": "item", "values": ["2025"]}},
             ],
             "response": {"format": "json-stat2"},
         }
         raw = client.fetch_table(FOREIGN_BORN_TABLE, query)
-        result = parse_birth_location(raw)
+        result = parse_birth_location(raw, age_group_map={})
         return result, FOREIGN_BORN_TABLE
 
     @staticmethod
@@ -138,19 +231,20 @@ class FetchService:
 
     @staticmethod
     def fetch_socioeconomic(client: SCBPxWebClient) -> tuple[dict, str]:
-        age_bands = [
-            "20-24", "25-29", "30-34", "35-39", "40-44", "45-49",
-            "50-54", "55-59", "60-64", "65-69", "70-74", "75-79",
-            "80-84", "85+",
-        ]
+        # SamForvInk1a carries single-year Alder (the old SamForvInk1 gave
+        # only 5-year bands). Request single years across the pipeline range;
+        # the parser folds them into the canonical age groups. This table has
+        # no Region dimension. Sparse young x high-bracket cells are legitimately
+        # suppressed (null); the parser tolerates those without treating them as
+        # zero-with-certainty.
+        ages = [str(i) for i in range(18, 86)]
         bracket_codes = [code for code, _, _ in SCB_INCOME_BRACKETS]
         query = {
             "query": [
-                {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
                 {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
-                {"code": "Alder", "selection": {"filter": "item", "values": age_bands}},
+                {"code": "Alder", "selection": {"filter": "item", "values": ages}},
                 {"code": "Inkomstklass", "selection": {"filter": "item", "values": bracket_codes}},
-                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["HE0110J9"]}},
+                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["HE0110AD"]}},
                 {"code": "Tid", "selection": {"filter": "item", "values": ["2024"]}},
             ],
             "response": {"format": "json-stat2"},
@@ -196,18 +290,23 @@ class FetchService:
 
     @staticmethod
     def fetch_industry_sector(client: SCBPxWebClient) -> tuple[dict, str]:
+        # Register (ArRegSNI2007Riket): employed persons by industry (NACE Rev. 2),
+        # keyed by real age band x sex. Units are person counts (not thousands).
+        # This is a national ("Riket") table with no Region dimension. The
+        # "employed" definition is the register one (annual gainfully employed by
+        # region of residence, ContentsCode 0000071V), across all statuses in
+        # employment (Yrkesstallning=TOT) and both Swedish- and foreign-born
+        # (Fodelseregion=tot). The parser aggregates the fine SNI2007 codes into
+        # the 12 canonical sectors and expands the coarse age bands to groups.
         query = {
             "query": [
-                {"code": "Anknytningsgrad", "selection": {"filter": "item", "values": ["SYSTOT"]}},
-                {"code": "SNI2007", "selection": {"filter": "item", "values": [
-                    "01-03", "05-33+35-39", "41-43", "45-47", "49-53",
-                    "55-56", "58-63", "64-82", "84+99", "85", "86-88", "90-98",
-                ]}},
-                {"code": "TypData", "selection": {"filter": "item", "values": ["O_DATA"]}},
-                {"code": "Kon", "selection": {"filter": "item", "values": ["1+2"]}},
-                {"code": "Alder", "selection": {"filter": "item", "values": ["tot15-74"]}},
-                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["000007V8"]}},
-                {"code": "Tid", "selection": {"filter": "item", "values": ["2025"]}},
+                {"code": "SNI2007", "selection": {"filter": "item", "values": list(INDUSTRY_SNI2007_CODES)}},
+                {"code": "Yrkesstallning", "selection": {"filter": "item", "values": ["TOT"]}},
+                {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
+                {"code": "Alder", "selection": {"filter": "item", "values": list(INDUSTRY_AGE_BANDS)}},
+                {"code": "Fodelseregion", "selection": {"filter": "item", "values": ["tot"]}},
+                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["0000071V"]}},
+                {"code": "Tid", "selection": {"filter": "item", "values": ["2024"]}},
             ],
             "response": {"format": "json-stat2"},
         }
@@ -253,18 +352,25 @@ class FetchService:
 
     @staticmethod
     def fetch_housing_tenure(client: SCBPxWebClient) -> tuple[dict, str]:
+        # Person-level register (HushallT31): number of persons by type of housing
+        # x single-year age x sex. Unlike the old dwelling-level table this carries
+        # the person's own age/sex, so the result is conditioned on
+        # (age_group, sex). Only the mappable Boendeform codes are requested; the
+        # parser collapses building-type x tenure onto the three canonical tenures.
+        ages = [str(i) for i in range(18, 86)]
         query = {
             "query": [
                 {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
-                {"code": "Hustyp", "selection": {"filter": "item", "values": ["SMÅHUS", "FLERBOST"]}},
-                {"code": "Upplatelseform", "selection": {"filter": "item", "values": ["1", "2", "3"]}},
-                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["BO0104AH"]}},
+                {"code": "Boendeform", "selection": {"filter": "item", "values": list(HOUSING_BOENDEFORM_CODES)}},
+                {"code": "Alder", "selection": {"filter": "item", "values": ages}},
+                {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
+                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["0000031S"]}},
                 {"code": "Tid", "selection": {"filter": "item", "values": ["2025"]}},
             ],
             "response": {"format": "json-stat2"},
         }
         raw = client.fetch_table(HOUSING_TENURE_TABLE, query)
-        result = parse_housing_tenure(raw)
+        result = parse_housing_tenure(raw, age_group_map={})
         return result, HOUSING_TENURE_TABLE
 
     @staticmethod
@@ -327,7 +433,17 @@ class FetchService:
         return result, BIRTH_COUNTRY_DETAIL_TABLE
 
     @staticmethod
-    def load_all(client: SCBPxWebClient) -> PopulationDistributions:
+    def load_all(
+        client: SCBPxWebClient,
+        merge_status_education: bool = False,
+    ) -> PopulationDistributions:
+        # merge_status_education (default OFF): when False the employment_status
+        # attribute is the single-table age x sex register path (Phase 4), byte for
+        # byte -- ArbStatusUtbM is NOT fetched. When True, the opt-in all-register
+        # two-table MERGE additionally derives P(status | age, education, sex) (see
+        # fetch_employment_status). The single-table field is still populated so
+        # Step 3 can fall back to it. Assumption: no status x age x education
+        # interaction (documented at the call site and in provenance).
         age_sex, tag_age_sex = FetchService.fetch_age_sex(client)
         education_by_age, tag_education = FetchService.fetch_education_by_age(client)
         employment_by_sex_education, tag_employment = FetchService.fetch_employment_by_sex_education(client)
@@ -342,6 +458,14 @@ class FetchService:
         household_size, tag_household = FetchService.fetch_household_size(client)
         income_source_by_employment_age, tag_income_source = FetchService.fetch_income_source_by_employment_age(client)
         birth_country_detail, tag_birth_country = FetchService.fetch_birth_country_detail(client)
+
+        employment_status_by_edu: dict | None = None
+        merge_tags: tuple[str, ...] = ()
+        if merge_status_education:
+            employment_status_by_edu, _tag_status, tag_status_edu = FetchService.fetch_employment_status(client)
+            # ArRegArbStatus (_tag_status) is already listed via tag_employment;
+            # add only the second, merge-specific table for provenance.
+            merge_tags = (tag_status_edu,)
 
         tables_used = (
             tag_age_sex,
@@ -359,7 +483,7 @@ class FetchService:
             tag_household,
             tag_income_source,
             tag_birth_country,
-        )
+        ) + merge_tags
 
         return PopulationDistributions(
             age_sex=age_sex,
@@ -378,4 +502,5 @@ class FetchService:
             birth_country_detail=birth_country_detail,
             ethnicity_map={},
             tables_used=tables_used,
+            employment_status_by_edu=employment_status_by_edu,
         )

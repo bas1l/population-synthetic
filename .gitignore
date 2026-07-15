@@ -28,5 +28,7 @@ config/gui/state.json
 # (…/Gauss/04_Dissemination/Manuscripts/40_llm-population-fidelity-benchmark/),
 # which is outside this repo. Keep the local drafting source out of git too.
 docs/paper/
-/tests
-/tests
+
+# Large, regenerable SCB catalog artifacts (rebuild with the scripts in that folder)
+docs/reference/scb-pxweb-catalog/scb-am-uf-metadata.jsonl
+docs/reference/scb-pxweb-catalog/scb-am-uf-catalog.html
