@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Embed a minified SCB population snapshot into the Sweden generation explorer HTML.
 
-The explorer page ``docs/architecture/sweden-generation-explorer.html`` overlays a
+The explorer page ``docs/architecture/sweden-generation-explorer/index.html`` overlays a
 single generated individual onto its conditional-sampling DAG. Browsers refuse to
 ``fetch()`` a sibling file when the page is opened from ``file://``, so the default
 population has to travel *inside* the HTML. This dev tool reads a generated SCB
@@ -32,7 +32,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOURCE = PROJECT_ROOT / "data" / "scb_api" / "scb_population_pop-10000_02.json"
-DEFAULT_HTML = PROJECT_ROOT / "docs" / "architecture" / "sweden-generation-explorer.html"
+DEFAULT_HTML = PROJECT_ROOT / "docs" / "architecture" / "sweden-generation-explorer" / "index.html"
 
 # The compact column order. The row index IS the individual id (0-based).
 COLUMNS = [
@@ -277,11 +277,12 @@ def _replace_or_insert(html: str, island: str, start: str, end: str) -> str:
     block_re = re.compile(re.escape(start) + r".*?" + re.escape(end), re.DOTALL)
     if block_re.search(html):
         return block_re.sub(lambda _m: island, html, count=1)
-    # Insert right before the page's main app <script> (the first inline
-    # <script> with no src that opens the "use strict" app block).
-    anchor = re.search(r'\n<script>\n"use strict";', html)
+    # Insert right before the page's first app <script src> include (the data
+    # module the view scripts depend on). Idempotent re-runs use the marker path
+    # above; this anchor only matters the first time the islands are inserted.
+    anchor = re.search(r'\n<script src="js/data\.js">', html)
     if not anchor:
-        raise ValueError("could not locate the main app <script> to anchor an embedded island")
+        raise ValueError("could not locate the js/data.js <script> include to anchor an embedded island")
     insert_at = anchor.start()
     return html[:insert_at] + "\n" + island + html[insert_at:]
 
