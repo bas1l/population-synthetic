@@ -1,8 +1,8 @@
 id: "openrouter_mistral_medium"
-label: "OpenRouter Mistral Medium 3"
+label: "OpenRouter Mistral Medium 3.5"
 model_config:
   provider: "openrouter"
-  model: "mistralai/mistral-medium-3"
+  model: "mistralai/mistral-medium-3-5"
   generation_config:
     temperature: null
     top_p: null

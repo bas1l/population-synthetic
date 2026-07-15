@@ -1,0 +1,141 @@
+{
+  "values": [
+    "Employed",
+    "Unemployed"
+  ],
+  "real": {
+    "Employed": {
+      "equals": [
+        "Employed",
+        "sysselsatta",
+        "employed",
+        "in employment",
+        "employed, thousands"
+      ]
+    },
+    "Unemployed": {
+      "equals": [
+        "Unemployed",
+        "arbetslösa",
+        "unemployed",
+        "unemployed, thousands"
+      ]
+    }
+  },
+  "synthetic": {
+    "Employed": {
+      "equals": [
+        "Employed",
+        "Anställd",
+        "Anställd heltid",
+        "Anställd deltid",
+        "Tillsvidareanställd",
+        "Visstidsanställd",
+        "Egenföretagare",
+        "Egen företagare",
+        "Frilansare",
+        "Konsult",
+        "Föräldraledig",
+        "Tjänstledig",
+        "Förvärvsarbetande",
+        "Sysselsatt",
+        "Yrkesverksam",
+        "I arbete",
+        "Heltidsarbetande",
+        "Deltidsarbetande",
+        "Arbetande",
+        "Full-time",
+        "Part-time",
+        "Heltidsarbete",
+        "Deltidsarbete",
+        "Arbetar",
+        "Arbetar fulltid",
+        "Arbeta fulltid",
+        "Aktiv",
+        "Aktiva",
+        "Full time",
+        "Fulgtid",
+        "Anställd (Employed)",
+        "Arbetar (Employed)",
+        "Arbetar för ett företag",
+        "Anställd fulltids",
+        "Anställd fulltid",
+        "Full-time employed",
+        "Employed full-time",
+        "Employed Full-time",
+        "Employed Full-Time",
+        "anställda"
+      ],
+      "contains": [
+        "parental leave",
+        "föräldraledig",
+        "mammaledig",
+        "pappaledig",
+        "military",
+        "värnplikt",
+        "armed forces",
+        "employ",
+        "working",
+        "worker",
+        "job",
+        "anställd",
+        "heltid",
+        "deltid",
+        "tillsvidare",
+        "sysselsatt",
+        "förvärvsarbetande",
+        "yrkesverksam",
+        "arbetar",
+        "full time",
+        "part time",
+        "selvständig",
+        "self-employ",
+        "freelanc",
+        "egenföretag",
+        "företagare",
+        "frilans",
+        "eget företag",
+        "näringsidkare",
+        "konstnär",
+        "projektledare",
+        "forskare",
+        "tjänsteman",
+        "lönearbetande",
+        "kok",
+        "praktikant",
+        "uppdragstagare"
+      ]
+    },
+    "Unemployed": {
+      "equals": [
+        "Unemployed",
+        "Arbetslös",
+        "Arbetssökande",
+        "I arbetsmarknadsåtgärd",
+        "Sjukskriven",
+        "Arbetstränade",
+        "Arbetsträning"
+      ],
+      "contains": [
+        "sick leave",
+        "sjukskriven",
+        "sjukskrivning",
+        "disability benefit",
+        "long-term sick",
+        "long term sick",
+        "unemploy",
+        "jobless",
+        "seeking",
+        "arbetssökande",
+        "arbetslos",
+        "arbetslös",
+        "arbetsträning",
+        "arbetstränade",
+        "a-kassa",
+        "försörjning",
+        "hemmafru",
+        "hemvårdare"
+      ]
+    }
+  }
+}

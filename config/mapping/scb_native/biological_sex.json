@@ -1,0 +1,60 @@
+{
+  "values": [
+    "Male",
+    "Female"
+  ],
+  "real": {
+    "Male": {
+      "equals": [
+        "Male",
+        "men",
+        "male",
+        "1"
+      ]
+    },
+    "Female": {
+      "equals": [
+        "Female",
+        "women",
+        "female",
+        "2"
+      ]
+    }
+  },
+  "synthetic": {
+    "Male": {
+      "equals": [
+        "Male",
+        "man",
+        "xy",
+        "m",
+        "män"
+      ],
+      "contains": [
+        "male",
+        "pojke",
+        "kille",
+        "manlig",
+        "kön man"
+      ]
+    },
+    "Female": {
+      "equals": [
+        "Female",
+        "xx",
+        "hon",
+        "f"
+      ],
+      "contains": [
+        "female",
+        "kvinna",
+        "kvinnlig",
+        "kvinnor",
+        "flicka",
+        "tjej",
+        "hona",
+        "woman"
+      ]
+    }
+  }
+}

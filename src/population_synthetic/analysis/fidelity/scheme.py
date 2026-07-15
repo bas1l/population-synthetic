@@ -107,19 +107,34 @@ class ComparisonScheme:
     c2st_config: C2STConfig | None = None
 
 
+#: Tier suffix stripped from ``MAPPINGS_SUBDIR`` to derive the *analysis-tuning*
+#: filename. The native high-fidelity tier (``scb_native``) reuses the base tier's
+#: cross-attribute tuning (``scb.json``) because that config is keyed by attribute
+#: *names* (joint_pairs / coherence / grounded / c2st), which are identical across
+#: tiers -- only the per-attribute ``values`` axis widens.
+_NATIVE_TIER_SUFFIX = "_native"
+
+
 def _scheme_dir(country: str, mappings_path: Path | None) -> Path:
     if mappings_path is not None:
         return mappings_path
-    # Reuse the real-mapper country dispatch (raises for unknown country).
-    subdir = _mapper_class(country).MAPPINGS_SUBDIR
-    return _MAPPINGS_ROOT / subdir
+    # Default resolution: fail loud if the country YAML and the mapper class
+    # defaults disagree about which mapping directory to use, then return the
+    # agreed (YAML-sourced) directory. This is the startup consistency guard.
+    from population_synthetic.analysis.utils.country_config import assert_mapping_dir_consistency
+
+    return assert_mapping_dir_consistency(country)
 
 
 def _analysis_path(country: str, analysis_path: Path | None) -> Path:
     if analysis_path is not None:
         return analysis_path
-    # Filename stem == the mapper's MAPPINGS_SUBDIR (scb.json / istat.json).
+    # Filename stem == the mapper's MAPPINGS_SUBDIR with any native-tier suffix
+    # stripped (scb_native -> scb.json, istat -> istat.json). The analysis tuning
+    # is attribute-name-keyed and therefore shared across the coarse/native tiers.
     subdir = _mapper_class(country).MAPPINGS_SUBDIR
+    if subdir.endswith(_NATIVE_TIER_SUFFIX):
+        subdir = subdir[: -len(_NATIVE_TIER_SUFFIX)]
     return _ANALYSIS_ROOT / f"{subdir}.json"
 
 

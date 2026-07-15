@@ -65,7 +65,11 @@ These are enforced guardrails, not suggestions. Full rationale in
 `src/` layout; the `population_synthetic` namespace holds the two data producers under
 `generators/` -- `generators/real/` (per-country data layers over a shared parent) and
 `generators/synthetic/` (LLM persona generation) -- plus `analysis/` (the
-post-generation family, one subpackage per process: `mapping/` raw -> canonical schema,
+post-generation family, one subpackage per process: `mapping/` raw -> canonical schema
+(two tiers, selected per country by the axis YAML `parameters.mappings`: a **native**
+within-country high-fidelity tier — `config/mapping/scb_native`, the default for Sweden —
+and a coarser, cross-country **global** tier — `config/mapping/scb` — whose collapse is
+deferred/design-only; see [Comparison & mapping](docs/architecture/comparison-mapping.md)),
 `fidelity/` two-stage map -> score statistical scoring + charts (synthetic vs real), `multivariate_fidelity/` standalone
 multivariate fidelity (recomputes the `multivariate` block over the mapped populations into
 its own `03_Analysis/multivariate_fidelity/` folder), `model_ranking/` cross-model

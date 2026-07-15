@@ -1,0 +1,84 @@
+{
+  "values": [
+    "1 person",
+    "2 persons",
+    "3 persons",
+    "4 persons",
+    "5 persons",
+    "6 persons",
+    "7+ persons"
+  ],
+  "real": {
+    "1 person": {
+      "equals": [
+        "1 person"
+      ]
+    },
+    "2 persons": {
+      "equals": [
+        "2 persons"
+      ]
+    },
+    "3 persons": {
+      "equals": [
+        "3 persons"
+      ]
+    },
+    "4 persons": {
+      "equals": [
+        "4 persons"
+      ]
+    },
+    "5 persons": {
+      "equals": [
+        "5 persons"
+      ]
+    },
+    "6 persons": {
+      "equals": [
+        "6 persons"
+      ]
+    },
+    "7+ persons": {
+      "equals": [
+        "7+ persons",
+        "7 persons or more"
+      ]
+    }
+  },
+  "synthetic": {
+    "1 person": {
+      "int": [
+        1
+      ]
+    },
+    "2 persons": {
+      "int": [
+        2
+      ]
+    },
+    "3 persons": {
+      "int": [
+        3
+      ]
+    },
+    "4 persons": {
+      "int": [
+        4
+      ]
+    },
+    "5 persons": {
+      "int": [
+        5
+      ]
+    },
+    "6 persons": {
+      "int": [
+        6
+      ]
+    },
+    "7+ persons": {
+      "int_gte": 7
+    }
+  }
+}

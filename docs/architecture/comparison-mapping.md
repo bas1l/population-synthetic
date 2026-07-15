@@ -8,7 +8,8 @@ How the `analysis/mapping/` package maps both a **real** (national-statistics) p
 **synthetic** (pipeline) population onto one canonical schema so the `analysis/fidelity/`
 package can score them against each other. This is the densest part of the architecture; for the deeper rationale see
 [`../real_mapper_philosophy.md`](../real_mapper_philosophy.md) and the per-country
-config READMEs (`config/mapping/scb/README.md`, `config/mapping/istat/README.md`).
+config READMEs (`config/mapping/scb_native/README.md` — Sweden's native tier, the default —
+plus `config/mapping/scb/README.md` and `config/mapping/istat/README.md`).
 
 ## Two-stage flow (map -> compare)
 
@@ -53,6 +54,36 @@ depends only on `map_populations` and is fully additive: it never writes under `
 internally it is exposed as `real`) / `parameters.mappings` from the **country axis YAMLs**
 (`config/synthetic/axes/countries/{swedish,italian}.yaml`), so real-population paths/mappings are
 config-driven, not hardcoded, and adding a country needs only a new YAML.
+
+## Mapping tiers: native (within-country) vs global (cross-country)
+
+Sweden's mapping config comes in **two tiers**, selected per country by the country axis
+YAML's `parameters.mappings` (the single source of truth):
+
+- **Native tier — `config/mapping/scb_native/` (default for Sweden, within-country,
+  high-fidelity).** Maps both the real SCB population and the LLM output onto the **real
+  data's own category resolution**, so within-country fidelity is scored at the resolution
+  the national statistics actually carry. 12 of the 15 attributes are identical to the
+  coarse tier; 3 (`industry_sector`, `employment_type`, `parental_structure`) are expanded
+  to native resolution.
+- **Global tier — `config/mapping/scb/` (deferred, cross-country).** A coarser shared axis
+  whose value sets are chosen so several countries can eventually collapse onto **one**
+  comparison axis. The collapse that would feed it (a native → global value lookup) is
+  **not implemented yet** — it is design-only; see the "Global tier (deferred)" note in
+  [`config/mapping/scb/README.md`](../../config/mapping/scb/README.md). Italy (`istat`)
+  will get its own native tier by the same pattern.
+
+**Dir-selection mechanism.** `parameters.mappings` in
+`config/synthetic/axes/countries/{swedish,italian}.yaml` is authoritative. It is mirrored by
+the `MAPPINGS_SUBDIR` class default on both the real and synthetic Swedish mapper (which also
+seeds the factory fallback and the fidelity scheme's default directory). A fail-loud guard
+`country_config.assert_mapping_dir_consistency(country)` raises if the YAML and either mapper
+class default resolve to different directories, so the real population, synthetic population,
+and comparison scheme can never be scored on divergent value axes silently. The
+analysis-tuning filename is decoupled from the tier: `fidelity.scheme._analysis_path` strips
+the `_native` suffix so `scb_native` reuses the shared, attribute-name-keyed
+`config/analysis/fidelity/scb.json` (tuning keys are attribute *names*, unaffected by the 3
+widened value sets).
 
 ## Unified symmetric mapping config
 

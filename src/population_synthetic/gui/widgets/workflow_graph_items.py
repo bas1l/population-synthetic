@@ -51,6 +51,7 @@ _H_PADDING = 44
 _CORNER_RADIUS = 6
 _INSET = 6
 _DRAG_THRESHOLD = 4  # scene-units of movement before a press counts as a drag, not a click
+GRID_SIZE = 20  # scene-units; node positions snap to this grid (WorkflowGraphView draws matching lines)
 
 _COLOR_BG_ENABLED = QColor("#d0e8ff")
 _COLOR_BORDER_ENABLED = QColor("#2255aa")
@@ -232,6 +233,13 @@ class WorkflowTaskNode(QGraphicsRectItem):
         self._dragged = False
 
     def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemPositionChange:
+            # Snap the proposed top-left to the grid before the move commits. Snapping the
+            # anchor (not the center) keeps same-row nodes of differing widths left-aligned.
+            return QPointF(
+                round(value.x() / GRID_SIZE) * GRID_SIZE,
+                round(value.y() / GRID_SIZE) * GRID_SIZE,
+            )
         if change == QGraphicsItem.ItemPositionHasChanged:
             self.signals.position_changed.emit(self._task_name, value.x(), value.y())
         return super().itemChange(change, value)
