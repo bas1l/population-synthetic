@@ -310,9 +310,28 @@ def _scheme_from_index(directory: Path, analysis_path: Path) -> ComparisonScheme
     (marginal axis) and the comparison-analysis config (cross-attribute statistics)."""
     index = load_index(directory)
 
-    attributes: list[str] = list(index["attributes"].keys())  # key order = axis order
+    # Deprecated axes stay mapped/emitted into population data but are excluded from
+    # analysis: filtered from the scheme's attributes/categories here (the sole analysis
+    # chokepoint), so no downstream stage sees them. Default empty => current behavior.
+    deprecated = list(index.get("deprecated_attributes", []))
+    unknown = [name for name in deprecated if name not in index["attributes"]]
+    if unknown:
+        raise ValueError(
+            f"Mapping index {directory} 'deprecated_attributes' names attribute(s) "
+            f"{unknown} not present in 'attributes'"
+        )
+
+    attributes: list[str] = [
+        attr for attr in index["attributes"] if attr not in deprecated
+    ]  # key order = axis order, deprecated axes removed
+    if not attributes:
+        raise ValueError(
+            f"Mapping index {directory} has no non-deprecated attributes left for analysis"
+        )
     categories: dict[str, list[str]] = {}
     for attr, filename in index["attributes"].items():
+        if attr in deprecated:
+            continue
         attr_path = directory / filename
         if not attr_path.is_file():
             raise FileNotFoundError(
