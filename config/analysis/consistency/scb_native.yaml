@@ -1,5 +1,5 @@
 # Consistency-scan rule config for Sweden (SCB), country-keyed by the real mapper's
-# MAPPINGS_SUBDIR stem ("scb"), same convention as config/analysis/fidelity/scb.json.
+# MAPPINGS_SUBDIR stem ("scb_native") -- this file is named to match that stem.
 #
 # PROVISIONAL SEED VALUES. These two rules and their thresholds (age >= 55 for
 # "retired", age >= 18 for "married") are a starting point to exercise the detection
@@ -31,9 +31,8 @@
 #
 # On the real population this rule should never trip (register retirees are 65+); it is
 # primarily a guard for synthetic populations, where an LLM could emit a young "retired"
-# persona. NB: the loader resolves this config by the real mapper's MAPPINGS_SUBDIR
-# ("scb_native"); aligning the config filename with that stem is tracked separately and
-# is out of scope for this change.
+# persona. The loader resolves this config by the real mapper's MAPPINGS_SUBDIR
+# ("scb_native"); this file is named accordingly (renamed from scb.yaml).
 
 rules:
   - id: young_retiree
