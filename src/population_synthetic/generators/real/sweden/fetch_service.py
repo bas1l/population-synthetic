@@ -435,15 +435,16 @@ class FetchService:
     @staticmethod
     def load_all(
         client: SCBPxWebClient,
-        merge_status_education: bool = False,
+        merge_status_education: bool = True,
     ) -> PopulationDistributions:
-        # merge_status_education (default OFF): when False the employment_status
-        # attribute is the single-table age x sex register path (Phase 4), byte for
-        # byte -- ArbStatusUtbM is NOT fetched. When True, the opt-in all-register
-        # two-table MERGE additionally derives P(status | age, education, sex) (see
-        # fetch_employment_status). The single-table field is still populated so
-        # Step 3 can fall back to it. Assumption: no status x age x education
-        # interaction (documented at the call site and in provenance).
+        # merge_status_education (default ON): when True the all-register two-table
+        # MERGE additionally derives P(status | age, education, sex) (see
+        # fetch_employment_status), and ArbStatusUtbM is fetched. The single-table
+        # age x sex field is still populated so Step 3 can fall back to it. When
+        # False, employment_status is the single-table age x sex register path
+        # (Phase 4), byte for byte -- ArbStatusUtbM is NOT fetched. Assumption: no
+        # status x age x education interaction (documented at the call site and in
+        # provenance).
         age_sex, tag_age_sex = FetchService.fetch_age_sex(client)
         education_by_age, tag_education = FetchService.fetch_education_by_age(client)
         employment_by_sex_education, tag_employment = FetchService.fetch_employment_by_sex_education(client)

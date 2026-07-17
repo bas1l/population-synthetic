@@ -2,5 +2,5 @@ id: "swedish"
 label: "Sweden"
 parameters:
   config: "config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json"
-  reference: "data/scb_api/scb_population_pop-10000_02.json"
+  reference: "data/scb_api/scb_population_n10000_seed42_merge-status-edu_2026-07-16.json"
   mappings: "config/mapping/scb_native"

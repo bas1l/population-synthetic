@@ -28,12 +28,20 @@
     const present = new Set(Object.keys(cond).map(k => k.split("|")[part]));
     return Object.keys(mapObj).filter(k => ascii(k) && present.has(mapObj[k]));
   }
-  // education (aku_edu role) → English SUN2020 labels whose AKU bucket appears in the
-  // employment dist; employment_status (inc_emp role) → English AKU labels present in income.
-  const EDU_OPTS = bucketOptions("employment_by_sex_education", 1, C.SUN2020_TO_AKU_EDU);
-  const EMP_OPTS = bucketOptions("income_source_by_employment_age", 0, C.AKU_TO_INC_EMP);
+  // distinct values of one "|"-joined key component across a conditional field.
+  function keyParts(condField, part) {
+    const cond = (typeof DIST !== "undefined" && DIST && DIST.conditional && DIST.conditional[condField]) || null;
+    if (!cond) return [];
+    return Array.from(new Set(Object.keys(cond).map(k => k.split("|")[part]))).filter(ascii);
+  }
+  // employment_status (inc_emp role) → register status labels whose income bucket is
+  // present in the income dist. Education IS a live conditioning dimension again: the
+  // status×education merge is now the DEFAULT path, so employment conditions on
+  // age×education×sex — EDU_OPTS are the casefolded ISCED97 labels keying that merge.
+  const EDU_OPTS = keyParts("employment_status_by_edu", 1);
+  const EMP_OPTS = bucketOptions("income_source_by_employment_age", 0, C.STATUS_TO_INC_EMP);
 
-  const ROLE_FIELD = { age_group: "age_group", inc_age: "age_group", sex: "sex", aku_edu: "education", inc_emp: "employment_status" };
+  const ROLE_FIELD = { age_group: "age_group", inc_age: "age_group", sex: "sex", education: "education", inc_emp: "employment_status" };
   const FIELD_LABEL = { age_group: "age group", sex: "sex", education: "education", employment_status: "employment status" };
   function fieldOptions(field) {
     if (field === "age_group") return AGE_GROUPS || [];
@@ -51,7 +59,7 @@
     return out;
   }
 
-  const TAG_LABEL = { used: "used by sampler", chosen: "candidate", declared: "declared, unused", alt: "alternative" };
+  const TAG_LABEL = { used: "used by sampler", chosen: "candidate", declared: "declared, unused", alt: "alternative", merge: "opt-in merge" };
   function titleize(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
   function shortId(id) { const parts = String(id).split("/"); return parts[parts.length - 1] || id; }
 

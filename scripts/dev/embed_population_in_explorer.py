@@ -30,8 +30,11 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from population_synthetic.analysis.utils.country_config import real_for_country
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SOURCE = PROJECT_ROOT / "data" / "scb_api" / "scb_population_pop-10000_02.json"
+# Dataset path comes from the country axis YAML (config), not hardcoded here.
+DEFAULT_SOURCE = real_for_country("swedish")
 DEFAULT_HTML = PROJECT_ROOT / "docs" / "architecture" / "sweden-generation-explorer" / "index.html"
 
 # The compact column order. The row index IS the individual id (0-based).
@@ -66,17 +69,19 @@ DIST_END_MARKER = "<!-- EMBEDDED-DIST:END -->"
 #             "conditional" (sliced by parent key), or "marginal" (same for all)
 #   parents : ordered parent *roles*; the page derives each role's value from a
 #             context and joins them with "|" to key the conditional dict.
-#             roles: age_group, sex, aku_edu (edu->AKU bucket via bridge),
-#                    inc_emp (employment_status->income bucket), inc_age (age_group->band)
+#             roles: age_group, sex, education (education label->casefold, keys the
+#                    merged employment conditional), inc_emp (employment status label->
+#                    income bucket), inc_age (age_group->income band)
 #   gate    : None, "employed" (N/A when not employed), or "foreign_born"
 #             (N/A when born in Sweden)
 DIST_SCHEMA: dict[str, dict] = {
     "agesex": {"field": "age_sex_group", "kind": "hub", "parents": [], "gate": None},
     "education": {"field": "education_by_age", "kind": "conditional",
                   "parents": ["age_group", "sex"], "gate": None},
-    "employment": {"field": "employment_by_sex_education", "kind": "conditional",
-                   "parents": ["sex", "aku_edu"], "gate": None},
-    "industry": {"field": "industry_sector", "kind": "marginal", "parents": [], "gate": "employed"},
+    "employment": {"field": "employment_status_by_edu", "kind": "conditional",
+                   "parents": ["age_group", "education", "sex"], "gate": None},
+    "industry": {"field": "industry_sector", "kind": "conditional",
+                 "parents": ["age_group", "sex"], "gate": "employed"},
     "emptype": {"field": "employment_type_by_age", "kind": "conditional",
                 "parents": ["age_group", "sex"], "gate": "employed"},
     "income_source": {"field": "income_source_by_employment_age", "kind": "conditional",
@@ -85,12 +90,14 @@ DIST_SCHEMA: dict[str, dict] = {
               "parents": ["age_group", "sex"], "gate": None},
     "civil": {"field": "civil_status_by_age_sex", "kind": "conditional",
               "parents": ["age_group", "sex"], "gate": None},
-    "birthloc": {"field": "birth_location", "kind": "marginal", "parents": [], "gate": None},
+    "birthloc": {"field": "birth_location", "kind": "conditional",
+                 "parents": ["age_group", "sex"], "gate": None},
     "birthdetail": {"field": "birth_country_detail", "kind": "conditional",
                     "parents": ["age_group", "sex"], "gate": "foreign_born"},
     "region": {"field": "region", "kind": "marginal", "parents": [], "gate": None},
     "parental": {"field": "parental_structure", "kind": "marginal", "parents": [], "gate": None},
-    "housing": {"field": "housing_tenure", "kind": "marginal", "parents": [], "gate": None},
+    "housing": {"field": "housing_tenure", "kind": "conditional",
+                "parents": ["age_group", "sex"], "gate": None},
     "household": {"field": "household_size", "kind": "marginal", "parents": [], "gate": None},
 }
 
@@ -197,7 +204,10 @@ def build_dist_payload() -> tuple[str, dict]:
     from population_synthetic.generators.real.sweden import sample_service as ss
     from population_synthetic.generators.real.sweden.fetch_service import FetchService
 
-    d = FetchService.load_all(SCBPxWebClient())  # reads config/database/caches/scb, no network
+    # merge_status_education=True is the DEFAULT generation path: employment_status is
+    # conditioned on age x education x sex via the two-register odds-multiplication merge,
+    # so d.employment_status_by_edu is populated. Reads config/database/caches/scb, no network.
+    d = FetchService.load_all(SCBPxWebClient(), merge_status_education=True)
 
     # age_sex is {(age_int, sex) -> P}; aggregate single years into the 7 pipeline
     # groups for a compact hub display ({"<group>|<sex>" -> P}, 14 rows).
@@ -205,12 +215,10 @@ def build_dist_payload() -> tuple[str, dict]:
     for (age, sex), p in d.age_sex.items():
         age_sex_group[f"{age_to_group(int(age))}|{sex}"] += p
 
-    # employment_by_sex_education is {sex -> {aku_edu -> {status -> P}}}; flatten the
-    # two parent levels into a single "sex|aku_edu" key so the page slices uniformly.
-    employment_flat: dict[str, dict] = {}
-    for sex, buckets in d.employment_by_sex_education.items():
-        for bucket, status_dist in buckets.items():
-            employment_flat[f"{sex}|{bucket}"] = dict(status_dist)
+    # employment_by_sex_education is now {(age_group, sex) -> {status -> P}} (the field
+    # name is legacy -- the register source ArRegArbStatus conditions on age x sex, not
+    # education). Flatten to "age_group|sex" keys like every other conditional field.
+    employment_flat = _conv_conditional(d.employment_by_sex_education)
 
     # Resolve each age_group to the actual income age-band string present in the
     # data, so the page needn't guess among the candidate spellings.
@@ -225,19 +233,27 @@ def build_dist_payload() -> tuple[str, dict]:
     conditional = {
         "education_by_age": _conv_conditional(d.education_by_age),
         "employment_by_sex_education": employment_flat,
+        # DEFAULT path: employment_status merged onto (age_group, education, sex) via the
+        # ArRegArbStatus x ArbStatusUtbM odds-multiplication. 112 fully-covered cells
+        # (7 age x 8 casefolded ISCED97 edu x 2 sex). The age x sex field above is retained
+        # as the sampler's fallback leg.
+        "employment_status_by_edu": _conv_conditional(d.employment_status_by_edu),
         "employment_type_by_age": _conv_conditional(d.employment_type_by_age),
         "income_source_by_employment_age": _conv_conditional(d.income_source_by_employment_age),
         "socioeconomic": _conv_conditional(d.socioeconomic),
         "civil_status_by_age_sex": _conv_conditional(d.civil_status_by_age_sex),
         "birth_country_detail": _conv_conditional(d.birth_country_detail),
+        # Post source-audit these three moved to best-available register sources that
+        # carry an age x sex breakdown -- they are (age_group, sex)-keyed now, no longer
+        # national marginals.
+        "industry_sector": _conv_conditional(d.industry_sector),
+        "housing_tenure": _conv_conditional(d.housing_tenure),
+        "birth_location": _conv_conditional(d.birth_location),
     }
     marginal = {
         "age_sex_group": dict(age_sex_group),
-        "birth_location": dict(d.birth_location),
         "region": dict(d.region),
         "parental_structure": dict(d.parental_structure),
-        "industry_sector": dict(d.industry_sector),
-        "housing_tenure": dict(d.housing_tenure),
         "household_size": dict(d.household_size),
     }
     # Constants copied VERBATIM from the sampler (imported, not re-typed, to avoid
@@ -245,11 +261,12 @@ def build_dist_payload() -> tuple[str, dict]:
     constants = {
         "AGE_GROUP_BOUNDS": [[lo, hi, group] for lo, hi, group in AGE_GROUP_BOUNDS],
         "AGE_GROUPS": [group for _lo, _hi, group in AGE_GROUP_BOUNDS],
-        "SUN2020_TO_AKU_EDU": dict(ss._SUN2020_TO_AKU_EDU),  # bridge keys are lowercased
-        "AKU_TO_INC_EMP": dict(ss._AKU_TO_INC_EMP),
+        # Register labour-status label (Employed/Unemployed/Student/Retired/Sick Leave/
+        # Other) -> income-source table's employment bucket. Keys lowercased for the page.
+        "STATUS_TO_INC_EMP": {k.lower(): v for k, v in ss._STATUS_TO_INC_EMP.items()},
         "AGE_GROUP_TO_INC_AGE": age_group_to_inc_age,
         "SEX_CODES": dict(ss._SEX_CODES),
-        "IS_EMPLOYED": sorted(ss._IS_EMPLOYED_AKU),
+        "IS_EMPLOYED": sorted(s.lower() for s in ss._EMPLOYED_STATUSES),
         "SWEDEN_LABELS": sorted(ss._SWEDEN_LABELS),
     }
     payload = {

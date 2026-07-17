@@ -409,6 +409,7 @@ footer b { color: var(--ink); }
 .tbox.chosen .tbox-tag, .ttag.chosen { color: var(--accent); }
 .tbox.declared .tbox-tag, .ttag.declared { color: var(--muted); }
 .tbox.alt .tbox-tag, .ttag.alt { color: var(--warn); }
+.tbox.merge .tbox-tag, .ttag.merge { color: var(--accent); }
 
 /* ---- per-block detail panel (mirrors the DAG .panel idiom) ---- */
 .cat-panel {

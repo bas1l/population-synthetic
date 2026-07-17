@@ -83,6 +83,36 @@ Same income-bracket register measure as the current `SamForvInk1`, but **single-
 ### 14 · housing_tenure → switch to `HE/HE0111/HE0111A/HushallT31`
 Current `BO0104T04` is **dwelling-level** — tenure has no person age/sex. `HushallT31` gives **`Boendeform` (housing type) × single-year age × sex × region**, register/full-count. **Verified:** 12/12 non-null person-level cells. `Boendeform` maps onto the 3-way owner / tenant-owned / rented split via a small **collapse map** (`SMAG`→owner-house, `SMBO`/`FBBO`→bostadsrätt, `SMHY0`/`FBHY0`→hyresrätt; `SPBO`/`OB`/missing folded or dropped explicitly). No table exposes `Upplatelseform` itself by person age/sex, so `Boendeform` is the route.
 
+> **Addendum (2026-07-16) — a tenure × age × income joint table exists, but is not a drop-in.**
+> Not surfaced by the original sweep (which stored only AM+UF dumps and evaluated tenure and
+> socioeconomic_class as independent best-sources): **`HE/HE0110/HE0110F/TabVXDispI4C`**
+> ("Economic standard by region, age, type of household, tenure"). It **does** cross tenure with
+> age *and* an income axis — variables `Upplatelseform` (rented / tenant-owned / owner-occupied,
+> the same 3-way split), `Alder`, `Hushallstyp`, `Region`, `Tid` (2012–2024), and an economic-standard
+> axis (`InkomstTyp` = equivalised disposable income incl./excl. capital gains; `ContentsCode` =
+> mean/median SEK, relative-poverty threshold counts <40/50/60/70 % of median, >200 %, total persons).
+> **Live-verified** as a genuine cross-tab (12/12 cells non-null): 2024, age 20–64, median equivalised
+> disposable income — rented ≈ 265.5k, tenant-owned ≈ 381k, owner-occupied ≈ 397.2k SEK.
+>
+> **Why it is not adopted for `housing_tenure`** (each mismatch is against the generator's conditioning
+> scheme, so using it would break like-for-like conditioning, not just add data):
+> 1. **Age is coarse bands only** (`0–19`, `20+`, `20–64`, `20–65`, `65+`, `66+`) — no single-year `Alder`, unlike every other Sweden attribute.
+> 2. **The income axis is household-*equivalised* disposable income** (relative-poverty framing), **not** the project's *personal* `SamForvInk1a` bracket → 4-class (`Poverty`/`Working Class`/`Middle Class`/`Wealthy`) derivation. Different unit *and* definition, so it does not condition on the same `socioeconomic_class` the sampler produces.
+> 3. **No sex dimension** (it carries `Hushallstyp` instead).
+> 4. It reports **per-cell income statistics** (median/mean/threshold counts), **not** a person-frequency joint distribution to sample from.
+>
+> **Consequence.** There is **no** public-API table crossing tenure × single-year age × sex × *personal*
+> income bracket, so under the no-synthetic-distributions rule `housing_tenure` and `socioeconomic_class`
+> stay on their separate marginals (both conditioned on shared age/sex, sampled independently). Coupling
+> them would require either (a) deliberately adopting `TabVXDispI4C` and accepting its coarser,
+> differently-defined axes, or (b) a documented max-entropy odds-merge of the two 2-way margins
+> (age×sex×tenure ⊗ age×socioeconomic) — the same "no 3-way interaction" derivation already specced for
+> [employment_status](./employment-status-merge-derivation.md). Neither is a pure API pull; both are
+> explicit modelling choices for a future maintainer.
+> Related non-tenure tables in the same folder, for reference: `TabVXDispI69` (economic standard ×
+> employment × background × age) and `TabVX13InkStruktN` (income structure × age × occupation — the
+> current `income_source` source).
+
 ### 5 · birth_location → enrich the existing `BE/BE0101/BE0101E/FolkmFodlandHVD`
 Not a table switch — the current query pins `Alder=TOT1` (all-ages aggregate). The same table carries single-year `Alder` (elim=False) and `Kon`, now to 2025. **Verified:** age×sex cross-tab on the 3-category SE/EU/non-EU field populates 8/8, age not collapsed. Handle the `OKANT` (unknown) birth bucket.
 

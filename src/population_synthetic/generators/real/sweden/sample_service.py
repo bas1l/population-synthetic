@@ -64,7 +64,7 @@ class SampleService:
         distributions: PopulationDistributions,
         rng: Generator,
         individual_id: int,
-        merge_status_education: bool = False,
+        merge_status_education: bool = True,
     ) -> dict:
         # Step 1: joint (age, biological_sex)
         age_sex_keys = list(distributions.age_sex.keys())
@@ -298,7 +298,7 @@ class SampleService:
         distributions: PopulationDistributions,
         rng: Generator,
         n: int,
-        merge_status_education: bool = False,
+        merge_status_education: bool = True,
     ) -> list[dict]:
         return [
             SampleService.sample_one(distributions, rng, i, merge_status_education)

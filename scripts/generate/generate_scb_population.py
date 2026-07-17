@@ -22,15 +22,18 @@ def main() -> None:
     parser.add_argument("--output", type=str, default="data/scb_api/scb_population.json", help="Output file path")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
     parser.add_argument(
-        "--merge-status-education",
-        action="store_true",
+        "--no-merge-status-education",
+        dest="merge_status_education",
+        action="store_false",
         help=(
-            "Opt-in: condition employment_status on (age x education x sex) by merging "
+            "Opt OUT of the default employment_status two-table merge. By DEFAULT the "
+            "generator conditions employment_status on (age x education x sex) by merging "
             "two REGISTER tables via the documented odds-multiplication derivation "
-            "(assumes no status x age x education interaction). Default OFF = the "
-            "single-table (age x sex) register path."
+            "(assumes no status x age x education interaction). Pass this flag to fall "
+            "back to the single-table (age x sex) register path instead."
         ),
     )
+    parser.set_defaults(merge_status_education=True)
     args = parser.parse_args()
 
     if args.seed is None:
