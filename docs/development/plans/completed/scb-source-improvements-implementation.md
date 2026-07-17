@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-15
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-07-17 15:18
 **Base Branch:** `feature/sweden-employment-status-by-age`
 **Branch:** `feature/scb-source-improvements`
 
