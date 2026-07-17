@@ -74,6 +74,10 @@ class WorkflowGraphView(QGraphicsView):
         self._panning = False
         self._pan_start = QPoint()
         self._config_path: Path | None = None
+        # Guard against re-entrant node-move handling: emitting position_changed
+        # (e.g. from _load_layout's setPos, or _update_scene_rect churn) must not
+        # recurse back into _on_node_moved. See fix/workflow-graph-recursion.
+        self._in_node_moved = False
 
         self._save_timer = QTimer(self)
         self._save_timer.setSingleShot(True)
@@ -255,10 +259,19 @@ class WorkflowGraphView(QGraphicsView):
             logger.warning("Failed to save workflow layout to %s", path)
 
     def _on_node_moved(self, _name: str, _x: float, _y: float) -> None:
-        for edge in self._edges:
-            edge.update_path()
-        self._update_scene_rect()
-        self._save_timer.start()
+        # Re-entrancy guard: _update_scene_rect() below can trigger geometry churn
+        # that re-emits position_changed; without this the handler recurses until
+        # RecursionError (crashes at startup when _load_layout setPos'es the nodes).
+        if self._in_node_moved:
+            return
+        self._in_node_moved = True
+        try:
+            for edge in self._edges:
+                edge.update_path()
+            self._update_scene_rect()
+            self._save_timer.start()
+        finally:
+            self._in_node_moved = False
 
     # ------------------------------------------------------------------
     # Zoom + middle-click pan

@@ -94,13 +94,39 @@ the walk is driven by `values`):
 
 ```json
 {
+  "deprecated_attributes": ["birth_location"],
   "attributes": { "age_group": "age.json", "biological_sex": "biological_sex.json", ... }
 }
 ```
 
 - `attributes` — the in-scope comparison attributes; **key order = axis order**. Only
   files listed here are read by the mappers and the scheme. This is the master's only
-  required key: it declares pure *mapping scope* (which per-attribute files exist).
+  **required** key: it declares pure *mapping scope* (which per-attribute files exist).
+- `deprecated_attributes` *(optional)* — attribute names that are still **mapped and
+  emitted into the population data** (they remain in `attributes`, so the mapper keeps
+  producing them) but are **excluded from the comparison axis and every analysis stage**
+  (marginals, bar charts, TV radar, multivariate/C2ST, model-ranking, method-significance,
+  consistency). The filter is applied once, at the scheme chokepoint
+  `analysis/fidelity/scheme.py:_scheme_from_index`, so every downstream stage that reads
+  `ComparisonScheme.attributes` honours it automatically. Fail-loud: a name that is not in
+  `attributes`, or a list that would leave the axis empty, raises. To deprecate another
+  axis, add its name here — no code change. To reactivate one, remove it here (leaving its
+  `attributes` entry untouched).
+
+### Why `birth_location` is deprecated
+
+`birth_location` (coarse `Sweden` / `Europe (Other)` / `Outside Europe`, from SCB
+`FolkmFodlandHVD`) and `birth_country_detail` (top-20 specific countries, from
+`FodelselandArK`) are sampled as **independent** age×sex marginals joined only by a binary
+Sweden/non-Sweden gate — nothing forces the sampled country into the matching coarse
+EU/non-EU bucket, so contradictory pairs occur (e.g. "Outside Europe" + "Germany"). That
+makes the coarse `birth_location` axis a contradictory, lower-value signal in fidelity
+scoring. `birth_country_detail` already carries the birthplace signal we want (it resolves
+to `Sweden` for natives via the gate, and to the specific country otherwise), so
+`birth_location` is deprecated from analysis while retained in the data. Note this
+**sidesteps** the underlying sampling-independence issue rather than fixing it — the
+contradictory pair still exists in the raw/mapped data; it is simply no longer scored. See
+`docs/development/plans/active/deprecate-birth-location-analysis-axis.md`.
 
 The cross-attribute statistics (`joint_pairs`, `coherence_attributes`,
 `coherence_threshold`) are **not** in this file — they are evaluator tuning, not mapping,

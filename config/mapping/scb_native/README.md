@@ -24,6 +24,24 @@ Same symmetric per-attribute schema as `config/mapping/scb/` (see
 `_index.json` maps each comparison attribute to its per-attribute file (identical order to
 the coarse tier).
 
+## Deprecated attributes
+
+`_index.json` also carries an optional `deprecated_attributes` list (schema documented in
+[`../scb/README.md`](../scb/README.md#_indexjson-master)). Names in it stay in `attributes`
+— so the mapper keeps emitting them into the population data — but are excluded from the
+comparison axis and every analysis stage, via the single filter at
+`analysis/fidelity/scheme.py:_scheme_from_index` (fail-loud on an unknown name or an emptied
+axis).
+
+This tier deprecates **`birth_location`**, so Sweden analyses **14** axes (not 15) while the
+field is still present in generated/mapped populations. Reason: `birth_location` (coarse
+Sweden/EU/non-Europe) and `birth_country_detail` (top-20 specific countries) are sampled as
+independent marginals joined only by a binary Sweden/non-Sweden gate, so contradictory pairs
+occur (e.g. "Outside Europe" + "Germany"); `birth_country_detail` already carries the
+birthplace signal, so the coarse axis is dropped from scoring while retained in data. This
+sidesteps — does not fix — the sampling independence; see
+`docs/development/plans/active/deprecate-birth-location-analysis-axis.md`.
+
 ## Resolution vs the coarse (global) tier
 
 12 of the 15 attributes are **identical** to `config/mapping/scb/` — their coarse value sets

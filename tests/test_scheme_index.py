@@ -17,17 +17,22 @@ from population_synthetic.analysis.fidelity.scheme import ComparisonScheme, load
 _ANALYSIS_FILENAME = "_analysis.json"
 
 
-def _write_country(directory, attributes, *, joint_pairs, coherence, threshold=0.001, omit=(), extra_analysis=None):
+def _write_country(
+    directory, attributes, *, joint_pairs, coherence, threshold=0.001, omit=(), extra_analysis=None, deprecated=()
+):
     """Write a fixture country dir: ``_index.json`` (attributes) + per-attribute files
     + an ``_analysis.json`` comparison-analysis config (cross-attribute statistics).
 
     ``extra_analysis`` merges extra keys (e.g. ``grounded_joint_pairs``,
-    ``combination_checks``, ``c2st``) into the analysis config verbatim."""
+    ``combination_checks``, ``c2st``) into the analysis config verbatim. ``deprecated``
+    (when non-empty) is written to the index's ``deprecated_attributes`` key."""
     directory.mkdir(parents=True, exist_ok=True)
     index = {
         "description": "fixture",
         "attributes": {attr: f"{attr}.json" for attr in attributes},
     }
+    if deprecated:
+        index["deprecated_attributes"] = list(deprecated)
     (directory / "_index.json").write_text(json.dumps(index), encoding="utf-8")
     analysis = {
         "joint_pairs": joint_pairs,
@@ -204,6 +209,84 @@ def test_legacy_scheme_json_still_read_when_no_index(tmp_path):
     assert scheme.attributes == ["biological_sex"]
     assert scheme.categories["biological_sex"] == ["Male", "Female"]
     assert scheme.coherence_threshold == 0.001
+
+
+# --- deprecated_attributes (analysis-axis deprecation) ---------------------
+
+def test_deprecated_attribute_excluded_from_scheme(tmp_path):
+    # A name in deprecated_attributes stays out of both .attributes and .categories,
+    # while the per-attribute file is still present on disk (mapper retains it).
+    _write_country(
+        tmp_path,
+        {
+            "age_group": _AGE_BINS,
+            "biological_sex": ["Male", "Female"],
+            "birth_location": ["Sweden", "Outside Europe"],
+        },
+        joint_pairs=[["age_group", "biological_sex"]],
+        coherence=["age_group"],
+        deprecated=["birth_location"],
+    )
+    scheme = _load(tmp_path)
+    assert scheme.attributes == ["age_group", "biological_sex"]
+    assert "birth_location" not in scheme.attributes
+    assert "birth_location" not in scheme.categories
+    # The non-deprecated axes keep their category sets intact.
+    assert scheme.categories["biological_sex"] == ["Male", "Female"]
+
+
+def test_deprecated_unknown_attribute_raises(tmp_path):
+    # A deprecated name absent from ``attributes`` is a config error -> fail loudly.
+    _write_country(
+        tmp_path,
+        {"age_group": _AGE_BINS, "biological_sex": ["Male", "Female"]},
+        joint_pairs=[], coherence=[],
+        deprecated=["not_an_attribute"],
+    )
+    with pytest.raises(ValueError, match="deprecated_attributes"):
+        _load(tmp_path)
+
+
+def test_deprecated_emptying_axis_raises(tmp_path):
+    # Deprecating every attribute leaves no analysis axis -> fail loudly.
+    _write_country(
+        tmp_path,
+        {"age_group": _AGE_BINS, "biological_sex": ["Male", "Female"]},
+        joint_pairs=[], coherence=[],
+        deprecated=["age_group", "biological_sex"],
+    )
+    with pytest.raises(ValueError, match="no non-deprecated attributes"):
+        _load(tmp_path)
+
+
+def test_absent_deprecated_key_unchanged_behavior(tmp_path):
+    # Regression guard: no deprecated_attributes key -> the full axis is retained.
+    attrs = {
+        "age_group": _AGE_BINS,
+        "biological_sex": ["Male", "Female"],
+        "birth_location": ["Sweden", "Outside Europe"],
+    }
+    _write_country(tmp_path, attrs, joint_pairs=[], coherence=[])
+    scheme = _load(tmp_path)
+    assert scheme.attributes == ["age_group", "biological_sex", "birth_location"]
+    assert "birth_location" in scheme.categories
+
+
+@pytest.mark.parametrize(
+    "deprecated",
+    [
+        "birth_location",          # a bare string, not a list
+        ["birth_location", 1],     # a list with a non-string entry
+        {"birth_location": True},  # an object, not a list
+    ],
+)
+def test_load_index_deprecated_attributes_must_be_list_of_strings(tmp_path, deprecated):
+    (tmp_path / "_index.json").write_text(
+        json.dumps({"attributes": {"a": "a.json"}, "deprecated_attributes": deprecated}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="deprecated_attributes"):
+        load_index(tmp_path)
 
 
 # --- multivariate config keys (grounded_joint_pairs / combination_checks / c2st) ----

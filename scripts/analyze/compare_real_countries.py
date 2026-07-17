@@ -17,14 +17,15 @@ from population_synthetic.analysis.fidelity.evaluator import StatisticalEvaluato
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.mapping.flatten_raw import flatten_raw_population
 from population_synthetic.analysis.mapping.real_mapper.mappings import load_mappings
-from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.utils.country_config import mappings_for_country, real_for_country
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SWEDEN = "data/scb_api/scb_population_pop-10000_02.json"
-_DEFAULT_NORWAY = "data/ssb_api/ssb_10k.json"
-_DEFAULT_ITALY = "data/istat_api/istat_population.json"
+# Dataset paths come from the country axis YAMLs (config), not hardcoded here.
+_DEFAULT_SWEDEN = str(real_for_country("swedish"))
+_DEFAULT_ITALY = str(real_for_country("italian"))
+_DEFAULT_NORWAY = "data/ssb_api/ssb_10k.json"  # no country axis config for Norway
 
 COMPARABLE_FIELDS = frozenset({
     "age_group",

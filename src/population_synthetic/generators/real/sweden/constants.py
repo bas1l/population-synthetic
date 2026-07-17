@@ -12,18 +12,34 @@ COUNTY_CODES = [
 AGE_SEX_TABLE = "BE/BE0101/BE0101A/BefolkningNy"
 FOREIGN_BORN_TABLE = "BE/BE0101/BE0101E/FolkmFodlandHVD"
 BIRTH_COUNTRY_DETAIL_TABLE = "BE/BE0101/BE0101E/FodelselandArK"
-EDUCATION_TABLE = "UF/UF0506/UF0506B/Utbildning"
+EDUCATION_TABLE = "UF/UF0506/UF0506B/UtbBefRegionR"
 EMPLOYMENT_TABLE = "AM/AM0401/AM0401A/AKURLBefAr"
-EMPLOYMENT_BY_EDUCATION_TABLE = "AM/AM0401/AM0401P/NAKUBefUtbNivAr"
+# NOTE: kept the legacy name `EMPLOYMENT_BY_EDUCATION_TABLE` (and the matching
+# fetch/parse/field names) for cross-country stability -- the shared
+# `PopulationDistributions.employment_by_sex_education` field is also populated by
+# the Norway/Italy generators, so renaming it here would ripple out of Sweden's
+# scope. This source is the *register* labour-market status table
+# (ArRegArbStatus): it carries NO education dimension. Labour status is conditioned
+# on age x sex over the full register spectrum (employed/unemployed/students/
+# retirees/sick/others), with each status exposed as its own ContentsCode measure.
+EMPLOYMENT_BY_EDUCATION_TABLE = "AM/AM0210/AM0210D/ArRegArbStatus"
+# Phase 6 (opt-in) status<->education leg: register labour-market status x level
+# of education x sex (working-age total 20-64). Combined with ArRegArbStatus
+# under the documented odds-multiplication derivation ONLY when the merge is
+# explicitly enabled -- see docs/reference/scb-pxweb-catalog/
+# employment-status-merge-derivation.md and parse_employment_status_combined.
+# ALL-REGISTER (never the AKU survey table) so "employed" means the same thing
+# in both legs. Not fetched at all when the merge flag is off (Phase 4 default).
+EMPLOYMENT_STATUS_EDU_TABLE = "AM/AM0210/AM0210A/ArbStatusUtbM"
 INCOME_TABLE = "HE/HE0110/HE0110F/TabVX10InkStrukt"
 INCOME_SOURCE_TABLE = "HE/HE0110/HE0110F/TabVX13InkStruktN"
 FAMILY_TABLE = "LE/LE0102/LE0102B/LE0102T17"
 URBANIZATION_TABLE = "MI/MI0810/MI0810A/BefLandInvKvmTO"
 CIVIL_STATUS_TABLE = "BE/BE0101/BE0101A/BefolkningNy"
-INDUSTRY_SECTOR_TABLE = "AM/AM0401/AM0401I/AKURLSysSNI07Ar"
+INDUSTRY_SECTOR_TABLE = "AM/AM0210/AM0210F/ArRegSNI2007Riket"
 EMPLOYMENT_ATTACHMENT_TABLE = "AM/AM0401/AM0401I/AKURLSysAnkAr"
 WORKING_HOURS_TABLE = "AM/AM0401/AM0401S/NAKUSysselOkArbtidAr"
-HOUSING_TENURE_TABLE = "BO/BO0104/BO0104D/BO0104T04"
+HOUSING_TENURE_TABLE = "HE/HE0111/HE0111A/HushallT31"
 HOUSEHOLD_SIZE_TABLE = "BE/BE0101/BE0101S/HushallT03"
 
 BIRTH_COUNTRY_TOP_CODES = [
@@ -31,7 +47,7 @@ BIRTH_COUNTRY_TOP_CODES = [
     "IN", "DE", "ER", "TH", "CN", "RO", "NO", "DK", "UA", "GB",
 ]
 
-INCOME_BRACKET_TABLE = "HE/HE0110/HE0110A/SamForvInk1"
+INCOME_BRACKET_TABLE = "HE/HE0110/HE0110A/SamForvInk1a"
 
 # (bracket_code, low_sek_thousands, high_sek_thousands).
 # All monetary values are in SEK thousands (1 unit = 1 000 SEK).

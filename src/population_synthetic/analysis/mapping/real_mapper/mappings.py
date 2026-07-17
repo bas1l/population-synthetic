@@ -73,4 +73,14 @@ def load_index(path: Path) -> dict:
     if not isinstance(attributes, dict) or not attributes:
         raise ValueError(f"Mapping index {ip} 'attributes' must be a non-empty object")
 
+    # ``deprecated_attributes`` is optional (absence is fine); when present it must be a
+    # list of attribute-name strings. Membership against ``attributes`` is validated later,
+    # at the analysis chokepoint that consumes it (``_scheme_from_index``).
+    if "deprecated_attributes" in index:
+        deprecated = index["deprecated_attributes"]
+        if not isinstance(deprecated, list) or not all(isinstance(name, str) for name in deprecated):
+            raise ValueError(
+                f"Mapping index {ip} 'deprecated_attributes' must be a list of attribute-name strings"
+            )
+
     return index

@@ -102,7 +102,17 @@ every tier. Attribute-level directives: `absent` (missing-input literal), `refin
 sibling's resolved value, e.g. `birth_location` from `birth_country_detail`), `on_miss` (default
 when all miss). The `_index.json` master lists the in-scope attributes (`attribute -> filename`,
 key order = axis order) -- pure mapping scope; country scope is data-driven (Italy's master omits
-`income_source`). The cross-attribute statistics (`joint_pairs`/`coherence_attributes`/
+`income_source`). An optional sibling `deprecated_attributes` list (of attribute names already in
+`attributes`) marks **analysis-deprecated axes**: the attribute is still mapped and emitted into the
+canonical population data (the mapper reads `attributes` and ignores this list), but it is dropped
+from the comparison axis. The filter is applied at the single analysis chokepoint,
+`_scheme_from_index` (`analysis/fidelity/scheme.py`), which excludes the named attributes from
+`ComparisonScheme.attributes`/`.categories` so no downstream stage (marginals, bar charts, TV radar,
+multivariate/C2ST, model-ranking, method-significance, consistency) ever sees them. It fails loudly
+if a listed name is not in `attributes` or if filtering would empty the axis; `load_index`
+additionally rejects a `deprecated_attributes` that is not a list of strings. Sweden deprecates
+`birth_location` (retained in data, out of analysis; see
+`docs/development/plans/*/deprecate-birth-location-analysis-axis.md`). The cross-attribute statistics (`joint_pairs`/`coherence_attributes`/
 `coherence_threshold`, plus the multivariate tuning `grounded_joint_pairs`/`combination_checks`/`c2st`)
 are evaluator tuning, not mapping, and live in a separate
 comparison-analysis config `config/analysis/fidelity/{scb,istat}.json` (one file per country)
