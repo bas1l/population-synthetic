@@ -32,3 +32,6 @@ docs/paper/
 # Large, regenerable SCB catalog artifacts (rebuild with the scripts in that folder)
 docs/reference/scb-pxweb-catalog/scb-am-uf-metadata.jsonl
 docs/reference/scb-pxweb-catalog/scb-am-uf-catalog.html
+
+# Generated per-persona DAG SVGs (render_persona_dags.py) — potentially huge, never tracked
+persona_dags/

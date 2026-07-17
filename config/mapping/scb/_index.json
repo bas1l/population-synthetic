@@ -1,5 +1,6 @@
 {
-  "description": "Master index: comparison attributes -> per-attribute config files. attributes key order = comparison axis order.",
+  "description": "Master index: comparison attributes -> per-attribute config files. attributes key order = comparison axis order. Names in deprecated_attributes are still mapped/emitted into population data but excluded from the comparison axis / analysis.",
+  "deprecated_attributes": ["birth_location"],
   "attributes": {
     "age_group": "age.json",
     "biological_sex": "biological_sex.json",
