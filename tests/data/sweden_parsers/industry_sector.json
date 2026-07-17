@@ -1,0 +1,526 @@
+{
+ "version": "2.0",
+ "class": "dataset",
+ "label": "Employed by region of residence. Annual register by industrial classification (NACE Rev. 2), status in employment, sex, age, region of birth, observations and year",
+ "source": "Statistics Sweden",
+ "updated": "2025-11-28T07:00:00Z",
+ "note": [
+  "A statistical method is used to protect the data of individuals in the statistics presented. For this reason, the presented totals do not always equal the sum of their reported components. See also section 2.2.6 Model assumptions in the quality declaration documentation on Statistics Sweden’s website.",
+  "The statistics are intended to describe the location of the workplaces with which the employed people are associated. Since this is not the same as presenting the employed part of the population by their physical location during the daytime when work is performed, the term “daytime population” is not used. Consequently, the term 'night-time population' is not used either in the reporting according to region of residence.",
+  "As of 2023, the retirement age was raised from 65 to 66 years. For this reason, statistics are reported for age groups 16-64 and 20-64 as well as for age groups 16-65 and 20-65.",
+  "As of 2024, the method for classifying entrepreneurs has been adjusted. This means that the figures are not fully comparable with data for previous months and years."
+ ],
+ "role": {
+  "time": [
+   "Tid"
+  ],
+  "metric": [
+   "ContentsCode"
+  ]
+ },
+ "id": [
+  "SNI2007",
+  "Yrkesstallning",
+  "Kon",
+  "Alder",
+  "Fodelseregion",
+  "ContentsCode",
+  "Tid"
+ ],
+ "size": [
+  51,
+  1,
+  2,
+  2,
+  1,
+  1,
+  1
+ ],
+ "dimension": {
+  "SNI2007": {
+   "label": "industrial classification (NACE Rev. 2)",
+   "category": {
+    "index": {
+     "01-03": 0,
+     "05-09": 1,
+     "10-12": 2,
+     "13-15": 3,
+     "16": 4,
+     "17": 5,
+     "18": 6,
+     "19": 7,
+     "20": 8,
+     "21": 9,
+     "22": 10,
+     "23": 11,
+     "24": 12,
+     "25": 13,
+     "26-28": 14,
+     "29-30": 15,
+     "31-32": 16,
+     "33": 17,
+     "35": 18,
+     "36-37": 19,
+     "38-39": 20,
+     "41-43": 21,
+     "45": 22,
+     "46": 23,
+     "47": 24,
+     "49-52": 25,
+     "53": 26,
+     "55-56": 27,
+     "58-60": 28,
+     "61": 29,
+     "62-63": 30,
+     "64": 31,
+     "65": 32,
+     "66": 33,
+     "68": 34,
+     "69": 35,
+     "70": 36,
+     "71": 37,
+     "72": 38,
+     "73": 39,
+     "74-75": 40,
+     "77": 41,
+     "78": 42,
+     "79-82": 43,
+     "84": 44,
+     "85": 45,
+     "86": 46,
+     "87": 47,
+     "88": 48,
+     "90-93": 49,
+     "94-99": 50
+    },
+    "label": {
+     "01-03": "companies in agriculture, forestry and fishing",
+     "05-09": "extraction of miniral",
+     "10-12": "production of food, beverages and tobacco",
+     "13-15": "textiles, clothing, leather industries",
+     "16": "industry for wood and products of wood, cork, cane etc. , except furniture",
+     "17": "industry for paper and paper products",
+     "18": "printers; other industry for recorded media",
+     "19": "industry for coke and refined petroleum products",
+     "20": "industry for basic chemicals, fertilisers and nitrogen compounds, plastics and synthetic rubber in primary forms",
+     "21": "industry for basic pharmaceutical products and pharmaceutical preparations",
+     "22": "industry for rubber and plastic products",
+     "23": "industry for other non-metallic mineral products",
+     "24": "industry for  basic metals",
+     "25": "industry for fabricated metal products, except machinery and equipment",
+     "26-28": "Industry for  basic metals and Industry for  fabricated metal products, except machinery and equipme",
+     "29-30": "industry for transport equipment",
+     "31-32": "industry for other manufacturing",
+     "33": "repair shops and installation companies for machinery and equipment",
+     "35": "electricity, gas, steam and hot water plants",
+     "36-37": "water supply; sewerage",
+     "38-39": "waste disposal plants; materials recovery plants;establishments for remediation activities and other waste management services",
+     "41-43": "construction",
+     "45": "sales and repair establishments for motor vehicles and motorcycles",
+     "46": "wholesale trade, except of motor vehicles",
+     "47": "retail trade, except of motor vehicles and motorcycles",
+     "49-52": "transport and storage",
+     "53": "postal and courier companies",
+     "55-56": "hotels and restaurants",
+     "58-60": "publishing, motion picture, video and television production, broadcast operation",
+     "61": "telecommunications companies",
+     "62-63": "computer programming and consultancy companies etc.;  information service companies",
+     "64": "banks and other financial institutions",
+     "65": "insurance and reinsurance companies, pension funds",
+     "66": "service companies auxiliary to financial intermediation and insurance, reinsurance and pension funding",
+     "68": "real estate companies",
+     "69": "legal and accounting firms",
+     "70": "head offices; management consultancy companies",
+     "71": "architect´s offices, technical consultancy companies, companies for technical testing and analysis",
+     "72": "institutes for scientific research and development",
+     "73": "advertising and marketing companies",
+     "74-75": "other professional, scientific and technical companies;  veterinary clinics",
+     "77": "renting companies",
+     "78": "employment placement agencies, temporary employment agencies etc.",
+     "79-82": " tourist, security, real estate and secretarial activities",
+     "84": "public authorities and national defence",
+     "85": "educational establishments",
+     "86": "human health establishments",
+     "87": "establishments for residential care activities",
+     "88": "social work establishments without accommodation",
+     "90-93": "arts, entertainment and recreation",
+     "94-99": "other service activities and personal activities"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "code_value"
+   }
+  },
+  "Yrkesstallning": {
+   "label": "status in employment",
+   "category": {
+    "index": {
+     "TOT": 0
+    },
+    "label": {
+     "TOT": "total"
+    }
+   },
+   "extension": {
+    "elimination": true,
+    "eliminationValueCode": "TOT",
+    "show": "value"
+   }
+  },
+  "Kon": {
+   "label": "sex",
+   "category": {
+    "index": {
+     "1": 0,
+     "2": 1
+    },
+    "label": {
+     "1": "men",
+     "2": "women"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "Alder": {
+   "label": "age",
+   "category": {
+    "index": {
+     "20-24": 0,
+     "65-74": 1
+    },
+    "label": {
+     "20-24": "20–24 years",
+     "65-74": "65–74 years"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "Fodelseregion": {
+   "label": "region of birth",
+   "category": {
+    "index": {
+     "tot": 0
+    },
+    "label": {
+     "tot": "total"
+    }
+   },
+   "extension": {
+    "elimination": true,
+    "eliminationValueCode": "tot",
+    "show": "value"
+   }
+  },
+  "ContentsCode": {
+   "label": "observations",
+   "category": {
+    "index": {
+     "0000071V": 0
+    },
+    "label": {
+     "0000071V": "employed by region of residence"
+    },
+    "unit": {
+     "0000071V": {
+      "base": "number",
+      "decimals": 0
+     }
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "refperiod": {
+     "0000071V": "Year"
+    },
+    "show": "value",
+    "measuringType": {
+     "0000071V": "Stock"
+    },
+    "priceType": {
+     "0000071V": "NotApplicable"
+    },
+    "adjustment": {
+     "0000071V": "None"
+    }
+   }
+  },
+  "Tid": {
+   "label": "year",
+   "category": {
+    "index": {
+     "2024": 0
+    },
+    "label": {
+     "2024": "2024"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "code"
+   }
+  }
+ },
+ "extension": {
+  "noteMandatory": {
+   "0": true,
+   "1": true,
+   "2": true,
+   "3": true
+  },
+  "px": {
+   "infofile": "AM0210",
+   "tableid": "TAB5543",
+   "decimals": 0,
+   "official-statistics": true,
+   "aggregallowed": false,
+   "copyright": false,
+   "language": "en",
+   "contents": "Employed by region of residence. Annual register",
+   "descriptiondefault": false,
+   "heading": [
+    "ContentsCode",
+    "Tid"
+   ],
+   "stub": [
+    "SNI2007",
+    "Yrkesstallning",
+    "Kon",
+    "Alder",
+    "Fodelseregion"
+   ],
+   "matrix": "0000071V",
+   "subject-code": "AM",
+   "subject-area": "Labour market"
+  },
+  "discontinued": null,
+  "contact": [
+   {
+    "name": "Sofia Löfgren",
+    "organization": "Statistics Sweden",
+    "phone": "010-479 65 86",
+    "mail": "sofia.lofgren@scb.se",
+    "raw": "Sofia Löfgren, Statistics Sweden# +46 010-479 65 86#sofia.lofgren@scb.se"
+   },
+   {
+    "name": "Frida Vingren",
+    "organization": "Statistics Sweden",
+    "phone": "010-479 65 84",
+    "mail": "frida.vingren@scb.se",
+    "raw": "Frida Vingren, Statistics Sweden# +46 010-479 65 84#frida.vingren@scb.se"
+   }
+  ]
+ },
+ "value": [
+  2965,
+  24280,
+  1384,
+  8324,
+  518,
+  255,
+  258,
+  42,
+  2843,
+  1078,
+  2000,
+  487,
+  196,
+  286,
+  153,
+  426,
+  1217,
+  1268,
+  318,
+  175,
+  1139,
+  445,
+  386,
+  102,
+  218,
+  388,
+  120,
+  105,
+  96,
+  51,
+  22,
+  9,
+  546,
+  314,
+  243,
+  98,
+  270,
+  107,
+  223,
+  78,
+  841,
+  436,
+  283,
+  133,
+  605,
+  443,
+  116,
+  197,
+  1119,
+  421,
+  327,
+  65,
+  3267,
+  2780,
+  720,
+  429,
+  4543,
+  2881,
+  1308,
+  489,
+  4199,
+  1355,
+  1852,
+  197,
+  590,
+  884,
+  294,
+  382,
+  1400,
+  1496,
+  146,
+  140,
+  576,
+  833,
+  273,
+  185,
+  157,
+  341,
+  59,
+  67,
+  840,
+  749,
+  297,
+  91,
+  25177,
+  15958,
+  2585,
+  1695,
+  7873,
+  3537,
+  1664,
+  428,
+  7657,
+  5850,
+  3896,
+  1925,
+  18632,
+  4488,
+  35974,
+  5325,
+  10278,
+  14224,
+  4517,
+  1763,
+  2511,
+  662,
+  1169,
+  166,
+  12355,
+  2581,
+  17494,
+  2297,
+  1465,
+  1352,
+  1218,
+  646,
+  644,
+  346,
+  328,
+  73,
+  3260,
+  3058,
+  1141,
+  764,
+  1916,
+  771,
+  2193,
+  564,
+  704,
+  296,
+  936,
+  206,
+  849,
+  418,
+  544,
+  158,
+  1579,
+  7070,
+  1353,
+  3400,
+  1111,
+  2660,
+  1844,
+  2533,
+  1563,
+  4460,
+  1260,
+  2300,
+  2448,
+  6569,
+  888,
+  1333,
+  462,
+  954,
+  335,
+  486,
+  945,
+  893,
+  715,
+  502,
+  557,
+  2080,
+  958,
+  1464,
+  925,
+  566,
+  301,
+  111,
+  12472,
+  4261,
+  7042,
+  2560,
+  8649,
+  4628,
+  6003,
+  3438,
+  6964,
+  6589,
+  6197,
+  7778,
+  8685,
+  9412,
+  17626,
+  19423,
+  2582,
+  6538,
+  8875,
+  20624,
+  4363,
+  3129,
+  10712,
+  9679,
+  8249,
+  5701,
+  17363,
+  15040,
+  5737,
+  5603,
+  6989,
+  3995,
+  2612,
+  4621,
+  4818,
+  6013
+ ]
+}

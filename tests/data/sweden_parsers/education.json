@@ -1,0 +1,268 @@
+{
+ "version": "2.0",
+ "class": "dataset",
+ "label": "Population 16-95+ years of age, number by region, level of education, age, sex, observations and year",
+ "source": "Statistics Sweden",
+ "updated": "2026-04-27T06:00:00Z",
+ "note": [
+  "Note that a level of education comprises both studies concluded with a degree and studies concluded without a degree, excluding postgraduate studies that only include persons with degrees. An education must cover no less than one term of full-time studies to enable level classification. \r\n  For further information on principles for classifying the level of education, see www.scb.se/sun",
+  "Note that educational data might be incomplete for a small number of persons. It could concern people with degrees from abroad or with private degrees or with internal company-educations or people with old degrees."
+ ],
+ "role": {
+  "time": [
+   "Tid"
+  ],
+  "metric": [
+   "ContentsCode"
+  ]
+ },
+ "id": [
+  "Region",
+  "UtbildningsNiva",
+  "Alder",
+  "Kon",
+  "ContentsCode",
+  "Tid"
+ ],
+ "size": [
+  1,
+  8,
+  3,
+  2,
+  1,
+  1
+ ],
+ "dimension": {
+  "Region": {
+   "label": "region",
+   "category": {
+    "index": {
+     "00": 0
+    },
+    "label": {
+     "00": "Sweden"
+    }
+   },
+   "extension": {
+    "elimination": true,
+    "eliminationValueCode": "00",
+    "show": "code_value"
+   }
+  },
+  "UtbildningsNiva": {
+   "label": "level of education",
+   "note": [
+    "The classification by level of educational attainment is according to the Swedish national educational classification (SUN)"
+   ],
+   "category": {
+    "index": {
+     "1": 0,
+     "2": 1,
+     "3": 2,
+     "4": 3,
+     "5": 4,
+     "6": 5,
+     "7": 6,
+     "US": 7
+    },
+    "label": {
+     "1": "primary and secondary education less than 9 years (ISCED97 1)",
+     "2": "primary and secondary education 9-10 years (ISCED97 2)",
+     "3": "upper secondary education, 2 years or less (ISCED97 3C)",
+     "4": "upper secondary education 3 years (ISCED97 3A)",
+     "5": "post-secondary education, less than 3 years (ISCED97 4+5B)",
+     "6": "post-secondary education 3 years or more (ISCED97 5A)",
+     "7": "post-graduate education (ISCED97 6)",
+     "US": "no information about level of educational attainment"
+    }
+   },
+   "extension": {
+    "elimination": true,
+    "show": "value"
+   }
+  },
+  "Alder": {
+   "label": "age",
+   "category": {
+    "index": {
+     "30": 0,
+     "80": 1,
+     "95+": 2
+    },
+    "label": {
+     "30": "30 years",
+     "80": "80 years",
+     "95+": "95+ years"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "Kon": {
+   "label": "sex",
+   "category": {
+    "index": {
+     "1": 0,
+     "2": 1
+    },
+    "label": {
+     "1": "men",
+     "2": "women"
+    }
+   },
+   "extension": {
+    "elimination": true,
+    "show": "value"
+   },
+   "link": {
+    "describedby": [
+     {
+      "extension": {
+       "Kon": "Kön"
+      }
+     }
+    ]
+   }
+  },
+  "ContentsCode": {
+   "label": "observations",
+   "category": {
+    "index": {
+     "000000I2": 0
+    },
+    "label": {
+     "000000I2": "Number"
+    },
+    "unit": {
+     "000000I2": {
+      "base": "number",
+      "decimals": 0
+     }
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "refperiod": {
+     "000000I2": "31 December each year"
+    },
+    "show": "value",
+    "measuringType": {
+     "000000I2": "Stock"
+    },
+    "priceType": {
+     "000000I2": "NotApplicable"
+    },
+    "adjustment": {
+     "000000I2": "None"
+    }
+   }
+  },
+  "Tid": {
+   "label": "year",
+   "category": {
+    "index": {
+     "2025": 0
+    },
+    "label": {
+     "2025": "2025"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "code"
+   }
+  }
+ },
+ "extension": {
+  "noteMandatory": {
+   "0": true,
+   "1": true
+  },
+  "px": {
+   "infofile": "UF0506",
+   "tableid": "TAB4320",
+   "decimals": 0,
+   "official-statistics": false,
+   "aggregallowed": true,
+   "copyright": false,
+   "language": "en",
+   "contents": "Population 16-95+ years of age, number",
+   "descriptiondefault": false,
+   "heading": [
+    "ContentsCode",
+    "Tid"
+   ],
+   "stub": [
+    "Region",
+    "UtbildningsNiva",
+    "Alder",
+    "Kon"
+   ],
+   "matrix": "000000I2",
+   "subject-code": "UF",
+   "subject-area": "Education and research"
+  },
+  "discontinued": null,
+  "contact": [
+   {
+    "name": "Tomas Westling",
+    "organization": "Statistics Sweden",
+    "phone": "010-479 61 78",
+    "mail": "tomas.westling@scb.se",
+    "raw": "Tomas Westling, Statistics Sweden# +46 010-479 61 78#tomas.westling@scb.se"
+   }
+  ]
+ },
+ "value": [
+  1095,
+  869,
+  9687,
+  7711,
+  2392,
+  8016,
+  5765,
+  3262,
+  3242,
+  4389,
+  206,
+  1495,
+  4513,
+  3857,
+  9934,
+  17216,
+  1148,
+  5095,
+  24838,
+  16289,
+  7961,
+  3843,
+  995,
+  712,
+  11663,
+  11178,
+  4373,
+  6072,
+  468,
+  1235,
+  17573,
+  27860,
+  7112,
+  8300,
+  819,
+  1760,
+  344,
+  301,
+  830,
+  368,
+  130,
+  52,
+  3506,
+  2557,
+  532,
+  683,
+  176,
+  514
+ ]
+}

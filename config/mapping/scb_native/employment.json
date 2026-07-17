@@ -1,7 +1,11 @@
 {
   "values": [
     "Employed",
-    "Unemployed"
+    "Unemployed",
+    "Student",
+    "Retired",
+    "Sick Leave",
+    "Other"
   ],
   "real": {
     "Employed": {
@@ -19,6 +23,36 @@
         "arbetslösa",
         "unemployed",
         "unemployed, thousands"
+      ]
+    },
+    "Student": {
+      "equals": [
+        "Student",
+        "students",
+        "studerande"
+      ]
+    },
+    "Retired": {
+      "equals": [
+        "Retired",
+        "retirees",
+        "retired",
+        "pensionärer",
+        "pensioner"
+      ]
+    },
+    "Sick Leave": {
+      "equals": [
+        "Sick Leave",
+        "sick",
+        "sjuk"
+      ]
+    },
+    "Other": {
+      "equals": [
+        "Other",
+        "others",
+        "övriga"
       ]
     }
   },

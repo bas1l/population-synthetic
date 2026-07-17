@@ -267,8 +267,12 @@ def test_load_scheme_is_country_specific():
     assert "income_source" in sv.attributes
     assert "income_source" not in it.attributes
     assert "age_group" in sv.attributes and "age_group" in it.attributes
-    # Category sets are DB-grounded (no empty buckets).
-    assert sv.categories["employment_status"] == ["Employed", "Unemployed"]
+    # Category sets are DB-grounded (no empty buckets). Sweden sources
+    # employment_status from the register labour-status table (ArRegArbStatus),
+    # whose six statuses map to these canonical values.
+    assert sv.categories["employment_status"] == [
+        "Employed", "Unemployed", "Student", "Retired", "Sick Leave", "Other",
+    ]
     assert "Separated" not in it.categories["civil_status"]
     assert "Civil Partnership" not in it.categories["civil_status"]
 

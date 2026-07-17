@@ -1,5 +1,5 @@
 # Consistency-scan rule config for Sweden (SCB), country-keyed by the real mapper's
-# MAPPINGS_SUBDIR stem ("scb"), same convention as config/analysis/fidelity/scb.json.
+# MAPPINGS_SUBDIR stem ("scb_native") -- this file is named to match that stem.
 #
 # PROVISIONAL SEED VALUES. These two rules and their thresholds (age >= 55 for
 # "retired", age >= 18 for "married") are a starting point to exercise the detection
@@ -21,18 +21,24 @@
 # Label equality is exact-match against the CANONICAL mapped value (the same casing
 # emitted by config/mapping/{scb,...}/*.json "values", e.g. "Married" not "married").
 #
-# KNOWN GAP (surfaced, not silently patched): the current config/mapping/scb/employment.json
-# only declares canonical values "Employed"/"Unemployed" -- there is no "Retired" category in
-# the mapped-population schema today, so `young_retiree` cannot currently match anything
-# (raw "retired"/pensioner AKU labels have no matcher and resolve to None, not a category).
-# The rule is kept as specified (provisional, per the plan) so it activates the moment a
-# "Retired" category is added to the employment mapping; until then its rate reads 0/n.
+# RECONCILED (was a KNOWN GAP): the employment mapping now declares a "Retired"
+# canonical value. The Swedish generator sources employment_status from the register
+# labour-status table (AM0210D/ArRegArbStatus), whose six statuses map to canonical
+# "Employed"/"Unemployed"/"Student"/"Retired"/"Sick Leave"/"Other" (see
+# config/mapping/scb_native/employment.json). The `young_retiree` rule below therefore
+# now matches against a real category rather than reading 0/n. The predicate label uses
+# the canonical mapped casing ("Retired"), per the exact-match note above.
+#
+# On the real population this rule should never trip (register retirees are 65+); it is
+# primarily a guard for synthetic populations, where an LLM could emit a young "retired"
+# persona. The loader resolves this config by the real mapper's MAPPINGS_SUBDIR
+# ("scb_native"); this file is named accordingly (renamed from scb.yaml).
 
 rules:
   - id: young_retiree
     description: Retired individuals should not be younger than 55.
     severity: hard
-    when: { employment_status: retired }
+    when: { employment_status: Retired }
     require: { age: { min: 55 } }
 
   - id: minor_married

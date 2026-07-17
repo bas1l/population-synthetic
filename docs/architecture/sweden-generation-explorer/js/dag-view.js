@@ -210,8 +210,8 @@ function deriveRole(role, ctx) {
   switch (role) {
     case "age_group": return ctx.age_group;
     case "sex": return ctx.sex;
-    case "aku_edu": return ctx.education ? (C.SUN2020_TO_AKU_EDU[String(ctx.education).toLowerCase()] || null) : null;
-    case "inc_emp": return ctx.employment_status ? (C.AKU_TO_INC_EMP[String(ctx.employment_status).toLowerCase()] || null) : null;
+    case "education": return ctx.education ? String(ctx.education).toLowerCase() : null;
+    case "inc_emp": return ctx.employment_status ? (C.STATUS_TO_INC_EMP[String(ctx.employment_status).toLowerCase()] || null) : null;
     case "inc_age": return ctx.age_group ? (C.AGE_GROUP_TO_INC_AGE[ctx.age_group] || null) : null;
     default: return null;
   }
