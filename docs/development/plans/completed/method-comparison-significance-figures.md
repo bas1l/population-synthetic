@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-20
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-07-20 16:23
 
 > **Refinement (2026-07-20):** two follow-up changes landed after the initial three phases.
 > 1. **Default `pairs_mode` is now `significant-only`** (was `adjacent`). `resolve_pairs("significant-only")`
