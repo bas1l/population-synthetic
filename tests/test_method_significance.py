@@ -119,7 +119,8 @@ def test_friedman_and_kendalls_w_present_per_attribute():
 def test_builder_json_shape():
     result = build_method_significance(_full_grid(), ATTRS)
 
-    assert set(result) == {"metadata", "per_attribute", "per_attribute_model", "overall"}
+    assert set(result) == {"metadata", "per_attribute", "per_attribute_model", "overall",
+                           "method_comparison"}
 
     meta = result["metadata"]
     for key in ("country", "generated_at", "alpha", "n_combos", "models", "strategies",

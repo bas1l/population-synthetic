@@ -37,21 +37,33 @@ import csv
 import json
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from scipy import stats
 
+from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
 from population_synthetic.analysis.utils.stats_tests import (
     benjamini_hochberg,
     friedman_test,
     mixed_logit_interaction,
+    nemenyi_pairwise,
     nemenyi_posthoc,
     page_trend_test,
 )
+
+# Config-driven method-comparison figure settings (bracketed-pair mode + star
+# thresholds); the single source of truth is the JSON, loaded fail-fast below.
+DEFAULT_COMPARISON_CONFIG_PATH = (
+    PROJECT_ROOT / "config" / "analysis" / "method_significance" / "comparison.json"
+)
+
+# Separator for a method-pair key in the serialised pairwise-p / bracket maps.
+_PAIR_SEP = "|"
 
 # The 5 canonical ordered strategies define the method axis; rank = index + 1
 # (1 = simplest). Combos on any other strategy are dropped (recorded).
@@ -75,6 +87,117 @@ _CAVEATS = (
     "attributes. TV is bounded [0,1] and heteroscedastic near 0, hence rank-based "
     "tests plus a logit-linked mixed model rather than raw-TV ANOVA."
 )
+
+
+def load_comparison_config(path: str | Path = DEFAULT_COMPARISON_CONFIG_PATH) -> dict[str, Any]:
+    """Load and validate the method-comparison figure config (fail-fast).
+
+    The config declares ``pairs_mode`` (which method pairs get a significance
+    bracket) constrained to ``allowed_pairs_modes``, plus ``star_thresholds`` (the
+    p-value -> star-symbol cutoffs) and the ``ns_symbol`` for a non-significant
+    pair. Everything the figure needs about pair selection and star mapping lives
+    here, not in code -- there is no baked-in mode list or threshold fallback.
+
+    Raises :class:`FileNotFoundError` when the file is missing and
+    :class:`ValueError` when its shape is malformed or ``pairs_mode`` is not one of
+    the declared ``allowed_pairs_modes``.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Method-comparison config not found: {path}. Expected "
+            "config/analysis/method_significance/comparison.json."
+        )
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = json.load(fh)
+
+    if not isinstance(raw, dict):
+        raise ValueError(f"Method-comparison config must be a JSON object, got {type(raw).__name__}: {path}")
+
+    allowed = raw.get("allowed_pairs_modes")
+    if not isinstance(allowed, list) or not allowed or not all(isinstance(m, str) for m in allowed):
+        raise ValueError(
+            f"Method-comparison config {path} must have a non-empty 'allowed_pairs_modes' "
+            f"list of strings, got {allowed!r}."
+        )
+
+    pairs_mode = raw.get("pairs_mode")
+    if pairs_mode not in allowed:
+        raise ValueError(
+            f"Method-comparison config {path} has unknown pairs_mode {pairs_mode!r}; "
+            f"must be one of {allowed}."
+        )
+
+    thresholds = raw.get("star_thresholds")
+    if not isinstance(thresholds, list) or not thresholds:
+        raise ValueError(
+            f"Method-comparison config {path} must have a non-empty 'star_thresholds' list, "
+            f"got {thresholds!r}."
+        )
+    for entry in thresholds:
+        if (not isinstance(entry, dict) or not isinstance(entry.get("max_p"), (int, float))
+                or not isinstance(entry.get("symbol"), str)):
+            raise ValueError(
+                f"Method-comparison config {path} star_thresholds entries must be "
+                f"{{'max_p': number, 'symbol': str}}, got {entry!r}."
+            )
+
+    if not isinstance(raw.get("ns_symbol"), str):
+        raise ValueError(
+            f"Method-comparison config {path} must have a string 'ns_symbol', got {raw.get('ns_symbol')!r}."
+        )
+    return raw
+
+
+def resolve_pairs(
+    methods: list[str],
+    pairs_mode: str,
+    *,
+    pairwise_p: dict[str, float] | None = None,
+    alpha: float = 0.05,
+) -> list[tuple[str, str]]:
+    """Resolve which method pairs get a bracket, from the config ``pairs_mode``.
+
+    *methods* are the compared methods in complexity order. Modes:
+
+    * ``adjacent`` -- consecutive complexity steps ``(m_i, m_{i+1})``.
+    * ``all`` -- every unordered pair.
+    * ``vs-baseline`` -- every method vs the simplest (``methods[0]``).
+    * ``significant-only`` -- the ``all`` pairs whose Nemenyi p (from *pairwise_p*)
+      is ``<= alpha``; requires *pairwise_p* (a ``"a|b" -> p`` map).
+
+    Pairs are returned in complexity order (left method simpler than right). An
+    unknown *pairs_mode* raises :class:`ValueError` (fail-fast; never a silent
+    default).
+    """
+    all_pairs = [(a, b) for a, b in combinations(methods, 2)]
+    if pairs_mode == "adjacent":
+        return list(zip(methods[:-1], methods[1:]))
+    if pairs_mode == "all":
+        return all_pairs
+    if pairs_mode == "vs-baseline":
+        if not methods:
+            return []
+        base = methods[0]
+        return [(base, m) for m in methods[1:]]
+    if pairs_mode == "significant-only":
+        if pairwise_p is None:
+            raise ValueError("pairs_mode 'significant-only' needs pairwise_p to select pairs")
+        selected: list[tuple[str, str]] = []
+        for a, b in all_pairs:
+            p = pairwise_p.get(_pair_key(a, b))
+            if p is not None and p <= alpha:
+                selected.append((a, b))
+        return selected
+    raise ValueError(
+        f"Unknown pairs_mode {pairs_mode!r}; expected one of "
+        "'adjacent', 'all', 'vs-baseline', 'significant-only'."
+    )
+
+
+def _pair_key(a: str, b: str) -> str:
+    """Serialised key for a method pair (``"a|b"``), stable in the given order."""
+    return f"{a}{_PAIR_SEP}{b}"
 
 
 def _library_versions() -> dict[str, str | None]:
@@ -344,11 +467,203 @@ def _overall_dominant_factor(eta_sq: dict[str, float] | None) -> str | None:
     return max(share, key=share.get)
 
 
+# =========================================================================== #
+# Method-comparison figure statistics (models as blocks, methods as treatments) #
+#                                                                             #
+# This block keys on **TV-similarity = 1 - tv_distance** (higher = better),   #
+# unlike the per-attribute trend/omnibus blocks above (which key on raw TV-   #
+# distance). The rank-based Friedman/Nemenyi p-values are invariant to that    #
+# monotone sign flip, but the reported per-method ``means`` are on the         #
+# similarity scale so the figure's bars read "taller = more faithful".         #
+# Minimum 3 complete models required to *chart* a panel (recorded but flagged  #
+# below that).                                                                 #
+# =========================================================================== #
+
+_MIN_COMPLETE_MODELS = 3  # panels with fewer complete models are recorded but not charted
+
+
+def _tv_sim(record: ComboPerformance | None, attr: str) -> float | None:
+    """TV-*similarity* (``1 - tv_distance``) of *record* at *attr*, or ``None``.
+
+    Reads the loader-computed ``tv_similarity`` map, which already omits NaN /
+    degenerate attributes -- so a missing key is an *absent* cell (never imputed,
+    never confused with a real ``0.0`` similarity).
+    """
+    if record is None:
+        return None
+    return record.tv_similarity.get(attr)
+
+
+def _overall_tv_sim(record: ComboPerformance | None) -> float | None:
+    """A model's overall TV-similarity: mean across its scorable categories.
+
+    Mirrors ``model_ranking``'s ``overall.tv_similarity_mean`` (mean of the
+    per-attribute ``tv_similarity`` values, NaN attributes already excluded).
+    Returns ``None`` when no attribute is scorable (an absent overall cell).
+    """
+    if record is None:
+        return None
+    values = list(record.tv_similarity.values())
+    if not values:
+        return None
+    return float(np.mean(values))
+
+
+def _complete_case_matrix(
+    per_model: dict[str, dict[str, float | None]],
+    models: list[str],
+    methods: list[str],
+) -> tuple[np.ndarray, list[str], list[str]]:
+    """Build the complete-case ``models x methods`` TV-similarity matrix.
+
+    *per_model* maps ``model -> {method -> tv_similarity | None}``. A model is
+    *complete* iff it has a non-``None`` value under **every** compared method
+    (Friedman requires complete blocks); incomplete models are dropped and
+    returned separately (no imputation). Returns ``(matrix, complete_models,
+    dropped_models)`` with *matrix* shaped ``len(complete_models) x len(methods)``.
+    """
+    complete = [m for m in models if all(per_model[m].get(s) is not None for s in methods)]
+    dropped = [m for m in models if m not in complete]
+    matrix = np.array(
+        [[float(per_model[m][s]) for s in methods] for m in complete],
+        dtype=float,
+    ) if complete else np.empty((0, len(methods)))
+    return matrix, complete, dropped
+
+
+def _method_panel(
+    matrix: np.ndarray,
+    methods: list[str],
+    complete_models: list[str],
+    dropped_models: list[str],
+) -> dict[str, Any]:
+    """One panel: Friedman omnibus + Nemenyi pairwise over methods on *matrix*.
+
+    *matrix* is ``complete_models x methods`` TV-similarity (no NaN). Records the
+    per-method means (over the complete-case models actually entering the test),
+    ``n_models`` / ``n_dropped``, the Friedman omnibus (statistic, p, Kendall's W),
+    and the Nemenyi ``pairwise_p`` map (``"a|b" -> p``). Panels with fewer than
+    ``_MIN_COMPLETE_MODELS`` complete models are flagged ``insufficient_n`` (the
+    chart skips them); the omnibus still runs when Friedman is computable
+    (``n >= 2``) so the number is available, but is ``None`` below that.
+    """
+    n = int(matrix.shape[0])
+    k = len(methods)
+    means: dict[str, float | None] = (
+        {s: float(np.mean(matrix[:, j])) for j, s in enumerate(methods)}
+        if n else {s: None for s in methods}
+    )
+    # Per-model TV-similarity under each method, over the complete-case models
+    # actually entering the test (matrix rows aligned to *complete_models*). This
+    # is the individual-point / paired-line source for the comparison figure; the
+    # renderer stays a pure consumer (no recomputation, no re-derivation from combos).
+    per_model: dict[str, dict[str, float]] = {
+        complete_models[i]: {methods[j]: float(matrix[i, j]) for j in range(k)}
+        for i in range(n)
+    }
+
+    if n < 2 or k < 2:
+        omnibus = {"test": "friedman", "statistic": None, "p": None, "p_bh": None,
+                   "kendall_w": None,
+                   "note": f"need >=2 methods and >=2 complete models, got {k} methods / {n} models"}
+        pairwise_p: dict[str, float] = {}
+    else:
+        friedman = friedman_test(matrix)
+        omnibus = {"test": "friedman", "statistic": friedman.get("chi2"),
+                   "p": friedman.get("p"), "p_bh": None,
+                   "kendall_w": friedman.get("kendalls_w")}
+        if "note" in friedman:
+            omnibus["note"] = friedman["note"]
+        nemenyi = nemenyi_pairwise(matrix, labels=methods)
+        pairwise_p = {}
+        p_matrix = nemenyi.get("p_matrix")
+        if p_matrix is not None:
+            for i, j in combinations(range(k), 2):
+                pairwise_p[_pair_key(methods[i], methods[j])] = float(p_matrix[i][j])
+
+    panel: dict[str, Any] = {
+        "n_models": n,
+        "n_dropped": len(dropped_models),
+        "dropped_models": dropped_models,
+        "means": means,
+        "per_model": per_model,
+        "omnibus": omnibus,
+        "pairwise_p": pairwise_p,
+        "insufficient_n": n < _MIN_COMPLETE_MODELS,
+    }
+    if n < _MIN_COMPLETE_MODELS:
+        panel["note"] = (
+            f"{n} complete model(s) < {_MIN_COMPLETE_MODELS}; recorded but not charted"
+        )
+    return panel
+
+
+def _method_comparison(
+    by_ms: dict[tuple[str, str], ComboPerformance],
+    models: list[str],
+    attributes: list[str],
+    methods: list[str],
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Per-category (+ Overall) method comparison: Friedman + Nemenyi, models as blocks.
+
+    For each demographic category builds the complete-case ``models x methods``
+    TV-similarity matrix and runs :func:`_method_panel`; the ``overall`` panel
+    uses each model's overall TV-similarity (mean across categories) under each
+    method. The category omnibus p-values are Benjamini-Hochberg (FDR) corrected
+    across categories (``p_bh`` stored alongside raw ``p``); the Overall panel is a
+    single pooled test and is not part of that family (``p_bh`` stays ``None``).
+
+    *methods* are the compared methods in complexity order; *config* supplies
+    ``pairs_mode`` (exposed for the renderer, which resolves the bracketed pairs).
+    The block is a pure serialisable contract -- no colormaps, no bracket geometry.
+    """
+    panels: dict[str, Any] = {}
+
+    for attr in attributes:
+        per_model = {
+            m: {s: _tv_sim(by_ms.get((m, s)), attr) for s in methods} for m in models
+        }
+        matrix, complete, dropped = _complete_case_matrix(per_model, models, methods)
+        panels[attr] = _method_panel(matrix, methods, complete, dropped)
+
+    # Overall panel: per-model overall TV-similarity under each method.
+    per_model_overall = {
+        m: {s: _overall_tv_sim(by_ms.get((m, s))) for s in methods} for m in models
+    }
+    o_matrix, o_complete, o_dropped = _complete_case_matrix(per_model_overall, models, methods)
+    panels["overall"] = _method_panel(o_matrix, methods, o_complete, o_dropped)
+
+    # BH-FDR across the *category* omnibus p-values (Overall excluded: single test).
+    indexed = [(attr, panels[attr]["omnibus"].get("p")) for attr in attributes]
+    have = [(attr, p) for attr, p in indexed if p is not None]
+    adjusted = benjamini_hochberg([p for _, p in have]) if have else []
+    bh_by_attr = {attr: adj for (attr, _), adj in zip(have, adjusted)}
+    for attr in attributes:
+        panels[attr]["omnibus"]["p_bh"] = bh_by_attr.get(attr)
+
+    return {
+        "response": "tv_similarity",
+        "block_factor": "model",
+        "compared_factor": "method",
+        "methods": methods,
+        "pairs_mode": config["pairs_mode"],
+        "min_complete_models": _MIN_COMPLETE_MODELS,
+        "multiplicity_correction": "benjamini_hochberg_fdr_over_categories",
+        # Echo the star mapping so the renderer reads it from *result* and stays a
+        # pure consumer (falls back to load_comparison_config only if absent).
+        "star_thresholds": config.get("star_thresholds"),
+        "ns_symbol": config.get("ns_symbol"),
+        "panels": panels,
+    }
+
+
 def build_method_significance(
     records: list[ComboPerformance],
     attributes: list[str],
     *,
     skipped: list[tuple[str, str]] | None = None,
+    comparison_config: dict[str, Any] | None = None,
     alpha: float = 0.05,
 ) -> dict[str, Any]:
     """Build the serialisable method/model significance analysis for one country.
@@ -434,6 +749,14 @@ def build_method_significance(
         "caveats": _CAVEATS,
     }
 
+    # ---- Method-comparison figure statistics (models-as-blocks) --------- #
+    # Config is the single source of truth for pair mode + star thresholds;
+    # load it here (fail-fast) unless the caller injected one (tests).
+    cmp_config = comparison_config if comparison_config is not None else load_comparison_config()
+    method_comparison = _method_comparison(
+        by_ms, models, list(attributes), strategies_present, cmp_config
+    )
+
     return {
         "metadata": {
             "country": country,
@@ -454,6 +777,7 @@ def build_method_significance(
         "per_attribute": per_attribute,
         "per_attribute_model": per_attribute_model,
         "overall": overall,
+        "method_comparison": method_comparison,
     }
 
 

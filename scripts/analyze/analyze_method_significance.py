@@ -22,12 +22,19 @@ score_fidelity_all.py first. It needs the optional analysis extra (statsmodels +
 scikit-posthocs): pip install -e .[analysis].
 
 Outputs, per country, under {output_base}/03_Analysis/method_significance/:
-    {country}_method_significance.json   per-attribute + overall tests, metadata, caveats
-    {country}_method_significance.csv    one row per attribute (method L/p, model chi2/p, BH)
-    {country}_slope_heatmap.png          attribute x model descriptive TV(method) slope
-    {country}_cd_diagram.png             model critical-difference diagram (Nemenyi)
-    {country}_factor_dominance.png       eta^2 variance shares (model/method/category)
-    {country}_method_trends/             one TV(method) trend chart per attribute (line per model)
+    {country}_method_significance.json      per-attribute + overall tests, metadata, caveats
+    {country}_method_significance.csv       one row per attribute (method L/p, model chi2/p, BH)
+    {country}_method_comparison.json        method-comparison block (Friedman + Nemenyi, models
+                                            as blocks): per category + overall omnibus & pairwise p
+    {country}_method_comparison.csv         one row per (category|overall, method-pair): omnibus
+                                            stat/p/p_bh/W + pairwise p + significance stars
+    {country}_method_comparison.png/.svg    bars + model points + significance brackets/stars,
+                                            one panel per category + overall (grid)
+    {country}_method_comparison_overall.png/.svg  the single Overall headline panel
+    {country}_slope_heatmap.png             attribute x model descriptive TV(method) slope
+    {country}_cd_diagram.png                model critical-difference diagram (Nemenyi)
+    {country}_factor_dominance.png          eta^2 variance shares (model/method/category)
+    {country}_method_trends/                one TV(method) trend chart per attribute (line per model)
 
 Usage:
     python scripts/analyze/analyze_method_significance.py
@@ -50,7 +57,10 @@ Usage:
 """
 
 import argparse
+import csv
+import json
 import sys
+from itertools import combinations
 from pathlib import Path
 
 import yaml
@@ -58,12 +68,15 @@ import yaml
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.method_significance.builder import (
     build_method_significance,
+    load_comparison_config,
     write_method_significance_csv,
     write_method_significance_json,
 )
 from population_synthetic.analysis.method_significance.charts import (
+    _p_to_stars,
     plot_cd_diagram,
     plot_factor_dominance,
+    plot_method_comparison,
     plot_method_trends,
     plot_slope_heatmap,
 )
@@ -149,6 +162,67 @@ def _split_csv(values: list[str] | None) -> list[str] | None:
 
 def _fmt_p(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.3g}"
+
+
+def _write_method_comparison_json(result: dict, out_path: Path) -> Path:
+    """Dump the ``method_comparison`` block (Friedman + Nemenyi, models as blocks).
+
+    Mirrors ``write_method_significance_json``'s idiom: the serialised block is the
+    machine-readable contract; the driver only persists it, never recomputes it.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as fh:
+        json.dump(result.get("method_comparison") or {}, fh, indent=2, ensure_ascii=False)
+    return out_path
+
+
+def _write_method_comparison_csv(result: dict, out_path: Path) -> Path:
+    """Flatten the ``method_comparison`` panels to one row per (panel, method-pair).
+
+    Rows iterate categories (in the metadata attribute order) then ``overall``; for
+    each panel a row is emitted per unordered method-pair (complexity order),
+    carrying the panel-level omnibus (statistic, raw & BH p, Kendall's W) alongside
+    that pair's Nemenyi p and its significance stars. A panel with no comparable
+    pair (fewer than two methods) still emits one row so its omnibus is not lost.
+    The star mapping reuses the renderer's config-driven ``_p_to_stars`` -- no
+    threshold logic is duplicated here.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    block = result.get("method_comparison") or {}
+    methods: list[str] = block.get("methods") or []
+    panels: dict = block.get("panels") or {}
+    thresholds = block.get("star_thresholds") or load_comparison_config()["star_thresholds"]
+    ns_symbol = block.get("ns_symbol") or load_comparison_config()["ns_symbol"]
+
+    # Categories in the analysed axis order, then the pooled Overall panel.
+    panel_order = [a for a in result["metadata"]["attributes"] if a in panels]
+    if "overall" in panels:
+        panel_order.append("overall")
+
+    with open(out_path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow([
+            "category", "n_models",
+            "omnibus_statistic", "omnibus_p", "omnibus_p_bh", "kendall_w",
+            "method_a", "method_b", "pairwise_p", "stars",
+        ])
+        for name in panel_order:
+            panel = panels[name]
+            omnibus = panel.get("omnibus") or {}
+            pairwise_p: dict = panel.get("pairwise_p") or {}
+            common = [
+                name, panel.get("n_models"),
+                omnibus.get("statistic"), omnibus.get("p"),
+                omnibus.get("p_bh"), omnibus.get("kendall_w"),
+            ]
+            pairs = list(combinations(methods, 2))
+            if not pairs:
+                writer.writerow(common + [None, None, None, None])
+                continue
+            for a, b in pairs:
+                p = pairwise_p.get(f"{a}|{b}")
+                writer.writerow(common + [a, b, p, _p_to_stars(p, thresholds, ns_symbol)])
+    return out_path
 
 
 def _print_country_summary(result: dict) -> None:
@@ -320,6 +394,16 @@ def main() -> None:
         )
         print(f"CSV written to {csv_path}")
 
+        # Method-comparison results table (data, not a chart -- always written).
+        mc_json = _write_method_comparison_json(
+            result, significance_dir / f"{country}_method_comparison.json"
+        )
+        print(f"Method-comparison JSON written to {mc_json}")
+        mc_csv = _write_method_comparison_csv(
+            result, significance_dir / f"{country}_method_comparison.csv"
+        )
+        print(f"Method-comparison CSV written to {mc_csv}")
+
         if not args.no_charts:
             heatmap = plot_slope_heatmap(result, significance_dir / f"{country}_slope_heatmap.png")
             if heatmap is not None:
@@ -345,6 +429,21 @@ def main() -> None:
                 f"Method-trend charts written to {significance_dir / f'{country}_method_trends'} "
                 f"({len(trends)} file(s))"
             )
+            comparison = plot_method_comparison(
+                result, significance_dir / f"{country}_method_comparison.png"
+            )
+            if comparison is not None:
+                print(f"Method-comparison grid written to {comparison} (+ .svg)")
+            else:
+                print("Method-comparison grid skipped (no method-comparison block / nothing plottable).")
+            comparison_overall = plot_method_comparison(
+                result, significance_dir / f"{country}_method_comparison_overall.png",
+                overall_only=True,
+            )
+            if comparison_overall is not None:
+                print(f"Method-comparison Overall panel written to {comparison_overall} (+ .svg)")
+            else:
+                print("Method-comparison Overall panel skipped (no Overall panel / nothing plottable).")
 
         print()
         _print_country_summary(result)
