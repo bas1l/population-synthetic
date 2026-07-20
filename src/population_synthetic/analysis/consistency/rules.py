@@ -23,7 +23,7 @@ multiple keys are ANDed together):
 - ``{age: {min: N, max: M}}`` -- numeric range on the raw integer ``age`` (``min``/``max``
   both optional, at least one required).
 
-Individuals are canonical *mapped* records (``03_Analysis/mapped/*.json``), where
+Individuals are canonical *mapped* records (from the analysis-stage mapping folder), where
 every scored attribute is a plain string value (e.g. ``{"employment_status": "Employed"}``)
 -- not a nested ``{"label": ...}`` dict; that nested shape belongs to the raw,
 pre-mapping record produced by the generator. :func:`evaluate` reads values through

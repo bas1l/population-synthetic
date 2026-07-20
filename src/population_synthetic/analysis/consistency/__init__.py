@@ -1,6 +1,6 @@
 """population_synthetic.analysis.consistency -- detection-only consistency scan.
 
-Scans a *mapped* canonical population (the same ``03_Analysis/mapped/`` input
+Scans a *mapped* canonical population (the same analysis-stage mapping-folder input
 contract as the other analysis processes) for internally-inconsistent attribute
 combinations, against a small config-driven rule list (e.g. "retired implies
 age >= 55"). This process does not touch the generator and does not correct

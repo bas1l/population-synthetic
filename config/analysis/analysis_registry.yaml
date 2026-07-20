@@ -1,0 +1,122 @@
+# Analysis registry -- the single source of truth mapping each analysis process's
+# canonical id to its human metadata, output folder, backing script, and GUI
+# dispatch mode. Both the GUI workflow and the analysis scripts read from here so
+# that a process's GUI task key and its on-disk 03_Analysis/ output folder always
+# derive from one canonical id.
+#
+# Contract (enforced by analysis/utils/registry.py, fail-fast on violation):
+#   - `stage_dir`  : the parent stage folder under output_base (one place this lives).
+#   - `processes`  : mapping of canonical id -> entry. Each entry MUST provide
+#                    label, description, folder, script, dispatch.
+#   - folder       : the process's subfolder under {output_base}/{stage_dir}/.
+#   - dispatch     : how the GUI fans the task out over combos
+#                    (per_combo | slugs | cli).
+#
+# NOTE: folder values are the canonical on-disk folder names. `mapping.folder` is
+# `mapping` (aligned to its canonical id); its `legacy_folder: mapped` records the
+# pre-rename folder so READERS transparently fall back to any existing on-disk
+# `mapped/` data (deprecation-logged) until it is re-mapped. See
+# analysis/utils/registry.analysis_output_dir(..., for_read=True).
+
+stage_dir: "03_Analysis"
+
+processes:
+  mapping:
+    label: "Map Populations"
+    description: >
+      Maps the raw generated synthetic populations and their real reference
+      populations to the canonical comparison schema, writing one mapped file per
+      run (plus a deduped real file per country) that every downstream analysis
+      consumes.
+    folder: "mapping"
+    legacy_folder: "mapped"
+    script: "scripts/analyze/map_populations.py"
+    dispatch: "per_combo"
+
+  fidelity:
+    label: "Compare Synthetic to Real"
+    description: >
+      Scores each synthetic population against its real reference: per-attribute
+      total-variation similarity, joint chi-squared, and coherence. Writes one
+      fidelity report per (country, strategy, model) combo.
+    folder: "fidelity"
+    script: "scripts/analyze/score_fidelity_all.py"
+    dispatch: "slugs"
+
+  multivariate_fidelity:
+    label: "Multivariate Joint Fidelity"
+    description: >
+      Recomputes the multivariate (joint-distribution) fidelity block over the
+      mapped populations -- e.g. classifier two-sample tests / MMD -- into a
+      standalone folder, without touching the univariate fidelity reports.
+    folder: "multivariate_fidelity"
+    script: "scripts/analyze/score_multivariate_fidelity.py"
+    dispatch: "slugs"
+
+  consistency:
+    label: "Consistency Scan (unrealistic combos)"
+    description: >
+      Scans each mapped synthetic population for internally inconsistent or
+      demographically implausible attribute combinations, reporting the flagged
+      records per country.
+    folder: "consistency"
+    script: "scripts/analyze/scan_consistency.py"
+    dispatch: "slugs"
+
+  model_ranking:
+    label: "Model Performance (models x methods)"
+    description: >
+      Aggregates the per-combo fidelity reports into a cross-model ranking,
+      comparing every model x strategy (method) combination per country to surface
+      which generation approach reproduces the real distribution best.
+    folder: "model_ranking"
+    script: "scripts/analyze/rank_models.py"
+    dispatch: "slugs"
+
+  method_significance:
+    label: "Method Significance (per-category)"
+    description: >
+      Tests, per attribute category, whether the generation method or the model
+      drives total-variation fidelity -- Page's L / Friedman / Nemenyi critical
+      difference plus a mixed-model interaction, with categories as blocks.
+    folder: "method_significance"
+    script: "scripts/analyze/analyze_method_significance.py"
+    dispatch: "slugs"
+
+  pairwise_comparison:
+    label: "Compare Two Populations"
+    description: >
+      Compares two already-mapped populations directly, deriving the country from
+      the slugs and emitting a single fidelity report for that pair -- the ad-hoc
+      two-population counterpart to the batch fidelity scoring.
+    folder: "pairwise_comparison"
+    script: "scripts/analyze/score_fidelity.py"
+    dispatch: "slugs"
+
+  run_analytics_per_run:
+    label: "LLM Metrics (per-run)"
+    description: >
+      Computes per-run LLM-call analytics (token usage, latency, retries, cost)
+      for a single generation run, writing one analytics subfolder per run slug.
+    folder: "run_analytics"
+    script: "scripts/analyze/analyze_run.py"
+    dispatch: "per_combo"
+
+  run_analytics_cross_run:
+    label: "LLM Metrics (cross-run)"
+    description: >
+      Rolls up the per-run LLM-call analytics across multiple runs into a single
+      comparison report, contrasting cost/latency/token profiles between runs.
+    folder: "run_analytics/_comparison"
+    script: "scripts/analyze/compare_run_analytics.py"
+    dispatch: "slugs"
+
+  cross_country:
+    label: "Cross-Country (real vs real)"
+    description: >
+      Compares the real reference populations of two countries against each other
+      (real vs real), quantifying how much the national distributions differ.
+      CLI-only; not exposed as a GUI workflow task.
+    folder: "cross_country"
+    script: "scripts/analyze/compare_real_countries.py"
+    dispatch: "cli"

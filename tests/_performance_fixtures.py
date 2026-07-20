@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
+from population_synthetic.analysis.utils.registry import analysis_output_dir
 
 ATTRIBUTES = ["age_group", "biological_sex", "education_level"]
 
@@ -144,8 +145,8 @@ def build_workspace(
     report (the loader's missing-report case); ``skipped=True`` marks the entry
     skipped during mapping. Returns *tmp_path* (the output_base).
     """
-    mapped_dir = tmp_path / "03_Analysis" / "mapped"
-    comparison_dir = tmp_path / "03_Analysis" / "fidelity"
+    mapped_dir = analysis_output_dir("mapping", tmp_path)
+    comparison_dir = analysis_output_dir("fidelity", tmp_path)
     mapped_dir.mkdir(parents=True, exist_ok=True)
 
     index = []

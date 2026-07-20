@@ -19,7 +19,8 @@ Mapping is a standalone pipeline stage, not an inline step of each comparison sc
 `config/analysis/comparison_targets.yaml` (entries are plain manifest-path strings or
 `{manifest, country}` mappings), maps each target's synthetic population (`load_synthetic_population`
 -> `map_population`) and its real population once per country (`load_real_population` ->
-`map_population`), and writes to `{output_base}/03_Analysis/mapped/`: `{slug}.json` (mapped
+`map_population`), and writes to `{output_base}/03_Analysis/mapping/` (folder name owned by the
+analysis registry; legacy on-disk `mapped/` is still read as a fallback): `{slug}.json` (mapped
 synthetic, one per target), `real_{country}.json` (mapped real population, deduped one per country),
 and `_index.json` (list of `{slug, country, synthetic_file, real_file, n, skipped}`).
 Missing/empty seed roots warn and skip, never crash.
@@ -27,9 +28,9 @@ Missing/empty seed roots warn and skip, never crash.
 **Stage 2 (compare)** -- the three comparison scripts perform **no** mapping; they `json.load` the
 pre-mapped files (a missing mapped file raises a clear "Run scripts/analyze/map_populations.py
 first." error) and run the existing evaluator/chart path. `score_fidelity_all.py` iterates
-`mapped/_index.json` (imports zero mappers); `score_fidelity_sweden.py` /
+`mapping/_index.json` (imports zero mappers); `score_fidelity_sweden.py` /
 `score_fidelity_italy.py` resolve mapped files from `--mapped-dir` (default
-`{output_base}/03_Analysis/mapped`) + `{slug}`, or take explicit `--mapped-synthetic` /
+`{output_base}/03_Analysis/mapping`, legacy `mapped/` read-fallback) + `{slug}`, or take explicit `--mapped-synthetic` /
 `--mapped-real`. All comparison artifacts land under
 `{output_base}/03_Analysis/fidelity/{slug}/` (per-target JSON report + CSV + 15 bar charts +
 radar + `{slug}_association.csv` and `{slug}_association_heatmap.png` from the multivariate block),
@@ -40,7 +41,7 @@ The **multivariate / joint-fidelity** block (C2ST, pairwise Cramér's-V associat
 TV, k-way combination plausibility -- defined via the scheme's `grounded_joint_pairs` /
 `combination_checks` / `c2st` tuning) is also available as a **standalone process**:
 `score_multivariate_fidelity.py` recomputes only that block (through the shared
-`StatisticalEvaluator.compute_multivariate()`) over the same `mapped/_index.json` targets and writes
+`StatisticalEvaluator.compute_multivariate()`) over the same `mapping/_index.json` targets and writes
 it to its own `{output_base}/03_Analysis/multivariate_fidelity/` folder -- per-combo envelope JSON +
 `{slug}_association.csv` + `{slug}_association_heatmap.png`, plus a per-country roll-up
 `{country}_multivariate_fidelity.json`/`.csv` and a cross-combo `{country}_c2st_vs_grounded_tv.png`. It

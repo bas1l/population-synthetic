@@ -101,13 +101,12 @@ def test_slugs_empty_combos_raises():
 # WorkflowConfigModel — accessors + round-trip
 # ---------------------------------------------------------------------------
 
+# Task keys are canonical analysis-registry ids; label/script/dispatch are
+# registry-owned and NOT authored in the flow YAML (get_task_meta resolves them).
 WORKFLOW_YAML = """\
 # Workflow header comment (must survive save).
 tasks:
-  map_populations:
-    label: Map Populations
-    script: scripts/analyze/map_populations.py
-    dispatch: per_combo
+  mapping:
     enabled: true
     supports_force: true          # force checkbox comment
     force: false
@@ -115,16 +114,13 @@ tasks:
       output-base:                # blank = script default
     depends_on: []
 
-  compare:
-    label: Compare
-    script: scripts/analyze/score_fidelity_all.py
-    dispatch: slugs
+  fidelity:
     enabled: true
     min_combos: 2
     options:
       no-charts: false
       workers: 4
-    depends_on: [map_populations]
+    depends_on: [mapping]
 
 selection:
   models:     [claude_haiku]
@@ -141,44 +137,69 @@ def model(tmp_path):
 
 
 def test_task_accessors(model):
-    assert model.get_task_names() == ["map_populations", "compare"]
-    assert model.is_task_enabled("compare") is True
-    assert model.get_task_force("map_populations") is False
-    assert model.get_task_options("compare") == {"no-charts": False, "workers": 4}
-    assert model.get_task_dependencies("compare") == ["map_populations"]
-    assert model.get_task_dependencies("map_populations") == []
-    meta = model.get_task_meta("compare")
-    assert meta == {
-        "label": "Compare",
-        "script": "scripts/analyze/score_fidelity_all.py",
-        "dispatch": "slugs",
+    from population_synthetic.analysis.utils.registry import get_process
+
+    assert model.get_task_names() == ["mapping", "fidelity"]
+    assert model.is_task_enabled("fidelity") is True
+    assert model.get_task_force("mapping") is False
+    assert model.get_task_options("fidelity") == {"no-charts": False, "workers": 4}
+    assert model.get_task_dependencies("fidelity") == ["mapping"]
+    assert model.get_task_dependencies("mapping") == []
+    # label/description/script/dispatch are registry-owned; GUI orchestration
+    # fields (supports_force/min_combos/max_combos) come from the flow YAML.
+    proc = get_process("fidelity")
+    assert model.get_task_meta("fidelity") == {
+        "label": proc.label,
+        "description": proc.description,
+        "script": proc.script,
+        "dispatch": proc.dispatch,
         "supports_force": False,
         "min_combos": 2,
         "max_combos": None,
     }
-    assert model.get_task_meta("map_populations")["supports_force"] is True
+    assert model.get_task_meta("mapping")["supports_force"] is True
+
+
+def test_get_task_meta_unregistered_task_raises(tmp_path):
+    """A flow task id absent from the registry fails loudly (config error)."""
+    path = tmp_path / "bad.yaml"
+    path.write_text(
+        "tasks:\n"
+        "  not_a_process:\n"
+        "    enabled: true\n"
+        "    options: {}\n"
+        "    depends_on: []\n"
+        "selection:\n"
+        "  models: [claude_haiku]\n"
+        "  strategies: [all_pick]\n"
+        "  countries: [swedish]\n",
+        encoding="utf-8",
+    )
+    model = WorkflowConfigModel(path)
+    with pytest.raises(KeyError, match="not a registered analysis process id"):
+        model.get_task_meta("not_a_process")
 
 
 def test_unknown_task_and_option_raise(model):
     with pytest.raises(KeyError, match="unknown task 'ghost'"):
         model.is_task_enabled("ghost")
     with pytest.raises(KeyError, match="no option 'made-up'"):
-        model.set_task_option("compare", "made-up", 1)
+        model.set_task_option("fidelity", "made-up", 1)
     with pytest.raises(KeyError, match="no 'force' key"):
-        model.get_task_force("compare")  # compare has no supports_force/force
+        model.get_task_force("fidelity")  # fidelity has no supports_force/force
 
 
 def test_mutations_mark_dirty(model):
     assert not model.is_dirty
-    model.set_task_enabled("compare", False)
+    model.set_task_enabled("fidelity", False)
     assert model.is_dirty
 
 
 def test_round_trip_preserves_comments_order_and_types(model):
-    model.set_task_enabled("compare", False)
-    model.set_task_force("map_populations", True)
-    model.set_task_option("compare", "workers", 8)
-    model.set_task_option("map_populations", "output-base", "out/mapped")
+    model.set_task_enabled("fidelity", False)
+    model.set_task_force("mapping", True)
+    model.set_task_option("fidelity", "workers", 8)
+    model.set_task_option("mapping", "output-base", "out/mapped")
     model.save()
     assert not model.is_dirty
 
@@ -186,27 +207,30 @@ def test_round_trip_preserves_comments_order_and_types(model):
     assert "# Workflow header comment (must survive save)." in text
     assert "# force checkbox comment" in text
     assert "# blank = script default" in text
-    # Key order preserved: map_populations still authored before compare.
-    assert text.index("map_populations:") < text.index("compare:")
+    # Key order preserved: mapping still authored before fidelity.
+    assert text.index("mapping:") < text.index("fidelity:")
 
     reloaded = WorkflowConfigModel(model.path)
-    assert reloaded.is_task_enabled("compare") is False
-    assert reloaded.get_task_force("map_populations") is True
-    options = reloaded.get_task_options("compare")
+    assert reloaded.is_task_enabled("fidelity") is False
+    assert reloaded.get_task_force("mapping") is True
+    options = reloaded.get_task_options("fidelity")
     assert options["workers"] == 8
     assert type(options["workers"]) is int  # not the string "8"
-    assert reloaded.get_task_options("map_populations")["output-base"] == "out/mapped"
+    assert reloaded.get_task_options("mapping")["output-base"] == "out/mapped"
 
 
 def test_to_plain_returns_plain_containers(model):
     plain = model.to_plain()
     assert type(plain) is dict
     assert type(plain["tasks"]) is dict
-    assert type(plain["tasks"]["compare"]["depends_on"]) is list
-    assert type(plain["tasks"]["compare"]["options"]["workers"]) is int
-    assert type(plain["tasks"]["compare"]["enabled"]) is bool
-    assert plain["tasks"]["map_populations"]["options"]["output-base"] is None
+    assert type(plain["tasks"]["fidelity"]["depends_on"]) is list
+    assert type(plain["tasks"]["fidelity"]["options"]["workers"]) is int
+    assert type(plain["tasks"]["fidelity"]["enabled"]) is bool
+    assert plain["tasks"]["mapping"]["options"]["output-base"] is None
     assert plain["selection"]["models"] == ["claude_haiku"]
+    # to_plain enriches each task with the registry-owned label/script/dispatch.
+    assert plain["tasks"]["fidelity"]["script"] == "scripts/analyze/score_fidelity_all.py"
+    assert plain["tasks"]["fidelity"]["dispatch"] == "slugs"
 
 
 def test_to_plain_feeds_workflow_state(model):
@@ -216,4 +240,4 @@ def test_to_plain_feeds_workflow_state(model):
 
     state = WorkflowState(model.to_plain(), PROJECT_ROOT)
     state.validate()  # scripts exist in the real repo; DAG is acyclic
-    assert [task.name for task in state.ordered_tasks()] == ["map_populations", "compare"]
+    assert [task.name for task in state.ordered_tasks()] == ["mapping", "fidelity"]

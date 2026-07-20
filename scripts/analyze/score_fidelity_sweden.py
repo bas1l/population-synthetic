@@ -23,10 +23,10 @@ Usage:
 
 --manifest         Seed manifest YAML; derives the slug from parallel.output_dir basename.
 --seed-root        Pipeline seed output directory; the slug is its basename.
---mapped-dir       Directory holding the mapped files (default: {output_base}/03_Analysis/mapped).
+--mapped-dir       Directory holding the mapped files (default: the analysis-stage mapping folder).
 --mapped-synthetic Explicit path to the mapped synthetic population JSON (overrides --mapped-dir/{slug}).
 --mapped-real      Explicit path to the mapped real population JSON (overrides real_swedish.json).
---output           Path for the JSON comparison report (default: 03_Analysis/fidelity/{slug}/{slug}.json).
+--output           Path for the JSON comparison report (default: analysis-stage fidelity folder, {slug}/{slug}.json).
 """
 
 import argparse
@@ -34,15 +34,15 @@ import json
 import sys
 from pathlib import Path
 
-import yaml
-
-from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.fidelity.artifacts import write_comparison_artifacts
 from population_synthetic.analysis.fidelity.evaluator import StatisticalEvaluator
 from population_synthetic.analysis.fidelity.scheme import load_scheme
+from population_synthetic.analysis.utils.registry import (
+    analysis_output_dir,
+    resolve_output_base,
+)
 
 _COUNTRY = "swedish"
-_DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -77,13 +77,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-base",
         default=None,
-        help="Base output directory (the 03_Analysis parent). "
+        help="Base output directory (the analysis-stage parent). "
         "Default: output_base from config/synthetic/experiment_defaults.yaml.",
     )
     parser.add_argument(
         "--mapped-dir",
         default=None,
-        help="Directory holding the mapped files (default: {output_base}/03_Analysis/mapped).",
+        help="Directory holding the mapped files (default: the analysis-stage mapping folder).",
     )
     parser.add_argument(
         "--mapped-synthetic",
@@ -102,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output", default=None,
-        help="Output JSON report path (default: 03_Analysis/fidelity/{slug}/{slug}.json)",
+        help="Output JSON report path (default: analysis-stage fidelity folder, {slug}/{slug}.json)",
     )
     parser.add_argument(
         "--charts-dir",
@@ -120,22 +120,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="On the radar chart, show only the TV-similarity polygon (omit chi-squared p-value overlay).",
     )
     return parser
-
-
-def _resolve_output_base(cli_value: str | None) -> Path:
-    """Resolve output_base from the CLI flag or experiment_defaults.yaml."""
-    if cli_value:
-        return Path(cli_value)
-    with open(_DEFAULTS_PATH, "r", encoding="utf-8") as f:
-        defaults = yaml.safe_load(f) or {}
-    output_base = (defaults.get("parameters") or {}).get("output_base")
-    if not output_base:
-        print(
-            f"ERROR: no output_base in {_DEFAULTS_PATH} and --output-base not given",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return Path(output_base)
 
 
 def resolve_slug(args: argparse.Namespace, parser: argparse.ArgumentParser):
@@ -216,7 +200,7 @@ def resolve_output_path(args: argparse.Namespace, manifest, slug: str, output_ba
         return Path(args.output)
     if manifest is not None and manifest.comparison_output_dir is not None:
         return manifest.comparison_output_dir / f"{slug}.json"
-    return output_base / "03_Analysis" / "fidelity" / slug / f"{slug}.json"
+    return analysis_output_dir("fidelity", output_base) / slug / f"{slug}.json"
 
 
 # ---------------------------------------------------------------------------
@@ -265,8 +249,10 @@ def main() -> None:
 
     slug, manifest = resolve_slug(args, parser)
     country = resolve_country(args, manifest)
-    output_base = _resolve_output_base(args.output_base)
-    mapped_dir = Path(args.mapped_dir) if args.mapped_dir else output_base / "03_Analysis" / "mapped"
+    output_base = resolve_output_base(args.output_base)
+    mapped_dir = (
+        Path(args.mapped_dir) if args.mapped_dir else analysis_output_dir("mapping", output_base, for_read=True)
+    )
 
     synthetic_path = Path(args.mapped_synthetic) if args.mapped_synthetic else mapped_dir / f"{slug}.json"
     real_path = Path(args.mapped_real) if args.mapped_real else mapped_dir / f"real_{country}.json"

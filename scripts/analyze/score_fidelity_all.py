@@ -2,7 +2,7 @@
 score_fidelity_all.py -- Batch comparison of mapped synthetic populations against a real population.
 
 Consumes the pre-mapped files produced by the map stage (scripts/analyze/map_populations.py):
-it iterates {output_base}/03_Analysis/mapped/_index.json, json.loads each mapped synthetic
+it iterates the analysis-stage mapping folder's _index.json, json.loads each mapped synthetic
 population and the shared mapped real population for its country, runs the statistical comparison, and
 aggregates results into a summary table and JSON file. This script performs NO mapping -- run
 map_populations.py first.
@@ -23,7 +23,7 @@ Usage:
 --strategy       Strategy axis ID filter (e.g. all_pick). May be repeated. Default: all strategies.
 --slug           Exact slug filter ({country}_{strategy}_{model}). May be repeated. Keeps only the
                  mapped entries whose slug is selected. Combines with --model/--strategy/--country.
---output-base    Base output directory (the 03_Analysis parent). Default: experiment_defaults.yaml.
+--output-base    Base output directory (the analysis-stage parent). Default: experiment_defaults.yaml.
 --no-charts      Skip chart generation.
 --radar-tv-only  On radar chart, show only TV-similarity polygon (omit chi-squared overlay).
 --n-synthetic    Cap each synthetic population to this many individuals via a seeded without-replacement
@@ -39,19 +39,18 @@ import json
 import sys
 from pathlib import Path
 
-import yaml
-
-from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.fidelity.artifacts import write_comparison_artifacts
 from population_synthetic.analysis.fidelity.charts import plot_radar_grid
 from population_synthetic.analysis.fidelity.evaluator import StatisticalEvaluator
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.utils.axes import decompose_slug
 from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.utils.registry import (
+    analysis_output_dir,
+    resolve_output_base,
+)
 from population_synthetic.analysis.utils.sampling import subsample_population
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
-
-_DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -94,7 +93,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-base",
         default=None,
-        help="Base output directory (the 03_Analysis parent). "
+        help="Base output directory (the analysis-stage parent). "
         "Default: output_base from config/synthetic/experiment_defaults.yaml.",
     )
     parser.add_argument(
@@ -130,22 +129,6 @@ def _parse_args() -> argparse.Namespace:
         "(default: reload the existing per-slug report so it still feeds the summary + radar grid).",
     )
     return parser.parse_args()
-
-
-def _resolve_output_base(cli_value: str | None) -> Path:
-    """Resolve output_base from the CLI flag or experiment_defaults.yaml."""
-    if cli_value:
-        return Path(cli_value)
-    with open(_DEFAULTS_PATH, "r", encoding="utf-8") as f:
-        defaults = yaml.safe_load(f) or {}
-    output_base = (defaults.get("parameters") or {}).get("output_base")
-    if not output_base:
-        print(
-            f"ERROR: no output_base in {_DEFAULTS_PATH} and --output-base not given",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return Path(output_base)
 
 
 def _validate_filter_ids(filter_ids: list[str], axis_ids: set[str], axis_name: str) -> None:
@@ -207,9 +190,9 @@ def main() -> None:
     strategy_ids = sorted(all_strategy_ids)
     model_ids = sorted(all_model_ids)
 
-    output_base = _resolve_output_base(args.output_base)
-    mapped_dir = output_base / "03_Analysis" / "mapped"
-    comparison_dir = output_base / "03_Analysis" / "fidelity"
+    output_base = resolve_output_base(args.output_base)
+    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    comparison_dir = analysis_output_dir("fidelity", output_base)
 
     index_path = mapped_dir / "_index.json"
     if not index_path.exists():

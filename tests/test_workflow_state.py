@@ -10,9 +10,9 @@ No Qt required.
 from __future__ import annotations
 
 import pytest
-import yaml
 
 from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.gui.workflow_config_model import WorkflowConfigModel
 from population_synthetic.gui.workflow_state import TaskStatus, WorkflowState
 
 SHIPPED_WORKFLOW = PROJECT_ROOT / "config" / "gui" / "flows" / "analysis_workflow.yaml"
@@ -40,8 +40,10 @@ def root(tmp_path):
 
 
 def _shipped_state() -> WorkflowState:
-    with SHIPPED_WORKFLOW.open(encoding="utf-8") as fh:
-        snapshot = yaml.safe_load(fh)
+    # Build via the model so the snapshot is enriched with the registry-owned
+    # label/script/dispatch (stripped from the flow YAML) -- exactly the path
+    # the runner takes (main_window._run_workflow -> WorkflowConfigModel.to_plain).
+    snapshot = WorkflowConfigModel(SHIPPED_WORKFLOW).to_plain()
     return WorkflowState(snapshot, PROJECT_ROOT)
 
 
@@ -111,14 +113,16 @@ def test_shipped_workflow_validates():
 def test_shipped_workflow_ordering():
     order = [task.name for task in _shipped_state().ordered_tasks()]
     assert set(order) == {
-        "map_populations", "compare_synth_real", "joint_fidelity", "model_performance",
-        "method_significance", "compare_pops", "llm_metrics_per_run", "llm_metrics_cross_run",
+        "mapping", "fidelity", "multivariate_fidelity", "consistency", "model_ranking",
+        "method_significance", "pairwise_comparison", "run_analytics_per_run",
+        "run_analytics_cross_run",
     }
-    assert order.index("map_populations") < order.index("compare_synth_real")
-    assert order.index("compare_synth_real") < order.index("model_performance")
-    assert order.index("compare_synth_real") < order.index("method_significance")
-    assert order.index("map_populations") < order.index("compare_pops")
-    assert order.index("map_populations") < order.index("joint_fidelity")
+    assert order.index("mapping") < order.index("fidelity")
+    assert order.index("mapping") < order.index("multivariate_fidelity")
+    assert order.index("mapping") < order.index("consistency")
+    assert order.index("mapping") < order.index("pairwise_comparison")
+    assert order.index("fidelity") < order.index("model_ranking")
+    assert order.index("fidelity") < order.index("method_significance")
 
 
 def test_shipped_workflow_ordering_deterministic():
@@ -127,7 +131,7 @@ def test_shipped_workflow_ordering_deterministic():
     order_b = [task.name for task in _shipped_state().ordered_tasks()]
     assert order_a == order_b
     # Roots emit in authoring order before released dependents.
-    assert order_a[0] == "map_populations"
+    assert order_a[0] == "mapping"
 
 
 # ---------------------------------------------------------------------------
@@ -136,38 +140,38 @@ def test_shipped_workflow_ordering_deterministic():
 
 def test_disabled_task_cannot_run():
     state = _shipped_state()
-    assert not state.can_run("llm_metrics_per_run")  # enabled: false in YAML
+    assert not state.can_run("run_analytics_per_run")  # enabled: false in YAML
 
 
 def test_dep_incomplete_blocks_then_mark_completed_unlocks():
     state = _shipped_state()
-    assert state.can_run("map_populations")  # no deps, enabled
-    assert not state.can_run("compare_synth_real")  # dep incomplete
-    assert not state.can_run("model_performance")
+    assert state.can_run("mapping")  # no deps, enabled
+    assert not state.can_run("fidelity")  # dep incomplete
+    assert not state.can_run("model_ranking")
 
-    state.mark_completed("map_populations")
-    assert state.can_run("compare_synth_real")
-    assert not state.can_run("model_performance")  # transitive dep still incomplete
+    state.mark_completed("mapping")
+    assert state.can_run("fidelity")
+    assert not state.can_run("model_ranking")  # transitive dep still incomplete
 
-    state.mark_completed("compare_synth_real")
-    assert state.can_run("model_performance")
+    state.mark_completed("fidelity")
+    assert state.can_run("model_ranking")
 
 
 def test_guard_skip_does_not_mark_completed():
     state = _shipped_state()
-    state.mark_completed("map_populations")
-    # compare_synth_real hits a guard: runner records the skip WITHOUT completing.
-    state.status["compare_synth_real"] = TaskStatus.SKIPPED_GUARD
-    assert "compare_synth_real" not in state.completed_tasks
-    assert not state.can_run("model_performance")  # dependents stay blocked
+    state.mark_completed("mapping")
+    # fidelity hits a guard: runner records the skip WITHOUT completing.
+    state.status["fidelity"] = TaskStatus.SKIPPED_GUARD
+    assert "fidelity" not in state.completed_tasks
+    assert not state.can_run("model_ranking")  # dependents stay blocked
 
 
 def test_status_lifecycle():
     state = _shipped_state()
     assert all(status is TaskStatus.PENDING for status in state.status.values())
-    state.mark_completed("map_populations")
-    assert state.status["map_populations"] is TaskStatus.COMPLETED
-    assert state.status["compare_synth_real"] is TaskStatus.PENDING
+    state.mark_completed("mapping")
+    assert state.status["mapping"] is TaskStatus.COMPLETED
+    assert state.status["fidelity"] is TaskStatus.PENDING
 
 
 def test_unknown_task_name_raises():
@@ -185,17 +189,17 @@ def test_unknown_task_name_raises():
 # ---------------------------------------------------------------------------
 
 def test_guard_exactly_message():
-    state = _shipped_state()  # compare_pops: min_combos=2, max_combos=2
-    assert state.guard_violation("compare_pops", 3) == "needs exactly 2 selected combinations, got 3"
-    assert state.guard_violation("compare_pops", 1) == "needs exactly 2 selected combinations, got 1"
-    assert state.guard_violation("compare_pops", 2) is None
+    state = _shipped_state()  # pairwise_comparison: min_combos=2, max_combos=2
+    assert state.guard_violation("pairwise_comparison", 3) == "needs exactly 2 selected combinations, got 3"
+    assert state.guard_violation("pairwise_comparison", 1) == "needs exactly 2 selected combinations, got 1"
+    assert state.guard_violation("pairwise_comparison", 2) is None
 
 
 def test_guard_min_only_message():
-    state = _shipped_state()  # model_performance: min_combos=2
-    assert state.guard_violation("model_performance", 1) == "needs at least 2 selected combinations, got 1"
-    assert state.guard_violation("model_performance", 2) is None
-    assert state.guard_violation("model_performance", 5) is None
+    state = _shipped_state()  # model_ranking: min_combos=2
+    assert state.guard_violation("model_ranking", 1) == "needs at least 2 selected combinations, got 1"
+    assert state.guard_violation("model_ranking", 2) is None
+    assert state.guard_violation("model_ranking", 5) is None
 
 
 def test_guard_max_only_message(root):
@@ -206,5 +210,5 @@ def test_guard_max_only_message(root):
 
 def test_guard_unbounded_task_never_violates():
     state = _shipped_state()
-    assert state.guard_violation("map_populations", 1) is None
-    assert state.guard_violation("map_populations", 99) is None
+    assert state.guard_violation("mapping", 1) is None
+    assert state.guard_violation("mapping", 99) is None

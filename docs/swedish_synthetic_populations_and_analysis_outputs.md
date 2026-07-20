@@ -80,7 +80,7 @@ couple of extras the pipeline does not score, e.g. `current_environment_type`,
 
 ### 4.1 The real baseline (the "ground truth")
 
-- **1 file:** `03_Analysis/mapped/real_swedish.json`
+- **1 file:** `03_Analysis/mapping/real_swedish.json`
 - **10,000 people**, sampled from live SCB distributions (population, education, employment,
   housing, income, region, birth country, …). Its `metadata` records exactly which SCB tables and
   classifications were used.
@@ -165,7 +165,11 @@ the audit's [cross-cutting decision](reference/scb-pxweb-catalog/scb-source-audi
 The pipeline runs in stages. Each stage writes concrete files under `03_Analysis/`. Below is what
 each stage produces and what it tells you.
 
-### Stage A — Map (`map_populations.py`) → `03_Analysis/mapped/`
+### Stage A — Map (`map_populations.py`) → `03_Analysis/mapping/`
+
+> Folder name owned by the analysis registry (`config/analysis/analysis_registry.yaml`). Older runs
+> wrote to `03_Analysis/mapped/`, which is still read as a legacy fallback until re-mapped.
+
 
 Normalises every raw population (real and synthetic) onto the canonical 15-attribute schema so they
 can be compared apples-to-apples.
@@ -264,7 +268,7 @@ The headline deliverable is the **Swedish leaderboard**. As currently generated 
 
 | You want… | Look here |
 |-----------|-----------|
-| The real Swedish reference population | `03_Analysis/mapped/real_swedish.json` (10,000 people) |
+| The real Swedish reference population | `03_Analysis/mapping/real_swedish.json` (10,000 people) |
 | A raw synthetic run | `01_Raw/swedish_{strategy}_{model}/persona_XXXXX/identity.json` |
 | Accuracy charts for one run | `03_Analysis/fidelity/swedish_{strategy}_{model}/` |
 | Accuracy numbers for one run | same folder, `{run}.json` and `{run}.csv` |

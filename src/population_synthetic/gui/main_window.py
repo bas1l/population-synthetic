@@ -247,6 +247,14 @@ class FlowRunnerWindow(QMainWindow):
         options_header = QLabel("Task options")
         options_header.setStyleSheet("font-weight: bold; padding: 2px 4px;")
         options_layout.addWidget(options_header)
+        # Read-only description of the selected task, sourced from the analysis
+        # registry via WorkflowConfigModel.get_task_meta (secondary/subtle text).
+        self._workflow_task_desc = QLabel()
+        self._workflow_task_desc.setWordWrap(True)
+        self._workflow_task_desc.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self._workflow_task_desc.setStyleSheet("color: #888888; padding: 0px 4px 4px 4px;")
+        self._workflow_task_desc.setVisible(False)  # shown once a node is clicked
+        options_layout.addWidget(self._workflow_task_desc)
         self._workflow_options_panel = FlowOptionsPanel()
         self._workflow_options_panel.option_changed.connect(self._on_option_changed)
         options_layout.addWidget(self._workflow_options_panel)
@@ -440,6 +448,8 @@ class FlowRunnerWindow(QMainWindow):
             self._view_toggle_bar.setVisible(False)
             self._center_stack.setCurrentWidget(self._workflow_page)
             self._workflow_graph.populate(model)  # type: ignore[arg-type]
+            self._workflow_task_desc.clear()
+            self._workflow_task_desc.setVisible(False)
             self._workflow_options_panel.show_placeholder("Select a task node to edit its options")
         self._refresh_title()
         self.statusBar().showMessage(f"Loaded {entry.config.name}", 3000)
@@ -490,6 +500,10 @@ class FlowRunnerWindow(QMainWindow):
         """Retarget the beneath-graph options pane onto the clicked task."""
         if not isinstance(self._model, WorkflowConfigModel):
             return
+        # Registry-sourced description (see WorkflowConfigModel.get_task_meta).
+        description = self._model.get_task_meta(name).get("description", "")
+        self._workflow_task_desc.setText(description)
+        self._workflow_task_desc.setVisible(bool(description))
         adapter = _TaskOptionsAdapter(self._model, name)
         self._workflow_options_panel.populate(adapter)  # type: ignore[arg-type]
         self._workflow_graph.select_task(name)

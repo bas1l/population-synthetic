@@ -2,10 +2,10 @@
 map_populations.py -- Standalone mapping stage of the comparison pipeline.
 
 Reads an explicit targets list (config/analysis/comparison_targets.yaml) naming the
-per-run manifests we consider complete, and writes mapped population files under
-{output_base}/03_Analysis/mapped/:
+per-run manifests we consider complete, and writes mapped population files under the
+analysis-stage mapping folder (resolved via the analysis registry):
 
-    mapped/
+    mapping/
       real_{country}.json       mapped real population, one per country (deduped)
       {slug}.json               mapped synthetic population, one per target
       _index.json               [{slug, country, synthetic_file, real_file, n, skipped}]
@@ -51,16 +51,19 @@ from population_synthetic.analysis.utils.country_config import (
     mappings_for_country,
     real_for_country,
 )
+from population_synthetic.analysis.utils.registry import (
+    analysis_output_dir,
+    resolve_output_base,
+)
 from population_synthetic.generators.synthetic.manifest_loader import compose_manifest, load_manifest
 
 _DEFAULT_TARGETS = PROJECT_ROOT / "config" / "analysis" / "comparison_targets.yaml"
-_DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Map the targeted synthetic populations and their real populations to "
-        "the canonical comparison schema, writing mapped files under 03_Analysis/mapped/."
+        "the canonical comparison schema, writing mapped files under the analysis-stage mapping folder."
     )
     parser.add_argument(
         "--targets",
@@ -93,26 +96,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-base",
         default=None,
-        help="Base output directory (the 03_Analysis parent). "
+        help="Base output directory (the analysis-stage parent). "
         "Default: output_base from config/synthetic/experiment_defaults.yaml.",
     )
     return parser.parse_args()
-
-
-def _resolve_output_base(cli_value: str | None) -> Path:
-    """Resolve output_base from the CLI flag or experiment_defaults.yaml."""
-    if cli_value:
-        return Path(cli_value)
-    with open(_DEFAULTS_PATH, "r", encoding="utf-8") as f:
-        defaults = yaml.safe_load(f) or {}
-    output_base = (defaults.get("parameters") or {}).get("output_base")
-    if not output_base:
-        print(
-            f"ERROR: no output_base in {_DEFAULTS_PATH} and --output-base not given",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return Path(output_base)
 
 
 def _load_targets(targets_path: Path) -> list[dict[str, Any]]:
@@ -295,8 +282,8 @@ def main() -> None:
         )
         sys.exit(1)
 
-    output_base = _resolve_output_base(args.output_base)
-    mapped_dir = output_base / "03_Analysis" / "mapped"
+    output_base = resolve_output_base(args.output_base)
+    mapped_dir = analysis_output_dir("mapping", output_base)
     mapped_dir.mkdir(parents=True, exist_ok=True)
     index_path = mapped_dir / "_index.json"
 
