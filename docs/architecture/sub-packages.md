@@ -72,9 +72,17 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   overall it runs the Demšar model comparison (Friedman → Nemenyi → critical-difference diagram),
   a Page's L method trend, and a `logit(TV) ~ model*method + (1|category)` mixed model whose
   interaction term is estimable. The per-category interaction is emitted **descriptively only**
-  (a slope heatmap) -- no p-value is claimed at that grain. `builder.py` (`build_method_significance`
+  (a slope heatmap) -- no p-value is claimed at that grain. It also emits a **`method_comparison`**
+  block (`builder.py::_method_comparison`, config `config/analysis/method_significance/comparison.json`):
+  a head-to-head comparison of the methods on **TV-similarity** with the *models as blocks* -- per
+  category (+ a pooled Overall panel) a Friedman omnibus + Nemenyi pairwise post-hoc over the
+  complete-case models, BH-FDR corrected across categories. `charts.py::plot_method_comparison` renders
+  it as the publication **significance-bracket figure** (bars = per-method mean TV-similarity + model
+  points + paired lines, pairwise brackets/stars over the configured pairs, in-figure star key; a
+  per-category grid and a standalone Overall panel, PNG + SVG). `builder.py` (`build_method_significance`
   + JSON/CSV writers), `charts.py` (per-attribute trend facets, slope heatmap, CD diagram,
-  factor-dominance bar). Needs the optional `[analysis]` extra (statsmodels + scikit-posthocs).
+  factor-dominance bar, method-comparison figure). Needs the optional `[analysis]` extra
+  (statsmodels + scikit-posthocs).
 - **`utils/`** -- cross-process shared infra:
   - `country_config.py` -- the shared country resolver (`real_for_country`, `mappings_for_country`,
     `known_country_ids`, `infer_country`) consumed by both the map stage and the comparison consumers

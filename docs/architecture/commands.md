@@ -84,7 +84,11 @@ python scripts/analyze/rank_models.py --country swedish --per-attribute-charts
 
 # Per-category method/model significance: which factor (generation method vs model) drives
 # per-attribute TV fidelity (Page's L + Friedman/Nemenyi CD + mixed-model interaction; consumes the
-# comparison reports; needs the [analysis] extra: pip install -e .[analysis])
+# comparison reports; needs the [analysis] extra: pip install -e .[analysis]). Also emits, per
+# country under 03_Analysis/method_significance/, the method-comparison results table
+# ({country}_method_comparison.json/.csv: per-category + Overall Friedman omnibus & Nemenyi pairwise
+# p, models as blocks) and the significance-bracket figures ({country}_method_comparison.png/.svg
+# grid + {country}_method_comparison_overall.png/.svg): bars + model points + pairwise brackets/stars.
 python scripts/analyze/analyze_method_significance.py --country swedish
 
 # Extract demographic profiles from a pipeline output tree into a single population file
