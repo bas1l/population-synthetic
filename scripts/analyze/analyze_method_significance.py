@@ -77,11 +77,16 @@ from population_synthetic.analysis.method_significance.charts import (
     plot_method_trends,
     plot_slope_heatmap,
 )
+from population_synthetic.analysis.method_significance.marginal_charts import (
+    load_marginal_series,
+    plot_marginal_progression,
+)
 from population_synthetic.analysis.model_ranking.loader import (
     load_combo_performances,
     scheme_attributes,
     scheme_category_values,
 )
+from population_synthetic.analysis.utils.country_config import mappings_for_country
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -438,6 +443,32 @@ def main() -> None:
                 print(f"Method-comparison Overall panel written to {comparison_overall} (+ .svg)")
             else:
                 print("Method-comparison Overall panel skipped (no Overall panel / nothing plottable).")
+
+            # Descriptive per-method marginal-progression charts (additive side-output).
+            # This is the one path that reads the mapped populations (not the fidelity
+            # reports), on the same mapping tier the combos were scored against. A
+            # missing/empty mapping index or absent real baseline for this country is
+            # logged and skipped -- it must not crash the whole method-significance run.
+            try:
+                prepared = load_marginal_series(
+                    country, output_base, mappings_for_country(country)
+                )
+            except FileNotFoundError as exc:
+                print(f"Marginal-progression charts skipped for {country!r}: {exc}", file=sys.stderr)
+            else:
+                if not prepared:
+                    print(
+                        f"Marginal-progression charts skipped for {country!r}: "
+                        "no usable mapped combo found."
+                    )
+                else:
+                    marginal_paths = plot_marginal_progression(prepared, country, significance_dir)
+                    n_models = len(prepared)
+                    n_attrs = len({attr for by_attr in prepared.values() for attr in by_attr})
+                    print(
+                        f"marginal_progression[{country}]: {n_models} models, "
+                        f"{n_attrs} attrs, {len(marginal_paths)} figures"
+                    )
 
         print()
         _print_country_summary(result)
