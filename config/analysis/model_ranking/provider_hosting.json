@@ -1,0 +1,10 @@
+{
+  "description": "Model-ranking config: groups each identity-generation provider (model_config.provider on the model axis YAMLs) into a hosting/provenance class. 'local' means the model runs on locally-hosted infrastructure (Ollama); 'hosted' means a remote API provider. Consumed by analysis/model_ranking/hosting.py::classify_hosting to tag each model in the performance JSON (metadata.model_hosting), so the manuscript tables can encode provenance. Every provider in generators/synthetic/manifest_loader.py::VALID_PROVIDERS must appear here; an unknown provider fails loudly rather than defaulting.",
+  "providers": {
+    "ollama": "local",
+    "claude": "hosted",
+    "gemini": "hosted",
+    "openrouter": "hosted",
+    "openai_compat": "hosted"
+  }
+}

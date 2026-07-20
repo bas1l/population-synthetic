@@ -139,13 +139,83 @@ def test_skipped_recorded_in_metadata():
     ]
 
 
+def test_methods_matrix_means_and_order():
+    result = build_performance_comparison(_grid(), ATTRIBUTES)
+    matrix = result["methods_matrix"]
+    # Ordered by STRATEGY_COMPLEXITY_ORDER (all_pick before all_generate_pick).
+    assert matrix["strategies"] == ["all_pick", "all_generate_pick"]
+    assert matrix["attributes"] == ATTRIBUTES
+
+    # all_pick: mean over models per attribute = (0.9 + 0.7) / 2 = 0.8 for each attr.
+    all_pick = matrix["cells"]["all_pick"]
+    for attr in ATTRIBUTES:
+        assert all_pick[attr] == pytest.approx(0.8)
+    assert all_pick["overall"] == pytest.approx(0.8)
+
+    # all_generate_pick: (0.8 + 0.6) / 2 = 0.7 for each attr.
+    all_gen = matrix["cells"]["all_generate_pick"]
+    for attr in ATTRIBUTES:
+        assert all_gen[attr] == pytest.approx(0.7)
+    assert all_gen["overall"] == pytest.approx(0.7)
+
+
+def test_methods_matrix_excludes_nan_attributes():
+    combos = [
+        make_combo(
+            slug="swedish_all_pick_claude_haiku", strategy="all_pick", model="claude_haiku",
+            tv_by_attr={"age_group": 0.1, "biological_sex": float("nan"), "education_level": 0.3},
+        ),
+        make_combo(
+            slug="swedish_all_pick_gemini_flash", strategy="all_pick", model="gemini_flash",
+            tv_by_attr={"age_group": 0.3, "biological_sex": 0.5, "education_level": 0.1},
+        ),
+    ]
+    matrix = build_performance_comparison(combos, ATTRIBUTES)["methods_matrix"]
+    cell = matrix["cells"]["all_pick"]
+    # age_group: mean(0.9, 0.7) = 0.8; biological_sex: only flash scorable -> 0.5;
+    # education_level: mean(0.7, 0.9) = 0.8.
+    assert cell["age_group"] == pytest.approx(0.8)
+    assert cell["biological_sex"] == pytest.approx(0.5)
+    assert cell["education_level"] == pytest.approx(0.8)
+    # Overall = mean of the three per-attribute means.
+    assert cell["overall"] == pytest.approx((0.8 + 0.5 + 0.8) / 3)
+
+
+def test_methods_matrix_all_nan_attribute_column():
+    combos = [
+        make_combo(
+            slug="swedish_all_pick_claude_haiku", strategy="all_pick", model="claude_haiku",
+            tv_by_attr={"age_group": 0.1, "biological_sex": float("nan"), "education_level": 0.3},
+        ),
+        make_combo(
+            slug="swedish_all_pick_gemini_flash", strategy="all_pick", model="gemini_flash",
+            tv_by_attr={"age_group": 0.3, "biological_sex": float("nan"), "education_level": 0.1},
+        ),
+    ]
+    cell = build_performance_comparison(combos, ATTRIBUTES)["methods_matrix"]["cells"]["all_pick"]
+    # biological_sex NaN for every model -> NaN cell, excluded from the overall.
+    assert cell["biological_sex"] != cell["biological_sex"]
+    assert cell["overall"] == pytest.approx((0.8 + 0.8) / 2)
+
+
+def test_model_hosting_embedded_when_supplied():
+    hosting = {"claude_haiku": "hosted", "gemini_flash": "hosted"}
+    result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=hosting)
+    assert result["metadata"]["model_hosting"] == hosting
+
+
+def test_model_hosting_defaults_to_empty():
+    result = build_performance_comparison(_grid(), ATTRIBUTES)
+    assert result["metadata"]["model_hosting"] == {}
+
+
 def test_writers(tmp_path):
     result = build_performance_comparison(_grid(), ATTRIBUTES)
 
     json_path = write_performance_json(result, tmp_path / "swedish_performance.json")
     with open(json_path, encoding="utf-8") as fh:
         loaded = json.load(fh)
-    assert set(loaded) == {"metadata", "combos", "ranking", "stats"}
+    assert set(loaded) == {"metadata", "combos", "ranking", "methods_matrix", "stats"}
     assert loaded["stats"]["metric"] == "tv_similarity"
     assert loaded["stats"]["caveats"]
 

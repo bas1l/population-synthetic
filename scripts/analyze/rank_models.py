@@ -15,6 +15,14 @@ Outputs, per country, under {output_base}/03_Analysis/model_ranking/:
     {country}_performance.csv     one row per combo (rank order)
     {country}_heatmap.png         combos x attributes (+ overall) TV-similarity
     {country}_leaderboard.png     overall ranking with coherence annotations
+    {country}_models_table.png    manuscript table: models at the global-best strategy x
+                                  axes (+ overall), single inferno ramp with a
+                                  hosted/local provenance side-marker (PNG + SVG)
+    {country}_methods_table.png   manuscript table: strategies x axes (+ overall),
+                                  mean-over-models TV-similarity, inferno ramp (PNG + SVG)
+    {country}_models_table.tex    manuscript LaTeX snippet mirroring the models table
+                                  (booktabs tabular, inferno cell colours, best-per-column bold)
+    {country}_methods_table.tex   manuscript LaTeX snippet mirroring the methods table
     {country}_by_attribute/       one grouped bar chart per attribute (opt-in)
 
 Usage:
@@ -58,13 +66,24 @@ from population_synthetic.analysis.model_ranking.charts import (
     plot_performance_heatmap,
     plot_performance_leaderboard,
 )
+from population_synthetic.analysis.model_ranking.hosting import (
+    classify_hosting,
+    load_hosting_config,
+)
 from population_synthetic.analysis.model_ranking.loader import (
     load_combo_performances,
     scheme_attributes,
 )
+from population_synthetic.analysis.model_ranking.manuscript_tables import (
+    plot_method_fidelity_table,
+    plot_model_fidelity_table,
+    write_method_fidelity_latex,
+    write_model_fidelity_latex,
+)
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
+_HOSTING_PATH = PROJECT_ROOT / "config" / "analysis" / "model_ranking" / "provider_hosting.json"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -181,7 +200,8 @@ def main() -> None:
     strategy_filter = _split_csv(args.strategies)
     slug_filter = _split_csv(args.slugs)
 
-    all_model_ids = {m["id"] for m in discover_axis_values("models")}
+    all_models = discover_axis_values("models")
+    all_model_ids = {m["id"] for m in all_models}
     all_strategy_ids = {s["id"] for s in discover_axis_values("strategies")}
     all_country_ids = {c["id"] for c in discover_axis_values("countries")}
 
@@ -191,6 +211,11 @@ def main() -> None:
         _validate_filter_ids(strategy_filter, all_strategy_ids, "strategy")
     if country_filter:
         _validate_filter_ids(country_filter, all_country_ids, "country")
+
+    # Provenance map (model id -> "local"/"hosted") from config; fails loudly on a
+    # missing config or a provider without a hosting class. Embedded in the built
+    # performance JSON so the manuscript tables can encode hosting by hue.
+    model_hosting = classify_hosting(all_models, load_hosting_config(_HOSTING_PATH))
 
     output_base = _resolve_output_base(args.output_base)
     performance_dir = output_base / "03_Analysis" / "model_ranking"
@@ -265,7 +290,8 @@ def main() -> None:
             (slug, reason) for slug, reason in skipped if slug.startswith(country)
         ]
         result = build_performance_comparison(
-            country_records, attrs_by_country[country], skipped=country_skipped
+            country_records, attrs_by_country[country], skipped=country_skipped,
+            model_hosting=model_hosting,
         )
 
         json_path = write_performance_json(result, performance_dir / f"{country}_performance.json")
@@ -287,6 +313,26 @@ def main() -> None:
             )
             if c2st_scatter is not None:
                 print(f"C2ST-vs-TV scatter written to {c2st_scatter}")
+            models_table = plot_model_fidelity_table(
+                result, performance_dir / f"{country}_models_table.png"
+            )
+            if models_table is not None:
+                print(f"Models table written to {models_table}")
+            methods_table = plot_method_fidelity_table(
+                result, performance_dir / f"{country}_methods_table.png"
+            )
+            if methods_table is not None:
+                print(f"Methods table written to {methods_table}")
+            models_tex = write_model_fidelity_latex(
+                result, performance_dir / f"{country}_models_table.tex"
+            )
+            if models_tex is not None:
+                print(f"Models LaTeX table written to {models_tex}")
+            methods_tex = write_method_fidelity_latex(
+                result, performance_dir / f"{country}_methods_table.tex"
+            )
+            if methods_tex is not None:
+                print(f"Methods LaTeX table written to {methods_tex}")
             if args.per_attribute_charts:
                 written = plot_attribute_bars(result, performance_dir / f"{country}_by_attribute")
                 print(f"Per-attribute charts written to {performance_dir / f'{country}_by_attribute'} "

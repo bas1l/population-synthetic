@@ -75,12 +75,20 @@ python scripts/analyze/score_fidelity_all.py --country swedish --country italian
 python scripts/analyze/score_fidelity_all.py --country swedish --n-synthetic 100 --sample-seed 0
 
 # Cross-model performance comparison: rank model x strategy combos per country against the real
-# baseline (consumes the comparison reports; run score_fidelity_all.py first)
+# baseline (consumes the comparison reports; run score_fidelity_all.py first). Emits, under
+# 03_Analysis/model_ranking/, the {country}_performance.json/.csv, the heatmap/leaderboard/
+# c2st charts, and two manuscript heatmap-tables (PNG + SVG each): {country}_models_table
+# (models at the global-best strategy, hosted/local hue) and {country}_methods_table (strategies,
+# mean-over-models TV-similarity).
 python scripts/analyze/rank_models.py --country swedish --per-attribute-charts
 
 # Per-category method/model significance: which factor (generation method vs model) drives
 # per-attribute TV fidelity (Page's L + Friedman/Nemenyi CD + mixed-model interaction; consumes the
-# comparison reports; needs the [analysis] extra: pip install -e .[analysis])
+# comparison reports; needs the [analysis] extra: pip install -e .[analysis]). Also emits, per
+# country under 03_Analysis/method_significance/, the method-comparison results table
+# ({country}_method_comparison.json/.csv: per-category + Overall Friedman omnibus & Nemenyi pairwise
+# p, models as blocks) and the significance-bracket figures ({country}_method_comparison.png/.svg
+# grid + {country}_method_comparison_overall.png/.svg): bars + model points + pairwise brackets/stars.
 python scripts/analyze/analyze_method_significance.py --country swedish
 
 # Extract demographic profiles from a pipeline output tree into a single population file

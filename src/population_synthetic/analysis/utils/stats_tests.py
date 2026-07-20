@@ -345,6 +345,51 @@ def nemenyi_posthoc(matrix: Sequence[Sequence[float]], alpha: float = 0.05) -> d
             "q_alpha": q_alpha, "k": k, "n": n, "alpha": alpha}
 
 
+def nemenyi_pairwise(
+    matrix: Sequence[Sequence[float]],
+    labels: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Labeled Nemenyi pairwise p-matrix over treatments (columns).
+
+    A thin, label-aware wrapper over :func:`nemenyi_posthoc` for the
+    method-comparison figure: given a ``blocks x treatments`` layout (here
+    ``models x methods``) it returns the symmetric ``k x k`` Nemenyi p-matrix with
+    **string treatment labels** attached, so a caller can read off the p-value for
+    a named method pair without tracking column indices. The CD/critical-difference
+    machinery of :func:`nemenyi_posthoc` is intentionally omitted -- this form is
+    for annotating pairwise significance, not for a CD diagram.
+
+    Input: ``matrix`` is ``blocks x treatments`` (row = block, column = treatment,
+    consistent column order); ``labels`` names the ``k`` columns (defaults to
+    ``["0", "1", ...]``). Reuses the same
+    :func:`scikit_posthocs.posthoc_nemenyi_friedman` call (lazily imported; raises
+    a clear install error without the ``[analysis]`` extra).
+
+    Returns ``{"labels","p_matrix","k","n"}`` where ``p_matrix`` is a ``k x k``
+    list-of-lists in ``labels`` order (symmetric, diagonal ``1.0``). Degenerate
+    inputs (``<2`` treatments, ``<2`` blocks) return those keys with ``p_matrix``
+    ``None`` and a ``"note"``. Raises ``ValueError`` if ``labels`` length does not
+    match the treatment count.
+    """
+    arr = _as_block_matrix(matrix)
+    n, k = arr.shape
+    if labels is None:
+        resolved = [str(i) for i in range(k)]
+    else:
+        resolved = [str(x) for x in labels]
+        if len(resolved) != k:
+            raise ValueError(
+                f"labels length {len(resolved)} does not match treatment count {k}"
+            )
+    if k < 2 or n < 2:
+        return {"labels": resolved, "p_matrix": None, "k": k, "n": n,
+                "note": "need >=2 treatments and >=2 blocks"}
+    sp = _import_scikit_posthocs()
+    p_df = sp.posthoc_nemenyi_friedman(arr)
+    p_matrix = p_df.to_numpy(dtype=float).tolist()
+    return {"labels": resolved, "p_matrix": p_matrix, "k": k, "n": n}
+
+
 def benjamini_hochberg(pvals: list[float]) -> list[float]:
     """Benjamini-Hochberg FDR adjustment of a list of p-values (order preserved).
 
