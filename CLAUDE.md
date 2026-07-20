@@ -80,6 +80,16 @@ Nemenyi CD + a mixed-model interaction, categories as blocks; needs the `[analys
 LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
+**Analysis registry (single source of truth for the analysis layer):**
+`config/analysis/analysis_registry.yaml` (+ its accessor `analysis/utils/registry.py`) maps each
+analysis process's **canonical id** → {label, description, output folder, script, dispatch}, and is
+consumed by BOTH the GUI workflow and the analysis scripts. The canonical id is simultaneously the
+registry key, the GUI workflow task key, and the `03_Analysis/` output-folder name, so those three
+can never drift. Scripts resolve their output dir via `analysis_output_dir(id, base)` — no hardcoded
+`03_Analysis`/folder literals (the sole `"03_Analysis"` definition lives in `registry.py`). The map
+stage folder was renamed `mapped/` → `mapping/`; readers pass `for_read=True` to transparently fall
+back to any legacy on-disk `mapped/` (deprecation-logged) until re-mapped.
+
 | Topic | Page |
 |-------|------|
 | Per-package breakdown + path resolution | [Sub-packages](docs/architecture/sub-packages.md) |

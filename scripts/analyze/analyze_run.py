@@ -70,6 +70,7 @@ from population_synthetic.analysis.run_analytics.per_run.log_parser import (
     parse_log_file,
     parse_run_summary,
 )
+from population_synthetic.analysis.utils.registry import analysis_output_dir
 from population_synthetic.generators.synthetic.manifest_loader import axis_slug
 
 # ---------------------------------------------------------------------------
@@ -111,14 +112,11 @@ def _derive_output_defaults(
         return None, None
 
     slug = run_dir_resolved.name
-    # New layout: run_analytics is a single master folder under 03_Analysis, with
-    # one subfolder per config combination (slug) nested inside it.
-    task_dir = (
-        Path(output_base)
-        / analytics.get("analysis_subdir", "03_Analysis")
-        / analytics.get("task_subdir", "run_analytics")
-        / slug
-    )
+    # New layout: run_analytics is a single master folder under the analysis stage,
+    # with one subfolder per config combination (slug) nested inside it. The
+    # analysis-stage run_analytics base comes from the analysis registry; the per-slug
+    # nesting and the JSON/charts filenames stay config-driven.
+    task_dir = analysis_output_dir("run_analytics_per_run", output_base) / slug
     default_json = task_dir / analytics.get("json_filename", "run_analytics.json")
     default_charts = task_dir / analytics.get("charts_subdir", "charts")
     return default_json, default_charts

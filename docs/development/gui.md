@@ -51,10 +51,38 @@ Dispatch shapes:
 - **workflow task `dispatch: slugs`**: one invocation total, with one
   `--slug {country}_{strategy}_{model}` per checked combo.
 
+## Task-naming contract — one registry, three aligned names
+
+An analysis process has **one canonical id**, and it is used three times over: it
+is the GUI workflow task **key** (the node id in `analysis_workflow.yaml`), the
+registry **key** in `config/analysis/analysis_registry.yaml`, and the
+`03_Analysis/` **output-folder** name the backing script writes to. These three
+can never drift because they are the same string.
+
+The flow YAML now carries **orchestration only** — per task: `depends_on`,
+`options`, `enabled`, and the force/combo guards (`supports_force`,
+`min_combos`/`max_combos`). It no longer carries `label`, `description`,
+`script`, or `dispatch`: those four are **owned by the registry** and merged in
+at read time by `WorkflowConfigModel.get_task_meta` (via `get_process(id)`),
+which fails loudly if a flow task id is not a registered process.
+`WorkflowState.to_plain()` enriches each task with the registry
+`label`/`script`/`dispatch` so the runner snapshot stays complete without
+re-duplicating them on disk. When a task node is clicked, the workflow options
+pane shows a read-only, mouse-selectable **description** sourced from the
+registry (`get_task_meta(name)["description"]`).
+
+The single accessor `analysis/utils/registry.py` also gives every script its
+output dir (`analysis_output_dir(id, base)`) and resolves the output base
+(`resolve_output_base`), so no script hardcodes `03_Analysis` or a folder name.
+See the canonical id → label → folder → script table in
+[Commands](../architecture/commands.md).
+
 ## Workflow contract — GUI-side dependency chaining
 
 The **Analysis Workflow** flow (`config/gui/flows/analysis_workflow.yaml`) is
-a DAG of tasks (`{script, dispatch, enabled, options, depends_on, min/max_combos}`).
+a DAG of tasks whose node ids are the canonical ids above; each task carries the
+orchestration fields (`{enabled, options, depends_on, min/max_combos, force}`),
+while `script`/`dispatch` are resolved from the registry.
 Ordering is **derived from `depends_on`** by topological sort (Kahn, YAML
 authoring order as the deterministic tie-break) — there is no hardcoded Python
 stage list. `WorkflowState.validate()` fails loudly at flow load on: unknown
@@ -70,9 +98,9 @@ enabled chain GUI-side:
   `SKIPPED_GUARD` with a **loud** console banner; the run continues.
 - **Run** → on **exit code 0** the task is marked `COMPLETED`, which unlocks its
   dependents; the first nonzero exit fails the task (`FAILED`) and its
-  dependents dep-skip, while independent branches (the `joint_fidelity` and
-  `compare_pops` side branches -- both `slugs`-dispatch, depending only on
-  `map_populations` -- and the isolated `llm_metrics` islands) still run.
+  dependents dep-skip, while independent branches (the `multivariate_fidelity`
+  and `pairwise_comparison` side branches -- both `slugs`-dispatch, depending
+  only on `mapping` -- and the isolated `run_analytics_*` islands) still run.
 - **Abort** → `_kill_process_tree` on the live process; the current task and all
   not-yet-run tasks become `ABORTED`.
 
@@ -98,6 +126,6 @@ restore an equivalent population size before scoring:
   marginal and joint reports would be computed over different people.
 
 **Model Performance inherits the cap automatically.** The ranking node
-(`rank_models`) recomputes nothing: it consumes the capped fidelity reports and
+(`model_ranking`) recomputes nothing: it consumes the capped fidelity reports and
 reads the `n` they record, so a capped Compare run feeds it a capped ranking. It
 therefore exposes no cap option of its own.

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from population_synthetic.analysis.utils.registry import get_process
 from population_synthetic.gui.flow_config_model import FlowConfigModel
 
 _MISSING = object()
@@ -144,18 +145,31 @@ class WorkflowConfigModel(FlowConfigModel):
     def get_task_meta(self, name: str) -> dict[str, Any]:
         """Non-editable task metadata for the graph panel and dispatch.
 
-        Returns ``label``, ``script`` (project-relative string as authored),
-        ``dispatch``, ``supports_force`` (default ``False``), and
-        ``min_combos``/``max_combos`` (default ``None``).
+        The task key is the canonical analysis-registry id: ``label``,
+        ``description``, ``script`` (project-relative string) and ``dispatch``
+        are resolved from ``config/analysis/analysis_registry.yaml`` (their
+        single source of truth -- they are NOT duplicated in the flow YAML).
+        The GUI-only orchestration fields ``supports_force`` (default
+        ``False``) and ``min_combos``/``max_combos`` (default ``None``) are
+        read from this task's flow YAML mapping.
+
+        Fails loudly (raises :class:`KeyError`) when the flow task id is not a
+        registered analysis process -- a config error, never a silent default.
         """
         task = self._task(name)
-        missing = [key for key in ("label", "script", "dispatch") if key not in task]
-        if missing:
-            raise KeyError(f"Workflow config {self._path}: task '{name}' is missing key(s) {missing}")
+        try:
+            process = get_process(name)
+        except KeyError as exc:
+            raise KeyError(
+                f"Workflow config {self._path}: task '{name}' is not a registered analysis "
+                f"process id -- label/description/script/dispatch are owned by the analysis "
+                f"registry (config/analysis/analysis_registry.yaml)."
+            ) from exc
         return {
-            "label": str(task["label"]),
-            "script": str(task["script"]),
-            "dispatch": str(task["dispatch"]),
+            "label": process.label,
+            "description": process.description,
+            "script": process.script,
+            "dispatch": process.dispatch,
             "supports_force": bool(task.get("supports_force", False)),
             "min_combos": self._native_type(task.get("min_combos")),
             "max_combos": self._native_type(task.get("max_combos")),
@@ -170,8 +184,25 @@ class WorkflowConfigModel(FlowConfigModel):
 
         The snapshot feeds :class:`WorkflowState` so the running workflow is
         decoupled from the live ruamel tree (and from subsequent GUI edits).
+
+        Each task is enriched with its registry-owned ``label``/``script``/
+        ``dispatch`` (stripped from the flow YAML -- the analysis registry is
+        their single source of truth), so the plain snapshot is a complete
+        :class:`WorkflowState` input without re-duplicating those fields on
+        disk. Enrichment routes through :meth:`get_task_meta`, so an
+        unregistered task id fails loudly here too.
         """
-        return self._to_plain_value(self._data)
+        plain = self._to_plain_value(self._data)
+        tasks = plain.get("tasks")
+        if isinstance(tasks, dict):
+            for task_name, task in tasks.items():
+                if not isinstance(task, dict):
+                    continue
+                meta = self.get_task_meta(str(task_name))
+                task["label"] = meta["label"]
+                task["script"] = meta["script"]
+                task["dispatch"] = meta["dispatch"]
+        return plain
 
     @classmethod
     def _to_plain_value(cls, value: Any) -> Any:

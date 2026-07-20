@@ -2,11 +2,11 @@
 score_multivariate_fidelity.py -- Standalone multivariate fidelity of mapped synthetic populations.
 
 Consumes the pre-mapped files produced by the map stage (scripts/analyze/map_populations.py):
-it iterates {output_base}/03_Analysis/mapped/_index.json, json.loads each mapped synthetic
+it iterates the analysis-stage mapping folder's _index.json, json.loads each mapped synthetic
 population and the shared mapped real population for its country, recomputes ONLY the
 multivariate / joint-fidelity block (C2ST, pairwise Cramer's-V association, per-pair joint TV,
 k-way combination plausibility) via the shared StatisticalEvaluator, and writes it to its own
-{output_base}/03_Analysis/multivariate_fidelity/ folder. This is additive: it never touches the
+analysis-stage multivariate_fidelity folder. This is additive: it never touches the
 fidelity or model-ranking outputs. This script performs NO mapping -- run map_populations.py first.
 
 Usage:
@@ -20,7 +20,7 @@ Usage:
 --country      Country axis ID filter (default: all countries in the mapped index). May be repeated.
 --slug         Exact slug filter ({country}_{strategy}_{model}). May be repeated. Keeps only the
                mapped entries whose slug is selected. Combines with --country.
---output-base  Base output directory (the 03_Analysis parent). Default: experiment_defaults.yaml.
+--output-base  Base output directory (the analysis-stage parent). Default: experiment_defaults.yaml.
 --no-charts    Skip chart generation.
 --n-synthetic  Cap each synthetic population to this many individuals via a seeded without-replacement
                draw, restoring equivalent population size for the size-sensitive metrics. Blank/omitted
@@ -30,7 +30,7 @@ Usage:
 --force        Recompute a slug even if its multivariate_fidelity/{slug}/{slug}.json already exists
                (default: reload the existing envelope so it still feeds the per-country roll-up).
 
-Outputs, under {output_base}/03_Analysis/multivariate_fidelity/:
+Outputs, under the analysis-stage multivariate_fidelity folder:
     {slug}/{slug}.json                          per-combo multivariate-fidelity envelope
     {slug}/{slug}_association.csv               pairwise Cramer's-V fidelity table
     {slug}/{slug}/{slug}_association_heatmap.png per-combo |Delta V| heatmap (opt-out)
@@ -44,9 +44,6 @@ import json
 import sys
 from pathlib import Path
 
-import yaml
-
-from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.fidelity.evaluator import write_association_csv
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.multivariate_fidelity.builder import (
@@ -60,9 +57,11 @@ from population_synthetic.analysis.multivariate_fidelity.charts import (
     plot_joint_association_heatmap,
 )
 from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.utils.registry import (
+    analysis_output_dir,
+    resolve_output_base,
+)
 from population_synthetic.analysis.utils.sampling import subsample_population
-
-_DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -89,7 +88,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-base",
         default=None,
-        help="Base output directory (the 03_Analysis parent). "
+        help="Base output directory (the analysis-stage parent). "
         "Default: output_base from config/synthetic/experiment_defaults.yaml.",
     )
     parser.add_argument(
@@ -122,22 +121,6 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _resolve_output_base(cli_value: str | None) -> Path:
-    """Resolve output_base from the CLI flag or experiment_defaults.yaml."""
-    if cli_value:
-        return Path(cli_value)
-    with open(_DEFAULTS_PATH, "r", encoding="utf-8") as f:
-        defaults = yaml.safe_load(f) or {}
-    output_base = (defaults.get("parameters") or {}).get("output_base")
-    if not output_base:
-        print(
-            f"ERROR: no output_base in {_DEFAULTS_PATH} and --output-base not given",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return Path(output_base)
-
-
 def _split_csv(values: list[str] | None) -> list[str] | None:
     if values is None:
         return None
@@ -155,9 +138,9 @@ def main() -> None:
     country_filter = _split_csv(args.countries)
     slug_filter = _split_csv(args.slugs)
 
-    output_base = _resolve_output_base(args.output_base)
-    mapped_dir = output_base / "03_Analysis" / "mapped"
-    joint_dir = output_base / "03_Analysis" / "multivariate_fidelity"
+    output_base = resolve_output_base(args.output_base)
+    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    joint_dir = analysis_output_dir("multivariate_fidelity", output_base)
 
     index_path = mapped_dir / "_index.json"
     if not index_path.exists():

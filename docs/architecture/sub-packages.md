@@ -55,7 +55,7 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   `rank_models.py`). Consumes the per-combo comparison reports and ranks the
   model × strategy combos against each other per country -- per attribute (TV-similarity) and
   overall -- with Kruskal-Wallis + Dunn/Holm factor tests. `loader.py` (`ComboPerformance` DTO +
-  report discovery via `mapped/_index.json`), `builder.py` (`build_performance_comparison` +
+  report discovery via `mapping/_index.json`, legacy `mapped/` read-fallback), `builder.py` (`build_performance_comparison` +
   JSON/CSV writers, plus the `methods_matrix` per-strategy × per-attribute block and the
   embedded `metadata.model_hosting`), `charts.py` (heatmap, leaderboard, per-attribute bars),
   `hosting.py` (config-driven provider → `local`/`hosted` classification), and
@@ -84,6 +84,12 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   factor-dominance bar, method-comparison figure). Needs the optional `[analysis]` extra
   (statsmodels + scikit-posthocs).
 - **`utils/`** -- cross-process shared infra:
+  - `registry.py` -- the **analysis registry** accessor: loads/validates
+    `config/analysis/analysis_registry.yaml` (the single source of truth mapping each process's
+    canonical id → label/description/folder/script/dispatch) and exposes `AnalysisProcess`,
+    `get_process`, `analysis_output_dir(id, base, *, for_read=False)` (the `mapped/`→`mapping/`
+    legacy read-fallback lives here), `resolve_output_base`, and `ANALYSIS_STAGE_DIR` (the sole
+    `"03_Analysis"` literal in code). Consumed by both the analysis scripts and the GUI workflow model.
   - `country_config.py` -- the shared country resolver (`real_for_country`, `mappings_for_country`,
     `known_country_ids`, `infer_country`) consumed by both the map stage and the comparison consumers
   - `axes.py` -- axis-vocabulary helpers: `decompose_slug` / `diagnose_slug` (slug -> axis IDs) and

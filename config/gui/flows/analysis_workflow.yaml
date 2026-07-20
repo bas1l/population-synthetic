@@ -1,13 +1,15 @@
 # Analysis workflow DAG. The GUI walks tasks in dependency order and TRANSLATES
 # each into CLI invocations of the task's script (scripts do NOT read this file).
-# dispatch:
-#   per_combo — one invocation per checked combo: --model-id/--strategy-id/--country-id
-#   slugs     — one invocation total, with one --slug {country}_{strategy}_{model} per combo
+# Task keys are the canonical analysis-registry ids: the label, description,
+# script and dispatch are OWNED by config/analysis/analysis_registry.yaml and
+# resolved through WorkflowConfigModel.get_task_meta -- they are NOT duplicated
+# here. This file carries only GUI orchestration (enabled/force, options,
+# depends_on, combo guards).
+# dispatch (from the registry):
+#   per_combo -- one invocation per checked combo: --model-id/--strategy-id/--country-id
+#   slugs     -- one invocation total, with one --slug {country}_{strategy}_{model} per combo
 tasks:
-  map_populations:
-    label: Map Populations
-    script: scripts/analyze/map_populations.py
-    dispatch: per_combo
+  mapping:
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
@@ -15,10 +17,7 @@ tasks:
       output-base:                # --output-base (blank = script default)
     depends_on: []
 
-  compare_synth_real:
-    label: Compare Synthetic to Real
-    script: scripts/analyze/score_fidelity_all.py
-    dispatch: slugs
+  fidelity:
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
@@ -28,12 +27,9 @@ tasks:
       output-base:
       n-synthetic: '100'          # blank = no cap; integer = cap each population to this size
       sample-seed: 0              # seed for the without-replacement draw (reproducible)
-    depends_on: [map_populations]
+    depends_on: [mapping]
 
-  joint_fidelity:
-    label: Multivariate Joint Fidelity
-    script: scripts/analyze/score_multivariate_fidelity.py
-    dispatch: slugs
+  multivariate_fidelity:
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
@@ -42,24 +38,18 @@ tasks:
       output-base:                # blank = script default
       n-synthetic: '100'          # blank = no cap; integer = cap each population to this size
       sample-seed: 0              # seed for the without-replacement draw (reproducible)
-    depends_on: [map_populations]
+    depends_on: [mapping]
 
-  consistency_scan:
-    label: Consistency Scan (unrealistic combos)
-    script: scripts/analyze/scan_consistency.py
-    dispatch: slugs
+  consistency:
     enabled: true
     supports_force: true
     force: false
     options:
       no-charts: false
       output-base:
-    depends_on: [map_populations]
+    depends_on: [mapping]
 
-  model_performance:
-    label: Model Performance (models x methods)
-    script: scripts/analyze/rank_models.py
-    dispatch: slugs
+  model_ranking:
     enabled: true
     min_combos: 2                 # guard: loud skip below 2 checked combos
     supports_force: true          # node shows a Force checkbox -> --force
@@ -69,26 +59,20 @@ tasks:
       per-attribute-charts: false
       strict: false
       output-base:
-    depends_on: [compare_synth_real]
+    depends_on: [fidelity]
 
   method_significance:
-    label: Method Significance (per-category)
-    script: scripts/analyze/analyze_method_significance.py
-    dispatch: slugs
     enabled: true
     min_combos: 2                 # guard: loud skip below 2 checked combos
     supports_force: true          # node shows a Force checkbox -> --force
-    force: false
+    force: true
     options:
       no-charts: false
       strict: false
       output-base:
-    depends_on: [compare_synth_real]
+    depends_on: [fidelity]
 
-  compare_pops:
-    label: Compare Two Populations
-    script: scripts/analyze/score_fidelity.py
-    dispatch: slugs
+  pairwise_comparison:
     enabled: false                # opt-in: needs EXACTLY 2 combos
     min_combos: 2
     max_combos: 2
@@ -97,12 +81,9 @@ tasks:
     options:
       output:                     # --output (blank = script default)
       no-charts: false
-    depends_on: [map_populations]
+    depends_on: [mapping]
 
-  llm_metrics_per_run:            # independent — isolated node
-    label: LLM Metrics (per-run)
-    script: scripts/analyze/analyze_run.py
-    dispatch: per_combo
+  run_analytics_per_run:          # independent -- isolated node
     enabled: false
     supports_force: true
     force: false
@@ -111,19 +92,16 @@ tasks:
       verbose: false
     depends_on: []
 
-  llm_metrics_cross_run:          # independent — isolated node
-    label: LLM Metrics (cross-run)
-    script: scripts/analyze/compare_run_analytics.py
-    dispatch: slugs
+  run_analytics_cross_run:        # independent -- isolated node
     enabled: false
     options:
       metrics:                    # --metrics KEY... (blank = all)
     depends_on: []
 
 selection:                        # shared by ALL tasks in the chain
-  models: [claude_haiku, claude_opus, claude_sonnet, ollama_deepseek_r1_14b, 
-      ollama_gemma4_e4b, ollama_llama31_8b, ollama_mistral_nemo_12b, 
+  models: [claude_haiku, claude_opus, claude_sonnet, ollama_deepseek_r1_14b,
+      ollama_gemma4_e4b, ollama_llama31_8b, ollama_mistral_nemo_12b,
       openrouter_glm_52]
-  strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick, 
+  strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick,
       all_generate_pick, all_pick, all_pick_dag]
   countries: [swedish]

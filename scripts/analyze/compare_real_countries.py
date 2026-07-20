@@ -1,5 +1,9 @@
 """Compare marginal distributions across Sweden, Norway, and Italy populations.
 
+By default the report and charts are written under the ``cross_country`` analysis folder
+(``{output_base}/03_Analysis/cross_country/``, output_base from experiment_defaults.yaml or
+``--output-base``); ``--output`` / ``--charts-dir`` override those locations.
+
 Usage:
     python scripts/analyze/compare_real_countries.py
     python scripts/analyze/compare_real_countries.py --sweden <path> --norway <path> --italy <path>
@@ -18,6 +22,7 @@ from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.mapping.flatten_raw import flatten_raw_population
 from population_synthetic.analysis.mapping.real_mapper.mappings import load_mappings
 from population_synthetic.analysis.utils.country_config import mappings_for_country, real_for_country
+from population_synthetic.analysis.utils.registry import analysis_output_dir, resolve_output_base
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -181,8 +186,27 @@ def main() -> None:
     parser.add_argument("--sweden", type=str, default=_DEFAULT_SWEDEN, help="Swedish population JSON")
     parser.add_argument("--norway", type=str, default=_DEFAULT_NORWAY, help="Norwegian population JSON")
     parser.add_argument("--italy", type=str, default=_DEFAULT_ITALY, help="Italian population JSON")
-    parser.add_argument("--output", type=str, default="data/cross_country/cross_country_report.json")
-    parser.add_argument("--charts-dir", type=str, default="data/cross_country/charts")
+    parser.add_argument(
+        "--output-base",
+        type=str,
+        default=None,
+        help="Base output directory (the 03_Analysis parent). Anchors the default report and "
+        "charts location under the cross_country analysis folder. "
+        "Default: output_base from config/synthetic/experiment_defaults.yaml.",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output JSON report path. Default: "
+        "{output_base}/03_Analysis/cross_country/cross_country_report.json.",
+    )
+    parser.add_argument(
+        "--charts-dir",
+        type=str,
+        default=None,
+        help="Directory for chart PNGs. Default: {output_base}/03_Analysis/cross_country/charts/.",
+    )
     parser.add_argument("--no-charts", action="store_true", help="Skip chart generation")
     parser.add_argument(
         "--reference-country",
@@ -193,6 +217,13 @@ def main() -> None:
              "names are country-independent; category sets come from this scheme.",
     )
     args = parser.parse_args()
+
+    # Report + charts live under the cross_country analysis folder by default; the
+    # output_base (CLI or experiment_defaults.yaml) anchors that location.
+    output_base = resolve_output_base(args.output_base)
+    cross_country_dir = analysis_output_dir("cross_country", output_base)
+    output_path = Path(args.output) if args.output else cross_country_dir / "cross_country_report.json"
+    charts_dir = Path(args.charts_dir) if args.charts_dir else cross_country_dir / "charts"
 
     scheme = load_scheme(args.reference_country)
     # Sex vocabulary for the generic flattener comes from the reference country's
@@ -226,7 +257,6 @@ def main() -> None:
 
     _print_summary(populations, pairwise, scheme.attributes)
 
-    output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     report = _build_json_report(populations, pairwise, paths, scheme.attributes)
     with open(output_path, "w", encoding="utf-8") as f:
@@ -239,7 +269,6 @@ def main() -> None:
             plot_3way_radar,
         )
 
-        charts_dir = Path(args.charts_dir)
         logger.info("Generating charts in %s ...", charts_dir)
         plot_3way_comparison_charts(
             swe, nor, ita,

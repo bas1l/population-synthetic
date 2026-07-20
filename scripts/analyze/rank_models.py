@@ -3,14 +3,14 @@ rank_models.py -- Cross-model performance comparison (models x methods per count
 
 Sits AFTER the compare stage: consumes the per-combo comparison reports written by
 score_fidelity_all.py / score_fidelity_sweden.py under
-{output_base}/03_Analysis/fidelity/{slug}/{slug}.json and compares the model x strategy
+the analysis-stage fidelity folder ({slug}/{slug}.json) and compares the model x strategy
 combos against each other per country -- per demographic attribute and overall -- on how
 well each matches the real baseline (TV-similarity = 1 - TV distance; coherence as
 tie-break). Includes Kruskal-Wallis + Dunn/Holm tests per factor (model / strategy).
 This script recomputes nothing from populations -- run map_populations.py and
 score_fidelity_all.py first.
 
-Outputs, per country, under {output_base}/03_Analysis/model_ranking/:
+Outputs, per country, under the analysis-stage model_ranking folder:
     {country}_performance.json    score matrix + ranking + factor statistics
     {country}_performance.csv     one row per combo (rank order)
     {country}_heatmap.png         combos x attributes (+ overall) TV-similarity
@@ -39,7 +39,7 @@ Usage:
 --model                 Model axis ID filter. May be repeated. Default: all models.
 --strategy              Strategy axis ID filter. May be repeated. Default: all strategies.
 --slug                  Exact slug filter ({country}_{strategy}_{model}). May be repeated.
---output-base           Base output directory (the 03_Analysis parent). Default: experiment_defaults.yaml.
+--output-base           Base output directory (the analysis-stage parent). Default: experiment_defaults.yaml.
 --no-charts             Skip chart generation.
 --per-attribute-charts  Also write one grouped bar chart per demographic attribute.
 --strict                Fail when any selected combo lacks a comparison report
@@ -50,9 +50,6 @@ Usage:
 
 import argparse
 import sys
-from pathlib import Path
-
-import yaml
 
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.model_ranking.builder import (
@@ -80,9 +77,12 @@ from population_synthetic.analysis.model_ranking.manuscript_tables import (
     write_method_fidelity_latex,
     write_model_fidelity_latex,
 )
+from population_synthetic.analysis.utils.registry import (
+    analysis_output_dir,
+    resolve_output_base,
+)
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
-_DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 _HOSTING_PATH = PROJECT_ROOT / "config" / "analysis" / "model_ranking" / "provider_hosting.json"
 
 
@@ -111,7 +111,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-base", default=None,
-        help="Base output directory (the 03_Analysis parent). "
+        help="Base output directory (the analysis-stage parent). "
         "Default: output_base from config/synthetic/experiment_defaults.yaml.",
     )
     parser.add_argument("--no-charts", action="store_true", help="Skip chart generation.")
@@ -129,22 +129,6 @@ def _parse_args() -> argparse.Namespace:
         "(default: skip that country if present).",
     )
     return parser.parse_args()
-
-
-def _resolve_output_base(cli_value: str | None) -> Path:
-    """Resolve output_base from the CLI flag or experiment_defaults.yaml."""
-    if cli_value:
-        return Path(cli_value)
-    with open(_DEFAULTS_PATH, "r", encoding="utf-8") as f:
-        defaults = yaml.safe_load(f) or {}
-    output_base = (defaults.get("parameters") or {}).get("output_base")
-    if not output_base:
-        print(
-            f"ERROR: no output_base in {_DEFAULTS_PATH} and --output-base not given",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return Path(output_base)
 
 
 def _validate_filter_ids(filter_ids: list[str], axis_ids: set[str], axis_name: str) -> None:
@@ -217,8 +201,8 @@ def main() -> None:
     # performance JSON so the manuscript tables can encode hosting by hue.
     model_hosting = classify_hosting(all_models, load_hosting_config(_HOSTING_PATH))
 
-    output_base = _resolve_output_base(args.output_base)
-    performance_dir = output_base / "03_Analysis" / "model_ranking"
+    output_base = resolve_output_base(args.output_base)
+    performance_dir = analysis_output_dir("model_ranking", output_base)
 
     # Attribute axis per country, computed once and shared with the loader.
     attrs_by_country: dict[str, list[str]] = {}

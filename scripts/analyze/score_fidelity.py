@@ -5,7 +5,7 @@ Two invocation modes:
 
 Positional-file mode (raw files, mapped on the fly)
     python scripts/analyze/score_fidelity.py <pop_a.json> <pop_b.json> --country swedish \
-        [--output data/comparison_report.json]
+        [--output <report.json>]
 
     pop_a is the real population (treated as "expected" for chi-squared).
     pop_b is the population to evaluate (treated as "observed").
@@ -14,10 +14,15 @@ Slug mode (exactly two pre-mapped pipelines)
     python scripts/analyze/score_fidelity.py --slug swedish_all_pick_claude_haiku \
         --slug swedish_all_pick_gemini_flash
 
-    Each --slug loads {output_base}/03_Analysis/mapped/{slug}.json (already mapped by
-    scripts/analyze/map_populations.py). The country is derived from the slugs via
-    decompose_slug and both slugs must share one country. Fails loudly if a mapped file is
-    missing. The first slug is treated as pop_a (expected), the second as pop_b (observed).
+    Each --slug loads the mapped {slug}.json from the analysis-stage mapping folder (already
+    mapped by scripts/analyze/map_populations.py; resolved via the analysis registry). The
+    country is derived from the slugs via decompose_slug and both slugs must share one
+    country. Fails loudly if a mapped file is missing. The first slug is treated as pop_a
+    (expected), the second as pop_b (observed).
+
+By default the report, its CSV summary, and the charts are written under the
+``pairwise_comparison`` analysis folder (``{output_base}/03_Analysis/pairwise_comparison/``);
+``--output`` / ``--charts-dir`` override the report / chart locations.
 
 --force  Recompute even if the --output report already exists (default: skip if present).
          python scripts/analyze/score_fidelity.py --slug A --slug B --force
@@ -32,17 +37,13 @@ import json
 import sys
 from pathlib import Path
 
-import yaml
-
-from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.fidelity.charts import plot_comparison_charts, plot_radar_comparison
 from population_synthetic.analysis.fidelity.evaluator import StatisticalEvaluator, write_csv_summary
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.mapping.real_mapper import map_population
 from population_synthetic.analysis.utils.axes import decompose_slug
+from population_synthetic.analysis.utils.registry import analysis_output_dir, resolve_output_base
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
-
-_DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 
 
 def _load_population(path: str) -> dict:
@@ -54,28 +55,14 @@ def _load_population(path: str) -> dict:
         return json.load(f)
 
 
-def _resolve_output_base(cli_value: str | None) -> Path:
-    """Resolve output_base from the CLI flag or experiment_defaults.yaml."""
-    if cli_value:
-        return Path(cli_value)
-    with open(_DEFAULTS_PATH, "r", encoding="utf-8") as f:
-        defaults = yaml.safe_load(f) or {}
-    output_base = (defaults.get("parameters") or {}).get("output_base")
-    if not output_base:
-        print(
-            f"ERROR: no output_base in {_DEFAULTS_PATH} and --output-base not given",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return Path(output_base)
-
-
 def _resolve_slug_pair(slugs: list[str], output_base: Path) -> tuple[dict, dict, str, str, str]:
     """Resolve exactly two slugs to (pop_a, pop_b, label_a, label_b, country).
 
-    Loads the pre-mapped {output_base}/03_Analysis/mapped/{slug}.json for each slug, derives
-    the country from the slugs and validates both share one country. Raises loudly on a wrong
-    slug count, an unknown slug, a country mismatch, or a missing mapped file.
+    Loads the pre-mapped {slug}.json from the analysis-stage mapping folder (resolved via
+    the registry, with a legacy-read fallback to the pre-rename ``mapped/`` folder) for each
+    slug, derives the country from the slugs and validates both share one country. Raises
+    loudly on a wrong slug count, an unknown slug, a country mismatch, or a missing mapped
+    file.
     """
     if len(slugs) != 2:
         raise ValueError(
@@ -103,7 +90,7 @@ def _resolve_slug_pair(slugs: list[str], output_base: Path) -> tuple[dict, dict,
         )
     country = countries[0]
 
-    mapped_dir = output_base / "03_Analysis" / "mapped"
+    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
     pops: list[dict] = []
     for slug in slugs:
         mapped_path = mapped_dir / f"{slug}.json"
@@ -129,13 +116,16 @@ def main() -> None:
         default=None,
         metavar="SLUG",
         help="Slug of a pre-mapped pipeline ({country}_{strategy}_{model}); pass exactly twice. "
-        "Loads {output_base}/03_Analysis/mapped/{slug}.json and derives --country from the slugs.",
+        "Loads the mapped {slug}.json from the analysis-stage mapping folder and derives "
+        "--country from the slugs.",
     )
     parser.add_argument(
         "--output-base",
         default=None,
-        help="Base output directory (the 03_Analysis parent). "
-        "Default: output_base from config/synthetic/experiment_defaults.yaml. Slug mode only.",
+        help="Base output directory (the 03_Analysis parent). Used to resolve the mapped "
+        "inputs (slug mode) and the default report/charts location under the "
+        "pairwise_comparison analysis folder. "
+        "Default: output_base from config/synthetic/experiment_defaults.yaml.",
     )
     parser.add_argument(
         "--country",
@@ -145,7 +135,12 @@ def main() -> None:
              "axis and category sets. Required for positional-file mode; derived from the "
              "slugs in --slug mode.",
     )
-    parser.add_argument("--output", default="data/comparison_report.json", help="Output JSON report path")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output JSON report path. Default: "
+        "{output_base}/03_Analysis/pairwise_comparison/comparison_report.json.",
+    )
     parser.add_argument(
         "--force",
         action="store_true",
@@ -154,7 +149,8 @@ def main() -> None:
     parser.add_argument(
         "--charts-dir",
         default=None,
-        help="Directory to write comparison chart PNGs. Defaults to data/analysis/<output_stem>/",
+        help="Directory to write comparison chart PNGs. "
+        "Defaults to {output_base}/03_Analysis/pairwise_comparison/<output_stem>/.",
     )
     parser.add_argument(
         "--no-charts",
@@ -168,9 +164,16 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # The output_base anchors both the mapped inputs (slug mode) and the default report /
+    # charts location under the pairwise_comparison analysis folder, so resolve it up front.
+    output_base = resolve_output_base(args.output_base)
+    if args.output is not None:
+        output_path = Path(args.output)
+    else:
+        output_path = analysis_output_dir("pairwise_comparison", output_base) / "comparison_report.json"
+
     # Idempotent skip: the single JSON report is the unit of work here, so if it already
     # exists and --force was not passed, skip before doing any heavy evaluation.
-    output_path = Path(args.output)
     if not args.force and output_path.exists():
         print(f"SKIP (exists): {output_path}")
         sys.exit(0)
@@ -180,7 +183,6 @@ def main() -> None:
         if args.pop_a is not None or args.pop_b is not None:
             print("ERROR: --slug mode does not take positional pop_a/pop_b files.", file=sys.stderr)
             sys.exit(1)
-        output_base = _resolve_output_base(args.output_base)
         pop_a, pop_b, label_a, label_b, country = _resolve_slug_pair(args.slugs, output_base)
     else:
         # --- Positional-file mode: raw files, mapped on the fly.
@@ -215,7 +217,7 @@ def main() -> None:
         if args.charts_dir is not None:
             charts_dir = Path(args.charts_dir)
         else:
-            charts_dir = PROJECT_ROOT / "data" / "analysis" / output_path.stem
+            charts_dir = analysis_output_dir("pairwise_comparison", output_base) / output_path.stem
         plot_comparison_charts(
             pop_a,
             pop_b,

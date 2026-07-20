@@ -6,10 +6,11 @@ that DTO (:func:`extract_combo_performance`, testable without a filesystem), and
 the discovery walk that welds the mapped index to the per-slug comparison
 reports (:func:`load_combo_performances`).
 
-Discovery follows the canonical downstream route: read
-``{output_base}/03_Analysis/mapped/_index.json``, decompose each non-skipped
-slug into ``(country, strategy, model)`` via the shared axis registries, and
-open ``{output_base}/03_Analysis/fidelity/{slug}/{slug}.json``.
+Discovery follows the canonical downstream route: read the ``_index.json`` from the
+analysis-stage mapping folder (resolved via the analysis registry, with a legacy-read
+fallback to the pre-rename ``mapped/`` folder), decompose each non-skipped slug into
+``(country, strategy, model)`` via the shared axis registries, and open the per-slug
+fidelity report (also resolved via the registry).
 
 Failure policy (fail-fast where it matters):
 
@@ -33,6 +34,7 @@ from typing import Any, Callable
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
 from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.utils.registry import analysis_output_dir
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 # Per-attribute metrics carried through from the comparison report into the
@@ -173,8 +175,8 @@ def load_combo_performances(
     are injectable for tests.
     """
     output_base = Path(output_base)
-    mapped_dir = output_base / "03_Analysis" / "mapped"
-    comparison_dir = output_base / "03_Analysis" / "fidelity"
+    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    comparison_dir = analysis_output_dir("fidelity", output_base)
 
     index_path = mapped_dir / "_index.json"
     if not index_path.is_file():

@@ -7,7 +7,7 @@ the ``run_analytics`` master folder, groups metrics by **model** and by
 tests, and writes a comparison report (JSON) plus box / bar / heatmap charts.
 
 Prerequisite: run ``python scripts/analyze/analyze_run.py --all`` first to populate the
-per-run analytics under ``{output_base}/03_Analysis/run_analytics/{slug}/``.
+per-run analytics under the analysis-stage ``run_analytics/{slug}/`` folder.
 
 Usage:
     python scripts/analyze/compare_run_analytics.py
@@ -35,6 +35,7 @@ from population_synthetic.analysis.run_analytics.cross_run.run_comparison import
     write_comparison_json,
 )
 from population_synthetic.analysis.utils.axes import decompose_slug
+from population_synthetic.analysis.utils.registry import analysis_output_dir
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 _CONFIG_PATH = PROJECT_ROOT / "config" / "analysis" / "analyze_defaults.yaml"
@@ -54,15 +55,13 @@ def _load_config() -> dict:
 
 
 def _default_root(cfg: dict) -> Path | None:
+    # The scan root is the per-run master folder; its analysis-stage run_analytics base
+    # comes from the analysis registry. The comparison output nests the config-driven
+    # `_comparison` subdir under this root (see main), matching run_analytics_cross_run.
     output_base = cfg.get("output_base")
-    analytics = cfg.get("analytics") or {}
     if not output_base:
         return None
-    return (
-        Path(output_base)
-        / analytics.get("analysis_subdir", "03_Analysis")
-        / analytics.get("task_subdir", "run_analytics")
-    )
+    return analysis_output_dir("run_analytics_per_run", output_base)
 
 
 def _print_console_summary(result: dict) -> None:

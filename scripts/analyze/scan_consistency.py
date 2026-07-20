@@ -2,7 +2,7 @@
 scan_consistency.py -- Detection-only consistency scan of mapped populations.
 
 Consumes the pre-mapped files produced by the map stage (scripts/analyze/map_populations.py):
-it iterates {output_base}/03_Analysis/mapped/_index.json, and for every country in scope
+it iterates the analysis-stage mapping folder's _index.json, and for every country in scope
 scans the shared mapped real reference population plus each requested mapped synthetic
 population (--slug) against the country's config-driven consistency-rule list
 (config/analysis/consistency/{country}.yaml). This never modifies the generator or the
@@ -23,12 +23,12 @@ Usage:
                reference population for each in-scope country is ALWAYS scanned regardless of
                --slug (this is what answers whether the generator itself produces inconsistent
                combinations, and lets a synthetic slug's rate be compared against it).
---output-base  Base output directory (the 03_Analysis parent). Default: experiment_defaults.yaml.
+--output-base  Base output directory (the analysis-stage parent). Default: experiment_defaults.yaml.
 --no-charts    Skip chart generation.
 --force        Recompute a country even if its consistency/{country}_consistency.json already
                exists (default: skip a country whose output already exists).
 
-Outputs, under {output_base}/03_Analysis/consistency/:
+Outputs, under the analysis-stage consistency folder:
     {country}_consistency.json          per-rule counts + rates, one entry per scanned population
     {country}_consistency.csv           flat table (population, rule_id, severity, violations, rate)
     {population}/violations_examples.csv  capped sample of offending records for that population
@@ -43,9 +43,6 @@ import json
 import sys
 from pathlib import Path
 
-import yaml
-
-from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.consistency.builder import (
     build_summary_rows,
     scan_population,
@@ -55,8 +52,10 @@ from population_synthetic.analysis.consistency.builder import (
 )
 from population_synthetic.analysis.consistency.charts import plot_violation_rates
 from population_synthetic.analysis.consistency.rules import load_rules
-
-_DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
+from population_synthetic.analysis.utils.registry import (
+    analysis_output_dir,
+    resolve_output_base,
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -84,7 +83,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-base",
         default=None,
-        help="Base output directory (the 03_Analysis parent). "
+        help="Base output directory (the analysis-stage parent). "
         "Default: output_base from config/synthetic/experiment_defaults.yaml.",
     )
     parser.add_argument(
@@ -99,22 +98,6 @@ def _parse_args() -> argparse.Namespace:
         "already exists (default: skip a country whose output already exists).",
     )
     return parser.parse_args()
-
-
-def _resolve_output_base(cli_value: str | None) -> Path:
-    """Resolve output_base from the CLI flag or experiment_defaults.yaml."""
-    if cli_value:
-        return Path(cli_value)
-    with open(_DEFAULTS_PATH, "r", encoding="utf-8") as f:
-        defaults = yaml.safe_load(f) or {}
-    output_base = (defaults.get("parameters") or {}).get("output_base")
-    if not output_base:
-        print(
-            f"ERROR: no output_base in {_DEFAULTS_PATH} and --output-base not given",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return Path(output_base)
 
 
 def _split_csv(values: list[str] | None) -> list[str] | None:
@@ -134,9 +117,9 @@ def main() -> None:
     country_filter = _split_csv(args.countries)
     slug_filter = _split_csv(args.slugs)
 
-    output_base = _resolve_output_base(args.output_base)
-    mapped_dir = output_base / "03_Analysis" / "mapped"
-    consistency_dir = output_base / "03_Analysis" / "consistency"
+    output_base = resolve_output_base(args.output_base)
+    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    consistency_dir = analysis_output_dir("consistency", output_base)
 
     index_path = mapped_dir / "_index.json"
     if not index_path.exists():

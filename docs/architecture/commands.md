@@ -51,7 +51,8 @@ python scripts/generate/generate_identity.py --provider openrouter --model opena
 python scripts/analyze/score_fidelity.py pop_a.json pop_b.json
 
 # Map stage: map the targeted synthetic populations + their real populations to the canonical schema
-# (reads config/analysis/comparison_targets.yaml; writes {output_base}/03_Analysis/mapped/).
+# (reads config/analysis/comparison_targets.yaml; writes {output_base}/03_Analysis/mapping/ -- folder
+# name owned by the analysis registry; legacy on-disk mapped/ is still read as a fallback).
 # Run this BEFORE any compare command -- the compare scripts consume these pre-mapped files.
 python scripts/analyze/map_populations.py
 python scripts/analyze/map_populations.py --targets config/analysis/comparison_targets.yaml
@@ -61,13 +62,13 @@ python scripts/analyze/score_fidelity_sweden.py --manifest config/synthetic/mani
 
 # Compare pipeline output against the SCB real population (explicit mapped-file paths)
 python scripts/analyze/score_fidelity_sweden.py \
-    --mapped-synthetic {output_base}/03_Analysis/mapped/<slug>.json \
-    --mapped-real {output_base}/03_Analysis/mapped/real_swedish.json
+    --mapped-synthetic {output_base}/03_Analysis/mapping/<slug>.json \
+    --mapped-real {output_base}/03_Analysis/mapping/real_swedish.json
 
 # Compare pipeline output against the ISTAT real population (Italy; consumes pre-mapped files)
 python scripts/analyze/score_fidelity_italy.py --model-id claude_haiku --strategy-id all_pick --country-id italian
 
-# Compare every mapped target against country real populations (batch; iterates mapped/_index.json)
+# Compare every mapped target against country real populations (batch; iterates mapping/_index.json)
 python scripts/analyze/score_fidelity_all.py --country swedish --country italian
 
 # ... with every synthetic population capped to an equivalent size (seeded without-replacement draw;
@@ -125,6 +126,26 @@ ruff check src/
 
 A pytest suite lives under `tests/` (covers the `analysis/run_analytics/` layer and `clients/call_context`).
 Run it with `pytest` (requires `pip install -e ".[dev]"`).
+
+## Analysis registry (canonical id → label → folder → script)
+
+`config/analysis/analysis_registry.yaml` (accessor `analysis/utils/registry.py`) is the single
+source of truth for every analysis process. Each process's **canonical id** is simultaneously the
+registry key, the GUI workflow task key, and the `03_Analysis/<folder>/` output-folder name; scripts
+resolve their output dir via `analysis_output_dir(id, output_base)` rather than hardcoding paths.
+
+| Canonical id (= GUI task key = folder) | Label | Output folder (under `03_Analysis/`) | Script | Dispatch |
+|---|---|---|---|---|
+| `mapping` | Map Populations | `mapping/` (legacy read: `mapped/`) | `map_populations.py` | per_combo |
+| `fidelity` | Compare Synthetic to Real | `fidelity/` | `score_fidelity_all.py` | slugs |
+| `multivariate_fidelity` | Multivariate Joint Fidelity | `multivariate_fidelity/` | `score_multivariate_fidelity.py` | slugs |
+| `consistency` | Consistency Scan (unrealistic combos) | `consistency/` | `scan_consistency.py` | slugs |
+| `model_ranking` | Model Performance (models × methods) | `model_ranking/` | `rank_models.py` | slugs |
+| `method_significance` | Method Significance (per-category) | `method_significance/` | `analyze_method_significance.py` | slugs |
+| `pairwise_comparison` | Compare Two Populations | `pairwise_comparison/` | `score_fidelity.py` | slugs |
+| `run_analytics_per_run` | LLM Metrics (per-run) | `run_analytics/{slug}/` | `analyze_run.py` | per_combo |
+| `run_analytics_cross_run` | LLM Metrics (cross-run) | `run_analytics/_comparison/` | `compare_run_analytics.py` | slugs |
+| `cross_country` | Cross-Country (real vs real) | `cross_country/` | `compare_real_countries.py` | cli (CLI-only) |
 
 ## See also
 

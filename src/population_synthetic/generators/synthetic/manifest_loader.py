@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.utils.registry import analysis_output_dir
 
 VALID_AXES = {"models", "strategies", "countries"}
 
@@ -217,7 +218,9 @@ def compose_manifest(model_id: str, strategy_id: str, country_id: str) -> Manife
 
     slug = axis_slug(model_id, strategy_id, country_id)
     parallel_output_dir = _resolve_path(f"{output_base}/01_Raw/{slug}")
-    comparison_output_dir = _resolve_path(f"{output_base}/03_Analysis/fidelity/{slug}")
+    # The fidelity output folder is owned by the analysis registry (single source of truth
+    # for the 03_Analysis/ layout), not hardcoded here.
+    comparison_output_dir = _resolve_path(str(analysis_output_dir("fidelity", output_base) / slug))
 
     return ManifestConfig(
         name=name,

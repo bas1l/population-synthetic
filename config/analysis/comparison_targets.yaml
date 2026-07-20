@@ -3,7 +3,8 @@
 # This is the explicit list of synthetic populations we consider "complete" and want
 # mapped for comparison. The map stage (map_populations.py) processes ONLY these
 # targets; it does not scan disk for runs. Each mapped output lands under
-# {output_base}/03_Analysis/mapped/.
+# {output_base}/03_Analysis/mapping/ (folder name owned by the analysis registry;
+# legacy on-disk mapped/ is still read as a fallback).
 #
 # Each entry under `targets:` is EITHER:
 #   - a plain string: a manifest path relative to the repo root. The country is

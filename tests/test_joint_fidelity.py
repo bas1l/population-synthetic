@@ -19,6 +19,7 @@ from population_synthetic.analysis.multivariate_fidelity.builder import (
     aggregate_multivariate_fidelity,
     build_multivariate_fidelity,
 )
+from population_synthetic.analysis.utils.registry import analysis_output_dir
 
 _AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85"]
 
@@ -131,7 +132,7 @@ def _load_driver():
 def test_driver_writes_joint_fidelity_tree(tmp_path, monkeypatch):
     driver = _load_driver()
 
-    mapped_dir = tmp_path / "03_Analysis" / "mapped"
+    mapped_dir = analysis_output_dir("mapping", tmp_path)
     mapped_dir.mkdir(parents=True)
 
     real, synth = _real_and_synth()
@@ -163,7 +164,7 @@ def test_driver_writes_joint_fidelity_tree(tmp_path, monkeypatch):
     )
     driver.main()
 
-    joint_dir = tmp_path / "03_Analysis" / "multivariate_fidelity"
+    joint_dir = analysis_output_dir("multivariate_fidelity", tmp_path)
     assert (joint_dir / "swedish_all_pick_claude_sonnet" / "swedish_all_pick_claude_sonnet.json").is_file()
     assert (
         joint_dir / "swedish_all_pick_claude_sonnet" / "swedish_all_pick_claude_sonnet_association.csv"
@@ -172,8 +173,8 @@ def test_driver_writes_joint_fidelity_tree(tmp_path, monkeypatch):
     assert (joint_dir / "swedish_multivariate_fidelity.csv").is_file()
 
     # Non-regression: the driver must not write under comparison/ or performance/.
-    assert not (tmp_path / "03_Analysis" / "fidelity").exists()
-    assert not (tmp_path / "03_Analysis" / "model_ranking").exists()
+    assert not analysis_output_dir("fidelity", tmp_path).exists()
+    assert not analysis_output_dir("model_ranking", tmp_path).exists()
 
 
 if __name__ == "__main__":
