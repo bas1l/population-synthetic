@@ -3,16 +3,22 @@
 Pure-consumer renderers over a built ``result`` dict: exercise the PNG+SVG dual
 output, the global-best-strategy selection cited in the models-table title, the
 Overall-sort of both tables, the drop-and-report of a model missing at the
-global-best strategy, and the empty / all-NaN ``None`` contract. Figures are
-written to a pytest ``tmp_path``, never the repo.
+global-best strategy, the provenance side-marker (row-label colour), the LaTeX
+snippet emitters, and the empty / all-NaN ``None`` contract. Figures / snippets
+are written to a pytest ``tmp_path``, never the repo.
 """
 
 from __future__ import annotations
 
+import re
+
 from population_synthetic.analysis.model_ranking.builder import build_performance_comparison
 from population_synthetic.analysis.model_ranking.manuscript_tables import (
+    _HOST_COLORS,
     plot_method_fidelity_table,
     plot_model_fidelity_table,
+    write_method_fidelity_latex,
+    write_model_fidelity_latex,
 )
 from tests._performance_fixtures import ATTRIBUTES, make_combo
 
@@ -219,3 +225,149 @@ def test_method_table_none_on_all_nan(tmp_path):
     result = build_performance_comparison(combos, ATTRIBUTES)
     assert plot_method_fidelity_table(result, tmp_path / "x.png") is None
     assert plot_model_fidelity_table(result, tmp_path / "y.png") is None
+
+
+def test_model_table_provenance_side_marker_colours_row_labels(tmp_path):
+    """Each model row label is coloured by its hosting class (side-marker encoding)."""
+    result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    captured = {}
+    orig = plt.subplots
+
+    def spy(*args, **kwargs):
+        fig, ax = orig(*args, **kwargs)
+        captured["ax"] = ax
+        return fig, ax
+
+    plt.subplots = spy
+    try:
+        out = plot_model_fidelity_table(result, tmp_path / "m.png")
+    finally:
+        plt.subplots = orig
+
+    assert out is not None
+    ax = captured["ax"]
+    color_by_model = {
+        t.get_text(): mcolors.to_hex(t.get_color()).lower() for t in ax.get_yticklabels()
+    }
+    # claude_haiku is hosted, gemini_flash is local (per _HOSTING).
+    assert color_by_model["claude_haiku"] == _HOST_COLORS["hosted"].lower()
+    assert color_by_model["gemini_flash"] == _HOST_COLORS["local"].lower()
+
+
+def test_model_table_categories_on_top(tmp_path):
+    """Category (column) tick labels are placed above the axes."""
+    result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    captured = {}
+    orig = plt.subplots
+
+    def spy(*args, **kwargs):
+        fig, ax = orig(*args, **kwargs)
+        captured["ax"] = ax
+        return fig, ax
+
+    plt.subplots = spy
+    try:
+        out = plot_model_fidelity_table(result, tmp_path / "m.png")
+    finally:
+        plt.subplots = orig
+
+    assert out is not None
+    assert captured["ax"].xaxis.get_ticks_position() == "top"
+
+
+# ------------------------------------------------------------------
+# LaTeX snippet emitters
+# ------------------------------------------------------------------
+
+def _tabular(content: str) -> str:
+    """The ``\\begin{tabular}...\\end{tabular}`` body, excluding the leading comment block."""
+    return content.split("\\begin{tabular}", 1)[1].split("\\end{tabular}", 1)[0]
+
+
+def _row_count(content: str) -> int:
+    """Number of body rows (``\\\\``-terminated lines between the mid/bottom rules)."""
+    body = _tabular(content).split("\\midrule", 1)[1].split("\\bottomrule", 1)[0]
+    return body.count("\\\\")
+
+
+def test_model_latex_snippet_shape(tmp_path):
+    result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
+    out = write_model_fidelity_latex(result, tmp_path / "swedish_models_table.tex")
+
+    assert out is not None
+    assert out == tmp_path / "swedish_models_table.tex"
+    assert out.exists()
+    content = out.read_text(encoding="utf-8")
+    assert content.strip()  # non-empty
+    assert "\\toprule" in content and "\\bottomrule" in content
+    # Header row = category names (attributes escaped) + Overall.
+    header = _tabular(content).split("\\toprule", 1)[1].split("\\midrule", 1)[0]
+    for attr in ATTRIBUTES:
+        assert attr.replace("_", "\\_") in header
+    assert "Overall" in header
+    # Values are shown as percentages (0--100, one decimal); the caption notes the unit.
+    assert "TV-similarity, %" in content
+    assert re.search(r"\\textbf\{\d+\.\d\}", content)  # best-per-column bold, percentage form
+    # Best per column (claude_haiku, TV-sim 0.90 -> 90.0%) is bold.
+    assert "\\textbf{90.0}" in content
+    # One body row per model at the global-best strategy.
+    assert _row_count(content) == 2
+    # Provenance indicator present (leading Host column, hosted/local text).
+    assert "Host" in header
+    assert "hosted" in content and "local" in content
+
+
+def test_method_latex_snippet_shape(tmp_path):
+    result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
+    out = write_method_fidelity_latex(result, tmp_path / "swedish_methods_table.tex")
+
+    assert out is not None
+    assert out.exists()
+    content = out.read_text(encoding="utf-8")
+    assert content.strip()
+    assert "\\toprule" in content and "\\bottomrule" in content
+    header = _tabular(content).split("\\toprule", 1)[1].split("\\midrule", 1)[0]
+    for attr in ATTRIBUTES:
+        assert attr.replace("_", "\\_") in header
+    assert "Overall" in header
+    # Values are shown as percentages (0--100, one decimal); the caption notes the unit.
+    assert "TV-similarity, %" in content
+    assert re.search(r"\\textbf\{\d+\.\d\}", content)  # best-per-column bold, percentage form
+    # all_pick wins every column (mean 0.80 -> 80.0%) -> bold.
+    assert "\\textbf{80.0}" in content
+    # One body row per strategy.
+    assert _row_count(content) == 2
+
+
+def test_latex_emitters_none_on_all_nan(tmp_path):
+    combos = [
+        make_combo(
+            slug="swedish_all_pick_claude_haiku", strategy="all_pick", model="claude_haiku",
+            tv_by_attr={a: float("nan") for a in ATTRIBUTES},
+        ),
+        make_combo(
+            slug="swedish_all_pick_gemini_flash", strategy="all_pick", model="gemini_flash",
+            tv_by_attr={a: float("nan") for a in ATTRIBUTES},
+        ),
+    ]
+    result = build_performance_comparison(combos, ATTRIBUTES)
+    assert write_model_fidelity_latex(result, tmp_path / "x.tex") is None
+    assert write_method_fidelity_latex(result, tmp_path / "y.tex") is None
+
+
+def test_latex_emitters_none_on_empty_attributes(tmp_path):
+    result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
+    result["metadata"]["attributes"] = []
+    assert write_model_fidelity_latex(result, tmp_path / "x.tex") is None
+    assert write_method_fidelity_latex(result, tmp_path / "y.tex") is None

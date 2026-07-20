@@ -16,9 +16,13 @@ Outputs, per country, under {output_base}/03_Analysis/model_ranking/:
     {country}_heatmap.png         combos x attributes (+ overall) TV-similarity
     {country}_leaderboard.png     overall ranking with coherence annotations
     {country}_models_table.png    manuscript table: models at the global-best strategy x
-                                  axes (+ overall), hosted/local hue (PNG + SVG)
+                                  axes (+ overall), single inferno ramp with a
+                                  hosted/local provenance side-marker (PNG + SVG)
     {country}_methods_table.png   manuscript table: strategies x axes (+ overall),
-                                  mean-over-models TV-similarity (PNG + SVG)
+                                  mean-over-models TV-similarity, inferno ramp (PNG + SVG)
+    {country}_models_table.tex    manuscript LaTeX snippet mirroring the models table
+                                  (booktabs tabular, inferno cell colours, best-per-column bold)
+    {country}_methods_table.tex   manuscript LaTeX snippet mirroring the methods table
     {country}_by_attribute/       one grouped bar chart per attribute (opt-in)
 
 Usage:
@@ -73,6 +77,8 @@ from population_synthetic.analysis.model_ranking.loader import (
 from population_synthetic.analysis.model_ranking.manuscript_tables import (
     plot_method_fidelity_table,
     plot_model_fidelity_table,
+    write_method_fidelity_latex,
+    write_model_fidelity_latex,
 )
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
@@ -317,6 +323,16 @@ def main() -> None:
             )
             if methods_table is not None:
                 print(f"Methods table written to {methods_table}")
+            models_tex = write_model_fidelity_latex(
+                result, performance_dir / f"{country}_models_table.tex"
+            )
+            if models_tex is not None:
+                print(f"Models LaTeX table written to {models_tex}")
+            methods_tex = write_method_fidelity_latex(
+                result, performance_dir / f"{country}_methods_table.tex"
+            )
+            if methods_tex is not None:
+                print(f"Methods LaTeX table written to {methods_tex}")
             if args.per_attribute_charts:
                 written = plot_attribute_bars(result, performance_dir / f"{country}_by_attribute")
                 print(f"Per-attribute charts written to {performance_dir / f'{country}_by_attribute'} "

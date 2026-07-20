@@ -16,6 +16,19 @@ models at a single global-best strategy, columns = the demographic axes + Overal
 **methods** table (rows = strategies, cells = mean across models). Both highlight the best cell
 per column and are sorted by an Overall column.
 
+> **Update (2026-07-20, supersedes the dual-colormap "encoding A" below):** both tables now
+> colour the score with a **single sequential `inferno` ramp** (matching the sibling repo's
+> RF-mapping convention). Hosted-vs-local provenance moved out of cell hue into a **side-marker**
+> — the model row label is coloured (hosted = blue `#4878CF`, local = orange `#E8935A`) with a
+> legend. Category (attribute) tick labels are placed **above** the table. The feature now also
+> emits **LaTeX `.tex` snippets** for both tables (`booktabs` `tabular`, inferno `\cellcolor`,
+> best-per-column `\textbf`, categories as the header row), wired into `rank_models.py` alongside
+> the PNG/SVG outputs.
+
+> **Update (2026-07-20):** cell values now **display as percentages (0--100, one decimal)** in
+> both figures and both LaTeX emitters; the colour `Normalize` still runs on the underlying 0--1
+> TV-similarity (colorbar tick labels rescaled via a `FuncFormatter`, label carries `(%)`).
+
 **Why:** The primary manuscript message is "model X is best overall." The existing
 `plot_performance_heatmap` is an internal viridis artifact showing every model×strategy combo — too
 dense and not print-styled. These two focused tables carry the model story and the method story
