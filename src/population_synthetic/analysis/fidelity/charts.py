@@ -16,6 +16,7 @@ import numpy as np
 
 from population_synthetic.analysis.fidelity.evaluator import attr_value
 from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
+from population_synthetic.analysis.utils.figures import save_figure
 
 # ------------------------------------------------------------------
 # Chart styling constants
@@ -267,13 +268,8 @@ def plot_radar_comparison(
     if show_chi_sq:
         ax.legend(loc="lower left", bbox_to_anchor=(-0.1, -0.05), fontsize=8)
 
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{prefix}_radar.png" if prefix else "radar.png"
-    out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    out_path = Path(output_dir) / (f"{prefix}_radar.png" if prefix else "radar.png")
+    return save_figure(fig, out_path, dpi=150)
 
 
 # ------------------------------------------------------------------
@@ -666,13 +662,8 @@ def plot_radar_grid(
                  fontsize=13, fontweight="bold", y=1.01)
     plt.tight_layout(rect=[0, 0, 1, 0.98])
 
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{prefix}_radar_grid.png" if prefix else "radar_grid.png"
-    out_path = output_dir / fname
-    fig.savefig(out_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    out_path = Path(output_dir) / (f"{prefix}_radar_grid.png" if prefix else "radar_grid.png")
+    return save_figure(fig, out_path, dpi=180)
 
 
 # ------------------------------------------------------------------
