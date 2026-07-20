@@ -75,7 +75,11 @@ python scripts/analyze/score_fidelity_all.py --country swedish --country italian
 python scripts/analyze/score_fidelity_all.py --country swedish --n-synthetic 100 --sample-seed 0
 
 # Cross-model performance comparison: rank model x strategy combos per country against the real
-# baseline (consumes the comparison reports; run score_fidelity_all.py first)
+# baseline (consumes the comparison reports; run score_fidelity_all.py first). Emits, under
+# 03_Analysis/model_ranking/, the {country}_performance.json/.csv, the heatmap/leaderboard/
+# c2st charts, and two manuscript heatmap-tables (PNG + SVG each): {country}_models_table
+# (models at the global-best strategy, hosted/local hue) and {country}_methods_table (strategies,
+# mean-over-models TV-similarity).
 python scripts/analyze/rank_models.py --country swedish --per-attribute-charts
 
 # Per-category method/model significance: which factor (generation method vs model) drives

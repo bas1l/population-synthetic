@@ -56,8 +56,12 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   model × strategy combos against each other per country -- per attribute (TV-similarity) and
   overall -- with Kruskal-Wallis + Dunn/Holm factor tests. `loader.py` (`ComboPerformance` DTO +
   report discovery via `mapped/_index.json`), `builder.py` (`build_performance_comparison` +
-  JSON/CSV writers), `charts.py` (heatmap, leaderboard, per-attribute bars). Never recomputes
-  from populations.
+  JSON/CSV writers, plus the `methods_matrix` per-strategy × per-attribute block and the
+  embedded `metadata.model_hosting`), `charts.py` (heatmap, leaderboard, per-attribute bars),
+  `hosting.py` (config-driven provider → `local`/`hosted` classification), and
+  `manuscript_tables.py` (two print-oriented, pure-consumer heatmap-tables emitted as PNG + SVG:
+  a **models** table at the global-best strategy with hosted/local hue, and a **methods** table
+  of mean-over-models TV-similarity per strategy). Never recomputes from populations.
 - **`method_significance/`** -- Per-category method/model significance (sits after the compare stage;
   driven by `analyze_method_significance.py`). Reuses `model_ranking`'s `loader` to obtain the
   (model × method × category) TV grid and asks, per country and per attribute, *which factor drives

@@ -28,6 +28,7 @@ from typing import Any, Callable
 
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils import _stats
+from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
 from population_synthetic.analysis.utils.stats_tests import dunn_posthoc, kruskal_test, summarize
 
 _CAVEATS = (
@@ -41,6 +42,56 @@ def _mean(values: list[float]) -> float:
     if not values:
         return float("nan")
     return sum(values) / len(values)
+
+
+def _ordered_strategies(strategies: list[str]) -> list[str]:
+    """Strategies in complexity order; any unknown strategy appended (sorted)."""
+    ordered = [s for s in STRATEGY_COMPLEXITY_ORDER if s in strategies]
+    ordered += sorted(s for s in strategies if s not in STRATEGY_COMPLEXITY_ORDER)
+    return ordered
+
+
+def _methods_matrix(
+    records: list[ComboPerformance],
+    attributes: list[str],
+) -> dict[str, Any]:
+    """Per-strategy x per-attribute mean TV-similarity across models.
+
+    For each strategy present in *records*, each attribute cell is the mean over
+    that strategy's models of the model's per-attribute TV-similarity (NaN/missing
+    attributes excluded). The per-strategy ``overall`` is the mean of that
+    strategy's per-attribute means (NaN attribute means excluded). Strategies are
+    ordered by :data:`STRATEGY_COMPLEXITY_ORDER` (simplest first; unknown
+    strategies appended sorted).
+    """
+    by_strategy: dict[str, list[ComboPerformance]] = {}
+    for r in records:
+        by_strategy.setdefault(r.strategy, []).append(r)
+
+    strategies = _ordered_strategies(list(by_strategy))
+    cells: dict[str, dict[str, float]] = {}
+    for strategy in strategies:
+        strategy_records = by_strategy[strategy]
+        cell: dict[str, float] = {}
+        attribute_means: list[float] = []
+        for attr in attributes:
+            values = [
+                v
+                for r in strategy_records
+                if (v := r.tv_similarity.get(attr)) is not None and v == v
+            ]
+            mean = _mean(values)
+            cell[attr] = mean
+            if mean == mean:  # exclude NaN attribute means from the strategy overall
+                attribute_means.append(mean)
+        cell["overall"] = _mean(attribute_means)
+        cells[strategy] = cell
+
+    return {
+        "attributes": list(attributes),
+        "strategies": strategies,
+        "cells": cells,
+    }
 
 
 def _group_tv_samples(
@@ -88,12 +139,17 @@ def build_performance_comparison(
     attributes: list[str],
     *,
     skipped: list[tuple[str, str]] | None = None,
+    model_hosting: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build the serialisable performance comparison for one country's records.
 
     *skipped* (``(slug, reason)`` pairs from the loader) is recorded in the
-    metadata so consumers can see grid gaps. Raises when fewer than two combos
-    are available (nothing to compare) or the records span multiple countries.
+    metadata so consumers can see grid gaps. *model_hosting* (``{model_id:
+    "local"|"hosted"}`` from :func:`~population_synthetic.analysis.model_ranking.hosting.classify_hosting`)
+    is embedded at ``metadata.model_hosting`` so manuscript renderers can encode
+    provenance; it defaults to ``{}`` when not supplied (existing callers
+    unaffected). Raises when fewer than two combos are available (nothing to
+    compare) or the records span multiple countries.
     """
     if len(records) < 2:
         raise ValueError(
@@ -160,9 +216,11 @@ def build_performance_comparison(
             "strategies": sorted({r.strategy for r in records}),
             "attributes": list(attributes),
             "skipped": [{"slug": slug, "reason": reason} for slug, reason in (skipped or [])],
+            "model_hosting": dict(model_hosting or {}),
         },
         "combos": combos,
         "ranking": ranking,
+        "methods_matrix": _methods_matrix(records, attributes),
         "stats": {
             "metric": "tv_similarity",
             "by_model": _factor_block(records, lambda r: r.model),
