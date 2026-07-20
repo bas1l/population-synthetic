@@ -39,6 +39,7 @@ import numpy as np
 from population_synthetic.analysis.method_significance.builder import (
     load_comparison_config,
     resolve_pairs,
+    significance_cutoff,
 )
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
@@ -489,9 +490,17 @@ def _panel_data_max(panel: dict[str, Any], methods: list[str]) -> float:
     return max(values) if values else 1.0
 
 
-def _star_key_text(thresholds: list[dict[str, Any]], ns_symbol: str) -> str:
-    """Human-readable in-figure key defining ns / * / ** / *** / **** from config."""
-    parts = [f"{ns_symbol}: p>{max(float(e['max_p']) for e in thresholds):g}"]
+def _star_key_text(thresholds: list[dict[str, Any]], ns_symbol: str, pairs_mode: str) -> str:
+    """Human-readable in-figure key defining the star symbols from config.
+
+    The ``ns`` entry is included only when the *pairs_mode* can actually draw a
+    non-significant bracket. Under ``significant-only`` no ``ns`` bracket is ever
+    drawn, so the key omits ``ns`` and defines only ``* ** *** ****`` -- keeping the
+    key accurate to what the figure shows.
+    """
+    parts: list[str] = []
+    if pairs_mode != "significant-only":
+        parts.append(f"{ns_symbol}: p>{max(float(e['max_p']) for e in thresholds):g}")
     for entry in sorted(thresholds, key=lambda e: float(e["max_p"]), reverse=True):
         parts.append(f"{entry['symbol']}: p≤{float(entry['max_p']):g}")
     return "   ".join(parts)
@@ -552,7 +561,11 @@ def _draw_method_panel(
 
     # Significance brackets over the configured pairs.
     pairwise_p: dict[str, float] = panel.get("pairwise_p", {})
-    pairs = resolve_pairs(methods, pairs_mode, pairwise_p=pairwise_p)
+    # The significant-only cutoff is read from the config star thresholds (the '*'
+    # cutoff), never a hardcoded literal; ignored by the non-filtering modes.
+    pairs = resolve_pairs(
+        methods, pairs_mode, pairwise_p=pairwise_p, alpha=significance_cutoff(thresholds)
+    )
     idx = {s: j for j, s in enumerate(methods)}
     spans = [(float(idx[a]), float(idx[b])) for a, b in pairs if a in idx and b in idx]
     levels = _stack_bracket_levels(spans)
@@ -582,7 +595,16 @@ def _draw_method_panel(
         omni_note = f"Friedman p={p_omni:.3g} (BH {p_bh:.3g})"
     else:
         omni_note = f"Friedman p={p_omni:.3g}"
-    ax.set_title(f"{title}\n{omni_note}; n={n_models}", fontsize=9.5, fontweight="bold")
+    # Header: model n and (for a category panel) the attribute's declared level
+    # count from the block; the Overall panel spans all categories, so it has no
+    # single level count and shows only the model n. Pure consumer -- the count is
+    # computed in the builder (panel["n_category_values"]), never derived here.
+    n_levels = panel.get("n_category_values")
+    if n_levels is not None:
+        count_note = f"n={n_models} models · {n_levels} levels"
+    else:
+        count_note = f"n={n_models} models"
+    ax.set_title(f"{title}  ({count_note})\n{omni_note}", fontsize=9.5, fontweight="bold")
 
 
 def plot_method_comparison(
@@ -673,7 +695,7 @@ def plot_method_comparison(
         headline += " -- Overall"
     fig.suptitle(headline, fontsize=12, fontweight="bold")
 
-    key_text = _star_key_text(thresholds, ns_symbol)
+    key_text = _star_key_text(thresholds, ns_symbol, pairs_mode)
     fig.text(0.5, 0.005, "key -- " + key_text, ha="center", va="bottom", fontsize=8,
              color="#333333")
 

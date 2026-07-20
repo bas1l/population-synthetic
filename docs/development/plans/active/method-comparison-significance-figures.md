@@ -3,6 +3,19 @@
 **Date:** 2026-07-20
 **Author:** Basil
 **Status:** In Progress
+
+> **Refinement (2026-07-20):** two follow-up changes landed after the initial three phases.
+> 1. **Default `pairs_mode` is now `significant-only`** (was `adjacent`). `resolve_pairs("significant-only")`
+>    considers **all** unordered method pairs and keeps only those with a significant pairwise Nemenyi p —
+>    the cutoff is read from config (`significance_cutoff(star_thresholds)` = the `*` threshold = 0.05, "at
+>    least one star"), never a hardcoded literal. Only significant brackets are drawn; non-significant pairs
+>    get no bracket (so `ns` is never shown, and the in-figure key omits `ns` in this mode).
+> 2. **Per-category panel headers now show the attribute's level count.** The builder stores
+>    `panels[category]["n_category_values"]` = length of that attribute's config `values` list (from the
+>    scheme's mapping tier — `scb_native` for Sweden, the same tier scored), and the renderer displays it:
+>    `age_group  (n=7 models · 7 levels)` / `Friedman p=…`. The Overall panel spans all categories, so it
+>    omits the level count and shows only the model `n`. Fail-fast: an analysed attribute with no resolved
+>    (or empty) `values` raises.
 **Base Branch:** `feature/manuscript-fidelity-tables`
 **Branch:** `feature/method-significance-figures`
 
@@ -45,7 +58,8 @@ needed.
    **and** a standalone Overall panel. PNG + SVG via `save_figure`.
 4. A machine-readable **results table** (JSON + CSV): omnibus stat/p + pairwise p (raw and corrected)
    per category and Overall.
-5. Config-driven choice of **which method pairs to bracket** (default: adjacent-ordered pairs).
+5. Config-driven choice of **which method pairs to bracket** (default: `significant-only` — all pairs
+   filtered to a significant Nemenyi p; the cutoff is the config `*` star threshold).
 6. Wire into `scripts/analyze/analyze_method_significance.py` (+ its GUI task picks it up).
 
 ### Out of Scope
@@ -92,8 +106,12 @@ needed.
 - **Pairwise post-hoc:** Nemenyi test for Friedman (`scikit-posthocs.posthoc_nemenyi_friedman`),
   yielding a symmetric p-matrix over methods; the value for a bracketed pair drives its stars.
 - **Bracketed pairs:** which method pairs get a drawn bracket. Config-driven; default
-  `adjacent-ordered` (consecutive complexity steps). Options: `adjacent`, `all`, `vs-baseline`
-  (all vs the simplest method), `significant-only`.
+  `significant-only` (every unordered pair, filtered to a significant pairwise p — the config `*` cutoff).
+  Options: `adjacent` (consecutive complexity steps), `all`, `vs-baseline` (all vs the simplest method),
+  `significant-only`.
+- **Level count (`n_category_values`):** per analysed attribute, the number of declared category values
+  (levels) from the scheme's config `values` list (the mapping tier scored — `scb_native` for Sweden);
+  computed in the builder and shown in each category panel header.
 - **Star mapping:** `p>0.05 → ns`, `≤0.05 → *`, `≤0.01 → **`, `≤0.001 → ***`, `≤0.0001 → ****`.
 
 ---

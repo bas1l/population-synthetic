@@ -35,6 +35,7 @@ from tests._performance_fixtures import make_combo  # noqa: E402
 MODELS = ["model_a", "model_b", "model_c", "model_d", "model_e"]
 STRATEGIES = list(STRATEGY_COMPLEXITY_ORDER)
 ATTRS = ["trend_attr", "shift_attr"]
+CATEGORY_VALUES = {"trend_attr": ["a", "b", "c", "d"], "shift_attr": ["x", "y", "z"]}
 
 
 def _trend_tv(m_idx: int, rank: int) -> float:
@@ -111,6 +112,7 @@ def test_stack_levels_non_overlapping_share_level():
 
 def test_grid_returns_png_and_svg(tmp_path):
     result = build_method_significance(_full_grid(), ATTRS,
+                                       category_values=CATEGORY_VALUES,
                                        comparison_config=load_comparison_config())
     out = plot_method_comparison(result, tmp_path / "swedish_method_comparison.png")
     assert out is not None
@@ -121,6 +123,7 @@ def test_grid_returns_png_and_svg(tmp_path):
 
 def test_overall_only_renders_single_panel(tmp_path):
     result = build_method_significance(_full_grid(), ATTRS,
+                                       category_values=CATEGORY_VALUES,
                                        comparison_config=load_comparison_config())
     out = plot_method_comparison(
         result, tmp_path / "swedish_method_comparison_overall.png", overall_only=True
@@ -134,10 +137,56 @@ def test_returns_none_when_block_absent(tmp_path):
     assert plot_method_comparison({"method_comparison": {}}, tmp_path / "none.png") is None
 
 
+def _crafted_result(*, pairwise_p, n_category_values, pairs_mode="significant-only"):
+    """A minimal built-shaped result for pure-consumer renderer tests.
+
+    One category panel + a trivial Overall panel; the star mapping is echoed from
+    the real config so the renderer stays a pure consumer.
+    """
+    cfg = load_comparison_config()
+    methods = STRATEGIES[:3]
+    panel = {
+        "n_models": 5,
+        "n_dropped": 0,
+        "dropped_models": [],
+        "means": {s: 0.8 for s in methods},
+        "per_model": {f"m{i}": {s: 0.8 for s in methods} for i in range(5)},
+        "omnibus": {"test": "friedman", "statistic": 1.0, "p": 0.6, "p_bh": 0.6, "kendall_w": 0.1},
+        "pairwise_p": pairwise_p,
+        "insufficient_n": False,
+        "n_category_values": n_category_values,
+    }
+    overall = dict(panel)
+    overall.pop("n_category_values")
+    return {
+        "metadata": {"country": "swedish"},
+        "method_comparison": {
+            "response": "tv_similarity",
+            "methods": methods,
+            "pairs_mode": pairs_mode,
+            "star_thresholds": cfg["star_thresholds"],
+            "ns_symbol": cfg["ns_symbol"],
+            "panels": {"age_group": panel, "overall": overall},
+        },
+    }
+
+
+def test_zero_significant_pairs_panel_renders_without_brackets(tmp_path):
+    # significant-only: every pair non-significant -> no bracket drawn, but the
+    # bars + header (with the level count) still render without error.
+    methods = STRATEGIES[:3]
+    ns_pairwise = {f"{a}|{b}": 0.9 for i, a in enumerate(methods) for b in methods[i + 1:]}
+    result = _crafted_result(pairwise_p=ns_pairwise, n_category_values=7)
+    out = plot_method_comparison(result, tmp_path / "zero_sig.png")
+    assert out is not None and out.is_file()
+    assert out.with_suffix(".svg").is_file()
+
+
 def test_insufficient_n_panel_renders_without_error(tmp_path, caplog):
     # Two models only -> every panel is insufficient_n (n<3); must still render.
     result = build_method_significance(
         _full_grid(models=["solo_a", "solo_b"]), ATTRS,
+        category_values=CATEGORY_VALUES,
         comparison_config=load_comparison_config(),
     )
     assert result["method_comparison"]["panels"]["trend_attr"]["insufficient_n"] is True

@@ -149,12 +149,28 @@ def load_comparison_config(path: str | Path = DEFAULT_COMPARISON_CONFIG_PATH) ->
     return raw
 
 
+def significance_cutoff(star_thresholds: list[dict[str, Any]]) -> float:
+    """The p below which a pair earns *at least one* star (the loosest star cutoff).
+
+    Returns ``max(max_p)`` over the config ``star_thresholds`` -- i.e. the ``*``
+    cutoff (``0.05`` in the standard convention). By construction this is exactly
+    the boundary at which :func:`_p_to_stars` stops returning the ``ns`` symbol, so
+    "significant" == "has at least one star". The cutoff is **read from config**
+    (single source of truth); it is never a hardcoded literal.
+
+    Raises :class:`ValueError` on an empty ``star_thresholds`` list (fail-fast).
+    """
+    if not star_thresholds:
+        raise ValueError("significance_cutoff needs a non-empty star_thresholds list")
+    return max(float(entry["max_p"]) for entry in star_thresholds)
+
+
 def resolve_pairs(
     methods: list[str],
     pairs_mode: str,
     *,
     pairwise_p: dict[str, float] | None = None,
-    alpha: float = 0.05,
+    alpha: float | None = None,
 ) -> list[tuple[str, str]]:
     """Resolve which method pairs get a bracket, from the config ``pairs_mode``.
 
@@ -163,12 +179,15 @@ def resolve_pairs(
     * ``adjacent`` -- consecutive complexity steps ``(m_i, m_{i+1})``.
     * ``all`` -- every unordered pair.
     * ``vs-baseline`` -- every method vs the simplest (``methods[0]``).
-    * ``significant-only`` -- the ``all`` pairs whose Nemenyi p (from *pairwise_p*)
-      is ``<= alpha``; requires *pairwise_p* (a ``"a|b" -> p`` map).
+    * ``significant-only`` -- **every** unordered pair (not just adjacent) filtered
+      to those whose Nemenyi p (from *pairwise_p*) is ``<= alpha``; requires both
+      *pairwise_p* (a ``"a|b" -> p`` map) and *alpha* (the config-derived
+      significance cutoff, see :func:`significance_cutoff`). Non-significant pairs
+      get no bracket, so ``ns`` is never drawn in this mode.
 
     Pairs are returned in complexity order (left method simpler than right). An
-    unknown *pairs_mode* raises :class:`ValueError` (fail-fast; never a silent
-    default).
+    unknown *pairs_mode*, or ``significant-only`` without its *pairwise_p*/*alpha*,
+    raises :class:`ValueError` (fail-fast; never a silent default).
     """
     all_pairs = [(a, b) for a, b in combinations(methods, 2)]
     if pairs_mode == "adjacent":
@@ -183,6 +202,11 @@ def resolve_pairs(
     if pairs_mode == "significant-only":
         if pairwise_p is None:
             raise ValueError("pairs_mode 'significant-only' needs pairwise_p to select pairs")
+        if alpha is None:
+            raise ValueError(
+                "pairs_mode 'significant-only' needs alpha (the config-derived "
+                "significance cutoff, e.g. significance_cutoff(star_thresholds))"
+            )
         selected: list[tuple[str, str]] = []
         for a, b in all_pairs:
             p = pairwise_p.get(_pair_key(a, b))
@@ -604,6 +628,7 @@ def _method_comparison(
     attributes: list[str],
     methods: list[str],
     config: dict[str, Any],
+    category_values: dict[str, list[str]],
 ) -> dict[str, Any]:
     """Per-category (+ Overall) method comparison: Friedman + Nemenyi, models as blocks.
 
@@ -613,6 +638,13 @@ def _method_comparison(
     method. The category omnibus p-values are Benjamini-Hochberg (FDR) corrected
     across categories (``p_bh`` stored alongside raw ``p``); the Overall panel is a
     single pooled test and is not part of that family (``p_bh`` stays ``None``).
+
+    Each category panel also carries ``n_category_values`` -- the count of that
+    attribute's declared category levels, taken from *category_values* (the scheme's
+    config-sourced ``values`` list, single source of truth). It is stored here so the
+    renderer stays a pure consumer. Fail-fast: an analysed attribute with no resolved
+    (or empty) ``values`` raises. The Overall panel spans all categories, so it has no
+    single level count and omits the key.
 
     *methods* are the compared methods in complexity order; *config* supplies
     ``pairs_mode`` (exposed for the renderer, which resolves the bracketed pairs).
@@ -625,7 +657,16 @@ def _method_comparison(
             m: {s: _tv_sim(by_ms.get((m, s)), attr) for s in methods} for m in models
         }
         matrix, complete, dropped = _complete_case_matrix(per_model, models, methods)
-        panels[attr] = _method_panel(matrix, methods, complete, dropped)
+        panel = _method_panel(matrix, methods, complete, dropped)
+        values = category_values.get(attr)
+        if not values:
+            raise ValueError(
+                f"method_comparison: no category values resolved for analysed attribute "
+                f"{attr!r}; its level count cannot be computed. The scheme's per-attribute "
+                "'values' list is the single source of truth -- expected a non-empty list."
+            )
+        panel["n_category_values"] = len(values)
+        panels[attr] = panel
 
     # Overall panel: per-model overall TV-similarity under each method.
     per_model_overall = {
@@ -662,6 +703,7 @@ def build_method_significance(
     records: list[ComboPerformance],
     attributes: list[str],
     *,
+    category_values: dict[str, list[str]],
     skipped: list[tuple[str, str]] | None = None,
     comparison_config: dict[str, Any] | None = None,
     alpha: float = 0.05,
@@ -670,9 +712,12 @@ def build_method_significance(
 
     *records* are the country's :class:`ComboPerformance` records (from
     ``model_ranking.loader``); *attributes* is the country's config-sourced
-    comparison axis (ordered). *skipped* (``(slug, reason)`` from the loader) is
-    recorded in the metadata. Records on a strategy outside the 5 canonical
-    ordered strategies are dropped and recorded.
+    comparison axis (ordered). *category_values* maps each analysed attribute to its
+    declared category ``values`` list (the scheme's config-sourced levels); the
+    method-comparison panels record each attribute's level count from it (fail-fast
+    when an analysed attribute is missing or empty). *skipped* (``(slug, reason)``
+    from the loader) is recorded in the metadata. Records on a strategy outside the 5
+    canonical ordered strategies are dropped and recorded.
 
     Raises when there are no usable records or the records span multiple
     countries (malformed input). A country with < 2 models, or an attribute with
@@ -754,7 +799,7 @@ def build_method_significance(
     # load it here (fail-fast) unless the caller injected one (tests).
     cmp_config = comparison_config if comparison_config is not None else load_comparison_config()
     method_comparison = _method_comparison(
-        by_ms, models, list(attributes), strategies_present, cmp_config
+        by_ms, models, list(attributes), strategies_present, cmp_config, category_values
     )
 
     return {

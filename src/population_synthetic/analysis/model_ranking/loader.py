@@ -71,6 +71,18 @@ def scheme_attributes(country: str) -> list[str]:
     return load_scheme(country, mappings_path=mappings_for_country(country)).attributes
 
 
+def scheme_category_values(country: str) -> dict[str, list[str]]:
+    """The config-sourced comparison category sets for *country* (attr -> values).
+
+    Mirrors :func:`scheme_attributes` but returns the scheme's per-attribute
+    ``values`` lists (the DB-exact category levels). Sourced from the same mapping
+    tier the fidelity reports were scored against (``mappings_for_country``), so the
+    per-attribute level count matches the analysed axis. Fail-fast on a missing
+    scheme/config.
+    """
+    return load_scheme(country, mappings_path=mappings_for_country(country)).categories
+
+
 def extract_combo_performance(
     slug: str,
     country: str,

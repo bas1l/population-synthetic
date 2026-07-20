@@ -36,6 +36,9 @@ from tests._performance_fixtures import make_combo  # noqa: E402
 MODELS = ["model_a", "model_b", "model_c", "model_d", "model_e"]
 STRATEGIES = list(STRATEGY_COMPLEXITY_ORDER)
 ATTRS = ["trend_attr", "null_attr"]
+# Config-sourced category levels per attribute (drives the method-comparison panel
+# level counts); required by build_method_significance.
+CATEGORY_VALUES = {"trend_attr": ["a", "b", "c", "d"], "null_attr": ["p", "q", "r"]}
 # Distinct values for the Latin-square null (each appears once per method column).
 _NULL_VALUES = [0.10, 0.20, 0.30, 0.40, 0.50]
 
@@ -84,7 +87,7 @@ def _full_grid(*, drop=None, nan_cell=None):
 
 
 def test_page_flags_planted_trend_bh_keeps_null_non_significant():
-    result = build_method_significance(_full_grid(), ATTRS)
+    result = build_method_significance(_full_grid(), ATTRS, category_values=CATEGORY_VALUES)
 
     trend = result["per_attribute"]["trend_attr"]["method_trend"]
     null = result["per_attribute"]["null_attr"]["method_trend"]
@@ -104,7 +107,7 @@ def test_page_flags_planted_trend_bh_keeps_null_non_significant():
 
 
 def test_friedman_and_kendalls_w_present_per_attribute():
-    result = build_method_significance(_full_grid(), ATTRS)
+    result = build_method_significance(_full_grid(), ATTRS, category_values=CATEGORY_VALUES)
     omni = result["per_attribute"]["trend_attr"]["model_omnibus"]["friedman"]
     assert omni["chi2"] is not None
     assert 0.0 <= omni["kendalls_w"] <= 1.0
@@ -117,7 +120,7 @@ def test_friedman_and_kendalls_w_present_per_attribute():
 
 
 def test_builder_json_shape():
-    result = build_method_significance(_full_grid(), ATTRS)
+    result = build_method_significance(_full_grid(), ATTRS, category_values=CATEGORY_VALUES)
 
     assert set(result) == {"metadata", "per_attribute", "per_attribute_model", "overall",
                            "method_comparison"}
@@ -152,7 +155,7 @@ def test_builder_json_shape():
 
 
 def test_writers_roundtrip(tmp_path):
-    result = build_method_significance(_full_grid(), ATTRS)
+    result = build_method_significance(_full_grid(), ATTRS, category_values=CATEGORY_VALUES)
 
     json_path = write_method_significance_json(result, tmp_path / "swedish_method_significance.json")
     csv_path = write_method_significance_csv(result, tmp_path / "swedish_method_significance.csv")
@@ -175,7 +178,7 @@ def test_writers_roundtrip(tmp_path):
 
 
 def test_overall_mixed_logit_and_model_comparison():
-    result = build_method_significance(_full_grid(), ATTRS)
+    result = build_method_significance(_full_grid(), ATTRS, category_values=CATEGORY_VALUES)
     overall = result["overall"]
 
     mixed = overall["mixed_logit"]
@@ -198,7 +201,7 @@ def test_absent_and_unbalanced_grid_recorded_not_imputed():
         drop=("model_e", "all_generate_evaluate_random_pick"),
         nan_cell=("model_a", "all_pick", "null_attr"),
     )
-    result = build_method_significance(grid, ATTRS)
+    result = build_method_significance(grid, ATTRS, category_values=CATEGORY_VALUES)
 
     # trend_attr: model_e is now incomplete (missing method 5) -> dropped from the
     # complete set; the test still runs on the remaining 4 models.
@@ -229,7 +232,7 @@ def test_degenerate_single_model_records_skip_note():
                 tv_by_attr={"trend_attr": _trend_tv(0, rank), "null_attr": _null_tv(0, rank)},
             )
         )
-    result = build_method_significance(combos, ATTRS)
+    result = build_method_significance(combos, ATTRS, category_values=CATEGORY_VALUES)
     block = result["per_attribute"]["trend_attr"]
     assert block["n_models_complete"] == 1
     assert block["method_trend"]["page"] is None
@@ -249,24 +252,24 @@ def test_multiple_countries_raises():
     b = make_combo(slug="italian_all_pick_model_a", strategy="all_pick", model="model_a",
                    tv_by_attr={"trend_attr": 0.1, "null_attr": 0.2}, country="italian")
     with pytest.raises(ValueError, match="one country"):
-        build_method_significance([a, b], ATTRS)
+        build_method_significance([a, b], ATTRS, category_values=CATEGORY_VALUES)
 
 
 def test_no_ordered_strategy_records_raises():
     off = make_combo(slug="swedish_seed_model_a", strategy="seed", model="model_a",
                      tv_by_attr={"trend_attr": 0.1, "null_attr": 0.2})
     with pytest.raises(ValueError, match="5 ordered strategies"):
-        build_method_significance([off], ATTRS)
+        build_method_significance([off], ATTRS, category_values=CATEGORY_VALUES)
 
 
 def test_empty_records_raises():
     with pytest.raises(ValueError, match="at least one record"):
-        build_method_significance([], ATTRS)
+        build_method_significance([], ATTRS, category_values=CATEGORY_VALUES)
 
 
 def test_null_page_matches_hand_computation():
     """Sanity: the Latin-square null truly has z == 0 (mu == L)."""
-    result = build_method_significance(_full_grid(), ATTRS)
+    result = build_method_significance(_full_grid(), ATTRS, category_values=CATEGORY_VALUES)
     page = result["per_attribute"]["null_attr"]["method_trend"]["page"]
     n, k = page["n"], page["k"]
     mu = n * k * (k + 1) ** 2 / 4.0

@@ -83,6 +83,7 @@ from population_synthetic.analysis.method_significance.charts import (
 from population_synthetic.analysis.model_ranking.loader import (
     load_combo_performances,
     scheme_attributes,
+    scheme_category_values,
 )
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
@@ -324,6 +325,15 @@ def main() -> None:
             attrs_by_country[country] = scheme_attributes(country)
         return attrs_by_country[country]
 
+    # Per-attribute category levels (config-sourced), for the method-comparison
+    # panel headers' level counts. Same mapping tier the fidelity reports used.
+    cats_by_country: dict[str, dict[str, list[str]]] = {}
+
+    def _cats(country: str) -> dict[str, list[str]]:
+        if country not in cats_by_country:
+            cats_by_country[country] = scheme_category_values(country)
+        return cats_by_country[country]
+
     try:
         records, skipped = load_combo_performances(
             output_base,
@@ -384,7 +394,8 @@ def main() -> None:
             (slug, reason) for slug, reason in skipped if slug.startswith(country)
         ]
         result = build_method_significance(
-            country_records, attrs_by_country[country], skipped=country_skipped
+            country_records, attrs_by_country[country],
+            category_values=_cats(country), skipped=country_skipped,
         )
 
         json_path = write_method_significance_json(result, result_json)

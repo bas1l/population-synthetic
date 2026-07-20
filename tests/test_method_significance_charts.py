@@ -33,6 +33,7 @@ from tests._performance_fixtures import make_combo  # noqa: E402
 MODELS = ["model_a", "model_b", "model_c", "model_d"]
 STRATEGIES = list(STRATEGY_COMPLEXITY_ORDER)
 ATTRS = ["trend_attr", "null_attr"]
+CATEGORY_VALUES = {"trend_attr": ["a", "b", "c", "d"], "null_attr": ["p", "q", "r"]}
 _NULL_VALUES = [0.10, 0.20, 0.30, 0.40, 0.50]
 
 
@@ -56,7 +57,7 @@ def _grid():
 
 def test_all_charts_write_files(tmp_path):
     records = _grid()
-    result = build_method_significance(records, ATTRS)
+    result = build_method_significance(records, ATTRS, category_values=CATEGORY_VALUES)
 
     heatmap = plot_slope_heatmap(result, tmp_path / "swedish_slope_heatmap.png")
     cd = plot_cd_diagram(result, tmp_path / "swedish_cd_diagram.png")
