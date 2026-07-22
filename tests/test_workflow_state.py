@@ -115,12 +115,13 @@ def test_shipped_workflow_ordering():
     assert set(order) == {
         "mapping", "fidelity", "multivariate_fidelity", "consistency", "model_ranking",
         "method_significance", "pairwise_comparison", "run_analytics_per_run",
-        "run_analytics_cross_run",
+        "run_analytics_cross_run", "real_population_stats",
     }
     assert order.index("mapping") < order.index("fidelity")
     assert order.index("mapping") < order.index("multivariate_fidelity")
     assert order.index("mapping") < order.index("consistency")
     assert order.index("mapping") < order.index("pairwise_comparison")
+    assert order.index("mapping") < order.index("real_population_stats")
     assert order.index("fidelity") < order.index("model_ranking")
     assert order.index("fidelity") < order.index("method_significance")
 

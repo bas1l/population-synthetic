@@ -25,7 +25,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-_VALID_DISPATCH = ("per_combo", "slugs")
+_VALID_DISPATCH = ("per_combo", "slugs", "per_country")
 
 _REQUIRED_TASK_KEYS = ("label", "script", "dispatch", "enabled", "options", "depends_on")
 _OPTIONAL_TASK_KEYS = ("supports_force", "force", "min_combos", "max_combos")
@@ -51,7 +51,7 @@ class WorkflowTask:
     name: str
     label: str
     script: Path  # resolved against the project root
-    dispatch: str  # 'per_combo' | 'slugs'
+    dispatch: str  # 'per_combo' | 'slugs' | 'per_country'
     enabled: bool
     supports_force: bool
     force: bool

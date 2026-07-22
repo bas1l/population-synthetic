@@ -30,7 +30,7 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
 
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
 (`mapping/`, `fidelity/`, `multivariate_fidelity/`, `model_ranking/`, `method_significance/`,
-`run_analytics/`, plus a shared `utils/`):
+`real_population_stats/`, `run_analytics/`, plus a shared `utils/`):
 
 - **`mapping/`** -- Transforms raw population data (national-statistics records *or* LLM-pipeline
   identities) into the canonical comparable schema. Holds the shared resolver `mapping_engine.py`,
@@ -83,6 +83,16 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   + JSON/CSV writers), `charts.py` (per-attribute trend facets, slope heatmap, CD diagram,
   factor-dominance bar, method-comparison figure). Needs the optional `[analysis]` extra
   (statsmodels + scikit-posthocs).
+- **`real_population_stats/`** -- Standalone real-only reference statistics (sits after the map
+  stage; driven by `analyze_real_population_stats.py`, depends only on `mapping`). For a single real
+  population it computes per-category counts/N/proportion/percent (`stats.py::compute_category_stats`,
+  built on the shared `utils/marginals.py::compute_proportions`) and renders one publication-styled
+  bar figure per analyzed attribute (`charts.py::plot_category_bars`, y fixed [0, 100]%, dashed
+  25/50/75/100% reference lines, on-bar percent labels) plus a combined multi-panel overview
+  (`plot_overview_panel`), writing PNG + SVG + a raw proportion CSV (`csv_writer.py`) per attribute
+  under `03_Analysis/real_population_stats/{country}/`. No synthetic population, comparison, or
+  fidelity metric is involved -- `artifacts.py::write_real_population_stats` is the orchestrator that
+  ties computation, rendering, and I/O together, idempotent unless `--force`.
 - **`utils/`** -- cross-process shared infra:
   - `registry.py` -- the **analysis registry** accessor: loads/validates
     `config/analysis/analysis_registry.yaml` (the single source of truth mapping each process's

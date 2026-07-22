@@ -6,8 +6,10 @@
 # here. This file carries only GUI orchestration (enabled/force, options,
 # depends_on, combo guards).
 # dispatch (from the registry):
-#   per_combo -- one invocation per checked combo: --model-id/--strategy-id/--country-id
-#   slugs     -- one invocation total, with one --slug {country}_{strategy}_{model} per combo
+#   per_combo   -- one invocation per checked combo: --model-id/--strategy-id/--country-id
+#   slugs       -- one invocation total, with one --slug {country}_{strategy}_{model} per combo
+#   per_country -- one invocation per DISTINCT checked country: --country-id only
+#                  (model/strategy ticks ignored -- real-population-only tasks)
 tasks:
   mapping:
     enabled: true
@@ -81,6 +83,13 @@ tasks:
     options:
       output:                     # --output (blank = script default)
       no-charts: false
+    depends_on: [mapping]
+
+  real_population_stats:          # per_country dispatch -- real population only, ignores model/strategy
+    enabled: true
+    supports_force: true          # node shows a Force checkbox -> --force
+    force: false
+    options: {}
     depends_on: [mapping]
 
   run_analytics_per_run:          # independent -- isolated node

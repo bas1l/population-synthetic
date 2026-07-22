@@ -50,6 +50,13 @@ Dispatch shapes:
 - **workflow task `dispatch: per_combo`**: one invocation per checked combo.
 - **workflow task `dispatch: slugs`**: one invocation total, with one
   `--slug {country}_{strategy}_{model}` per checked combo.
+- **workflow task `dispatch: per_country`**: collapses the checked combos to
+  their **distinct `country_id` values** (stable, first-seen order) and emits
+  one invocation per country with **`--country-id` only** — model/strategy
+  ticks are ignored, since the backing script (e.g.
+  `analyze_real_population_stats.py`) operates on the real reference
+  population alone. Built by `gui/commands.py::build_per_country_cmds`;
+  ticking 3 models × 2 strategies × 1 country yields exactly one invocation.
 
 ## Task-naming contract — one registry, three aligned names
 
@@ -87,7 +94,7 @@ Ordering is **derived from `depends_on`** by topological sort (Kahn, YAML
 authoring order as the deterministic tie-break) — there is no hardcoded Python
 stage list. `WorkflowState.validate()` fails loudly at flow load on: unknown
 `depends_on` target, a cycle (members named), a missing script on disk, a
-`dispatch` outside `{per_combo, slugs}`, or `min_combos > max_combos`.
+`dispatch` outside `{per_combo, slugs, per_country}`, or `min_combos > max_combos`.
 
 `WorkflowRunner` (a `QThread` over a Qt-free `execute_workflow` core) walks the
 enabled chain GUI-side:

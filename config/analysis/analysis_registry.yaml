@@ -10,7 +10,7 @@
 #                    label, description, folder, script, dispatch.
 #   - folder       : the process's subfolder under {output_base}/{stage_dir}/.
 #   - dispatch     : how the GUI fans the task out over combos
-#                    (per_combo | slugs | cli).
+#                    (per_combo | slugs | per_country | cli).
 #
 # NOTE: folder values are the canonical on-disk folder names. `mapping.folder` is
 # `mapping` (aligned to its canonical id); its `legacy_folder: mapped` records the
@@ -120,3 +120,14 @@ processes:
     folder: "cross_country"
     script: "scripts/analyze/compare_real_countries.py"
     dispatch: "cli"
+
+  real_population_stats:
+    label: "Real Reference Population Stats"
+    description: >
+      Per-category proportion figures (PNG+SVG+CSV) of the real, API-sourced
+      reference population for each selected country, plus a combined overview.
+      Runs once per country on the mapped real population; ignores model and
+      strategy selections.
+    folder: "real_population_stats"
+    script: "scripts/analyze/analyze_real_population_stats.py"
+    dispatch: "per_country"
