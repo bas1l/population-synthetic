@@ -53,7 +53,15 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             except json.JSONDecodeError as e:
                 raise ValueError(f"Invalid JSON in flat schema file: {e}")
 
-    def _load_strategy(self, filepath: str) -> dict:
+    def _load_strategy(self, filepath: str) -> tuple[dict, str]:
+        """Parse + validate a strategy YAML.
+
+        Returns ``(categories, context_mode)`` where ``context_mode`` is the
+        top-level ``context`` key (default ``"cumulative"`` when absent):
+        ``"cumulative"`` serialises the full accumulated persona into every
+        prompt (today's behavior); ``"none"`` passes no prior-attribute context
+        at all (the context-free baseline). Any other value fails loudly.
+        """
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Strategy file not found: {filepath}")
         with open(filepath, "r", encoding="utf-8") as f:
@@ -64,7 +72,13 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         categories = data.get("categories") if isinstance(data, dict) else None
         if not categories or not isinstance(categories, dict):
             raise ValueError(f"Strategy file must contain a 'categories' dict: {filepath}")
-        return categories
+        context_mode = data.get("context", "cumulative")
+        if context_mode not in ("cumulative", "none"):
+            raise ValueError(
+                f"Strategy file has invalid 'context' value {context_mode!r} "
+                f"(expected 'cumulative' or 'none'): {filepath}"
+            )
+        return categories, context_mode
 
     def _build_dag(self, category_config: dict) -> list[str]:
         """
@@ -645,7 +659,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         if not strategy_file:
             raise ValueError("'strategy_file' must be provided as a kwarg.")
 
-        category_config = self._load_strategy(strategy_file)
+        category_config, context_mode = self._load_strategy(strategy_file)
 
         if any("mode" in cfg for cfg in category_config.values()):
             raise ValueError(
@@ -677,22 +691,27 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             method: str = cfg.get("method", "")
             category_schema = schema_categories[category_name]
 
+            # Under ``context: none`` the prompt sees no prior-attribute values;
+            # ``resolved`` is still accumulated below (only what the prompt sees
+            # changes, not DAG order, clamping, or the returned persona).
+            context_view = {} if context_mode == "none" else resolved
+
             try:
                 if method == "pick":
                     value = self._process_pick(
-                        category_name, category_schema, resolved, system_instruction
+                        category_name, category_schema, context_view, system_instruction
                     )
                 elif method == "generate_pick":
                     value = self._process_generate_pick(
-                        category_name, category_schema, resolved, system_instruction
+                        category_name, category_schema, context_view, system_instruction
                     )
                 elif method == "generate_evaluate_pick":
                     value = self._process_generate_evaluate_pick(
-                        category_name, category_schema, resolved, system_instruction
+                        category_name, category_schema, context_view, system_instruction
                     )
                 elif method == "generate_evaluate_random_pick":
                     value = self._process_generate_evaluate_random_pick(
-                        category_name, category_schema, resolved, system_instruction
+                        category_name, category_schema, context_view, system_instruction
                     )
                 else:
                     raise ValueError(
