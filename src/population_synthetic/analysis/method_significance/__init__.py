@@ -20,7 +20,15 @@ Iman-Davenport + Kendall's W), BH-corrected across attributes; per-(attribute,
 model) descriptive trend slopes; and the overall Demšar model comparison
 (Friedman → Nemenyi → critical-difference inputs), overall Page's L method trend
 and the ``logit(TV) ~ model*method + (1|category)`` mixed-model interaction — all
-from the shared ``analysis.utils.stats_tests`` primitives. This package never
-recomputes statistics from populations: the comparison reports are its only data
-source.
+from the shared ``analysis.utils.stats_tests`` primitives. The **statistical**
+paths never recompute statistics from populations: the comparison reports are their
+only data source.
+
+The lone exception is the **descriptive** per-method marginal-progression chart
+family (``marginal_charts``), which is not a statistic and claims no p-value: it
+reads the *mapped populations* (real baseline + each combo) to recompute per-category
+proportions and draw, per ``(country, model, attribute)``, a grouped-bar figure of
+the real distribution against the method progression. The per-category proportion
+arithmetic lives in the shared ``analysis.utils.marginals`` helper; only this
+descriptive path touches populations, and it does so purely for visualization.
 """

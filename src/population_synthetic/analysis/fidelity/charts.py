@@ -8,7 +8,6 @@ summarizing per-dimension TV similarity and chi-squared p-values.
 from __future__ import annotations
 
 import sys
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +16,7 @@ import numpy as np
 from population_synthetic.analysis.fidelity.evaluator import attr_value
 from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.marginals import compute_proportions
 
 # ------------------------------------------------------------------
 # Chart styling constants
@@ -56,15 +56,16 @@ _COLOR_SERIES = ("#4878CF", "#D65F5F", "#6AB187", "#E8935A", "#E9C46A", "#8172B2
 # ------------------------------------------------------------------
 
 def _compute_proportions(individuals: list[dict], attr: str) -> dict[str, float]:
-    counts: Counter = Counter()
-    for ind in individuals:
-        val = attr_value(ind, attr)
-        if val is not None:
-            counts[val] += 1
-    total = sum(counts.values())
-    if total == 0:
-        return {}
-    return {k: v / total for k, v in counts.items()}
+    """Proportions keyed by the categories *observed* for *attr* (summing to 1).
+
+    Thin adapter over the shared :func:`compute_proportions`: the observed
+    category set is the axis, so the result is the full observed distribution
+    (empty when the attribute is null for every individual). Callers pick their
+    own display axis and ``.get(cat, 0.0)`` any category absent from the data.
+    """
+    observed = [v for v in {attr_value(ind, attr) for ind in individuals} if v is not None]
+    proportions, _ = compute_proportions(individuals, attr, observed)
+    return proportions
 
 
 def _close_polygon(values: list[float]) -> list[float]:
