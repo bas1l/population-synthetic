@@ -2,9 +2,9 @@
 
 **Date:** 2026-07-21
 **Author:** Basil
-**Status:** Implemented (unstaged for review)
+**Status:** Completed
 **Started:** 2026-07-22
-**Completed:** 2026-07-22
+**Completed:** 2026-07-22 15:05
 **Base Branch:** `feature/method-marginal-progression-charts`
 **Branch:** `feature/fix-all-pick-context-leak`
 
