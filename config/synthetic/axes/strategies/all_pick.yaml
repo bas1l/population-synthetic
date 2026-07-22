@@ -1,6 +1,7 @@
 id: "all_pick"
 label: "All Pick"
-description: "All fields use pick method. LLM directly picks a single value given any available context. 1 LLM call per category."
+description: "All fields use pick method. LLM picks each value with NO persona context (true context-free baseline): no previously-resolved attribute is passed into any prompt. 1 LLM call per category."
+context: none
 categories:
   age:                           { method: pick, depends_on: [] }
   biological_sex:                { method: pick, depends_on: [] }

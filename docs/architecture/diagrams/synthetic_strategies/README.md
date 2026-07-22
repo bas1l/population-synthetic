@@ -28,10 +28,11 @@ Two panels:
 1. **Category dependency DAG** (left) — the 17 demographic fields placed at the
    strategy's canonical `*.layout.json` coordinates, with `depends_on` edges.
    `depends_on` fixes the topological *resolution order* (Kahn's algorithm in
-   `IdentityGeneratorConfigurable._build_dag`); the prompt context is cumulative
-   (every already-resolved value is passed along), so the edges show which
-   parents are *guaranteed* present when a child is filled. `age` (the only
-   numeric field) is drawn with a bold edge.
+   `IdentityGeneratorConfigurable._build_dag`); for the cumulative strategies the
+   prompt context is cumulative (every already-resolved value is passed along),
+   so the edges show which parents are *guaranteed* present when a child is
+   filled. (`all_pick` is the exception — see below — where no context is passed
+   at all.) `age` (the only numeric field) is drawn with a bold edge.
 2. **Per-field method pipeline** (right) — the inner sequence of LLM calls /
    Python sampling that fills one field, with `×3 JSON retry` annotations on LLM
    steps, the weight/candidate reconcile retry loop where applicable, and the
@@ -39,10 +40,18 @@ Two panels:
 
 ## Key distinction: `all_pick` vs `all_pick_dag`
 
-Both use the identical `pick` method (1 LLM call). They differ **only** in
-`depends_on`: `all_pick` declares no edges (all 17 fields are roots, resolved in
-arbitrary topological order), while `all_pick_dag` declares the dependency edges
-that force parents to resolve before children.
+Both use the identical `pick` method (1 LLM call). They differ in `depends_on`:
+`all_pick` declares no edges (all 17 fields are roots, resolved in arbitrary
+topological order), while `all_pick_dag` declares the dependency edges that force
+parents to resolve before children.
+
+They also now differ in **context**. `all_pick` carries the top-level
+`context: none` key and is genuinely **context-free**: no previously-resolved
+attribute is serialised into any prompt (every field sees the first-category
+sentinel), making it the manuscript's clean no-context baseline. `all_pick_dag`
+and the `all_generate_*` strategies omit the key and default to
+`context: cumulative` — the full accumulated persona is passed into every prompt
+(the "leak" is intentionally retained there so those arms stay unchanged).
 
 Source: `src/population_synthetic/generators/synthetic/identity_generator_configurable.py` and
 the strategy definitions under
