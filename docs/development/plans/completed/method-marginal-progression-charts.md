@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-20
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-07-22 15:50
 **Base Branch:** `dev`
 **Branch:** `feature/method-marginal-progression-charts`
 
