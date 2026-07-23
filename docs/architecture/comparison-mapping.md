@@ -15,6 +15,13 @@ plus `config/mapping/scb/README.md` and `config/mapping/istat/README.md`).
 
 Mapping is a standalone pipeline stage, not an inline step of each comparison script.
 
+**Stage 0 (cap)** -- `scripts/analyze/cap_populations.py` (`population_cap`, the pipeline root) runs
+before mapping. Per combo it seeded-selects exactly `--n` of the raw `persona_*` dirs and copies them
+into a layout-identical capped mirror at `{output_base}/03_Analysis/population_cap/{slug}/`. The map
+stage reads synthetic personas from that mirror (via `analysis/utils/capped_source.resolve_combo_source`),
+never from `01_Raw/{slug}/` directly; the resolver **raises `FileNotFoundError` if the mirror is absent —
+there is no `01_Raw` fallback** — so `population_cap` must run first.
+
 **Stage 1 (map)** -- `scripts/analyze/map_populations.py` reads the explicit completeness list
 `config/analysis/comparison_targets.yaml` (entries are plain manifest-path strings or
 `{manifest, country}` mappings), maps each target's synthetic population (`load_synthetic_population`

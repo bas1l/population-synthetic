@@ -50,9 +50,20 @@ python scripts/generate/generate_identity.py --provider openrouter --model opena
 # Compare two population files
 python scripts/analyze/score_fidelity.py pop_a.json pop_b.json
 
+# Cap stage (pipeline ROOT): seeded per-combo cap of a combination's generated personas to N.
+# Copies the selected persona_* dirs (plus combo logs/metadata) into the canonical capped mirror
+# at {output_base}/03_Analysis/population_cap/{slug}/. mapping and generation_metadata read this
+# mirror instead of 01_Raw and fail loudly if it is absent (no 01_Raw fallback), so run this FIRST.
+# --n is required (raises if missing); --sample-seed defaults to 0 (0 is a valid seed); --force
+# overwrites an existing mirror; --output-base defaults to experiment_defaults.yaml.
+python scripts/analyze/cap_populations.py --model-id claude_haiku --strategy-id all_pick --country-id swedish --n 100
+python scripts/analyze/cap_populations.py --model-id claude_haiku --strategy-id all_pick --country-id swedish \
+    --n 100 --sample-seed 7 --force --output-base {output_base}
+
 # Map stage: map the targeted synthetic populations + their real populations to the canonical schema
 # (reads config/analysis/comparison_targets.yaml; writes {output_base}/03_Analysis/mapping/ -- folder
-# name owned by the analysis registry; legacy on-disk mapped/ is still read as a fallback).
+# name owned by the analysis registry; legacy on-disk mapped/ is still read as a fallback). Personas are
+# read from the capped mirror (03_Analysis/population_cap/{slug}/), never 01_Raw -- run cap_populations.py first.
 # Run this BEFORE any compare command -- the compare scripts consume these pre-mapped files.
 python scripts/analyze/map_populations.py
 python scripts/analyze/map_populations.py --targets config/analysis/comparison_targets.yaml
@@ -113,7 +124,9 @@ python scripts/analyze/analyze_real_population_stats.py --country-id swedish --c
 # input/output/total tokens, LLM calls, retry & error rates, latency p95/max, success rate,
 # estimated USD cost from config/analysis/model_pricing.yaml), plus per-combo deep diagnostics
 # and per-country cross-factor significance (Kruskal-Wallis + Dunn/Holm across the model and
-# method factors). Reads the 01_Raw LLM-call telemetry; emits ONE per-country CSV + JSON + charts.
+# method factors). Reads the LLM-call telemetry from the capped mirror (03_Analysis/population_cap/,
+# produced by cap_populations.py -- fail-fast if absent, no 01_Raw fallback); emits ONE per-country
+# CSV + JSON + charts.
 python scripts/analyze/summarize_generation_metadata.py --country swedish
 python scripts/analyze/summarize_generation_metadata.py --model claude_haiku --no-charts --force
 # --verbose prints per-combo deep diagnostics; --metrics limits the comparison to a metric subset
@@ -138,6 +151,7 @@ resolve their output dir via `analysis_output_dir(id, output_base)` rather than 
 
 | Canonical id (= GUI task key = folder) | Label | Output folder (under `03_Analysis/`) | Script | Dispatch |
 |---|---|---|---|---|
+| `population_cap` | Cap Population (N) | `population_cap/` | `cap_populations.py` | per_combo |
 | `mapping` | Map Populations | `mapping/` (legacy read: `mapped/`) | `map_populations.py` | per_combo |
 | `fidelity` | Compare Synthetic to Real | `fidelity/` | `score_fidelity_all.py` | slugs |
 | `multivariate_fidelity` | Multivariate Joint Fidelity | `multivariate_fidelity/` | `score_multivariate_fidelity.py` | slugs |

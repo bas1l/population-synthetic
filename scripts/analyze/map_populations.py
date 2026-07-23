@@ -45,6 +45,7 @@ from population_synthetic.analysis.mapping.synthetic_mapper import (
 from population_synthetic.analysis.mapping.synthetic_mapper import (
     map_population as map_synthetic,
 )
+from population_synthetic.analysis.utils.capped_source import resolve_combo_source
 from population_synthetic.analysis.utils.country_config import (
     infer_country,
     known_country_ids,
@@ -170,6 +171,7 @@ def _map_one_target(
     manifest,
     country: str,
     slug: str,
+    output_base: str | Path,
     mapped_dir: Path,
     real_files: dict[str, str],
     force: bool,
@@ -192,12 +194,9 @@ def _map_one_target(
         n_skipped = existing["metadata"].get("skipped", 0)
         print(f"  SKIP (exists): {synthetic_file} (n={n_mapped}, skipped={n_skipped})")
     else:
-        seed_root = manifest.parallel_output_dir
-
-        # Seed-root guards (mirroring score_fidelity_all.py): warn & skip, never crash.
-        if seed_root is None or not seed_root.exists():
-            print(f"  SKIP: parallel_output_dir does not exist: {seed_root}")
-            return _skipped_entry(slug, country)
+        # Read personas from the capped mirror, never from 01_Raw. resolve_combo_source
+        # raises FileNotFoundError (fail-fast, no fallback) if population_cap has not run.
+        seed_root = resolve_combo_source(slug, output_base)
 
         persona_files = list(seed_root.glob("persona_*/identity.json"))
         if not persona_files:
@@ -297,16 +296,20 @@ def main() -> None:
             )
             sys.exit(1)
         manifest = compose_manifest(args.model_id, args.strategy_id, args.country_id)
-        seed_root = manifest.parallel_output_dir
+        # parallel_output_dir is only the canonical naming source now; personas are
+        # read from the capped mirror inside _map_one_target, not from this path.
+        raw_naming_dir = manifest.parallel_output_dir
         slug = (
-            seed_root.name
-            if seed_root is not None
+            raw_naming_dir.name
+            if raw_naming_dir is not None
             else f"{args.country_id}_{args.strategy_id}_{args.model_id}"
         )
         print(f"Axis target: {slug} (country={country})")
         print(f"Mapped output dir: {mapped_dir}")
         print()
-        entry = _map_one_target(manifest, country, slug, mapped_dir, real_files={}, force=args.force)
+        entry = _map_one_target(
+            manifest, country, slug, output_base, mapped_dir, real_files={}, force=args.force
+        )
         _upsert_index_entry(index_path, entry)
         print(f"\nIndex upserted at {index_path} (slug={slug})")
         return
@@ -329,10 +332,14 @@ def main() -> None:
         manifest = load_manifest(manifest_path)
         country = _resolve_country(manifest, target["country"], manifest_path)
 
-        seed_root = manifest.parallel_output_dir
-        slug = seed_root.name if seed_root is not None else manifest_path.stem
+        # parallel_output_dir is only the canonical naming source now; personas are
+        # read from the capped mirror inside _map_one_target, not from this path.
+        raw_naming_dir = manifest.parallel_output_dir
+        slug = raw_naming_dir.name if raw_naming_dir is not None else manifest_path.stem
 
-        entry = _map_one_target(manifest, country, slug, mapped_dir, real_files, force=args.force)
+        entry = _map_one_target(
+            manifest, country, slug, output_base, mapped_dir, real_files, force=args.force
+        )
         index_entries.append(entry)
         print()
 

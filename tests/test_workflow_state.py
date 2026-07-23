@@ -113,10 +113,13 @@ def test_shipped_workflow_validates():
 def test_shipped_workflow_ordering():
     order = [task.name for task in _shipped_state().ordered_tasks()]
     assert set(order) == {
-        "mapping", "fidelity", "multivariate_fidelity", "consistency", "model_ranking",
-        "method_significance", "pairwise_comparison", "real_population_stats",
+        "population_cap", "mapping", "fidelity", "multivariate_fidelity", "consistency",
+        "model_ranking", "method_significance", "pairwise_comparison", "real_population_stats",
         "generation_metadata",
     }
+    # population_cap is the pipeline root: mapping and generation_metadata depend on it.
+    assert order.index("population_cap") < order.index("mapping")
+    assert order.index("population_cap") < order.index("generation_metadata")
     assert order.index("mapping") < order.index("fidelity")
     assert order.index("mapping") < order.index("multivariate_fidelity")
     assert order.index("mapping") < order.index("consistency")
@@ -131,8 +134,8 @@ def test_shipped_workflow_ordering_deterministic():
     order_a = [task.name for task in _shipped_state().ordered_tasks()]
     order_b = [task.name for task in _shipped_state().ordered_tasks()]
     assert order_a == order_b
-    # Roots emit in authoring order before released dependents.
-    assert order_a[0] == "mapping"
+    # population_cap is the sole DAG root, emitted before every released dependent.
+    assert order_a[0] == "population_cap"
 
 
 # ---------------------------------------------------------------------------
@@ -149,9 +152,13 @@ def test_disabled_task_cannot_run():
 
 def test_dep_incomplete_blocks_then_mark_completed_unlocks():
     state = _shipped_state()
-    assert state.can_run("mapping")  # no deps, enabled
+    assert state.can_run("population_cap")  # the DAG root: no deps, enabled
+    assert not state.can_run("mapping")  # now depends on population_cap
     assert not state.can_run("fidelity")  # dep incomplete
     assert not state.can_run("model_ranking")
+
+    state.mark_completed("population_cap")
+    assert state.can_run("mapping")  # root satisfied -> mapping released
 
     state.mark_completed("mapping")
     assert state.can_run("fidelity")

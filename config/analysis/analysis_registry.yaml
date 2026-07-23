@@ -21,6 +21,16 @@
 stage_dir: "03_Analysis"
 
 processes:
+  population_cap:
+    label: "Cap Population (N)"
+    description: >
+      Seeded cap of each combination's generated personas to N. Copies the selected persona
+      directories (plus combo logs/metadata) into the canonical capped input consumed by mapping
+      and generation-metadata, so no downstream task analyzes more than N personas.
+    folder: "population_cap"
+    script: "scripts/analyze/cap_populations.py"
+    dispatch: "per_combo"
+
   mapping:
     label: "Map Populations"
     description: >

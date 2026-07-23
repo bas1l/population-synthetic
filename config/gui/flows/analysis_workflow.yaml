@@ -11,13 +11,23 @@
 #   per_country -- one invocation per DISTINCT checked country: --country-id only
 #                  (model/strategy ticks ignored -- real-population-only tasks)
 tasks:
+  population_cap:                 # pipeline root -- seeded cap of each combo to N personas
+    enabled: true
+    supports_force: true          # node shows a Force checkbox -> --force (overwrite mirror)
+    force: false
+    options:
+      n: '100'                    # --n (required; task raises if blank/missing)
+      sample-seed: 0              # --sample-seed (int, reproducible draw)
+      output-base:                # --output-base (blank = script default)
+    depends_on: []
+
   mapping:
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options:
       output-base:                # --output-base (blank = script default)
-    depends_on: []
+    depends_on: [population_cap]
 
   fidelity:
     enabled: true
@@ -99,7 +109,7 @@ tasks:
     options:
       output-base:                # --output-base (blank = script default)
       no-charts: false            # --no-charts (flag when true; charts default ON)
-    depends_on: []
+    depends_on: [population_cap]
 
 selection:                        # shared by ALL tasks in the chain
   models: [claude_haiku, claude_opus, claude_sonnet, ollama_deepseek_r1_14b, 

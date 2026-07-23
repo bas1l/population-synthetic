@@ -9,7 +9,7 @@ metrics scripts were absorbed into this unified task:
   ``01_Raw`` yields the benign "no reports" exit, proving the flag parses/validates
   and reaches ``summarize`` without error).
 
-These stay data-free (an empty ``01_Raw`` dir) so they never touch real telemetry.
+These stay data-free (an empty capped-mirror stage) so they never touch real telemetry.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.utils.registry import analysis_output_dir
 
 SCRIPT = PROJECT_ROOT / "scripts" / "analyze" / "summarize_generation_metadata.py"
 
@@ -33,7 +34,10 @@ def _run_cli(output_base: Path, *extra_args: str) -> subprocess.CompletedProcess
 
 
 def _empty_raw_base(tmp_path: Path) -> Path:
-    (tmp_path / "01_Raw").mkdir(parents=True, exist_ok=True)
+    # generation_metadata reads the capped mirror, not 01_Raw; an empty (but present)
+    # capped stage is the new-contract equivalent of "no data": resolve_stage_source
+    # succeeds, then there are simply no slug dirs to summarize (benign "no reports").
+    analysis_output_dir("population_cap", tmp_path).mkdir(parents=True, exist_ok=True)
     return tmp_path
 
 

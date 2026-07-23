@@ -40,7 +40,9 @@ from population_synthetic.analysis.generation_metadata.persona_metrics import (
     reduce_persona,
 )
 from population_synthetic.analysis.generation_metadata.pricing import PricingTable, load_pricing_table
+from population_synthetic.analysis.population_cap import cap_combo
 from population_synthetic.analysis.utils._stats import mean, stddev
+from population_synthetic.analysis.utils.registry import analysis_output_dir
 
 # --------------------------------------------------------------------------- #
 # (a) stats primitives
@@ -296,6 +298,20 @@ def _build_raw_fixture(output_base: Path) -> None:
     _write_jsonl(raw / _TOKENLESS_SLUG / "persona_0001" / "llm_interactions.jsonl", _tokenless_entries())
 
 
+def _cap_raw_fixture(output_base: Path, n: int = 100) -> None:
+    """Run the real population_cap over every 01_Raw combo into the capped mirror.
+
+    generation_metadata now reads the capped mirror exclusively (never 01_Raw), so the
+    true pipeline order is cap -> summarize. ``n`` is deliberately larger than any
+    combo's persona count, so every fixture persona is retained and the summarize
+    assertions still hold over the full fixture.
+    """
+    raw = output_base / "01_Raw"
+    cap_stage = analysis_output_dir("population_cap", output_base)
+    for slug_dir in sorted(p for p in raw.iterdir() if p.is_dir()):
+        cap_combo(slug_dir, n, 0, cap_stage / slug_dir.name)
+
+
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with open(path, newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
@@ -303,6 +319,7 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
 
 def test_summarize_writes_csv_json_and_charts(tmp_path: Path):
     _build_raw_fixture(tmp_path)
+    _cap_raw_fixture(tmp_path)
     written = summarize(output_base=tmp_path, countries=["swedish"], charts=True)
 
     assert "swedish" in written
@@ -383,6 +400,7 @@ def test_summarize_writes_csv_json_and_charts(tmp_path: Path):
 
 def test_summarize_force_vs_skip(tmp_path: Path):
     _build_raw_fixture(tmp_path)
+    _cap_raw_fixture(tmp_path)
 
     first = summarize(output_base=tmp_path, countries=["swedish"], charts=False)
     csv_path = first["swedish"]["csv"]

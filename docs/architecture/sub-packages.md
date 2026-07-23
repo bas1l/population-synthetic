@@ -29,11 +29,21 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   - `configurable` -- strategy-driven generation controlled by a simulation config JSON file with pluggable strategy definitions
 
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
-(`mapping/`, `fidelity/`, `multivariate_fidelity/`, `model_ranking/`, `method_significance/`,
-`real_population_stats/`, `generation_metadata/`, plus a shared `utils/`):
+(`population_cap/`, `mapping/`, `fidelity/`, `multivariate_fidelity/`, `model_ranking/`,
+`method_significance/`, `real_population_stats/`, `generation_metadata/`, plus a shared `utils/`):
 
+- **`population_cap/`** -- The pipeline **root** (runs before mapping). `cap_combo` seeded-selects
+  exactly `--n` of a combo's `persona_*` dirs (shared draw `utils/sampling.select_indices`) and copies
+  them, plus the combo-level `logs/` / `run_metadata.json` / `manifest_snapshot.yaml`, into a
+  layout-identical capped mirror at `{output_base}/03_Analysis/population_cap/{slug}/`. The two
+  raw-persona consumers (`mapping`, `generation_metadata`) read that mirror via the shared read
+  resolvers in `utils/capped_source.py` (`resolve_combo_source` / `resolve_stage_source`), which
+  **raise `FileNotFoundError` when the mirror is absent — there is no fallback to `01_Raw`**, so no
+  downstream task can analyze more than N personas. Under-generation (`available < n`) copies all and
+  warns; it never fails the batch.
 - **`mapping/`** -- Transforms raw population data (national-statistics records *or* LLM-pipeline
-  identities) into the canonical comparable schema. Holds the shared resolver `mapping_engine.py`,
+  identities) into the canonical comparable schema. Reads synthetic personas from the capped mirror
+  (`resolve_combo_source`), never `01_Raw` directly. Holds the shared resolver `mapping_engine.py`,
   `flatten_raw.py`, the `real_mapper/` and `synthetic_mapper/` class hierarchies, and the thin
   `extractor.py` / `normalizer.py` facades. The **unified symmetric mapping config** and the
   real/synthetic mapper hierarchies are documented on their own page — see
