@@ -117,6 +117,12 @@ python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet
 # Generate Italian identities via axis composition
 python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id italian
 
+# Real-population reference statistics: publication-ready per-category bar figures
+# (PNG + SVG) + proportion CSVs for the real (API-sourced) reference population only
+# (no synthetic comparison), plus a combined overview panel; one run per country.
+python scripts/analyze/analyze_real_population_stats.py --country-id swedish
+python scripts/analyze/analyze_real_population_stats.py --country-id swedish --country-id italian --force
+
 # Launch the GUI: the config-driven Flow Runner (requires pip install -e ".[gui]")
 python -m population_synthetic.gui.main
 
@@ -146,6 +152,7 @@ resolve their output dir via `analysis_output_dir(id, output_base)` rather than 
 | `run_analytics_per_run` | LLM Metrics (per-run) | `run_analytics/{slug}/` | `analyze_run.py` | per_combo |
 | `run_analytics_cross_run` | LLM Metrics (cross-run) | `run_analytics/_comparison/` | `compare_run_analytics.py` | slugs |
 | `cross_country` | Cross-Country (real vs real) | `cross_country/` | `compare_real_countries.py` | cli (CLI-only) |
+| `real_population_stats` | Real Reference Population Stats | `real_population_stats/{country}/` | `analyze_real_population_stats.py` | per_country |
 
 ## See also
 

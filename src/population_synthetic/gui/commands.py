@@ -83,6 +83,41 @@ def build_per_combo_cmds(
     return cmds
 
 
+def build_per_country_cmds(
+    script: Path,
+    combos: Sequence[Combo],
+    force: bool,
+    options: Mapping[str, Any],
+) -> list[list[str]]:
+    """One arg vector per DISTINCT country in *combos*: ``--country-id`` only.
+
+    Collapses the checked model x strategy x country combos down to their
+    distinct ``country_id`` values, in first-seen (stable) order, and emits one
+    command per country -- model/strategy ticks are ignored, since the backing
+    script operates on the real reference population only.
+
+    Raises:
+        ValueError: If *combos* is empty (an empty batch is a caller bug —
+            the GUI guards empty selections before dispatch).
+    """
+    if not combos:
+        raise ValueError(f"build_per_country_cmds: no combos selected for {script}")
+    countries: list[str] = []
+    seen: set[str] = set()
+    for _model_id, _strategy_id, country_id in combos:
+        if country_id not in seen:
+            seen.add(country_id)
+            countries.append(country_id)
+    cmds: list[list[str]] = []
+    for country_id in countries:
+        cmd = [sys.executable, str(script), "--country-id", country_id]
+        if force:
+            cmd.append("--force")
+        cmd += _option_args(options)
+        cmds.append(cmd)
+    return cmds
+
+
 def build_slugs_cmd(
     script: Path,
     combos: Sequence[Combo],

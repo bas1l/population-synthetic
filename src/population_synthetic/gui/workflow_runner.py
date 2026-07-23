@@ -19,7 +19,9 @@ Execution semantics (per task, in :meth:`WorkflowState.ordered_tasks` order):
 3. combo-count guard  -> ``SKIPPED_GUARD``, LOUD ``!! SKIP <name>: <message>``.
 4. run                -> per-task banner; ``per_combo`` runs one subprocess per
    combo (first nonzero exit fails the whole task, remaining combos skipped);
-   ``slugs`` runs one subprocess. All exit 0 -> ``COMPLETED``; else ``FAILED``
+   ``per_country`` collapses the combos to their distinct country ids and runs
+   one subprocess per country (model/strategy ignored); ``slugs`` runs one
+   subprocess. All exit 0 -> ``COMPLETED``; else ``FAILED``
    (``!! TASK FAILED (exit N)``). The loop continues regardless, so
    independent branches still run.
 
@@ -38,7 +40,7 @@ from pathlib import Path
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-from population_synthetic.gui.commands import build_per_combo_cmds, build_slugs_cmd
+from population_synthetic.gui.commands import build_per_combo_cmds, build_per_country_cmds, build_slugs_cmd
 from population_synthetic.gui.workflow_state import TaskStatus, WorkflowState, WorkflowTask
 
 Combo = tuple[str, str, str]
@@ -102,6 +104,15 @@ def _task_banner(idx: int, total: int, task: WorkflowTask, combos: Sequence[Comb
         lines.append(f"    dispatch: per_combo ({len(combos)} combo(s))")
         if task.supports_force and task.force:
             lines.append("    force: on")
+    elif task.dispatch == "per_country":
+        countries: list[str] = []
+        for _m, _s, c in combos:
+            if c not in countries:
+                countries.append(c)
+        lines.append(f"    dispatch: per_country ({len(countries)} countr{'y' if len(countries) == 1 else 'ies'})")
+        lines.append(f"    countries: {', '.join(countries)} (model/strategy ignored)")
+        if task.supports_force and task.force:
+            lines.append("    force: on")
     else:  # slugs
         from population_synthetic.generators.synthetic.manifest_loader import axis_slug
 
@@ -127,6 +138,18 @@ def _run_task(
             if is_aborted():
                 return 1
             emit(ConsoleLine(f"  -- combo {i}/{total}: {' × '.join(combo)}"))
+            code = run_cmd(cmd)
+            if code != 0:
+                return code  # first nonzero exit fails the whole task
+        return 0
+    if task.dispatch == "per_country":
+        cmds = build_per_country_cmds(task.script, combos, task.force, task.options)
+        total = len(cmds)
+        for i, cmd in enumerate(cmds, start=1):
+            if is_aborted():
+                return 1
+            country_id = cmd[cmd.index("--country-id") + 1]
+            emit(ConsoleLine(f"  -- country {i}/{total}: {country_id}"))
             code = run_cmd(cmd)
             if code != 0:
                 return code  # first nonzero exit fails the whole task

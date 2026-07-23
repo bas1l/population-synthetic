@@ -34,6 +34,7 @@ _EXPECTED_FOLDERS = {
     "run_analytics_per_run": "run_analytics",
     "run_analytics_cross_run": "run_analytics/_comparison",
     "cross_country": "cross_country",
+    "real_population_stats": "real_population_stats",
 }
 
 
@@ -41,7 +42,7 @@ def test_stage_dir_constant() -> None:
     assert ANALYSIS_STAGE_DIR == "03_Analysis"
 
 
-def test_registry_has_all_ten_processes() -> None:
+def test_registry_has_all_eleven_processes() -> None:
     reg = load_registry()
     assert set(reg) == set(_EXPECTED_FOLDERS)
     assert all(isinstance(p, AnalysisProcess) for p in reg.values())
