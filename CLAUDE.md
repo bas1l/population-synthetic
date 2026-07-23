@@ -89,6 +89,13 @@ rates, latency p95/max, success rate, estimated USD cost from `config/analysis/m
 plus per-combo deep diagnostics and per-country cross-factor significance (Kruskal-Wallis + Dunn/Holm
 across the model and method factors), read from the LLM-call telemetry of the **capped mirror**
 (`03_Analysis/population_cap/`, produced by `population_cap`), not `01_Raw` directly,
+`persona_realism/` an LLM-as-judge coherence task — judges each individual mapped persona N cold
+rounds (`can_exist` binary + `typicality` 0-10 ordinal + severity-tagged clash issues) and ranks
+every combination **plus the SCB real reference as a competitor** on a per-combination impossibility
+rate (bootstrap CI), typicality dispersion vs SCB (Levene), and a judge self-reliability metric
+(ICC / Krippendorff's α — self-consistency, **not** validity; the config-driven hard-rules subset is
+the only validity anchor); judge model + params config-driven in `config/analysis/persona_realism/`,
+cost via `model_pricing.yaml` (needs the `[analysis]` extra),
 and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 

@@ -139,3 +139,21 @@ processes:
     folder: "generation_metadata"
     script: "scripts/analyze/summarize_generation_metadata.py"
     dispatch: "slugs"
+
+  persona_realism:
+    label: "Persona Realism Judge (LLM-as-judge)"
+    description: >
+      LLM-as-judge scoring of each individual persona's internal coherence: per
+      persona, N judge rounds (default 3, cold temperature) return can_exist
+      (binary possibility) and typicality (0-10 ordinal) plus severity-tagged
+      attribute-clash issues. Aggregates round -> persona -> combination into a
+      per-combination impossibility rate (bootstrap CI), typicality dispersion vs
+      the SCB real reference (Levene variance-equality test), and a judge
+      self-reliability metric (ICC / Krippendorff's alpha across rounds). The real
+      API-sourced population is judged as an additional competitor. Judge model,
+      rounds, temperature, severity weights, sampling size, and bootstrap params
+      are config-driven (config/analysis/persona_realism/); cost per combo reuses
+      config/analysis/model_pricing.yaml.
+    folder: "persona_realism"
+    script: "scripts/analyze/analyze_persona_realism.py"
+    dispatch: "per_combo"

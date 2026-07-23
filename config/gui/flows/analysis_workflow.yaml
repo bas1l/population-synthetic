@@ -111,6 +111,19 @@ tasks:
       no-charts: false            # --no-charts (flag when true; charts default ON)
     depends_on: [population_cap]
 
+  persona_realism:                # per_combo dispatch -- LLM-as-judge per-persona coherence
+    enabled: true                 # no min_combos: each invocation judges 1 synthetic combo +
+                                  # its real reference (a valid 2-point map); the cross-combo
+                                  # ranking is a CLI-batch capability (broad filters, one process)
+    supports_force: true          # node shows a Force checkbox -> --force (re-judge + re-write)
+    force: false
+    options:
+      judge-model:                # --judge-model (blank = config default claude-fable-5)
+      sample:                     # --sample (blank = judge every persona; int caps per combo)
+      workers:                    # --workers (blank = config default fan-out width)
+      output-base:                # --output-base (blank = script default)
+    depends_on: [mapping]
+
 selection:                        # shared by ALL tasks in the chain
   models: [claude_haiku, claude_opus, claude_sonnet, ollama_deepseek_r1_14b, 
       ollama_gemma4_e4b, ollama_llama31_8b, ollama_mistral_nemo_12b, 

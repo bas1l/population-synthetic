@@ -35,6 +35,7 @@ _EXPECTED_FOLDERS = {
     "cross_country": "cross_country",
     "real_population_stats": "real_population_stats",
     "generation_metadata": "generation_metadata",
+    "persona_realism": "persona_realism",
 }
 
 

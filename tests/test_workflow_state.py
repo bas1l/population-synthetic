@@ -115,7 +115,7 @@ def test_shipped_workflow_ordering():
     assert set(order) == {
         "population_cap", "mapping", "fidelity", "multivariate_fidelity", "consistency",
         "model_ranking", "method_significance", "pairwise_comparison", "real_population_stats",
-        "generation_metadata",
+        "generation_metadata", "persona_realism",
     }
     # population_cap is the pipeline root: mapping and generation_metadata depend on it.
     assert order.index("population_cap") < order.index("mapping")
@@ -125,6 +125,7 @@ def test_shipped_workflow_ordering():
     assert order.index("mapping") < order.index("consistency")
     assert order.index("mapping") < order.index("pairwise_comparison")
     assert order.index("mapping") < order.index("real_population_stats")
+    assert order.index("mapping") < order.index("persona_realism")
     assert order.index("fidelity") < order.index("model_ranking")
     assert order.index("fidelity") < order.index("method_significance")
 

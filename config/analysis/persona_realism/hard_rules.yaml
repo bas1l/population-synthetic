@@ -1,0 +1,51 @@
+# Deterministic hard-rule checks for the persona-realism can_exist validation
+# subset. These are the ONLY non-LLM voice on possibility: on a sampled subset of
+# personas the aggregation layer evaluates these rules and compares their verdict
+# to the judge's can_exist, reporting agreement as the process's validity anchor
+# (the judge's ICC/alpha measures self-consistency, NOT correctness -- these rules
+# do). A rule firing means the persona is structurally IMPOSSIBLE (can_exist=false).
+#
+# These are STRUCTURAL constants (minimum attainment ages tied to the canonical
+# mapped schema), not probability distributions -- allowed in config per the
+# no-synthetic-distributions rule. Rules reference the native canonical category
+# labels in config/mapping/scb_native/ verbatim; a label that does not exist in
+# the mapped schema must surface as an error when the rule is evaluated, so keep
+# these in exact sync with the mapping config.
+#
+# Rule schema (extensible -- add entries to `rules`):
+#   id            : stable identifier (unique).
+#   description   : human rationale for the impossibility.
+#   type          : "incompatible_pair" -- the only type implemented in v1. Fires
+#                   when the persona's `when.attribute` value is in `when.equals`
+#                   AND its `forbid.attribute` value is in `forbid.equals`.
+#   when          : {attribute, equals:[...]} -- the triggering attribute/values.
+#   forbid        : {attribute, equals:[...]} -- the co-occurring value that makes
+#                   the pair impossible.
+#   severity      : "S3" (hard contradiction). Hard rules only encode impossibility.
+#
+# Coverage note: v1 grounds only the education-attainment-by-age constraint, the
+# one cross-axis impossibility the coarse mapped schema supports unassailably --
+# even the oldest person in the 18-24 bracket cannot have earned a doctorate. Age
+# is bracketed (a bracket contains attainable ages), so lower credentials (e.g.
+# ISCED 5A, reachable by 22) cannot be forbidden for a whole bracket. Work-
+# experience/age bounds (a plan example) are deferred: no work-experience axis
+# exists in the mapped schema to check against; add such a rule here when one does.
+
+rules:
+  - id: postgraduate_before_adult_completion_age
+    description: >
+      A Post-Graduate (ISCED 6, doctorate/licentiate) credential requires a prior
+      bachelor and master plus multi-year doctoral study, so the minimum realistic
+      age is ~25. No one in the 18-24 age bracket -- including a 24-year-old -- can
+      have attained it. (The plan's motivating example: a 19-year-old with a
+      doctorate.)
+    type: incompatible_pair
+    when:
+      attribute: education_level
+      equals:
+        - "Post-Graduate (ISCED 6)"
+    forbid:
+      attribute: age_group
+      equals:
+        - "18-24"
+    severity: S3

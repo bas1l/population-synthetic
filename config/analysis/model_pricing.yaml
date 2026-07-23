@@ -11,6 +11,13 @@ observed_date: "2026-07-23"
 source: "OpenRouter model pages + platform.claude.com pricing (see plan appendix)"
 currency: "USD_per_1M_tokens"
 models:
+  # --- persona_realism judge model ---
+  # Keyed by the RAW model string passed to the judge CLI (`claude -p ... --model
+  # claude-fable-5`), which is also the `judge_model` value in
+  # config/analysis/persona_realism/judge.yaml. Unlike the generation rows below
+  # (keyed by model AXIS id), the judge is not a generation-axis model, so its cost
+  # lookup joins on the --model string directly via persona_cost(judge_model, ...).
+  claude-fable-5:           {in: 10.00, out: 50.00}   # Anthropic Fable 5 (LLM-as-judge default)
   claude_sonnet:            {in: 3.00,  out: 15.00}   # Anthropic first-party (Sonnet 5)
   claude_haiku:             {in: 1.00,  out: 5.00}    # Anthropic first-party (Haiku 4.5)
   claude_opus:              {in: 5.00,  out: 25.00}   # Anthropic first-party (Opus 4.8)
