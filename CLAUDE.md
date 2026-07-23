@@ -32,7 +32,7 @@ python scripts/analyze/score_fidelity_sweden.py --manifest config/synthetic/mani
 
 python -m population_synthetic.gui.main   # GUI: config-driven Flow Runner (requires ".[gui]")
 ruff check src/                       # lint (line-length 120, rules E/F/W/I)
-pytest                                # full suite (sampling, mapping, fidelity, multivariate, comparison, workflow, run_analytics)
+pytest                                # full suite (sampling, mapping, fidelity, multivariate, comparison, workflow, generation_metadata)
 pytest tests/test_sampling.py::test_name   # run a single test (testpaths=tests/ is set in pyproject.toml)
 ```
 
@@ -77,8 +77,13 @@ ranking of the fidelity reports (models × strategies per country), `method_sign
 per-category significance of the generation method vs model on TV fidelity (Page's L / Friedman /
 Nemenyi CD + a mixed-model interaction, categories as blocks; needs the `[analysis]` extra),
 `real_population_stats/` publication-ready per-category reference figures + proportion CSVs for the
-real (API-sourced) population only, one country at a time, `run_analytics/` post-run
-LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
+real (API-sourced) population only, one country at a time, `generation_metadata/` the single
+LLM-metrics task — per country × model × method(strategy) mean/spread(median/q1/q3)/n of the
+per-persona generation cost (wall-clock time, input/output/total tokens, LLM calls, retry & error
+rates, latency p95/max, success rate, estimated USD cost from `config/analysis/model_pricing.yaml`)
+plus per-combo deep diagnostics and per-country cross-factor significance (Kruskal-Wallis + Dunn/Holm
+across the model and method factors), all read from the `01_Raw` LLM-call telemetry,
+and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
 **Analysis registry (single source of truth for the analysis layer):**

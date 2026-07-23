@@ -1,4 +1,4 @@
-"""Compute v1 analytics metrics from interaction data.
+"""Compute deep per-combo diagnostics metrics from interaction data.
 
 Entry point: :func:`compute_metrics`.
 
@@ -465,7 +465,7 @@ def compute_metrics(
     entries: list[dict[str, Any]],
     run_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Compute all v1 analytics metrics for a single run.
+    """Compute all deep per-combo diagnostics metrics for a single run.
 
     Thin assembler over the per-family ``_compute_*`` helpers above.  The five
     token-gated families (token consumption per persona/category, tokens/second,

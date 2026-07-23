@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from population_synthetic.analysis.run_analytics.per_run.aggregator import compute_metrics
+from population_synthetic.analysis.generation_metadata.diagnostics import compute_metrics
 
 from ._fixtures import ENRICHED_ENTRIES, JSONL_NATIVE_ENTRIES, RUN_SUMMARY, entries_without_tokens
 

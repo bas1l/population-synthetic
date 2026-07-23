@@ -1,7 +1,7 @@
 """stats_tests.py -- Non-parametric hypothesis tests shared across analysis processes.
 
-Houses the statistical machinery used by the cross-run run_analytics comparison and
-the cross-model performance comparison: the Kruskal-Wallis omnibus test, an
+Houses the statistical machinery used by the generation-metadata cross-factor
+comparison and the cross-model performance comparison: the Kruskal-Wallis omnibus test, an
 inline Dunn post-hoc with Holm step-down correction, and the descriptive
 :func:`summarize` of a sample list.
 

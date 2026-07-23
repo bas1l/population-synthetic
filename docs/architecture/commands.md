@@ -96,21 +96,6 @@ python scripts/analyze/analyze_method_significance.py --country swedish
 python scripts/generate/extract_population_from_pipeline.py --seed-root path/to/pipeline_output/ \
     --output pipeline_population.json
 
-# Analyse a single-persona run directory (prints summary table)
-python scripts/analyze/analyze_run.py path/to/run_dir/
-
-# Analyse a batch run directory (persona_* subdirs) and export full analytics
-python scripts/analyze/analyze_run.py path/to/batch_run_dir/ --output run_analytics.json
-
-# Analyse with per-persona breakdown
-python scripts/analyze/analyze_run.py path/to/run_dir/ --verbose
-
-# Batch-analyse every run under {output_base}/01_Raw/ into 03_Analysis/run_analytics/{slug}/
-python scripts/analyze/analyze_run.py --all
-
-# Cross-run scientific comparison of LLM metrics (Kruskal-Wallis + Dunn); requires --all first
-python scripts/analyze/compare_run_analytics.py
-
 # Generate identities via axis composition (model × strategy × country)
 python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id swedish
 
@@ -123,6 +108,17 @@ python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet
 python scripts/analyze/analyze_real_population_stats.py --country-id swedish
 python scripts/analyze/analyze_real_population_stats.py --country-id swedish --country-id italian --force
 
+# Generation metadata: the single LLM-metrics task. Per country × model × method(strategy),
+# the mean/spread(median/q1/q3)/n of the per-persona generation cost (wall-clock time,
+# input/output/total tokens, LLM calls, retry & error rates, latency p95/max, success rate,
+# estimated USD cost from config/analysis/model_pricing.yaml), plus per-combo deep diagnostics
+# and per-country cross-factor significance (Kruskal-Wallis + Dunn/Holm across the model and
+# method factors). Reads the 01_Raw LLM-call telemetry; emits ONE per-country CSV + JSON + charts.
+python scripts/analyze/summarize_generation_metadata.py --country swedish
+python scripts/analyze/summarize_generation_metadata.py --model claude_haiku --no-charts --force
+# --verbose prints per-combo deep diagnostics; --metrics limits the comparison to a metric subset
+python scripts/analyze/summarize_generation_metadata.py --country swedish --verbose --metrics time cost
+
 # Launch the GUI: the config-driven Flow Runner (requires pip install -e ".[gui]")
 python -m population_synthetic.gui.main
 
@@ -130,7 +126,7 @@ python -m population_synthetic.gui.main
 ruff check src/
 ```
 
-A pytest suite lives under `tests/` (covers the `analysis/run_analytics/` layer and `clients/call_context`).
+A pytest suite lives under `tests/` (covers the `analysis/generation_metadata/` layer and `clients/call_context`).
 Run it with `pytest` (requires `pip install -e ".[dev]"`).
 
 ## Analysis registry (canonical id → label → folder → script)
@@ -149,10 +145,9 @@ resolve their output dir via `analysis_output_dir(id, output_base)` rather than 
 | `model_ranking` | Model Performance (models × methods) | `model_ranking/` | `rank_models.py` | slugs |
 | `method_significance` | Method Significance (per-category) | `method_significance/` | `analyze_method_significance.py` | slugs |
 | `pairwise_comparison` | Compare Two Populations | `pairwise_comparison/` | `score_fidelity.py` | slugs |
-| `run_analytics_per_run` | LLM Metrics (per-run) | `run_analytics/{slug}/` | `analyze_run.py` | per_combo |
-| `run_analytics_cross_run` | LLM Metrics (cross-run) | `run_analytics/_comparison/` | `compare_run_analytics.py` | slugs |
 | `cross_country` | Cross-Country (real vs real) | `cross_country/` | `compare_real_countries.py` | cli (CLI-only) |
 | `real_population_stats` | Real Reference Population Stats | `real_population_stats/{country}/` | `analyze_real_population_stats.py` | per_country |
+| `generation_metadata` | Generation Metadata (country × model × method) | `generation_metadata/` | `summarize_generation_metadata.py` | slugs |
 
 ## See also
 

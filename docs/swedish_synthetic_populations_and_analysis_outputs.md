@@ -222,17 +222,23 @@ Consumes all the Stage-B reports and answers **"which model + strategy is best f
 - `swedish_by_attribute/{attribute}_bars.png` — 15 optional charts, one per attribute, comparing
   all models × strategies on that single attribute.
 
-### Stage D — LLM-call analytics (`analyze_run.py`, `compare_run_analytics.py`) → `03_Analysis/run_analytics/`
+### Stage D — LLM-call analytics (`summarize_generation_metadata.py`) → `03_Analysis/generation_metadata/`
 
 This stage ignores demographic accuracy and instead profiles the **generation process itself** —
-how the LLM behaved while producing a run.
+how the LLM behaved while producing a run. It is the **single LLM-metrics task**: one command over
+`01_Raw` produces one enriched per-country summary covering cost, means±spread, distribution shape,
+significance, and deep diagnostics.
 
-- Per run: `run_analytics/{run}/run_analytics.json` + a `charts/` folder with up to 9 PNGs
-  (call counts per category, retry rates, answer diversity/entropy, prompt-size growth,
-  wall-clock per persona, token consumption, latency, …).
-- Cross-run (`compare_run_analytics.py`): `run_analytics/_comparison/` — compares those process metrics
-  across models and strategies (retry rate, success rate, speed, verbosity, token cost) with the
-  same Kruskal–Wallis + Dunn significance testing.
+- Per country: `generation_metadata/{country}_summary.csv` (per-combo scalar columns — mean/std/
+  median/q1/q3/n per metric, latency p95/max, success rate, estimated USD cost, and per-combo
+  cross-factor significance-group labels) + `{country}_summary.json` (the same scalars plus a deep
+  per-combo `diagnostics` block — error taxonomy, entropy, latency percentiles, token budgets — and a
+  country-level `significance` block).
+- Cross-factor significance: for each metric, a Kruskal–Wallis omnibus + Dunn/Holm post-hoc is
+  computed once across the **model** factor and once across the **method/strategy** factor (country
+  fixed).
+- `charts/`: per-metric model×method mean-heatmaps, per-combo diagnostic charts, and comparison charts
+  (box plots with significance brackets, mean±SD bars, heatmaps), all PNG+SVG.
 
 ---
 
@@ -274,10 +280,10 @@ The headline deliverable is the **Swedish leaderboard**. As currently generated 
 | Accuracy numbers for one run | same folder, `{run}.json` and `{run}.csv` |
 | The overall winner ranking | `03_Analysis/model_ranking/swedish_leaderboard.png` + `swedish_performance.{json,csv}` |
 | Where each combo wins/loses | `03_Analysis/model_ranking/swedish_heatmap.png` |
-| How the LLM behaved during generation | `03_Analysis/run_analytics/{run}/` |
+| How the LLM behaved during generation | `03_Analysis/generation_metadata/{country}_summary.{csv,json}` + `charts/` |
 
 *(`output_base` root is currently `F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data`, configured
-in `config/synthetic/experiment_defaults.yaml` and `config/analysis/analyze_defaults.yaml`.)*
+in `config/synthetic/experiment_defaults.yaml`.)*
 
 ---
 

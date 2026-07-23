@@ -30,7 +30,7 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
 
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
 (`mapping/`, `fidelity/`, `multivariate_fidelity/`, `model_ranking/`, `method_significance/`,
-`real_population_stats/`, `run_analytics/`, plus a shared `utils/`):
+`real_population_stats/`, `generation_metadata/`, plus a shared `utils/`):
 
 - **`mapping/`** -- Transforms raw population data (national-statistics records *or* LLM-pipeline
   identities) into the canonical comparable schema. Holds the shared resolver `mapping_engine.py`,
@@ -105,27 +105,28 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   - `axes.py` -- axis-vocabulary helpers: `decompose_slug` / `diagnose_slug` (slug -> axis IDs) and
     `STRATEGY_COMPLEXITY_ORDER` (strategy chart ordering)
   - `_stats.py` -- stdlib numeric primitives (median, percentile, Shannon entropy); no external dep
-  - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected) for run_analytics /
+  - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected) for generation_metadata /
     model_ranking, plus the repeated-measures family for `method_significance` (Friedman +
     Iman-Davenport + Kendall's W, Page's L trend, Nemenyi post-hoc + CD, Benjamini-Hochberg FDR,
     Cliff's δ, and the logit-linked `MixedLM` interaction fit); carries the scipy/numpy surface and
     lazily imports statsmodels + scikit-posthocs (the `[analysis]` extra) for the library-backed ones
-- **`run_analytics/`** -- post-run LLM-call analytics; detailed below.
+- **`generation_metadata/`** -- the single LLM-metrics task; detailed below.
 
 **`gui/`** -- the **sole** GUI: a config-driven PyQt5 "Flow Runner" (`python -m population_synthetic.gui.main`). `FlowRunnerWindow` is driven by a two-tier editable-YAML config (`config/gui/menu.yaml` catalogue + one round-trip YAML per flow under `config/gui/flows/`), translates flow YAML into CLI invocations of the existing scripts, and adds a DAG-based Analysis Workflow. The runner and widget substrate is self-contained inside the package (`execution.py` holds `CombinationRunner` + `_kill_process_tree`; `widgets/` holds `ConsoleWidget`, `DagGraphWidget`, `CheckableAxisList`, `PersonaCountWorker`) -- the deprecated v1 launcher it superseded has been removed. Full contracts in [gui Flow Runner](../development/gui.md).
 
-**`analysis/run_analytics/`** -- Post-processing analytics for identity generation runs (LLM call behaviour, distinct from `analysis/fidelity/` which scores population quality). Named for its output subdir `03_Analysis/run_analytics/`. Organised as a **two-level pipeline** split across two subpackages: `per_run/` (pipeline A, driven by `analyze_run.py`) turns one run into per-persona analytics + a report; `cross_run/` (pipeline B, driven by `compare_run_analytics.py`) consumes many runs' analytics and produces a cross-run comparison. The numeric primitives and hypothesis tests both levels use live in the cross-process `analysis/utils/` (`_stats.py` / `stats_tests.py`). `per_run/` and `cross_run/` never import each other -- only through `analysis/utils`.
+**`analysis/generation_metadata/`** -- The **single LLM-metrics task** (LLM call behaviour, distinct from `analysis/fidelity/` which scores population quality). Named for its output subdir `03_Analysis/generation_metadata/`. A pipe-and-filter stage driven by `summarize_generation_metadata.py`: it reads `01_Raw` telemetry for every combo, reduces each persona to a metric record, aggregates per-combo distribution + scalar stats, runs one deep per-combo diagnostics pass, computes per-country cross-factor significance, and emits **one** per-country CSV + JSON + `charts/`. Public entrypoint `summarize()` in `__init__.py`. Numeric primitives and hypothesis tests live in the cross-process `analysis/utils/` (`_stats.py` / `stats_tests.py`).
 
-- **`per_run/`** -- single-run pipeline (parse -> join -> aggregate -> visualize/report):
-  - `interaction_parser.py` / `log_parser.py` -- Parse `llm_interactions.jsonl` and log files from run output
-  - `joiner.py` -- Enriches JSONL interaction records by matching to log-file call records via timestamp proximity (±2s). Note: parallel runs write a single top-level master log (`01_Raw/{slug}/logs/`), not per-persona logs; `analyze_run.py` joins that master log so token/latency fields populate. The ±2s join means per-persona token sums are approximate in parallel runs, but aggregate/per-category distributions are sound
-  - `aggregator.py` -- Computes per-persona metrics: call counts, retry rates, token consumption, latency percentiles, prompt size growth, value diversity (Shannon entropy)
-  - `charts.py` (`plot_run_charts`) -- 9 per-run analytics PNGs (call counts, retry rates, entropy, token budgets, latency); token-gated charts skipped when the provider reports no token counts (e.g. Claude/Gemini CLI)
-  - `console_report.py` (`print_metrics`) -- Renders the per-run summary table to the console
-- **`cross_run/`** -- cross-run pipeline (load -> test -> build -> visualize):
-  - `comparison_loader.py` -- Discovers and loads the per-run `run_analytics.json` files to compare
-  - `run_comparison.py` (`build_comparison`, `METRIC_SPECS`) -- Cross-run statistics: groups runs by model and strategy (country fixed) and assembles the comparison (tests from `analysis/utils/stats_tests.py`)
-  - `comparison_charts.py` (`plot_run_comparison`) -- Box plots (with significance brackets), mean±SD bars, and model×method heatmaps per metric
+- `pricing.py` -- parse/validate `config/analysis/model_pricing.yaml` (fail-fast cost model)
+- `interaction_parser.py` / `log_parser.py` -- Parse `llm_interactions.{jsonl,json}` and `logs/run_*.log` (call lines + run summary) from run output
+- `joiner.py` -- Enriches JSONL interaction records by matching to log-file call records via timestamp proximity (±2s). Note: parallel runs write a single top-level master log (`01_Raw/{slug}/logs/`), not per-persona logs; joining that master log populates token/latency fields. The ±2s join means per-persona token sums are approximate in parallel runs, but aggregate/per-category distributions are sound
+- `persona_metrics.py` -- reduce one persona's normalized call entries to a per-persona record
+- `cost.py` -- per-persona USD cost from the pricing table (fail-fast; `None` when no token telemetry)
+- `diagnostics.py` (`compute_metrics`) -- deep per-combo diagnostics: call counts, retry rates, token consumption/budget, latency percentiles, prompt-size growth, value diversity (Shannon entropy), error taxonomy
+- `combo_aggregator.py` (`aggregate_combo`, `ComboSummary`, `METRIC_NAMES`) -- per-metric distribution stats (mean/std/median/q1/q3/n) + combo-level scalars (latency p95/max, success_rate) + the per-persona sample lists reused by the significance path
+- `comparison.py` (`build_summary_comparison`, `significance_from_comparison`) -- in-memory cross-factor comparison over the country's `list[ComboSummary]`: groups pooled per-persona samples by model and by method (country fixed), runs Kruskal-Wallis + Dunn/Holm per factor, derives compact-letter-display group labels (tests from `analysis/utils/stats_tests.py`)
+- `report_writer.py` -- serialise a country's combo summaries to CSV (scalars + group-label columns) + JSON (scalars + per-combo `diagnostics` + per-country `significance`)
+- `charts.py` (`render_metric_heatmaps`, `plot_run_charts`, `plot_run_comparison`) -- per-metric mean-heatmaps, per-combo diagnostic charts, and cross-factor comparison charts (box plots with significance brackets, mean±SD bars, model×method heatmaps); all persisted PNG+SVG via `save_figure`; token-gated charts skipped when the provider reports no token counts (e.g. Claude/Gemini CLI)
+- `console.py` (`print_metrics`) -- renders a combo's deep diagnostics table to the console for `--verbose`
 
 **`utils/`** (top-level) -- Minimal pipeline utilities (`should_process_task()` for skip-if-done logic). Distinct from `analysis/utils/`, which holds the cross-process analysis infra (country resolver, axis helpers, numeric primitives, hypothesis tests).
 

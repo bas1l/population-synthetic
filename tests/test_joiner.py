@@ -7,7 +7,7 @@ that extension cannot silently regress it.
 
 from __future__ import annotations
 
-from population_synthetic.analysis.run_analytics.per_run.joiner import join_entries
+from population_synthetic.analysis.generation_metadata.joiner import join_entries
 
 
 def _log(ts, pt=100, ct=10, ms=500.0):

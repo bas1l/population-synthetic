@@ -107,7 +107,7 @@ enabled chain GUI-side:
   dependents; the first nonzero exit fails the task (`FAILED`) and its
   dependents dep-skip, while independent branches (the `multivariate_fidelity`
   and `pairwise_comparison` side branches -- both `slugs`-dispatch, depending
-  only on `mapping` -- and the isolated `run_analytics_*` islands) still run.
+  only on `mapping` -- and the isolated `generation_metadata` island) still run.
 - **Abort** → `_kill_process_tree` on the live process; the current task and all
   not-yet-run tasks become `ABORTED`.
 
