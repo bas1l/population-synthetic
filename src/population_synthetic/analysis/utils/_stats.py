@@ -18,6 +18,37 @@ from __future__ import annotations
 import math
 
 
+def mean(values: list[float]) -> float | None:
+    """Return the arithmetic mean of *values*, or ``None`` when empty.
+
+    ``None`` (not ``0.0``) for an empty input keeps "no data" distinct from a
+    genuine zero mean -- callers gate on availability rather than treating an
+    absent metric as zero.
+    """
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def stddev(values: list[float], *, sample: bool = True) -> float | None:
+    """Return the standard deviation of *values*, or ``None`` when undefined.
+
+    Uses the **sample** (``n-1``) denominator by default (``sample=True``), which
+    is undefined for ``n < 2`` and therefore returns ``None`` there (never ``0``
+    or a crash). Pass ``sample=False`` for the population (``n``) denominator,
+    which is defined for ``n >= 1`` and returns ``None`` only when empty.
+    """
+    n = len(values)
+    if n < 1:
+        return None
+    denom = n - 1 if sample else n
+    if denom < 1:
+        return None
+    m = sum(values) / n
+    variance = sum((x - m) ** 2 for x in values) / denom
+    return math.sqrt(variance)
+
+
 def median(values: list[float]) -> float | None:
     """Return the median of *values*, or ``None`` when empty.
 

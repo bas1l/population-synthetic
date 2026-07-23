@@ -123,6 +123,13 @@ python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet
 python scripts/analyze/analyze_real_population_stats.py --country-id swedish
 python scripts/analyze/analyze_real_population_stats.py --country-id swedish --country-id italian --force
 
+# Generation metadata: per country × model × method(strategy), the mean/spread/n of the
+# per-persona generation cost (wall-clock time, input/output/total tokens, LLM calls,
+# retry & error rates, estimated USD cost from config/analysis/model_pricing.yaml).
+# Reads the 01_Raw LLM-call telemetry; emits per-country CSV + JSON + per-metric charts.
+python scripts/analyze/summarize_generation_metadata.py --country swedish
+python scripts/analyze/summarize_generation_metadata.py --model claude_haiku --no-charts --force
+
 # Launch the GUI: the config-driven Flow Runner (requires pip install -e ".[gui]")
 python -m population_synthetic.gui.main
 
@@ -153,6 +160,7 @@ resolve their output dir via `analysis_output_dir(id, output_base)` rather than 
 | `run_analytics_cross_run` | LLM Metrics (cross-run) | `run_analytics/_comparison/` | `compare_run_analytics.py` | slugs |
 | `cross_country` | Cross-Country (real vs real) | `cross_country/` | `compare_real_countries.py` | cli (CLI-only) |
 | `real_population_stats` | Real Reference Population Stats | `real_population_stats/{country}/` | `analyze_real_population_stats.py` | per_country |
+| `generation_metadata` | Generation Metadata (country × model × method) | `generation_metadata/` | `summarize_generation_metadata.py` | slugs |
 
 ## See also
 

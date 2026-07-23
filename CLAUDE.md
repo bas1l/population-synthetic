@@ -77,7 +77,11 @@ ranking of the fidelity reports (models × strategies per country), `method_sign
 per-category significance of the generation method vs model on TV fidelity (Page's L / Friedman /
 Nemenyi CD + a mixed-model interaction, categories as blocks; needs the `[analysis]` extra),
 `real_population_stats/` publication-ready per-category reference figures + proportion CSVs for the
-real (API-sourced) population only, one country at a time, `run_analytics/` post-run
+real (API-sourced) population only, one country at a time, `generation_metadata/` per
+country × model × method(strategy) mean/spread/n of the per-persona generation cost
+(wall-clock time, input/output/total tokens, LLM calls, retry & error rates, estimated USD cost
+from `config/analysis/model_pricing.yaml`) read from the `01_Raw` LLM-call telemetry,
+`run_analytics/` post-run
 LLM-call analytics, and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 

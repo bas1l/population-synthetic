@@ -131,3 +131,14 @@ processes:
     folder: "real_population_stats"
     script: "scripts/analyze/analyze_real_population_stats.py"
     dispatch: "per_country"
+
+  generation_metadata:
+    label: "Generation Metadata (country x model x method)"
+    description: >
+      Per country x model x method(strategy), the mean/spread/n of the per-persona
+      generation cost: wall-clock time, input/output/total tokens, LLM calls, retry &
+      error rates, and estimated USD cost (from config/analysis/model_pricing.yaml).
+      Reads 01_Raw LLM-call telemetry; emits per-country CSV + JSON + charts.
+    folder: "generation_metadata"
+    script: "scripts/analyze/summarize_generation_metadata.py"
+    dispatch: "slugs"
