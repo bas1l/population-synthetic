@@ -114,8 +114,8 @@ def test_shipped_workflow_ordering():
     order = [task.name for task in _shipped_state().ordered_tasks()]
     assert set(order) == {
         "mapping", "fidelity", "multivariate_fidelity", "consistency", "model_ranking",
-        "method_significance", "pairwise_comparison", "run_analytics_per_run",
-        "run_analytics_cross_run", "real_population_stats", "generation_metadata",
+        "method_significance", "pairwise_comparison", "real_population_stats",
+        "generation_metadata",
     }
     assert order.index("mapping") < order.index("fidelity")
     assert order.index("mapping") < order.index("multivariate_fidelity")
@@ -141,7 +141,10 @@ def test_shipped_workflow_ordering_deterministic():
 
 def test_disabled_task_cannot_run():
     state = _shipped_state()
-    assert not state.can_run("run_analytics_per_run")  # enabled: false in YAML
+    # Satisfy pairwise_comparison's only dependency so the sole blocker under test
+    # is its `enabled: false` flag (the last remaining disabled node in the YAML).
+    state.mark_completed("mapping")
+    assert not state.can_run("pairwise_comparison")  # enabled: false in YAML
 
 
 def test_dep_incomplete_blocks_then_mark_completed_unlocks():

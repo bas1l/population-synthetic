@@ -1,7 +1,7 @@
 """Reduce one persona's LLM-call telemetry to a per-persona metric record.
 
-Consumes the *normalized call entries* produced by the reused
-``run_analytics.per_run.interaction_parser`` -- a list of dicts with all
+Consumes the *normalized call entries* produced by the local
+``generation_metadata.interaction_parser`` -- a list of dicts with all
 ``LLMInteractionEntry`` fields guaranteed present (``None`` when absent). This
 module knows nothing about slugs, country/model/strategy, file layout, pricing,
 or charts: it takes entries in and returns a ``PersonaMetrics`` record.
@@ -29,8 +29,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from population_synthetic.analysis.run_analytics.per_run.aggregator import _parse_iso
-from population_synthetic.analysis.run_analytics.per_run.interaction_parser import (
+from population_synthetic.analysis.generation_metadata.diagnostics import _parse_iso
+from population_synthetic.analysis.generation_metadata.interaction_parser import (
     find_interaction_file,
     parse_interactions,
 )

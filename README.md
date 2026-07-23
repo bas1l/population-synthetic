@@ -125,17 +125,13 @@ python scripts/generate/extract_population_from_pipeline.py \
 ### Analyse generation runs
 
 ```bash
-# Analyse a single run directory (prints summary table)
-python scripts/analyze/analyze_run.py path/to/run_dir/
+# The single LLM-metrics task: one command over {output_base}/01_Raw/ emits one enriched
+# per-country summary (cost, means +/- spread, distribution, cross-factor significance, and
+# deep per-combo diagnostics) as {country}_summary.{csv,json} + charts/.
+python scripts/analyze/summarize_generation_metadata.py --country swedish
 
-# Analyse a batch run and export full analytics
-python scripts/analyze/analyze_run.py path/to/batch_run_dir/ --output run_analytics.json
-
-# Batch-analyse every run under {output_base}/01_Raw/
-python scripts/analyze/analyze_run.py --all
-
-# Cross-run scientific comparison of LLM metrics (requires --all first)
-python scripts/analyze/compare_run_analytics.py
+# Print per-combo deep diagnostics and restrict the comparison to a metric subset
+python scripts/analyze/summarize_generation_metadata.py --country swedish --verbose --metrics time cost
 ```
 
 ### Launch the GUI
@@ -224,7 +220,7 @@ The output slug is `{country_id}_{strategy_id}_{model_id}`, and the run director
 - **Axis configs:** `config/synthetic/axes/models/`, `config/synthetic/axes/strategies/`, `config/synthetic/axes/countries/`
 - **API response caches (git-ignored):** `config/database/caches/scb/`, `config/database/caches/ssb/`, `config/database/caches/eurostat/`, `config/database/caches/istat/`
 - **Category label mappings:** `config/mapping/{scb,ssb,istat}/` -- one JSON file per demographic attribute (filename stem == top-level key), grouped by source agency. The loader merges every `*.json` in a country directory into a single dict
-- **Experiment / analytics defaults:** `config/synthetic/experiment_defaults.yaml`, `config/analysis/analyze_defaults.yaml`
+- **Experiment defaults:** `config/synthetic/experiment_defaults.yaml`
 - **GUI config:** `config/gui/menu.yaml` + `config/gui/flows/*.yaml` (the Flow Runner GUI)
 
 ## Data Sources

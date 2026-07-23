@@ -1,11 +1,11 @@
 """Shared numeric primitives for the analysis pipelines.
 
 A single home for ``median`` / ``percentile`` / ``shannon_entropy`` so every
-analysis consumer (the run_analytics per-run aggregator and charts, the cross-run
-comparison, the cross-model performance comparison) uses the *same* convention.
-Previously these were implemented three times with divergent percentile
-semantics (stdlib nearest-rank vs numpy linear interpolation), so the same
-conceptual p95 could differ between a chart and a cross-run summary.
+analysis consumer (the generation-metadata diagnostics and charts, the
+cross-factor comparison, the cross-model performance comparison) uses the *same*
+convention.  Previously these were implemented three times with divergent
+percentile semantics (stdlib nearest-rank vs numpy linear interpolation), so the
+same conceptual p95 could differ between a chart and a summary.
 
 **Percentile convention: nearest-rank.**  ``percentile`` returns a value that
 actually occurred in the sample (no interpolation between ranks).  This keeps the

@@ -29,7 +29,9 @@ import pytest
 
 from population_synthetic.analysis.generation_metadata import summarize
 from population_synthetic.analysis.generation_metadata.combo_aggregator import (
+    DISTRIBUTION_STATS,
     METRIC_NAMES,
+    SCALAR_METRIC_NAMES,
     aggregate_combo,
 )
 from population_synthetic.analysis.generation_metadata.cost import persona_cost
@@ -309,14 +311,16 @@ def test_summarize_writes_csv_json_and_charts(tmp_path: Path):
     assert csv_path.is_file()
     assert json_path.is_file()
 
-    # --- CSV columns: identity + <metric>_{mean,std,n} per metric ---
+    # --- CSV columns: identity + <metric>_<stat> per metric + scalar columns ---
     rows = _read_csv(csv_path)
     header = set(rows[0].keys())
     for base in ("model", "method", "n_personas", "has_token_data"):
         assert base in header
     for metric in METRIC_NAMES:
-        for suffix in ("mean", "std", "n"):
+        for suffix in DISTRIBUTION_STATS:  # mean, std, median, q1, q3, n
             assert f"{metric}_{suffix}" in header
+    for scalar in SCALAR_METRIC_NAMES:  # latency_p95, latency_max, success_rate
+        assert scalar in header
 
     by_model = {r["model"]: r for r in rows}
     assert set(by_model) == {"claude_haiku", "claude_opus"}
@@ -330,6 +334,14 @@ def test_summarize_writes_csv_json_and_charts(tmp_path: Path):
     # cost per persona: 300*1e-6*price_in + 100*1e-6*price_out (claude_haiku = 1/5)
     assert float(haiku["cost_mean"]) == pytest.approx(300 * 1.0 / 1e6 + 100 * 5.0 / 1e6)
     assert int(haiku["time_n"]) == 2
+    # Distribution stats: two personas each 300 input tokens -> median 300, q1/q3 defined.
+    assert float(haiku["input_tokens_median"]) == pytest.approx(300.0)
+    assert haiku["input_tokens_q1"] != ""
+    assert haiku["input_tokens_q3"] != ""
+    # Scalar diagnostics: no errors -> success_rate 1.0; no timing -> latency empty.
+    assert float(haiku["success_rate"]) == pytest.approx(1.0)
+    assert haiku["latency_p95"] == ""
+    assert haiku["latency_max"] == ""
 
     # Token-less combo: token/cost gated to empty (None), time still present.
     opus = by_model["claude_opus"]
@@ -344,7 +356,21 @@ def test_summarize_writes_csv_json_and_charts(tmp_path: Path):
     assert payload["country"] == "swedish"
     assert set(payload["pricing"]) >= {"observed_date", "source", "currency"}
     assert payload["metrics"] == list(METRIC_NAMES)
+    assert payload["scalar_metrics"] == list(SCALAR_METRIC_NAMES)
     assert len(payload["combos"]) == 2
+
+    # --- JSON: per-combo diagnostics block + scalar fields inside metrics ---
+    combo = next(c for c in payload["combos"] if c["model"] == "claude_haiku")
+    assert "diagnostics" in combo
+    diag = combo["diagnostics"]
+    assert diag["summary"]["total_entries"] == 4  # two personas x two calls
+    assert "per_category" in diag and "value_diversity" in diag
+    # Distribution stat set present per metric; scalar fields flat alongside.
+    for stat in DISTRIBUTION_STATS:
+        assert stat in combo["metrics"]["input_tokens"]
+    for scalar in SCALAR_METRIC_NAMES:
+        assert scalar in combo["metrics"]
+    assert combo["metrics"]["success_rate"] == pytest.approx(1.0)
 
     # --- charts: a PNG+SVG pair per non-empty metric ---
     charts_dir = csv_path.parent / "charts"

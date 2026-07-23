@@ -16,9 +16,11 @@ families:
         model_ranking/          cross-model/strategy leaderboard over the
                                 fidelity reports.
 
-    Run analytics (LLM operational metrics)
-        run_analytics/          per-run and cross-run analytics on
-                                identity-generation LLM calls.
+    Generation metadata (LLM operational metrics)
+        generation_metadata/    the single LLM-metrics task: per-combo cost,
+                                token, latency and retry summaries plus deep
+                                per-combo diagnostics and per-country cross-factor
+                                significance over identity-generation LLM calls.
 
     utils/                      cross-process shared infrastructure.
 

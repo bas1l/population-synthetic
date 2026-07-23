@@ -1,10 +1,9 @@
-"""
-console_report.py -- Render run-analytics metrics as console text tables.
+"""console.py -- Render generation-metadata diagnostics as console text tables.
 
 Turns the nested metrics dict produced by
-:func:`population_synthetic.analysis.run_analytics.per_run.aggregator.compute_metrics` into the
-human-readable summary tables printed by ``scripts/analyze/analyze_run.py``.  This is the
-presentation concern only -- no orchestration, I/O, or metric computation.
+:func:`population_synthetic.analysis.generation_metadata.diagnostics.compute_metrics`
+into human-readable summary tables for the ``--verbose`` console view.  This is
+the presentation concern only -- no orchestration, I/O, or metric computation.
 
 Entry point: :func:`print_metrics`.
 """

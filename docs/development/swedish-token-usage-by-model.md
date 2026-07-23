@@ -9,7 +9,7 @@ sections fall back to a retroactive `tiktoken` estimate. Each section states cle
 ## Claude Haiku — retroactive estimate (no real token data exists)
 
 Token usage is not recorded anywhere for Claude-based generation runs (haiku or sonnet). The
-`analysis/run_analytics/` pipeline (`per_run/aggregator.py`, `joiner.py`, `log_parser.py`) is built to
+`analysis/generation_metadata/` pipeline (`diagnostics.py`, `joiner.py`, `log_parser.py`) is built to
 read `prompt_tokens`/`completion_tokens` from `llm_interactions.jsonl` and `logs/run_*.log`, but the
 `claude` CLI provider never logged token counts for any past run. As a control, the same pipeline
 does find token counts in Ollama-model run logs (e.g. `seed_034_all_pick_llama33`), so this is an
@@ -49,9 +49,9 @@ investigation found, with zero malformed or missing `prompt`/`raw_response` reco
 ## Ollama Llama 3.1 (8B) — real token counts
 
 Unlike Claude, Ollama runs log real `prompt_eval_count`/`eval_count`-derived token fields in
-`logs/run_*.log`. These totals come from actually running the existing per-run aggregator pipeline
-(`scripts/analyze/analyze_run.py` → `population_synthetic.analysis.llm_metrics.per_run`) against the
-on-disk raw directories `swedish_{strategy}_ollama_llama31_8b` — no tiktoken estimation was needed.
+`logs/run_*.log`. These totals come from actually running the generation-metadata pipeline
+(`scripts/analyze/summarize_generation_metadata.py` → `population_synthetic.analysis.generation_metadata`)
+against the on-disk raw directories `swedish_{strategy}_ollama_llama31_8b` — no tiktoken estimation was needed.
 
 Manifests: `identity_manifest_044-048_ollama_llama31_8b.yaml`. All 5 strategies have matching runs,
 100 personas each.
@@ -73,7 +73,7 @@ resume gap. Only ~45% of its 3,398 calls matched a logged token record — that 
 
 ## Ollama Mistral Nemo 12B — real token counts
 
-Same real-token-count approach as Llama 3.1: `logs/run_*.log` parsed via the per-run aggregator
+Same real-token-count approach as Llama 3.1: `logs/run_*.log` parsed via the generation-metadata
 pipeline against the on-disk raw directories `swedish_{strategy}_ollama_mistral_nemo_12b`. All 5
 strategies had high match rates (94-99.9%), so no `tiktoken` estimation fallback was needed for any
 row.

@@ -93,24 +93,6 @@ processes:
     script: "scripts/analyze/score_fidelity.py"
     dispatch: "slugs"
 
-  run_analytics_per_run:
-    label: "LLM Metrics (per-run)"
-    description: >
-      Computes per-run LLM-call analytics (token usage, latency, retries, cost)
-      for a single generation run, writing one analytics subfolder per run slug.
-    folder: "run_analytics"
-    script: "scripts/analyze/analyze_run.py"
-    dispatch: "per_combo"
-
-  run_analytics_cross_run:
-    label: "LLM Metrics (cross-run)"
-    description: >
-      Rolls up the per-run LLM-call analytics across multiple runs into a single
-      comparison report, contrasting cost/latency/token profiles between runs.
-    folder: "run_analytics/_comparison"
-    script: "scripts/analyze/compare_run_analytics.py"
-    dispatch: "slugs"
-
   cross_country:
     label: "Cross-Country (real vs real)"
     description: >
@@ -135,10 +117,15 @@ processes:
   generation_metadata:
     label: "Generation Metadata (country x model x method)"
     description: >
-      Per country x model x method(strategy), the mean/spread/n of the per-persona
-      generation cost: wall-clock time, input/output/total tokens, LLM calls, retry &
-      error rates, and estimated USD cost (from config/analysis/model_pricing.yaml).
-      Reads 01_Raw LLM-call telemetry; emits per-country CSV + JSON + charts.
+      The single LLM-metrics task. Per country x model x method(strategy), the
+      mean/spread (median/q1/q3)/n of the per-persona generation cost: wall-clock
+      time, input/output/total tokens, LLM calls, retry & error rates, latency
+      p95/max, success rate, and estimated USD cost (from
+      config/analysis/model_pricing.yaml). Also emits per-combo deep diagnostics
+      (error taxonomy, entropy, latency percentiles, token budgets) and
+      per-country cross-factor significance (Kruskal-Wallis + Dunn/Holm across the
+      model and method factors). Reads 01_Raw LLM-call telemetry; emits one
+      per-country CSV + JSON + charts.
     folder: "generation_metadata"
     script: "scripts/analyze/summarize_generation_metadata.py"
     dispatch: "slugs"

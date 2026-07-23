@@ -31,8 +31,6 @@ _EXPECTED_FOLDERS = {
     "model_ranking": "model_ranking",
     "method_significance": "method_significance",
     "pairwise_comparison": "pairwise_comparison",
-    "run_analytics_per_run": "run_analytics",
-    "run_analytics_cross_run": "run_analytics/_comparison",
     "cross_country": "cross_country",
     "real_population_stats": "real_population_stats",
     "generation_metadata": "generation_metadata",

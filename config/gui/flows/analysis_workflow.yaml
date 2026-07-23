@@ -92,21 +92,6 @@ tasks:
     options: {}
     depends_on: [mapping]
 
-  run_analytics_per_run:          # independent -- isolated node
-    enabled: false
-    supports_force: true
-    force: false
-    options:
-      charts:                     # --charts DIR (blank = default)
-      verbose: false
-    depends_on: []
-
-  run_analytics_cross_run:        # independent -- isolated node
-    enabled: false
-    options:
-      metrics:                    # --metrics KEY... (blank = all)
-    depends_on: []
-
   generation_metadata:            # independent -- isolated node (slugs dispatch)
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from population_synthetic.analysis.run_analytics.per_run.log_parser import (
+from population_synthetic.analysis.generation_metadata.log_parser import (
     _parse_corr,
     _split_log_line,
     _try_parse_call,
@@ -80,7 +80,10 @@ def test_split_log_line_with_elapsed_prefix_parses():
 
 
 def test_split_log_line_without_elapsed_prefix_still_parses():
-    line = "2026-05-21 15:45:27 INFO: ollama call: model=m base_url=u elapsed_ms=500 prompt_tokens=100 completion_tokens=10"
+    line = (
+        "2026-05-21 15:45:27 INFO: ollama call: model=m base_url=u "
+        "elapsed_ms=500 prompt_tokens=100 completion_tokens=10"
+    )
     ts, msg = _split_log_line(line)
     assert ts == "2026-05-21 15:45:27"
     assert msg is not None

@@ -27,8 +27,7 @@ all real logic lives in the `population_synthetic.*` package (installed via
 | `score_fidelity_italy.py` | Compare LLM pipeline output against an ISTAT real population |
 | `score_fidelity_all.py` | Batch comparison over every model × strategy × country |
 | `compare_real_countries.py` | Cross-country marginals (Sweden vs Norway vs Italy) |
-| `analyze_run.py` | Per-run LLM interaction analytics (call counts, retries, tokens, latency) |
-| `compare_run_analytics.py` | Cross-run scientific comparison of run analytics (Kruskal-Wallis + Dunn) |
+| `summarize_generation_metadata.py` | The single LLM-metrics task: per country × model × method(strategy) cost/token/latency/retry summaries + per-combo deep diagnostics + cross-factor significance (Kruskal-Wallis + Dunn) |
 
 ### `dev/` — exploratory / one-off tooling
 | Script | Purpose |
@@ -46,7 +45,8 @@ all real logic lives in the `population_synthetic.*` package (installed via
   `generate/generate_identities_parallel.py` → `analyze/score_fidelity_{sweden,italy}.py`
   (or `analyze/score_fidelity_all.py` for the full matrix).
 - **Analyze LLM-call behaviour across runs:**
-  `analyze/analyze_run.py --all` → `analyze/compare_run_analytics.py`.
+  `analyze/summarize_generation_metadata.py` (one command over `01_Raw` emits the enriched
+  per-country summary — cost, means±spread, distribution, significance, deep diagnostics).
 
 These are standalone CLIs, not an importable package — there is intentionally no
 `__init__.py` here.
