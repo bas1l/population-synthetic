@@ -158,6 +158,14 @@ ruff check src/
 A pytest suite lives under `tests/` (covers the `analysis/generation_metadata/` layer and `clients/call_context`).
 Run it with `pytest` (requires `pip install -e ".[dev]"`).
 
+## Developer tools
+
+Standalone helpers under `tools/` (self-contained, not part of the analysis pipeline):
+
+| Tool | What it does | Entry point |
+|------|--------------|-------------|
+| `graph-diff` | Renders the change in a package's import/dependency graph between two git refs — added edges green, removed red, unchanged grey — as SVG/PNG/DOT + JSON/MD. Repo-agnostic; needs the Graphviz `dot` binary for SVG/PNG. See [`tools/graph-diff/README.md`](../../tools/graph-diff/README.md). | `python tools/graph-diff/graph_diff.py --package-path src/population_synthetic --base-ref dev` |
+
 ## Analysis registry (canonical id → label → folder → script)
 
 `config/analysis/analysis_registry.yaml` (accessor `analysis/utils/registry.py`) is the single
