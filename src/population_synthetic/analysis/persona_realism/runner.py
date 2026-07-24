@@ -7,11 +7,15 @@ persona's successful ``RoundVerdict``s, and its sibling
 Phase-4 cost chain (one telemetry file per persona, 1:1 with the verdict cache).
 
 Orchestration mirrors ``scripts/generate/generate_identities_parallel.py``:
-a ``ThreadPoolExecutor`` fan-out, a *round-count-aware* per-persona resume gate,
-and round-based retry of only the failed calls. During the parallel fan-out each
-call's telemetry is appended to a thread-safe in-memory buffer (no per-persona
-file handles are opened concurrently); the buffers are flushed sequentially at
-end-of-run, one throwaway ``LLMInteractionCollector`` handle at a time.
+a ``ThreadPoolExecutor`` fan-out over PERSONAS (not rounds) and a
+*round-count-aware* per-persona resume gate. Each persona is one unit of work:
+its own throwaway judge client judges that persona's shortfall rounds
+sequentially (with per-round retry of only the rounds that fail), and the
+persona writes its OWN verdict json and telemetry jsonl the moment its rounds
+finish -- so a long run reports incremental progress and an interrupt keeps
+every persona already completed. Because each persona owns its two distinct
+files (written atomically via ``tmp``+``replace``), no cross-thread write lock
+or shared telemetry buffer is needed.
 
 Resume is *round-count-aware* (not binary-exists): a persona is skipped only when
 its cached file already holds ``>= n_rounds`` successful rounds. A file left by an
@@ -43,7 +47,6 @@ import json
 import logging
 import random
 import threading
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -95,10 +98,11 @@ atexit.register(_atexit_cleanup)
 class _AppendingCollector(LLMInteractionCollector):
     """A throwaway ``LLMInteractionCollector`` that APPENDS instead of truncating.
 
-    Used only at end-of-run when topping up an existing persona's telemetry so cost
-    accumulates across passes. Overrides only the file-open mode (``"a"`` instead of
-    the parent's ``"w"``); it does NOT modify the shared collector class. Constructed
-    one at a time, sequentially, after the parallel fan-out has finished.
+    Used when topping up an existing persona's telemetry so cost accumulates across
+    runs. Overrides only the file-open mode (``"a"`` instead of the parent's ``"w"``);
+    it does NOT modify the shared collector class. Constructed inside a persona's own
+    task and only ever appends to that persona's ``.jsonl``, so concurrent personas
+    never contend on a single file handle.
     """
 
     def _ensure_open(self) -> None:  # type: ignore[override]
@@ -223,8 +227,25 @@ class RunnerSummary:
     total_rounds: int        # new rounds attempted this run (== successful_rounds + failed_rounds)
     successful_rounds: int   # new successful rounds this run
     failed_rounds: int       # new failed rounds this run
-    passes: int              # fan-out passes actually run (1 + retries)
+    passes: int              # max per-persona judge attempts any persona used (1 + retries); 0 if none judged
     out_dir: Path
+
+
+@dataclass(frozen=True)
+class _PersonaOutcome:
+    """One persona worker's return value, aggregated by the main thread into the summary.
+
+    ``status`` is one of ``"written"`` (fresh persona newly cached), ``"topped_up"``
+    (existing cache gained >= 1 appended round), ``"failed"`` (fresh persona whose every
+    round failed -- left uncached, retryable), or ``"topup_noop"`` (a top-up that added
+    zero rounds this run -- prior cache kept, counted in none of the progress buckets).
+    """
+
+    idx: int
+    status: str
+    n_ok: int              # successful new rounds this run for this persona
+    n_failed_rounds: int   # shortfall rounds that failed after retry
+    passes_used: int       # max attempts any of this persona's rounds needed (1..MAX)
 
 
 def _default_client_factory(cfg: JudgeConfig) -> Any:
@@ -266,9 +287,7 @@ def _select_prefix_indices(n: int, sample_size: int | None) -> list[int]:
     return list(range(sample_size))
 
 
-def _record_call(
-    buffer: dict[str, list[LLMInteractionEntry]],
-    lock: threading.Lock,
+def _build_entry(
     *,
     persona_id: str,
     round_idx: int,
@@ -278,16 +297,17 @@ def _record_call(
     verdict: RoundVerdict | None,
     error: str | None,
     meta: dict[str, Any],
-) -> None:
-    """Append one judge call's telemetry to the persona's in-memory buffer (thread-safe).
+) -> LLMInteractionEntry:
+    """Build one judge call's telemetry record from the client's ``last_metadata``.
 
-    No file handle is opened here: buffering keeps the parallel fan-out lock-cheap
-    and defers all per-persona ``.jsonl`` writes to the sequential end-of-run flush.
+    Pure construction -- no file handle, no lock. The caller appends the returned
+    entry to that persona's LOCAL list, which is flushed to the persona's own
+    ``.jsonl`` once its rounds finish.
     """
     parsed = None
     if verdict is not None:
         parsed = {"can_exist": verdict.can_exist, "typicality": verdict.typicality}
-    entry = LLMInteractionEntry(
+    return LLMInteractionEntry(
         category=_LOG_CATEGORY,
         method=_LOG_METHOD,
         step=f"round_{round_idx}",
@@ -310,37 +330,27 @@ def _record_call(
         cache_creation_tokens=meta.get("cache_creation_tokens"),
         error_category=meta.get("error_category"),
     )
-    with lock:
-        buffer[persona_id].append(entry)
 
 
-def _judge_call(
+def _judge_one_round(
+    client: Any,
     *,
-    persona_index: int,
     persona_id: str,
     round_idx: int,
     attempt: int,
     system_str: str,
     user_str: str,
     cfg: JudgeConfig,
-    client_factory: Callable[[], Any],
-    buffer: dict[str, list[LLMInteractionEntry]],
-    buffer_lock: threading.Lock,
-) -> tuple[int, int, RoundVerdict | None, str | None]:
-    """Run one judge call for one (persona, round); never raises.
+    entries: list[LLMInteractionEntry],
+) -> tuple[RoundVerdict | None, str | None]:
+    """Run one judge call for one (persona, round) on *client*; never raises.
 
-    Instantiates one client for this call (mirrors ``_generate_one``), records the
-    call's telemetry whether it succeeds or fails, and returns the verdict or a
-    string error. A parse/contract violation from :func:`parse_round_verdict` is
-    caught here and surfaced as a failed round (retryable), keeping failure
-    distinct from a possible verdict.
+    Reuses the persona's own client (the persona worker owns its lifecycle), appends
+    the call's telemetry -- success or failure -- to that persona's LOCAL ``entries``
+    list, and returns the verdict or a string error. A parse/contract violation from
+    :func:`parse_round_verdict` is caught here and surfaced as a failed round
+    (retryable), keeping failure distinct from a possible verdict.
     """
-    client = client_factory()
-    registered = hasattr(client, "close")
-    if registered:
-        with _ACTIVE_LOCK:
-            _ACTIVE_CLIENTS.add(client)
-
     raw: str | None = None
     verdict: RoundVerdict | None = None
     error: str | None = None
@@ -349,24 +359,16 @@ def _judge_call(
             user_str, model=cfg.judge_model, system_instruction=system_str
         )
         verdict = parse_round_verdict(raw)
-    except Exception as exc:  # noqa: BLE001 -- fan-out worker must not crash the pool
+    except Exception as exc:  # noqa: BLE001 -- a failed round is retryable, not fatal
         error = f"{type(exc).__name__}: {exc}"
-    finally:
-        meta = getattr(client, "last_metadata", {}) or {}
-        _record_call(
-            buffer, buffer_lock,
+    meta = getattr(client, "last_metadata", {}) or {}
+    entries.append(
+        _build_entry(
             persona_id=persona_id, round_idx=round_idx, attempt=attempt,
             prompt=user_str, raw=raw, verdict=verdict, error=error, meta=meta,
         )
-        if registered:
-            try:
-                client.close()
-            except Exception:
-                pass
-            with _ACTIVE_LOCK:
-                _ACTIVE_CLIENTS.discard(client)
-
-    return persona_index, round_idx, verdict, error
+    )
+    return verdict, error
 
 
 def _read_cached_rounds(path: Path) -> list[dict[str, Any]]:
@@ -440,8 +442,9 @@ def _flush_telemetry(path: Path, entries: list[LLMInteractionEntry], *, append: 
     ``append`` (a top-up onto an existing persona) opens a throwaway
     :class:`_AppendingCollector` so prior passes' calls are retained and cumulative
     cost stays correct; otherwise (fresh persona / ``--force``) a plain
-    :class:`LLMInteractionCollector` truncates. One handle at a time, opened and
-    closed here -- never during the parallel fan-out.
+    :class:`LLMInteractionCollector` truncates. Called from within a persona's own
+    task; the handle targets only that persona's ``.jsonl`` (distinct per persona),
+    so concurrent personas never share it.
     """
     if not entries:
         return
@@ -548,72 +551,69 @@ def run_combo_judgements(
                 f"combo {combo_label!r} persona_{idx:05d}: {exc}"
             ) from exc
 
-    # Per-call telemetry accumulates in memory during the parallel fan-out; the
-    # per-persona ``.jsonl`` files are written sequentially at end-of-run. Only the
-    # shortfall rounds (``n_rounds`` minus already-cached) are judged for each persona,
-    # numbered continuing from the existing count.
-    buffer: dict[str, list[LLMInteractionEntry]] = defaultdict(list)
-    buffer_lock = threading.Lock()
+    total_new_rounds = sum(cfg.n_rounds - len(existing[idx]) for idx in to_judge)
 
-    results: dict[tuple[int, int], RoundVerdict] = {}
-    pending = [(idx, r) for idx in to_judge for r in range(len(existing[idx]), cfg.n_rounds)]
-    total_new_rounds = len(pending)
-    passes = 0
-    while pending:
-        passes += 1
-        with ThreadPoolExecutor(max_workers=cfg.workers) as executor:
-            futures = [
-                executor.submit(
-                    _judge_call,
-                    persona_index=idx,
-                    persona_id=f"persona_{idx:05d}",
-                    round_idx=r,
-                    attempt=passes,
-                    system_str=prompts[idx][0],
-                    user_str=prompts[idx][1],
-                    cfg=cfg,
-                    client_factory=client_factory,
-                    buffer=buffer,
-                    buffer_lock=buffer_lock,
-                )
-                for (idx, r) in pending
-            ]
-            for future in as_completed(futures):
-                idx, r, verdict, error = future.result()
-                if verdict is not None:
-                    results[(idx, r)] = verdict
-                else:
-                    logger.warning(
-                        "combo %s persona_%05d round %d failed: %s",
-                        combo_label, idx, r, error,
-                    )
+    def _judge_and_write_persona(idx: int) -> _PersonaOutcome:
+        """Judge one persona's shortfall rounds, then write ITS OWN files immediately.
 
-        failed_units = [unit for unit in pending if unit not in results]
-        if not failed_units or passes >= _MAX_JUDGE_PASSES:
-            break
-        logger.info(
-            "combo %s: retrying %d failed judge call(s) (pass %d/%d)",
-            combo_label, len(failed_units), passes + 1, _MAX_JUDGE_PASSES,
-        )
-        pending = failed_units
-
-    # Assemble per-persona caches + telemetry. A *fresh* persona with no successful
-    # round is failed and left uncached (retryable, no telemetry). A *top-up* always
-    # keeps its prior cache; it is rewritten (and its telemetry appended) only when it
-    # gained >= 1 new round this pass.
-    written = 0
-    topped_up = 0
-    failed_personas = 0
-    successful_rounds = 0
-    failed_rounds = 0
-    for idx in to_judge:
+        Owns a single judge client for this persona (created here, ``close()``d in a
+        ``finally``); judges rounds ``range(len(existing[idx]), n_rounds)`` sequentially
+        with per-round retry up to ``_MAX_JUDGE_PASSES`` of only the rounds that fail;
+        collects verdicts + telemetry into LOCAL lists. On >= 1 successful round it
+        atomically writes ``persona_XXXXX.json`` and flushes ``persona_XXXXX.jsonl``
+        (append for a top-up, truncate for a fresh/force write) -- so this persona is
+        durable the instant its rounds finish, independent of every sibling. A fresh
+        persona with zero successful rounds is left uncached (retryable, no telemetry);
+        a top-up that adds zero rounds keeps its prior cache untouched.
+        """
         persona_id = f"persona_{idx:05d}"
+        system_str, user_str = prompts[idx]
         n_existing = len(existing[idx])
-        new_verdicts = [results[(idx, r)] for r in range(n_existing, cfg.n_rounds) if (idx, r) in results]
-        n_ok = len(new_verdicts)
-        successful_rounds += n_ok
-        failed_rounds += (cfg.n_rounds - n_existing) - n_ok
         is_topup = append_jsonl[idx]
+
+        new_verdicts: list[RoundVerdict] = []
+        local_entries: list[LLMInteractionEntry] = []
+        passes_used = 1
+
+        client = client_factory()
+        registered = hasattr(client, "close")
+        if registered:
+            with _ACTIVE_LOCK:
+                _ACTIVE_CLIENTS.add(client)
+        try:
+            for r in range(n_existing, cfg.n_rounds):
+                for attempt in range(1, _MAX_JUDGE_PASSES + 1):
+                    passes_used = max(passes_used, attempt)
+                    verdict, error = _judge_one_round(
+                        client,
+                        persona_id=persona_id, round_idx=r, attempt=attempt,
+                        system_str=system_str, user_str=user_str, cfg=cfg,
+                        entries=local_entries,
+                    )
+                    if verdict is not None:
+                        new_verdicts.append(verdict)
+                        break
+                    if attempt < _MAX_JUDGE_PASSES:
+                        logger.info(
+                            "combo %s %s round %d failed (attempt %d/%d), retrying: %s",
+                            combo_label, persona_id, r, attempt, _MAX_JUDGE_PASSES, error,
+                        )
+                    else:
+                        logger.warning(
+                            "combo %s %s round %d failed after %d attempt(s): %s",
+                            combo_label, persona_id, r, _MAX_JUDGE_PASSES, error,
+                        )
+        finally:
+            if registered:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                with _ACTIVE_LOCK:
+                    _ACTIVE_CLIENTS.discard(client)
+
+        n_ok = len(new_verdicts)
+        n_failed_rounds = (cfg.n_rounds - n_existing) - n_ok
 
         if n_ok == 0:
             if is_topup:
@@ -621,18 +621,19 @@ def run_combo_judgements(
                     "combo %s %s: top-up added 0 of %d requested round(s); %d cached round(s) kept",
                     combo_label, persona_id, cfg.n_rounds - n_existing, n_existing,
                 )
+                status = "topup_noop"
             else:
-                failed_personas += 1
                 logger.error(
                     "combo %s %s: all %d rounds failed after %d pass(es) — not cached",
-                    combo_label, persona_id, cfg.n_rounds, passes,
+                    combo_label, persona_id, cfg.n_rounds, passes_used,
                 )
-            continue
+                status = "failed"
+            return _PersonaOutcome(idx, status, n_ok, n_failed_rounds, passes_used)
 
-        persona_file = out_dir / f"{persona_id}.json"
-        jsonl_file = out_dir / f"{persona_id}.jsonl"
+        # >= 1 new round: write this persona's OWN files now (atomic tmp+replace on the
+        # json; distinct per-persona paths, so no cross-thread write lock is needed).
         _write_persona_file(
-            persona_file,
+            out_dir / f"{persona_id}.json",
             persona_id=persona_id,
             combo_label=combo_label,
             cfg=cfg,
@@ -641,11 +642,35 @@ def run_combo_judgements(
             existing_rounds=existing[idx],
             new_verdicts=new_verdicts,
         )
-        _flush_telemetry(jsonl_file, buffer.get(persona_id, []), append=is_topup)
-        if is_topup:
-            topped_up += 1
-        else:
-            written += 1
+        _flush_telemetry(out_dir / f"{persona_id}.jsonl", local_entries, append=is_topup)
+        logger.info("combo %s %s: wrote %d round(s)", combo_label, persona_id, n_ok)
+        return _PersonaOutcome(idx, "topped_up" if is_topup else "written", n_ok, n_failed_rounds, passes_used)
+
+    # Fan out one task PER persona (each doing its rounds sequentially): effective
+    # concurrency is unchanged (cfg.workers personas in flight) but writes are now
+    # incremental and interrupt-safe. The main thread aggregates the returned outcomes
+    # -- no shared mutable counters/buffer across threads.
+    written = 0
+    topped_up = 0
+    failed_personas = 0
+    successful_rounds = 0
+    failed_rounds = 0
+    passes = 0
+    if to_judge:
+        with ThreadPoolExecutor(max_workers=cfg.workers) as executor:
+            futures = [executor.submit(_judge_and_write_persona, idx) for idx in to_judge]
+            for future in as_completed(futures):
+                outcome = future.result()
+                successful_rounds += outcome.n_ok
+                failed_rounds += outcome.n_failed_rounds
+                passes = max(passes, outcome.passes_used)
+                if outcome.status == "written":
+                    written += 1
+                elif outcome.status == "topped_up":
+                    topped_up += 1
+                elif outcome.status == "failed":
+                    failed_personas += 1
+                # "topup_noop": prior cache kept, counted in no progress bucket.
 
     summary = RunnerSummary(
         combo_label=combo_label,

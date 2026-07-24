@@ -10,6 +10,12 @@ root (no ``raw/`` subdir), the per-combo CSV/JSON, the figures, and the cross-co
 (impossibility rate, dispersion, reliability, cost) are well-formed. A separate
 test drives the round-count-aware top-up (rounds=1 -> rounds=2 appends -> skip).
 
+Further tests pin the per-persona INCREMENTAL write contract: each persona writes
+its own ``persona_XXXXX.{json,jsonl}`` the moment its rounds finish (not in one
+batched end-of-run write), so a later persona sees earlier siblings already on
+disk, and a persona whose every round fails is left uncached while its siblings
+persist intact -- the interrupt-safety property.
+
 Matplotlib is forced onto the non-interactive ``Agg`` backend before any figure
 is built (mirrors the other analysis tests).
 """
@@ -484,3 +490,77 @@ def test_failed_calls_are_distinct_from_possible(tmp_path):
     # No persona cache OR telemetry written for a fully-failed persona (retryable later).
     assert not list(combo_dir.glob("persona_[0-9]*.json"))
     assert not list(combo_dir.glob("persona_[0-9]*.jsonl"))
+
+
+def test_runner_writes_incrementally_not_batched(tmp_path):
+    """Each persona writes its OWN files the instant its rounds finish (incremental),
+    not in one end-of-run batch. With ``workers=1`` personas judge in submission order,
+    so by the time persona K is judged every earlier persona's verdict file is already
+    on disk -- an observation impossible under the old batched end-of-run write.
+    """
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    cfg = dataclasses.replace(_cfg(), n_rounds=1, workers=1)
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    label = "swedish_all_pick_claude_haiku"
+
+    population = [_persona(attrs, marker_attr, f"TYP{i}") for i in range(1, 5)]  # 4 personas
+    seen_before: list[int] = []
+
+    class _SnapshotClient(_StubClient):
+        """Records how many persona verdict files exist on disk when each call runs."""
+
+        def generate_content(self, user, *, model, system_instruction):
+            seen_before.append(len(list(combo_dir.glob("persona_[0-9]*.json"))))
+            return super().generate_content(user, model=model, system_instruction=system_instruction)
+
+    summary = run_combo_judgements(
+        population, label, attrs, combo_dir, cfg, client_factory=lambda: _SnapshotClient(),
+    )
+    assert summary.written == 4
+    # Persona 0 sees 0 files; each later persona sees its predecessors already written.
+    assert seen_before == [0, 1, 2, 3]
+    for idx in range(4):
+        assert (combo_dir / f"persona_{idx:05d}.json").is_file()
+        assert (combo_dir / f"persona_{idx:05d}.jsonl").is_file()
+
+
+def test_runner_failed_persona_leaves_siblings_intact(tmp_path):
+    """A persona whose every round fails is left uncached (no json, no jsonl) while its
+    siblings are written completely and independently -- per-persona writes mean one
+    persona's failure never loses another's work (the interrupt-safety property).
+    """
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    cfg = dataclasses.replace(_cfg(), n_rounds=2, workers=2)
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    label = "swedish_all_pick_claude_haiku"
+
+    # Persona 2 carries FAILME; the stub raises for it on every round.
+    population = [
+        _persona(attrs, marker_attr, "TYP8"),
+        _persona(attrs, marker_attr, "TYP3"),
+        _persona(attrs, marker_attr, "FAILME"),
+        _persona(attrs, marker_attr, "TYP6"),
+    ]
+
+    class _SelectiveFailClient(_StubClient):
+        def generate_content(self, user, *, model, system_instruction):
+            if "FAILME" in user:
+                raise RuntimeError("stub judge failure for FAILME")
+            return super().generate_content(user, model=model, system_instruction=system_instruction)
+
+    summary = run_combo_judgements(
+        population, label, attrs, combo_dir, cfg, client_factory=lambda: _SelectiveFailClient(),
+    )
+    assert summary.written == 3
+    assert summary.failed == 1
+    # Siblings written completely and independently.
+    for idx in (0, 1, 3):
+        assert (combo_dir / f"persona_{idx:05d}.json").is_file()
+        assert (combo_dir / f"persona_{idx:05d}.jsonl").is_file()
+        payload = json.loads((combo_dir / f"persona_{idx:05d}.json").read_text(encoding="utf-8"))
+        assert len(payload["rounds"]) == 2 and payload["status"] == "complete"
+    # The fully-failed persona: neither file (retryable on a later run).
+    assert not (combo_dir / "persona_00002.json").exists()
+    assert not (combo_dir / "persona_00002.jsonl").exists()
