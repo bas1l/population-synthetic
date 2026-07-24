@@ -23,8 +23,8 @@ params are config-driven (``config/analysis/persona_realism/``); cost per combo
 reuses ``config/analysis/model_pricing.yaml`` (fail-fast on a missing pricing row).
 
 Outputs, under the analysis-stage persona_realism folder:
-    {combo}/raw/persona_XXXXX.json   per-persona verdict cache (resumable)
-    {combo}/llm_interactions.jsonl   per-call token/timing telemetry
+    {combo}/persona_XXXXX.json       per-persona verdict cache (combo root; resumable)
+    {combo}/persona_XXXXX.jsonl      per-persona token/timing telemetry (1:1 with the cache)
     {combo}/{combo}.csv / .json      per-combination stats + cost + validation
     {combo}/typicality.png/.svg      per-combo typicality distribution
     {combo}/clash_taxonomy.png/.svg  per-combo attribute-clash taxonomy
@@ -126,8 +126,9 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--force", action="store_true",
-        help="Re-judge personas and re-write artifacts (default: resume -- skip a combo "
-        "whose report already exists and personas already cached).",
+        help="Re-judge personas from scratch and re-write artifacts (default: resume -- the runner "
+        "tops up personas below the --rounds target and skips those already cached; artifacts are "
+        "re-written only when the cache changed or the report is missing).",
     )
     parser.add_argument("--workers", type=int, default=None,
                         help="Override the config judge-call fan-out width (ThreadPool workers).")
@@ -273,32 +274,51 @@ def _run_one_combo(
     hard_rules: Any,
     pricing: Any,
 ) -> ComboArtifacts:
-    """Judge (if needed) then compute + render one combination's artifacts.
+    """Judge (top-up if needed) then compute + render one combination's artifacts.
 
-    Idempotent: when the combo's ``{label}.json`` report already exists and *force*
-    is off, the judge fan-out is skipped entirely (which also leaves the durable
-    ``llm_interactions.jsonl`` cost log intact); the pure ``write_combo_artifacts``
-    still runs so the combo's stats seed the cross-combo headline map, but its file
-    writes are themselves skipped. A resumable partial cache (missing personas) is
-    completed by the runner because the report is absent until the combo finishes.
+    The runner is **always** invoked -- its per-persona, round-count-aware resume
+    gate is the authority on what needs judging and is cheap when everything is
+    already cached (file-existence + round-count reads, no LLM call). This is what
+    lets a ``--rounds 1`` run be topped up to ``--rounds 2`` on a later invocation
+    even though the combo's ``{label}.json`` report already exists: a combo-level
+    report-exists gate would skip the runner wholesale and defeat the top-up.
+
+    Artifacts are re-written only when the runner actually did work (wrote or topped
+    up a persona), the report is missing, or *force* is set -- otherwise nothing
+    changed on disk, so the idempotent "don't rewrite unchanged outputs" behavior is
+    preserved. Under ``--force`` the runner re-judges every persona from scratch
+    (truncating) and the artifacts are always rewritten.
     """
     report_path = out_dir / f"{label}.json"
-    combo_done = report_path.exists() and not force
-    if combo_done:
-        logger.info("combo %s: report exists; skipping judge fan-out (resume)", label)
-    else:
-        summary = run_combo_judgements(
-            individuals, label, analyzed_attrs, out_dir, cfg, force=force, logger=logger,
+    report_exists = report_path.exists()
+
+    summary = run_combo_judgements(
+        individuals, label, analyzed_attrs, out_dir, cfg, force=force, logger=logger,
+    )
+    if summary.failed:
+        logger.warning(
+            "combo %s: %d persona(s) had all rounds fail this run (uncached, retryable)",
+            label, summary.failed,
         )
-        if summary.failed:
-            logger.warning(
-                "combo %s: %d persona(s) had all rounds fail this run (uncached, retryable)",
-                label, summary.failed,
-            )
+
+    # Regenerate the combo artifacts when the runner actually changed the cache
+    # (wrote a fresh persona or topped one up), when the report is missing, or under
+    # --force; otherwise nothing on disk changed and the existing artifacts stand.
+    # ``write_combo_artifacts`` is *always* called (its return value seeds the
+    # cross-combo headline map + this country's scb_ref), but its file writes key on
+    # output-file existence, so a top-up onto an existing combo (data changed, files
+    # already present) must force the rewrite to avoid stale artifacts.
+    did_work = summary.written > 0 or summary.topped_up > 0
+    rewrite_artifacts = did_work or not report_exists or force
+    if not rewrite_artifacts:
+        logger.info(
+            "combo %s: nothing changed (report exists, no personas written/topped-up); "
+            "skipping artifact re-write", label,
+        )
 
     return write_combo_artifacts(
         out_dir, label,
-        scb_ref=scb_ref, cfg=cfg, dpi=dpi, force=force,
+        scb_ref=scb_ref, cfg=cfg, dpi=dpi, force=rewrite_artifacts,
         hard_rules=hard_rules, pricing=pricing, logger=logger,
     )
 

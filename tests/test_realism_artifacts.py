@@ -141,8 +141,9 @@ def test_write_run_report_structure(tmp_path):
 # --------------------------------------------------------------------------- #
 
 
-def _write_cache(raw_dir, persona_id, attributes, verdicts):
-    raw_dir.mkdir(parents=True, exist_ok=True)
+def _write_cache(combo_dir, persona_id, attributes, verdicts):
+    """Write one persona verdict cache at the combo root (no ``raw/`` subdir)."""
+    combo_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "persona_id": persona_id,
         "combo": "combo_x",
@@ -154,18 +155,18 @@ def _write_cache(raw_dir, persona_id, attributes, verdicts):
         "attributes": attributes,
         "rounds": [dataclasses.asdict(v) for v in verdicts],
     }
-    (raw_dir / f"{persona_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+    (combo_dir / f"{persona_id}.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _write_jsonl(out_dir, persona_ids, *, tokens=(100, 50)):
+    """Write one ``persona_XXXXX.jsonl`` telemetry file per persona at the combo root."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    lines = []
     for pid in persona_ids:
-        lines.append(json.dumps({
+        line = json.dumps({
             "persona_id": pid, "category": "persona_realism", "method": "judge",
             "prompt_tokens": tokens[0], "completion_tokens": tokens[1], "total_tokens": sum(tokens),
-        }))
-    (out_dir / "llm_interactions.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        })
+        (out_dir / f"{pid}.jsonl").write_text(line + "\n", encoding="utf-8")
 
 
 def test_combo_cost_sums_tokens_and_reports_complete_coverage(tmp_path):
@@ -177,9 +178,21 @@ def test_combo_cost_sums_tokens_and_reports_complete_coverage(tmp_path):
     assert coverage == {"judged_this_run": 2, "total_personas": 2, "status": "complete"}
 
 
-def test_combo_cost_partial_coverage_on_resume(tmp_path):
+def test_combo_cost_complete_coverage_on_resume(tmp_path):
+    # Telemetry is now per-persona and 1:1 with the verdict cache, so a resumed run
+    # has one .jsonl per cached persona -> coverage is complete (no truncation gap).
     out_dir = tmp_path / "combo_x"
-    _write_jsonl(out_dir, ["persona_00000"])  # only one judged this run
+    _write_jsonl(out_dir, ["persona_00000", "persona_00001", "persona_00002"])
+    _cost, coverage = A._combo_cost(out_dir, "claude-fable-5", _PRICING, n_cached_personas=3)
+    assert coverage["judged_this_run"] == 3 and coverage["total_personas"] == 3
+    assert coverage["status"] == "complete"
+
+
+def test_combo_cost_partial_on_genuine_per_file_gap(tmp_path):
+    # The only residual partial case: fewer per-persona telemetry files than cached
+    # verdicts (a genuine gap), not a whole-run truncation artefact.
+    out_dir = tmp_path / "combo_x"
+    _write_jsonl(out_dir, ["persona_00000"])  # one log, but more personas cached
     _cost, coverage = A._combo_cost(out_dir, "claude-fable-5", _PRICING, n_cached_personas=5)
     assert coverage["judged_this_run"] == 1 and coverage["total_personas"] == 5
     assert coverage["status"] == "partial"
@@ -208,11 +221,10 @@ def test_combo_cost_fail_fast_on_missing_pricing_row(tmp_path):
 
 def _seed_combo_dir(tmp_path):
     out_dir = tmp_path / "combo_x"
-    raw = out_dir / "raw"
     attrs = {"age_group": "25-34", "education_level": "Upper-Secondary"}
-    _write_cache(raw, "persona_00000", attrs, [_possible(8), _possible(9)])
-    _write_cache(raw, "persona_00001", attrs, [_possible(3), _possible(4)])
-    _write_cache(raw, "persona_00002", attrs, [_impossible(), _impossible()])
+    _write_cache(out_dir, "persona_00000", attrs, [_possible(8), _possible(9)])
+    _write_cache(out_dir, "persona_00001", attrs, [_possible(3), _possible(4)])
+    _write_cache(out_dir, "persona_00002", attrs, [_impossible(), _impossible()])
     _write_jsonl(out_dir, ["persona_00000", "persona_00001", "persona_00002"])
     return out_dir
 
@@ -265,7 +277,7 @@ def test_write_headline_map_renders_map_and_summary(tmp_path):
     scb_dir = _seed_combo_dir(tmp_path / "scb")
     combo_dir = _seed_combo_dir(tmp_path / "syn")
     cfg = _cfg()
-    scb_combo, _present = A.load_combo_realism(scb_dir / "raw", "real_swedish")
+    scb_combo, _present = A.load_combo_realism(scb_dir, "real_swedish")
     scb_ca = A.write_combo_artifacts(scb_dir, "real_swedish", scb_ref=None, cfg=cfg, dpi=80,
                                      force=True, hard_rules=(), pricing=_PRICING)
     syn_ca = A.write_combo_artifacts(combo_dir, "combo_x", scb_ref=scb_combo, cfg=cfg, dpi=80,

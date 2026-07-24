@@ -14,10 +14,12 @@ labels, not computations):
 * **Reliability != validity.** The ``reliability`` block is emitted under a
   ``reliability_note`` that names it self-consistency, and the ``hard_rules_validation``
   block is always present as the validity anchor.
-* **Cost-coverage honesty.** ``llm_interactions.jsonl`` is truncated each run, so a
-  resumed run's cost covers only the freshly-judged personas. The ``cost_coverage``
-  block (``{judged_this_run, total_personas, status}``) is carried verbatim so a
-  partial-run cost is never misread as the full-population cost.
+* **Cost-coverage honesty.** Telemetry is now per-persona (``persona_XXXXX.jsonl``,
+  append-accumulated across resumed/top-up passes) and 1:1 with the verdict cache,
+  so a resumed run's cost reliably covers every cached persona (``status`` is
+  ``complete``). The ``cost_coverage`` block (``{judged_this_run, total_personas,
+  status}``) is still carried verbatim; a genuine per-file gap surfaces as
+  ``partial`` so it is never misread as the full-population cost.
 """
 
 from __future__ import annotations

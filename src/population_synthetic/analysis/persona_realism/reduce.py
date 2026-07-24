@@ -3,8 +3,8 @@
 The first pure layer downstream of the judge-call cache (pipe-and-filter, guide
 02 sect. 8). It consumes the frozen ``RoundVerdict`` DTOs produced by
 :mod:`population_synthetic.analysis.persona_realism.judge` -- read back from the
-durable ``raw/persona_XXXXX.json`` cache the runner wrote -- and reduces them in
-two nested steps:
+durable ``<combo>/persona_XXXXX.json`` cache the runner wrote (at the combo root,
+no ``raw/`` subdir) -- and reduces them in two nested steps:
 
     list[RoundVerdict]      -> PersonaVerdict     (per-persona)
     list[PersonaVerdict|None] -> ComboRealism     (per-combination)
@@ -154,7 +154,7 @@ class ComboRealism:
 
 @dataclass(frozen=True)
 class LoadedPersona:
-    """One persona read back from its ``raw/persona_XXXXX.json`` cache file.
+    """One persona read back from its ``<combo>/persona_XXXXX.json`` cache file.
 
     Carries the persona identity, the mapped ``attributes`` dict (needed by the
     hard-rules validation subset), the successful ``rounds`` as re-validated
@@ -285,7 +285,7 @@ def _round_from_cache(raw_round: dict[str, Any]) -> RoundVerdict:
 
 
 def load_persona_verdicts(path: str | Path) -> LoadedPersona:
-    """Read one ``raw/persona_XXXXX.json`` cache file into a :class:`LoadedPersona`.
+    """Read one ``<combo>/persona_XXXXX.json`` cache file into a :class:`LoadedPersona`.
 
     Raises ``ValueError`` (with file context) on a malformed cache file or a
     contract-violating round -- the cache is durable analysis input and a silent
@@ -319,27 +319,29 @@ def load_persona_verdicts(path: str | Path) -> LoadedPersona:
 
 
 def load_combo_verdicts(
-    raw_dir: str | Path,
+    combo_dir: str | Path,
     *,
     expected_ids: list[str] | None = None,
 ) -> dict[str, LoadedPersona | None]:
-    """Load a combo's ``raw/`` cache into ``{persona_id: LoadedPersona | None}``.
+    """Load a combo's per-persona cache into ``{persona_id: LoadedPersona | None}``.
 
-    Globs ``raw/persona_*.json`` and loads each into a :class:`LoadedPersona`.
-    Fully-failed personas are absent from the cache by construction (the runner
-    never writes them); passing ``expected_ids`` -- the roster of persona ids that
-    were *selected* to be judged -- maps every selected id without a cache file to
-    ``None`` (a **failed/absent** persona, kept distinct from a loaded one). Without
-    ``expected_ids`` the result contains only the personas present on disk (all
-    non-``None``), and the caller must supply the failed count some other way.
+    Globs ``<combo>/persona_[0-9]*.json`` (the leading-digit guard keeps the glob
+    from ever matching a sibling combo output such as ``<combo_label>.json``) and
+    loads each into a :class:`LoadedPersona`. Fully-failed personas are absent from
+    the cache by construction (the runner never writes them); passing
+    ``expected_ids`` -- the roster of persona ids that were *selected* to be judged
+    -- maps every selected id without a cache file to ``None`` (a **failed/absent**
+    persona, kept distinct from a loaded one). Without ``expected_ids`` the result
+    contains only the personas present on disk (all non-``None``), and the caller
+    must supply the failed count some other way.
 
     The returned dict is ordered by persona id (sorted) so a downstream reduction
     and any seeded subsampling are stable across runs.
     """
-    raw_dir = Path(raw_dir)
+    combo_dir = Path(combo_dir)
     found: dict[str, LoadedPersona] = {}
-    if raw_dir.is_dir():
-        for cache_file in sorted(raw_dir.glob("persona_*.json")):
+    if combo_dir.is_dir():
+        for cache_file in sorted(combo_dir.glob("persona_[0-9]*.json")):
             loaded = load_persona_verdicts(cache_file)
             found[loaded.persona_id] = loaded
 

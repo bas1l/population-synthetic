@@ -2,8 +2,9 @@
 
 The **only** path-aware module of the persona-realism subpackage and its
 aggregation+reporting orchestrator. It consumes an *already-judged* verdict cache
-(``<out_dir>/raw/persona_XXXXX.json``, written by Phase 2's ``runner``) -- it does
-NOT call the judge. Its per-combo entry point runs the pure pipeline
+(``<out_dir>/persona_XXXXX.json`` at the combo root, written by Phase 2's
+``runner``) -- it does NOT call the judge. Its per-combo entry point runs the pure
+pipeline
 
     load_combo_verdicts -> reduce_combo -> compute_realism_stats -> cost -> sinks
 
@@ -25,16 +26,12 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from population_synthetic.analysis.generation_metadata.cost import persona_cost
-from population_synthetic.analysis.generation_metadata.interaction_parser import (
-    find_interaction_file,
-    parse_interactions,
-)
+from population_synthetic.analysis.generation_metadata.interaction_parser import parse_interactions
 from population_synthetic.analysis.generation_metadata.persona_metrics import (
     reduce_persona as reduce_persona_metrics,
 )
@@ -156,38 +153,36 @@ def _combo_cost(
     pricing: PricingTable,
     n_cached_personas: int,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Aggregate a combo's judge-call cost from ``llm_interactions.jsonl``.
+    """Aggregate a combo's judge-call cost from the per-persona ``persona_*.jsonl`` logs.
 
-    Groups the interaction log by persona, reduces each to a
-    :class:`~population_synthetic.analysis.generation_metadata.persona_metrics.PersonaMetrics`,
-    prices it via :func:`persona_cost` (which **raises** if the persona has token
-    telemetry but *judge_model* is absent from the pricing table -- fail-fast), and
-    sums. Returns ``(cost, cost_coverage)``.
+    Each ``<out_dir>/persona_XXXXX.jsonl`` is exactly one persona's telemetry
+    (append-accumulated across resumed/top-up passes), so the combo cost is the sum
+    over those files. Each is reduced to a
+    :class:`~population_synthetic.analysis.generation_metadata.persona_metrics.PersonaMetrics`
+    and priced via :func:`persona_cost` (which **raises** if the persona has token
+    telemetry but *judge_model* is absent from the pricing table -- fail-fast).
+    Returns ``(cost, cost_coverage)``.
 
-    ``cost_coverage`` records the resume-honesty marker: ``llm_interactions.jsonl``
-    is truncated each run, so ``judged_this_run`` (distinct personas in the log)
-    may be fewer than ``total_personas`` (personas actually cached). ``status`` is
-    ``complete`` when the log covers every cached persona, ``partial`` on a resumed
-    run that judged only some, and ``none`` when no log is present.
+    ``cost_coverage`` records the resume-honesty marker. Because the telemetry is now
+    per-persona and 1:1 with the verdict cache, a resumed run's logs cover every
+    cached persona: ``judged_this_run`` (number of ``persona_*.jsonl`` files) equals
+    ``total_personas`` and ``status`` is ``complete``. ``partial`` fires only on a
+    genuine per-file gap (fewer telemetry files than cached personas); ``none`` when
+    no telemetry files are present (**no legacy single-file fallback**).
     """
     coverage: dict[str, Any] = {
         "judged_this_run": 0,
         "total_personas": n_cached_personas,
         "status": "none",
     }
-    interaction_file = find_interaction_file(out_dir)
-    if interaction_file is None:
+    jsonl_files = sorted(out_dir.glob("persona_*.jsonl"))
+    if not jsonl_files:
         cost = {
             "input_tokens": None, "output_tokens": None, "total_tokens": None,
             "usd": None, "n_calls": 0, "n_personas_costed": 0,
-            "note": "no llm_interactions log present under this combo",
+            "note": "no per-persona telemetry logs present under this combo",
         }
         return cost, coverage
-
-    entries = parse_interactions(interaction_file)
-    by_persona: dict[Any, list[dict[str, Any]]] = defaultdict(list)
-    for entry in entries:
-        by_persona[entry.get("persona_id")].append(entry)
 
     input_tokens: list[int | None] = []
     output_tokens: list[int | None] = []
@@ -197,8 +192,8 @@ def _combo_cost(
     costs: list[float] = []
     n_calls = 0
     n_costed = 0
-    for persona_entries in by_persona.values():
-        pm = reduce_persona_metrics(persona_entries)
+    for jsonl_file in jsonl_files:
+        pm = reduce_persona_metrics(parse_interactions(jsonl_file))
         n_calls += pm.n_calls
         input_tokens.append(pm.input_tokens)
         output_tokens.append(pm.output_tokens)
@@ -216,7 +211,7 @@ def _combo_cost(
             costs.append(usd)
             n_costed += 1
 
-    judged_this_run = len(by_persona)
+    judged_this_run = len(jsonl_files)
     if judged_this_run == 0:
         status = "none"
     elif judged_this_run >= n_cached_personas:
@@ -320,19 +315,20 @@ def load_realism_hard_rules(cfg: JudgeConfig) -> tuple[HardRule, ...]:
 
 
 def load_combo_realism(
-    raw_dir: Path,
+    combo_dir: Path,
     combo_label: str,
     *,
     expected_ids: list[str] | None = None,
 ) -> tuple[ComboRealism, list[LoadedPersona]]:
-    """Load ``raw/`` -> reduce to a :class:`ComboRealism` + the present personas.
+    """Load the combo-root cache -> reduce to a :class:`ComboRealism` + present personas.
 
+    Reads ``<combo_dir>/persona_XXXXX.json`` (combo root, no ``raw/`` subdir).
     ``expected_ids`` (the selected persona roster) maps every selected id without a
     cache file to a failed/absent persona (counted in ``n_failed``); without it only
     the on-disk personas are seen (``n_failed == 0``). Returns the reduced combo and
     the list of successfully-loaded personas (for the hard-rules validation subset).
     """
-    loaded = load_combo_verdicts(raw_dir, expected_ids=expected_ids)
+    loaded = load_combo_verdicts(combo_dir, expected_ids=expected_ids)
     personas = [
         reduce_persona(lp.rounds, persona_id=pid) if lp is not None else None
         for pid, lp in loaded.items()
@@ -358,10 +354,13 @@ def write_combo_artifacts(
 ) -> ComboArtifacts:
     """Compute + render + write one combination's realism artifacts under *out_dir*.
 
-    Runs the pure pipeline on the already-judged ``<out_dir>/raw`` cache, computes
-    the combo's cost from ``<out_dir>/llm_interactions.jsonl`` (fail-fast if the
-    judge model's pricing row is absent), and writes ``{combo}.csv``,
-    ``{combo}.json``, ``typicality.png/.svg`` and ``clash_taxonomy.png/.svg``.
+    Runs the pure pipeline on the already-judged ``<out_dir>/persona_XXXXX.json``
+    combo-root cache, computes the combo's cost by summing the per-persona
+    ``<out_dir>/persona_XXXXX.jsonl`` telemetry logs (fail-fast if the judge model's
+    pricing row is absent), and writes ``{combo}.csv``, ``{combo}.json``,
+    ``typicality.png/.svg`` and ``clash_taxonomy.png/.svg``. The idempotent skip keys
+    on those specific output filenames, so the sibling ``persona_*.json/.jsonl``
+    files never confuse it.
 
     The stats are **always** computed (cheap, pure) so the returned
     :class:`ComboArtifacts` can seed the cross-combo headline map even when every
@@ -370,7 +369,8 @@ def write_combo_artifacts(
     when its field is genuinely empty (no can_exist typicality means / no clashes).
 
     Args:
-        out_dir: the combo's resolved output dir (contains ``raw/``).
+        out_dir: the combo's resolved output dir (holds the per-persona cache +
+            telemetry directly at its root).
         combo_label: the combination label (a ``{slug}`` or ``real_{country}``).
         scb_ref: the SCB real-population :class:`ComboRealism` dispersion reference
             (``None`` when *combo* itself is the reference).
@@ -383,7 +383,6 @@ def write_combo_artifacts(
     """
     logger = logger or _LOGGER
     out_dir = Path(out_dir)
-    raw_dir = out_dir / "raw"
 
     if pricing is None:
         pricing = load_pricing_table()
@@ -396,7 +395,7 @@ def write_combo_artifacts(
     tail_threshold = float(cfg.reliability.get("tail_threshold", 3.0))
     variance_center = str(cfg.reliability.get("variance_center", "median"))
 
-    combo, present = load_combo_realism(raw_dir, combo_label, expected_ids=expected_ids)
+    combo, present = load_combo_realism(out_dir, combo_label, expected_ids=expected_ids)
     stats = compute_realism_stats(
         combo, scb_ref,
         bootstrap=cfg.bootstrap,

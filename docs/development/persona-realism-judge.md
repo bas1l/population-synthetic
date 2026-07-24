@@ -50,7 +50,7 @@ CLI flags (`--help` is authoritative):
 | `--country ID` / `--model ID` / `--strategy ID` / `--slug SLUG` | Repeatable combo filters (default: all). |
 | `--country-id` / `--model-id` / `--strategy-id` | GUI `per_combo` singular aliases; fold into the plural filters. |
 | `--output-base DIR` | Analysis-stage parent (default: `experiment_defaults.yaml` `output_base`). |
-| `--force` | Re-judge personas and re-write artifacts (default: resume — skip a combo whose report exists and personas already cached). |
+| `--force` | Re-judge personas from scratch and re-write artifacts (truncates each persona's verdict json + telemetry jsonl). Default: resume — the runner is always consulted; a persona is skipped only once it holds `>= n_rounds` cached rounds, else the shortfall is topped up. Artifacts are re-written only when the runner changed the cache, the report is missing, or under `--force`. |
 | `--workers N` | Override the config judge-call fan-out width. |
 | `--sample N` | Override the config per-combo persona sample size. |
 | `--rounds N` | Override the config judge rounds per persona (`n_rounds`; must be ≥ 1). |
@@ -58,9 +58,11 @@ CLI flags (`--help` is authoritative):
 | `--dpi N` | PNG resolution (default 200). |
 
 Outputs land under `03_Analysis/persona_realism/` (resolved via
-`analysis_output_dir("persona_realism", base)`): per-combo `raw/persona_XXXXX.json` verdict cache,
-`llm_interactions.jsonl` telemetry, per-combo CSV/JSON + figures, and the cross-combo
-`headline_map.png/.svg` + `run_report.json`.
+`analysis_output_dir("persona_realism", base)`). Each combo directory holds, **at its root** (no
+`raw/` subdir), one `persona_XXXXX.json` verdict cache **and** its sibling `persona_XXXXX.jsonl`
+per-persona telemetry (1:1 — a persona has a `.jsonl` iff it has a cached verdict), plus the per-combo
+CSV/JSON + figures; the cross-combo `headline_map.png/.svg` + `run_report.json` sit at the
+`persona_realism/` root.
 
 ### GUI headline-map limitation
 
@@ -114,11 +116,20 @@ full run over every combination is large. Controls:
 
 - `sample_size` (or `--sample`) caps personas per combination via seeded sampling.
 - `n_rounds` (or `--rounds`) is the N multiplier — lowering it cuts cost proportionally but N ≥ 2 is
-  required for any reliability or per-persona SD number.
+  required for any reliability or per-persona SD number. `n_rounds` is a **target count of successful
+  rounds**: resume is round-count-aware, so re-running a judged combo with a *higher* `--rounds` **tops
+  up** each persona — it judges only the shortfall and appends the new rounds to both the verdict json
+  and the telemetry jsonl (round numbering continues from the existing count). A persona is skipped
+  only once its cache already holds `>= n_rounds` successful rounds; `--force` re-judges from scratch.
 - `workers` (or `--workers`) sets the parallel fan-out width, and `timeout_seconds` bounds each call's
   wall clock; neither changes total cost, only wall-clock time and per-call failure behaviour.
-- The per-persona `raw/` cache makes runs **resumable**: a re-run without `--force` skips personas
-  already cached and skips a combo whose report already exists.
+- The per-persona combo-root cache makes runs **resumable**: a re-run without `--force` tops up
+  under-target personas and skips those already at `>= n_rounds`. The per-persona gate is the sole
+  authority — the CLI always consults the runner (cheap when everything is cached: file-existence +
+  round-count reads, no LLM call), so a `--rounds 1` run can be topped up to `--rounds 2` even though
+  the combo's report already exists. The combo's artifacts are re-written only when the runner actually
+  wrote or topped up a persona, when the report is missing, or under `--force`; otherwise nothing
+  changed on disk and the existing artifacts stand.
 - Per-combo cost (tokens + USD) is priced from `config/analysis/model_pricing.yaml`; a missing
   pricing row for the judge model **raises** (fail-fast).
 - **Cache tokens:** the judge prompt is prompt-cached, so the client sees `input_tokens ≈ 2` (the
@@ -127,11 +138,14 @@ full run over every combination is large. Controls:
   `cache_multipliers: {read, write}` block in `model_pricing.yaml` (fail-fast if cache tokens are
   present but the block is absent).
 
-**Resume/truncate cost-coverage caveat:** `llm_interactions.jsonl` is truncated each run, so a
-resumed run's cost report covers only personas judged *that run*. The report carries a
-`cost_coverage` marker — `judged_this_run` / `total_personas` and a `status` of `complete`
-(log covers every cached persona), `partial` (resumed run — cost is under-counted), or `none`.
-Treat a `partial` cost figure as a lower bound.
+**Cost-coverage on resume:** telemetry is now **per-persona** (`persona_XXXXX.jsonl`, one file per
+persona, append-accumulated across top-up passes) and 1:1 with the verdict cache, so a resumed run's
+cost report covers **every** cached persona — `cost_coverage.status` is reliably `complete` on resume
+(it was chronically `partial` under the old single truncated `llm_interactions.jsonl`). The marker
+still carries `judged_this_run` (number of `persona_*.jsonl` files) / `total_personas`; `partial` now
+fires only on a genuine per-file gap (fewer telemetry files than cached personas) and `none` when no
+telemetry is present. Because each persona's `.jsonl` accumulates all of its passes' calls, the summed
+USD is the true cumulative cost even across a `rounds=1` → `rounds=2` top-up.
 
 ## Judge-model availability smoke-test
 

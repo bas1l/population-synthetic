@@ -4,9 +4,11 @@ Drives the *real* runner -> artifacts pipeline the CLI script drives, but with a
 **stubbed** judge client injected via ``run_combo_judgements(..., client_factory=)``
 -- no live ``claude`` CLI, no network. A tiny synthetic combo plus a tiny real
 reference are judged, reduced, scored, and rendered on a ``tmp_path``; the test
-asserts the durable ``raw/`` cache, the per-combo CSV/JSON, the figures, and the
-cross-combo ``headline_map`` / ``run_report.json`` are written and that the head
-metrics (impossibility rate, dispersion, reliability, cost) are well-formed.
+asserts the durable per-persona ``persona_XXXXX.{json,jsonl}`` cache at the combo
+root (no ``raw/`` subdir), the per-combo CSV/JSON, the figures, and the cross-combo
+``headline_map`` / ``run_report.json`` are written and that the head metrics
+(impossibility rate, dispersion, reliability, cost) are well-formed. A separate
+test drives the round-count-aware top-up (rounds=1 -> rounds=2 appends -> skip).
 
 Matplotlib is forced onto the non-interactive ``Agg`` backend before any figure
 is built (mirrors the other analysis tests).
@@ -29,6 +31,7 @@ from population_synthetic.analysis.model_ranking.loader import scheme_attributes
 from population_synthetic.analysis.persona_realism import artifacts as A  # noqa: E402
 from population_synthetic.analysis.persona_realism.runner import (  # noqa: E402
     JudgeConfig,
+    RunnerSummary,
     run_combo_judgements,
 )
 
@@ -178,10 +181,12 @@ def test_persona_realism_end_to_end(tmp_path):
         hard_rules=(), pricing=_PRICING,
     )
 
-    # --- per-persona verdict cache -------------------------------------------
+    # --- per-persona verdict cache + telemetry (combo root, no raw/) ----------
     for idx in range(4):
-        assert (syn_dir / "raw" / f"persona_{idx:05d}.json").is_file()
-    assert (syn_dir / "llm_interactions.jsonl").is_file()
+        assert (syn_dir / f"persona_{idx:05d}.json").is_file()
+        assert (syn_dir / f"persona_{idx:05d}.jsonl").is_file()
+    assert not (syn_dir / "raw").exists()
+    assert not (syn_dir / "llm_interactions.jsonl").exists()
 
     # --- per-combo artifacts --------------------------------------------------
     for name in (f"{slug}.csv", f"{slug}.json", "typicality.png", "typicality.svg",
@@ -238,6 +243,197 @@ def test_runner_resumes_without_force(tmp_path):
     assert second.skipped == 4 and second.requested == 0
 
 
+def test_runner_tops_up_rounds_and_appends_telemetry(tmp_path):
+    """Re-running at a higher ``--rounds`` appends rounds (verdicts + telemetry).
+
+    rounds=1 -> each persona cached with 1 round + a 1-line telemetry file;
+    rounds=2 (no force) -> tops up each persona to 2 rounds and APPENDS the new
+    pass's calls to the same ``.jsonl`` (not truncated); a third rounds=2 run skips
+    everything (already at the target).
+    """
+    attrs = scheme_attributes("swedish")
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = _synthetic_population(attrs)
+    label = "swedish_all_pick_claude_haiku"
+    base = _cfg()
+    cfg1 = dataclasses.replace(base, n_rounds=1)
+    cfg2 = dataclasses.replace(base, n_rounds=2)
+
+    persona0 = combo_dir / "persona_00000.json"
+    jsonl0 = combo_dir / "persona_00000.jsonl"
+
+    # --- pass 1: rounds=1 -----------------------------------------------------
+    first = run_combo_judgements(population, label, attrs, combo_dir, cfg1,
+                                 client_factory=_stub_factory())
+    assert first.written == 4 and first.topped_up == 0 and first.skipped == 0
+    assert len(json.loads(persona0.read_text(encoding="utf-8"))["rounds"]) == 1
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 1
+
+    # --- pass 2: rounds=2 -> top-up (append, not truncate) --------------------
+    second = run_combo_judgements(population, label, attrs, combo_dir, cfg2,
+                                  client_factory=_stub_factory())
+    assert second.topped_up == 4 and second.written == 0 and second.skipped == 0
+    assert second.requested == 4
+    payload0 = json.loads(persona0.read_text(encoding="utf-8"))
+    assert len(payload0["rounds"]) == 2                 # appended, not overwritten
+    assert payload0["successful_rounds"] == 2 and payload0["status"] == "complete"
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 2  # both passes' calls
+
+    # --- pass 3: rounds=2 -> already at target, skip --------------------------
+    third = run_combo_judgements(population, label, attrs, combo_dir, cfg2,
+                                 client_factory=_stub_factory())
+    assert third.skipped == 4 and third.requested == 0 and third.topped_up == 0
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 2  # untouched
+
+
+def test_runner_force_rejudges_and_truncates_telemetry(tmp_path):
+    """``force`` re-judges from scratch: verdict overwritten, telemetry truncated."""
+    attrs = scheme_attributes("swedish")
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = _synthetic_population(attrs)
+    label = "swedish_all_pick_claude_haiku"
+    cfg2 = dataclasses.replace(_cfg(), n_rounds=2)
+    jsonl0 = combo_dir / "persona_00000.jsonl"
+
+    run_combo_judgements(population, label, attrs, combo_dir, cfg2, client_factory=_stub_factory())
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 2
+
+    forced = run_combo_judgements(population, label, attrs, combo_dir, cfg2, force=True,
+                                  client_factory=_stub_factory())
+    assert forced.written == 4 and forced.topped_up == 0 and forced.skipped == 0
+    # Truncated + re-judged from scratch: still exactly 2 lines (not 4).
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 2
+    assert len(json.loads((combo_dir / "persona_00000.json").read_text(encoding="utf-8"))["rounds"]) == 2
+
+
+def _load_driver():
+    """Load the CLI driver script by file path (scripts/ is not an importable package)."""
+    import importlib.util
+
+    path = PROJECT_ROOT / "scripts" / "analyze" / "analyze_persona_realism.py"
+    spec = importlib.util.spec_from_file_location("analyze_persona_realism", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _summary(label: str, out_dir, *, written: int = 0, topped_up: int = 0, skipped: int = 0):
+    return RunnerSummary(
+        combo_label=label, n_selected=written + topped_up + skipped,
+        requested=written + topped_up, written=written, topped_up=topped_up,
+        skipped=skipped, failed=0, total_rounds=written + topped_up,
+        successful_rounds=written + topped_up, failed_rounds=0, passes=1, out_dir=out_dir,
+    )
+
+
+def test_cli_combo_dispatch_tops_up_even_when_report_exists(tmp_path, monkeypatch):
+    """The CLI ``_run_one_combo`` must ALWAYS invoke the runner (the per-persona gate
+    is the authority), even when the combo report already exists.
+
+    Regression guard for the combo-level ``combo_done`` short-circuit that skipped the
+    whole combo -- defeating a ``--rounds 1`` -> ``--rounds 2`` per-persona top-up. Also
+    checks the artifact-rewrite decision: a top-up (data changed, files exist) forces a
+    rewrite; a no-op leaves artifacts untouched.
+    """
+    driver = _load_driver()
+    cfg = _cfg()
+    attrs = scheme_attributes("swedish")
+    label = "swedish_all_pick_claude_haiku"
+    out_dir = tmp_path / label
+    out_dir.mkdir(parents=True)
+    (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")  # report already exists
+
+    calls: dict[str, object] = {}
+
+    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False, logger=None):
+        calls["runner_called"] = True
+        calls["force"] = force
+        return _summary(combo_label, o, topped_up=len(individuals))  # runner tops up
+
+    def _spy_artifacts(o, combo_label, *, scb_ref, cfg, dpi, force, hard_rules, pricing, logger=None):
+        calls["artifacts_force"] = force
+        return object()
+
+    monkeypatch.setattr(driver, "run_combo_judgements", _spy_runner)
+    monkeypatch.setattr(driver, "write_combo_artifacts", _spy_artifacts)
+
+    result = driver._run_one_combo(
+        label=label, individuals=[{"a": 1}, {"a": 2}], analyzed_attrs=attrs,
+        out_dir=out_dir, scb_ref=None, cfg=cfg, dpi=80, force=False,
+        hard_rules=(), pricing=_PRICING,
+    )
+    # Runner was called despite the pre-existing report (gate no longer short-circuits).
+    assert calls["runner_called"] is True
+    # Runner topped up personas -> artifacts must be force-rewritten (data changed).
+    assert calls["artifacts_force"] is True
+    assert result is not None
+
+
+def test_cli_combo_dispatch_skips_rewrite_when_nothing_changed(tmp_path, monkeypatch):
+    """When the report exists and the runner does no work, artifacts are NOT rewritten
+    (idempotent), but the runner is still consulted (cheap, no LLM)."""
+    driver = _load_driver()
+    cfg = _cfg()
+    attrs = scheme_attributes("swedish")
+    label = "swedish_all_pick_claude_haiku"
+    out_dir = tmp_path / label
+    out_dir.mkdir(parents=True)
+    (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")
+
+    calls: dict[str, object] = {}
+
+    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False, logger=None):
+        calls["runner_called"] = True
+        return _summary(combo_label, o, skipped=len(individuals))  # everything already cached
+
+    def _spy_artifacts(o, combo_label, *, scb_ref, cfg, dpi, force, hard_rules, pricing, logger=None):
+        calls["artifacts_force"] = force
+        return object()
+
+    monkeypatch.setattr(driver, "run_combo_judgements", _spy_runner)
+    monkeypatch.setattr(driver, "write_combo_artifacts", _spy_artifacts)
+
+    driver._run_one_combo(
+        label=label, individuals=[{"a": 1}], analyzed_attrs=attrs,
+        out_dir=out_dir, scb_ref=None, cfg=cfg, dpi=80, force=False,
+        hard_rules=(), pricing=_PRICING,
+    )
+    assert calls["runner_called"] is True
+    assert calls["artifacts_force"] is False  # nothing changed -> no forced rewrite
+
+
+def test_write_persona_file_derives_age_group_from_raw_age(tmp_path):
+    """A real mapped persona carries integer ``age`` (no ``age_group``): the verdict
+    file must store a derived ``age_group`` bracket string and NOT crash.
+
+    Reproduce-then-guard for the end-of-run ``_write_persona_file`` KeyError: the
+    analyzed axis includes ``age_group`` but the raw mapped record has only ``age``.
+    Resolution now goes through the canonical ``attr_value`` accessor (which bins
+    ``age``), mirroring ``prompt.render_persona_block``.
+    """
+    cfg = dataclasses.replace(_cfg(), n_rounds=1)
+    attrs = scheme_attributes("swedish")
+    assert attrs[0] == "age_group"  # the axis that has no raw column
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    label = "swedish_all_pick_claude_haiku"
+
+    # One persona with raw integer age (42 -> "35-44") and NO pre-binned age_group,
+    # every other analyzed axis present, and the stub's TYP marker on a non-age axis.
+    persona = {attr: f"val_{i}" for i, attr in enumerate(attrs)}
+    del persona["age_group"]
+    persona["age"] = 42
+    persona[attrs[1]] = "TYP7"
+
+    summary = run_combo_judgements(
+        [persona], label, attrs, combo_dir, cfg, client_factory=_stub_factory(),
+    )
+    assert summary.written == 1 and summary.failed == 0  # did not raise
+
+    payload = json.loads((combo_dir / "persona_00000.json").read_text(encoding="utf-8"))
+    assert payload["attributes"]["age_group"] == "35-44"  # derived bracket, not raw 42
+    assert payload["attributes"][attrs[1]] == "TYP7"
+
+
 def test_failed_calls_are_distinct_from_possible(tmp_path):
     """A stub that always errors yields failed (uncached) personas, not possible ones."""
     cfg = _cfg()
@@ -250,5 +446,6 @@ def test_failed_calls_are_distinct_from_possible(tmp_path):
     )
     assert summary.written == 0
     assert summary.failed == 4
-    # No persona cache written for a fully-failed persona (retryable on a later run).
-    assert not list((combo_dir / "raw").glob("persona_*.json"))
+    # No persona cache OR telemetry written for a fully-failed persona (retryable later).
+    assert not list(combo_dir.glob("persona_[0-9]*.json"))
+    assert not list(combo_dir.glob("persona_[0-9]*.jsonl"))

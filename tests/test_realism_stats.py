@@ -463,13 +463,13 @@ def _cache_payload(persona_id, attributes, verdicts, failed_rounds=0):
 
 
 def test_loader_round_trips_asdict_cache(tmp_path):
-    raw = tmp_path / "raw"
-    raw.mkdir()
+    combo_dir = tmp_path / "combo_x"  # per-persona files live at the combo root (no raw/)
+    combo_dir.mkdir()
     verdicts = [_possible(8, [Issue(("age_group", "income"), "S1", "hi")]), _impossible()]
     payload = _cache_payload("persona_00007", {"age_group": "25-34", "sex": "female"}, verdicts)
-    (raw / "persona_00007.json").write_text(json.dumps(payload), encoding="utf-8")
+    (combo_dir / "persona_00007.json").write_text(json.dumps(payload), encoding="utf-8")
 
-    loaded = load_persona_verdicts(raw / "persona_00007.json")
+    loaded = load_persona_verdicts(combo_dir / "persona_00007.json")
     assert isinstance(loaded, LoadedPersona)
     assert loaded.persona_id == "persona_00007"
     assert loaded.attributes == {"age_group": "25-34", "sex": "female"}
@@ -480,34 +480,34 @@ def test_loader_round_trips_asdict_cache(tmp_path):
 
 
 def test_load_combo_marks_absent_expected_ids_as_none(tmp_path):
-    raw = tmp_path / "raw"
-    raw.mkdir()
+    combo_dir = tmp_path / "combo_x"
+    combo_dir.mkdir()
     payload = _cache_payload("persona_00001", {"age_group": "25-34"}, [_possible(5)])
-    (raw / "persona_00001.json").write_text(json.dumps(payload), encoding="utf-8")
+    (combo_dir / "persona_00001.json").write_text(json.dumps(payload), encoding="utf-8")
 
-    result = load_combo_verdicts(raw, expected_ids=["persona_00001", "persona_00002"])
+    result = load_combo_verdicts(combo_dir, expected_ids=["persona_00001", "persona_00002"])
     assert result["persona_00001"] is not None
     assert result["persona_00002"] is None  # selected but no cache file == failed/absent
 
 
 def test_load_combo_without_expected_ids_returns_only_present(tmp_path):
-    raw = tmp_path / "raw"
-    raw.mkdir()
+    combo_dir = tmp_path / "combo_x"
+    combo_dir.mkdir()
     payload = _cache_payload("persona_00003", {"age_group": "25-34"}, [_possible(5)])
-    (raw / "persona_00003.json").write_text(json.dumps(payload), encoding="utf-8")
-    result = load_combo_verdicts(raw)
+    (combo_dir / "persona_00003.json").write_text(json.dumps(payload), encoding="utf-8")
+    result = load_combo_verdicts(combo_dir)
     assert list(result) == ["persona_00003"]
     assert all(v is not None for v in result.values())
 
 
 def test_loader_reduce_pipeline_end_to_end(tmp_path):
     # loader dict -> reduce_persona each present value -> reduce_combo.
-    raw = tmp_path / "raw"
-    raw.mkdir()
+    combo_dir = tmp_path / "combo_x"
+    combo_dir.mkdir()
     for i, verdicts in enumerate([[_possible(8), _possible(9)], [_impossible(), _impossible()]], start=1):
         payload = _cache_payload(f"persona_{i:05d}", {"age_group": "25-34"}, verdicts)
-        (raw / f"persona_{i:05d}.json").write_text(json.dumps(payload), encoding="utf-8")
-    loaded = load_combo_verdicts(raw, expected_ids=[f"persona_{i:05d}" for i in (1, 2, 3)])
+        (combo_dir / f"persona_{i:05d}.json").write_text(json.dumps(payload), encoding="utf-8")
+    loaded = load_combo_verdicts(combo_dir, expected_ids=[f"persona_{i:05d}" for i in (1, 2, 3)])
     personas = [reduce_persona(v.rounds, persona_id=k) if v is not None else None
                 for k, v in loaded.items()]
     combo = reduce_combo(personas, "combo_x")
