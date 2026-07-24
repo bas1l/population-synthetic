@@ -29,6 +29,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED, is_unmapped
+
 __all__ = [
     "SYSTEM_SENTINEL",
     "USER_SENTINEL",
@@ -107,10 +109,14 @@ def render_persona_block(persona: dict[str, Any], analyzed_attrs: list[str]) -> 
     canonical accessor :func:`attr_value` so that a real mapped record -- which
     stores the raw integer ``age`` rather than a pre-binned ``age_group`` -- has its
     ``age_group`` derived on demand from ``age`` (matching how the fidelity pipeline
-    reads the same populations). Raises ``KeyError`` naming the axis when the value
-    resolves to ``None`` (axis genuinely absent, or ``age`` missing/out-of-range) --
-    the caller adds persona/combo context (fail-fast per the plan's edge-case
-    contract).
+    reads the same populations).
+
+    An unmapped value -- the explicit ``UNMAPPED`` sentinel a mapped attribute
+    carries when it has no canonical equivalent, or a legacy ``None`` (axis genuinely
+    absent, or ``age`` missing/out-of-range) -- is **tolerated and rendered** as the
+    ``UNMAPPED`` token line rather than raising. The earlier fail-fast is
+    intentionally replaced: unmapped is now an explicit, judge-visible state, so the
+    judge sees the axis verbatim instead of the persona being dropped.
     """
     # Lazy import: this pure rendering layer must not pull the statistics stack
     # (numpy/scipy, via evaluator) at module import time. ``attr_value`` is the
@@ -120,11 +126,8 @@ def render_persona_block(persona: dict[str, Any], analyzed_attrs: list[str]) -> 
     lines: list[str] = []
     for attr in analyzed_attrs:
         value = attr_value(persona, attr)
-        if value is None:
-            raise KeyError(
-                f"persona is missing analyzed axis {attr!r} "
-                f"(present axes: {sorted(persona)})"
-            )
+        if is_unmapped(value):
+            value = UNMAPPED
         lines.append(f"{attr}: {value}")
     return "\n".join(lines)
 

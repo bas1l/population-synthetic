@@ -24,6 +24,7 @@ from population_synthetic.analysis.persona_realism.runner import (
     JudgeConfig,
     _default_client_factory,
 )
+from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED
 
 _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
 
@@ -334,9 +335,14 @@ def test_render_persona_block_orders_by_analyzed_attrs():
     assert "birth_location" not in block
 
 
-def test_render_persona_block_missing_axis_raises():
-    with pytest.raises(KeyError, match="income"):
-        prompt.render_persona_block({"age_group": "25-34"}, ["age_group", "income"])
+def test_render_persona_block_unmapped_axis_renders_token():
+    # An analyzed axis genuinely absent from the persona (or an explicit UNMAPPED
+    # sentinel) is TOLERATED and rendered as the token line, not raised.
+    block = prompt.render_persona_block({"age_group": "25-34"}, ["age_group", "income"])
+    assert block == f"age_group: 25-34\nincome: {UNMAPPED}"
+    # An explicit sentinel value renders identically.
+    block2 = prompt.render_persona_block({"sex": UNMAPPED}, ["sex"])
+    assert block2 == f"sex: {UNMAPPED}"
 
 
 def test_build_prompts_substitutes_only_persona_block():
@@ -424,8 +430,9 @@ def test_build_prompts_real_shaped_persona_no_keyerror():
     assert "age: 65" not in user_str  # raw age never leaks into the block
 
 
-def test_render_persona_block_missing_age_still_fails_fast():
+def test_render_persona_block_missing_age_renders_unmapped_token():
     persona = _real_shaped_sweden_persona()
     del persona["age"]  # no raw age and no age_group -> genuinely absent
-    with pytest.raises(KeyError, match="age_group"):
-        prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS)
+    # Tolerated: the age_group axis renders the UNMAPPED token instead of raising.
+    block = prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS)
+    assert f"age_group: {UNMAPPED}" in block

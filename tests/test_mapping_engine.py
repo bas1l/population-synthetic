@@ -7,6 +7,7 @@ before any production config is rewritten.
 """
 
 from population_synthetic.analysis.mapping.mapping_engine import normalize, resolve
+from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED, is_unmapped
 
 # --- equals / contains precedence and first-match-by-order -----------------
 
@@ -20,7 +21,7 @@ def test_equals_exact_match():
 def test_equals_is_not_substring():
     # ``equals`` must be exact: "women" must not match the "men" token.
     block = {"Male": {"equals": ["men"]}}
-    assert resolve("women", block, ["Male"]) is None
+    assert resolve("women", block, ["Male"]) == UNMAPPED
 
 
 def test_contains_substring_match():
@@ -40,9 +41,9 @@ def test_first_matching_value_wins_by_declared_order():
     assert resolve("ab", block, ["Second", "First"]) == "Second"
 
 
-def test_unmatched_returns_none():
+def test_unmatched_returns_unmapped():
     block = {"Male": {"equals": ["men"]}}
-    assert resolve("zzz", block, ["Male"]) is None
+    assert resolve("zzz", block, ["Male"]) == UNMAPPED
 
 
 def test_case_and_underscore_and_hyphen_normalization():
@@ -67,7 +68,7 @@ def test_all_of_requires_one_token_from_every_group():
     }
     assert resolve("permanent heltid contract", block, ["PermanentFull"]) == "PermanentFull"
     # Missing the hours group -> no match.
-    assert resolve("permanent contract", block, ["PermanentFull"]) is None
+    assert resolve("permanent contract", block, ["PermanentFull"]) == UNMAPPED
 
 
 def test_none_of_veto_blocks_otherwise_matching_value():
@@ -95,8 +96,8 @@ def test_int_and_int_gte_bucketing_with_overflow():
     assert resolve(3, block, values) == "3 persons"
     assert resolve(6, block, values) == "6 persons or more"
     assert resolve(9, block, values) == "6 persons or more"  # overflow
-    # A size with no bucket and no overflow rule -> None.
-    assert resolve(4, block, values) is None
+    # A size with no bucket and no overflow rule -> UNMAPPED.
+    assert resolve(4, block, values) == UNMAPPED
 
 
 def test_int_accepts_integer_valued_string():
@@ -124,9 +125,9 @@ def test_composite_attachment_hours_all_subfields_must_hit():
     assert resolve(rec_part, block, values) == "Permanent Part-time"
     # One sub-field mismatched -> no composite hit.
     rec_bad = {"attachment": "temporary staff", "hours": "35+ hours"}
-    assert resolve(rec_bad, block, values) is None
+    assert resolve(rec_bad, block, values) == UNMAPPED
     # A non-dict raw can never satisfy a composite matcher.
-    assert resolve("permanent full time", block, values) is None
+    assert resolve("permanent full time", block, values) == UNMAPPED
 
 
 # --- refine_from cross-field ----------------------------------------------
@@ -143,8 +144,8 @@ def test_refine_from_resolves_from_sibling_when_primary_misses():
     assert resolve("", block, values, refine_value="Germany") == "Europe (Other)"
     # Primary hits directly -> refine not needed.
     assert resolve("born in Sweden", block, values, refine_value="Germany") == "Sweden"
-    # No refine value and primary misses -> None.
-    assert resolve("", block, values) is None
+    # No refine value and primary misses -> UNMAPPED.
+    assert resolve("", block, values) == UNMAPPED
 
 
 # --- absent / on_miss ------------------------------------------------------
@@ -157,25 +158,25 @@ def test_absent_literal_for_missing_raw():
     assert resolve("factory worker", block, values) == "Manufacturing"
 
 
-def test_on_miss_default_none_vs_literal():
+def test_on_miss_default_unmapped_vs_literal():
     values = ["Wage / Business", "Pension"]
     matchers = {
         "Wage / Business": {"contains": ["salary"]},
         "Pension": {"contains": ["pension"]},
     }
-    # Default on_miss -> None.
-    assert resolve("lottery winnings", matchers, values) is None
-    # Literal on_miss default.
+    # No declared on_miss -> the UNMAPPED sentinel (not a bare None).
+    assert resolve("lottery winnings", matchers, values) == UNMAPPED
+    # A declared literal on_miss is unaffected.
     block_default = {"on_miss": "Wage / Business", **matchers}
     assert resolve("lottery winnings", block_default, values) == "Wage / Business"
 
 
-def test_unmatched_raw_returns_none_without_fuzzy_fallback():
+def test_unmatched_raw_returns_unmapped_without_fuzzy_fallback():
     # There is no fuzzy tier: a raw that substring-matches a value *label* but hits
     # no declared matcher must miss.
     values = ["Middle Class", "Working Class"]
     block = {"Middle Class": {"equals": ["mc"]}, "Working Class": {"equals": ["wc"]}}
-    assert resolve("solidly middle class household", block, values) is None
+    assert resolve("solidly middle class household", block, values) == UNMAPPED
 
 
 # --- global tiered precedence (equals -> all_of -> contains -> numeric) -----
@@ -219,3 +220,17 @@ def test_normalize_lowercases_and_collapses_underscores_but_keeps_hyphens():
     assert normalize("upper-secondary") == "upper-secondary"
     assert normalize(None) == ""
     assert normalize(42) == "42"
+
+
+# --- UNMAPPED sentinel predicate ------------------------------------------
+
+def test_is_unmapped_recognizes_sentinel_and_legacy_none():
+    # The explicit sentinel and legacy None (pre-sentinel data/caches) are both
+    # "no canonical equivalent".
+    assert is_unmapped(UNMAPPED) is True
+    assert is_unmapped(None) is True
+    # A real mapped value (or any other string/number) is not unmapped.
+    assert is_unmapped("Male") is False
+    assert is_unmapped("") is False
+    assert is_unmapped(0) is False
+    assert is_unmapped("Not Applicable") is False

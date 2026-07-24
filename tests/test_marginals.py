@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED
 from population_synthetic.analysis.utils.marginals import compute_proportions
 
 
@@ -37,6 +38,26 @@ def test_absent_in_data_category_is_explicit_zero():
 
 def test_all_null_attribute_yields_all_zero():
     inds = [{"biological_sex": None} for _ in range(3)]
+    props, extra = compute_proportions(inds, "biological_sex", ["male", "female"])
+    assert props == {"male": 0.0, "female": 0.0}
+    assert extra == []
+
+
+def test_unmapped_sentinel_excluded_exactly_like_none():
+    # The UNMAPPED sentinel must drop out of the proportion base identically to None:
+    # here 2 real values + 1 None + 1 sentinel -> divisor is 2, not 4.
+    inds_none = _inds("biological_sex", ["male", "female", None, None])
+    inds_sentinel = _inds("biological_sex", ["male", "female", UNMAPPED, UNMAPPED])
+    props_none, extra_none = compute_proportions(inds_none, "biological_sex", ["male", "female"])
+    props_sentinel, extra_sentinel = compute_proportions(inds_sentinel, "biological_sex", ["male", "female"])
+    # Numerically identical to the None case (proves no change to the base).
+    assert props_sentinel == props_none == {"male": pytest.approx(0.5), "female": pytest.approx(0.5)}
+    # The sentinel is not surfaced as an extra category (excluded, like None).
+    assert extra_sentinel == extra_none == []
+
+
+def test_all_unmapped_attribute_yields_all_zero():
+    inds = [{"biological_sex": UNMAPPED} for _ in range(3)]
     props, extra = compute_proportions(inds, "biological_sex", ["male", "female"])
     assert props == {"male": 0.0, "female": 0.0}
     assert extra == []

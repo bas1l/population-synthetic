@@ -21,8 +21,9 @@ axis simply *is* the ``values`` list.
 Resolution model
 ----------------
 :func:`resolve` matches ``values`` with a **global tiered sweep** and returns the
-first value that hits; a miss yields ``None`` (or the attribute-level ``on_miss``
-literal). Each tier is swept across *all* values before the next tier is tried, so
+first value that hits; a total miss yields the ``UNMAPPED`` sentinel (or the
+attribute-level ``on_miss`` literal, when one is declared). Each tier is swept
+across *all* values before the next tier is tried, so
 a later value's ``equals`` beats an earlier value's ``contains``. Within a single
 tier, ``values`` declared order breaks ties.
 
@@ -56,8 +57,9 @@ never confused with value keys because the walk is driven by ``values``):
 - ``refine_from`` — cross-field: when the primary raw walk misses, re-run the walk
   against a second attribute's already-resolved value (passed as ``refine_value``);
   replaces the old ``cross_field_coded`` handler.
-- ``on_miss`` — literal default when everything misses (default ``None``); e.g.
-  synthetic ``industry_sector`` → ``"Other"``.
+- ``on_miss`` — literal default when everything misses; e.g. synthetic
+  ``industry_sector`` → ``"Other"``. When omitted, a total miss defaults to the
+  explicit ``UNMAPPED`` sentinel (``"__UNMAPPED__"``), not a bare ``None``.
 """
 
 from __future__ import annotations
@@ -68,6 +70,7 @@ from typing import Any
 from population_synthetic.analysis.mapping.synthetic_mapper._text_helpers import (
     _repair_utf8_double_encoding,
 )
+from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED, is_unmapped
 
 # ---------------------------------------------------------------------------
 # Reserved keys
@@ -303,11 +306,15 @@ def resolve(
 
     Returns
     -------
-    The first matching unified value, the ``absent`` literal (missing raw), the
-    ``on_miss`` literal (total miss), or ``None``.
+    The first matching unified value, the ``absent`` literal (missing raw), or the
+    total-miss default: the attribute's ``on_miss`` literal when declared, else the
+    ``UNMAPPED`` sentinel (``"__UNMAPPED__"``).
     """
     absent = rules_block.get("absent")
-    on_miss = rules_block.get("on_miss")  # default None
+    # Default a total miss to the explicit UNMAPPED sentinel (not a bare None), so a
+    # "mapped, but nothing matched" outcome is legible downstream. Attributes that
+    # declare their own ``on_miss`` literal are unaffected.
+    on_miss = rules_block.get("on_miss", UNMAPPED)
     refine_from = rules_block.get("refine_from")
 
     # Absent input -> the declared literal (e.g. "Not Applicable"). When no
@@ -322,10 +329,12 @@ def resolve(
         return hit
 
     # 2. refine_from: re-run the same walk against the sibling's resolved value.
-    if refine_from and refine_value is not None and not _is_absent(refine_value):
+    #    An unmapped sibling (UNMAPPED sentinel or legacy None) carries no canonical
+    #    value to refine from, so it is skipped exactly as a bare None was.
+    if refine_from and not is_unmapped(refine_value) and not _is_absent(refine_value):
         hit = _walk(refine_value, rules_block, values)
         if hit is not None:
             return hit
 
-    # 3. Total miss -> the on_miss literal (default None).
+    # 3. Total miss -> the on_miss literal (default: the UNMAPPED sentinel).
     return on_miss
