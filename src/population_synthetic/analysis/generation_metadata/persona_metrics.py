@@ -58,6 +58,10 @@ class PersonaMetrics:
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    # Prompt-cache token sums (Anthropic). ``None`` (not ``0``) when no call
+    # reported the field -- "absent" stays distinct from a genuine zero.
+    cache_read_tokens: int | None = None
+    cache_creation_tokens: int | None = None
     n_calls: int = 0
     retry_rate: float | None = None
     error_rate: float | None = None
@@ -109,6 +113,8 @@ def reduce_persona(entries: list[dict[str, Any]]) -> PersonaMetrics:
     input_tokens = _token_sum(entries, "prompt_tokens")
     output_tokens = _token_sum(entries, "completion_tokens")
     total_tokens = _token_sum(entries, "total_tokens")
+    cache_read_tokens = _token_sum(entries, "cache_read_tokens")
+    cache_creation_tokens = _token_sum(entries, "cache_creation_tokens")
 
     if n_calls > 0:
         retry_rate = sum(1 for e in entries if (e.get("attempt") or 1) > 1) / n_calls
@@ -122,6 +128,8 @@ def reduce_persona(entries: list[dict[str, Any]]) -> PersonaMetrics:
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total_tokens=total_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_creation_tokens=cache_creation_tokens,
         n_calls=n_calls,
         retry_rate=retry_rate,
         error_rate=error_rate,

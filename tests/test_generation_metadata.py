@@ -35,6 +35,7 @@ from population_synthetic.analysis.generation_metadata.combo_aggregator import (
     aggregate_combo,
 )
 from population_synthetic.analysis.generation_metadata.cost import persona_cost
+from population_synthetic.analysis.generation_metadata.interaction_parser import parse_interactions
 from population_synthetic.analysis.generation_metadata.persona_metrics import (
     PersonaMetrics,
     reduce_persona,
@@ -132,6 +133,59 @@ def test_reduce_persona_empty_entries():
     assert pm.error_rate is None
 
 
+def test_reduce_persona_sums_cache_tokens():
+    entries = [
+        {"prompt_tokens": 2, "completion_tokens": 40, "cache_read_tokens": 1000,
+         "cache_creation_tokens": 0},
+        {"prompt_tokens": 2, "completion_tokens": 60, "cache_read_tokens": 1000,
+         "cache_creation_tokens": 500},
+    ]
+    pm = reduce_persona(entries)
+    assert pm.cache_read_tokens == 2000
+    assert pm.cache_creation_tokens == 500
+
+
+def test_reduce_persona_cache_tokens_none_when_absent():
+    # Legacy entries with no cache fields -> the sums stay None (absent != 0).
+    entries = [{"prompt_tokens": 100, "completion_tokens": 40}]
+    pm = reduce_persona(entries)
+    assert pm.cache_read_tokens is None
+    assert pm.cache_creation_tokens is None
+
+
+# --------------------------------------------------------------------------- #
+# interaction_parser: cache-token round-trip incl. legacy logs
+# --------------------------------------------------------------------------- #
+
+
+def test_parser_round_trips_cache_tokens_and_defaults_legacy(tmp_path: Path):
+    log = tmp_path / "llm_interactions.jsonl"
+    lines = [
+        # New-format line carrying the cache fields.
+        {"category": "persona_realism", "method": "judge", "step": "round_0",
+         "prompt": "p", "raw_response": "r", "prompt_tokens": 2, "completion_tokens": 40,
+         "cache_read_tokens": 1000, "cache_creation_tokens": 500},
+        # Legacy line lacking the cache fields entirely -> parsed as None (no KeyError).
+        {"category": "persona_realism", "method": "judge", "step": "round_1",
+         "prompt": "p", "raw_response": "r", "prompt_tokens": 2, "completion_tokens": 60},
+    ]
+    with open(log, "w", encoding="utf-8") as fh:
+        for rec in lines:
+            fh.write(json.dumps(rec) + "\n")
+
+    entries = parse_interactions(log)
+    assert entries[0]["cache_read_tokens"] == 1000
+    assert entries[0]["cache_creation_tokens"] == 500
+    # Legacy line: keys present (normalised) and defaulted to None.
+    assert entries[1]["cache_read_tokens"] is None
+    assert entries[1]["cache_creation_tokens"] is None
+
+    # The reduce layer sums across the mixed log (absent counts as absent, not 0).
+    pm = reduce_persona(entries)
+    assert pm.cache_read_tokens == 1000
+    assert pm.cache_creation_tokens == 500
+
+
 # --------------------------------------------------------------------------- #
 # (c) cost.persona_cost
 # --------------------------------------------------------------------------- #
@@ -166,6 +220,55 @@ def test_persona_cost_zero_for_ollama():
 def test_persona_cost_raises_when_tokened_but_unpriced():
     with pytest.raises(KeyError):
         persona_cost("some_unpriced_model", 100, 50, _pricing())
+
+
+def _pricing_with_cache() -> PricingTable:
+    return PricingTable(
+        rates={"claude_haiku": (1.0, 5.0)},
+        observed_date="2026-07-23",
+        source="unit-test",
+        currency="USD_per_1M_tokens",
+        cache_multipliers={"read": 0.1, "write": 1.25},
+    )
+
+
+def test_persona_cost_without_cache_tokens_is_unchanged():
+    # A pricing table WITH a cache block must still return the plain token-only
+    # cost when no cache tokens are supplied (backward-compat with existing callers).
+    priced = _pricing_with_cache()
+    assert persona_cost("claude_haiku", 300, 100, priced) == pytest.approx(0.0008)
+    # Explicit zeros are the same as omission.
+    assert persona_cost(
+        "claude_haiku", 300, 100, priced, cache_read_tokens=0, cache_creation_tokens=0
+    ) == pytest.approx(0.0008)
+    # None cache tokens (as summed from a persona with no cache telemetry) also gate off.
+    assert persona_cost(
+        "claude_haiku", 300, 100, priced, cache_read_tokens=None, cache_creation_tokens=None
+    ) == pytest.approx(0.0008)
+
+
+def test_persona_cost_with_cache_tokens_adds_multiplied_input():
+    # base = 300*1/1e6 + 100*5/1e6 = 0.0008
+    # cache read     = 1000 * 1.0 * 0.10 / 1e6 = 0.0001
+    # cache creation =  500 * 1.0 * 1.25 / 1e6 = 0.000625
+    cost = persona_cost(
+        "claude_haiku", 300, 100, _pricing_with_cache(),
+        cache_read_tokens=1000, cache_creation_tokens=500,
+    )
+    assert cost == pytest.approx(0.0008 + 0.0001 + 0.000625)
+
+
+def test_persona_cost_cache_tokens_without_multipliers_raises():
+    # Cache tokens supplied but the pricing config omitted the cache_multipliers
+    # block -> fail-fast (never silently priced at a default).
+    with pytest.raises(ValueError, match="cache_multipliers"):
+        persona_cost("claude_haiku", 300, 100, _pricing(), cache_read_tokens=1000)
+
+
+def test_real_pricing_config_has_cache_multipliers():
+    table = load_pricing_table()
+    assert table.cache_multipliers == {"read": 0.1, "write": 1.25}
+    assert table.cache_mults() == (0.1, 1.25)
 
 
 # --------------------------------------------------------------------------- #

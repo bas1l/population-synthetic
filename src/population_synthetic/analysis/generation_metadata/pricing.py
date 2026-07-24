@@ -40,9 +40,26 @@ class PricingTable:
     observed_date: str
     source: str
     currency: str
+    # Prompt-cache pricing multipliers relative to the base input rate, e.g.
+    # ``{"read": 0.1, "write": 1.25}``. ``None`` when the config omits the block --
+    # optional so callers that never supply cache tokens are unaffected.
+    cache_multipliers: dict[str, float] | None = None
 
     def __contains__(self, model_id: str) -> bool:
         return model_id in self.rates
+
+    def cache_mults(self) -> tuple[float, float]:
+        """Return ``(read_mult, write_mult)``; raise if the config omitted the block.
+
+        Fail-fast: cost pricing that needs cache multipliers but finds none is a
+        configuration gap the caller must surface, never paper over with a default.
+        """
+        if self.cache_multipliers is None:
+            raise ValueError(
+                "Cache tokens supplied but the pricing table has no 'cache_multipliers' "
+                f"block ({_PRICING_PATH}). Add a top-level 'cache_multipliers: {{read, write}}'."
+            )
+        return self.cache_multipliers["read"], self.cache_multipliers["write"]
 
     def get(self, model_id: str) -> tuple[float, float]:
         """Return ``(price_in, price_out)`` for *model_id*; raise if absent.
@@ -84,6 +101,35 @@ def _coerce_rate(model_id: str, entry: Any) -> tuple[float, float]:
     return (price_in, price_out)
 
 
+def _coerce_cache_multipliers(raw: Any, cfg_path: Path) -> dict[str, float] | None:
+    """Validate the optional top-level ``cache_multipliers`` block, or return ``None``.
+
+    Absent -> ``None`` (feature off; callers that pass no cache tokens are unaffected).
+    Present -> must be a mapping with numeric, non-negative ``read`` and ``write``.
+    """
+    if "cache_multipliers" not in raw or raw["cache_multipliers"] in (None, ""):
+        return None
+    block = raw["cache_multipliers"]
+    if not isinstance(block, dict):
+        raise ValueError(
+            f"'cache_multipliers' must be a mapping with 'read'/'write', "
+            f"got {type(block).__name__}: {cfg_path}"
+        )
+    missing = [k for k in ("read", "write") if k not in block]
+    if missing:
+        raise ValueError(f"'cache_multipliers' missing required key(s) {missing}: {cfg_path}")
+    try:
+        read_mult = float(block["read"])
+        write_mult = float(block["write"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"'cache_multipliers' has non-numeric value(s): {block!r} ({cfg_path})"
+        ) from exc
+    if read_mult < 0 or write_mult < 0:
+        raise ValueError(f"'cache_multipliers' has a negative value: {block!r} ({cfg_path})")
+    return {"read": read_mult, "write": write_mult}
+
+
 def load_pricing_table(path: Path | str | None = None) -> PricingTable:
     """Load and validate the pricing table (fail-fast).
 
@@ -120,10 +166,12 @@ def load_pricing_table(path: Path | str | None = None) -> PricingTable:
         raise ValueError(f"Model pricing config missing non-empty 'models' mapping: {cfg_path}")
 
     rates = {str(model_id): _coerce_rate(str(model_id), entry) for model_id, entry in models.items()}
+    cache_multipliers = _coerce_cache_multipliers(raw, cfg_path)
 
     return PricingTable(
         rates=rates,
         observed_date=str(raw["observed_date"]),
         source=str(raw["source"]),
         currency=str(raw["currency"]),
+        cache_multipliers=cache_multipliers,
     )

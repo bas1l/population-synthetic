@@ -100,6 +100,7 @@ class JudgeConfig:
     sample_size: int | None
     bootstrap: dict[str, Any]
     workers: int
+    timeout_seconds: int
     prompt_template: Path
     config_dir: Path
     reliability: dict[str, Any] = field(default_factory=dict)
@@ -118,7 +119,7 @@ class JudgeConfig:
         required = [
             "judge_model", "model_options", "n_rounds", "temperature",
             "severity_weights", "impossibility_severities", "sample_size",
-            "bootstrap", "workers", "prompt_template",
+            "bootstrap", "workers", "timeout_seconds", "prompt_template",
         ]
         missing = [key for key in required if key not in data]
         if missing:
@@ -134,6 +135,9 @@ class JudgeConfig:
         workers = int(data["workers"])
         if workers < 1:
             raise ValueError(f"judge config 'workers' must be >= 1, got {workers}")
+        timeout_seconds = int(data["timeout_seconds"])
+        if timeout_seconds < 1:
+            raise ValueError(f"judge config 'timeout_seconds' must be >= 1, got {timeout_seconds}")
 
         sample_size = data["sample_size"]
         if sample_size is not None:
@@ -151,6 +155,7 @@ class JudgeConfig:
             sample_size=sample_size,
             bootstrap=dict(data["bootstrap"]),
             workers=workers,
+            timeout_seconds=timeout_seconds,
             prompt_template=template_path,
             config_dir=config_dir,
             reliability=dict(data.get("reliability") or {}),
@@ -181,6 +186,7 @@ def _default_client_factory(cfg: JudgeConfig) -> Any:
     return ClaudeCodeClient(
         model_name=cfg.judge_model,
         default_config={"temperature": cfg.temperature},
+        timeout=cfg.timeout_seconds,
     )
 
 
@@ -233,6 +239,8 @@ def _record_call(
         prompt_tokens=meta.get("prompt_tokens"),
         completion_tokens=meta.get("completion_tokens"),
         total_tokens=meta.get("total_tokens"),
+        cache_read_tokens=meta.get("cache_read_tokens"),
+        cache_creation_tokens=meta.get("cache_creation_tokens"),
         error_category=meta.get("error_category"),
     )
     with lock:

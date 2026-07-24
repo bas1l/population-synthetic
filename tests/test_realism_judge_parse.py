@@ -13,11 +13,16 @@ import json
 import pytest
 
 from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.generation_metadata.pricing import load_pricing_table
 from population_synthetic.analysis.persona_realism import judge, prompt
 from population_synthetic.analysis.persona_realism.judge import (
     Issue,
     RoundVerdict,
     parse_round_verdict,
+)
+from population_synthetic.analysis.persona_realism.runner import (
+    JudgeConfig,
+    _default_client_factory,
 )
 
 _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
@@ -237,6 +242,58 @@ def test_judge_persona_passes_model_and_system():
 
 
 # --------------------------------------------------------------------------
+# JudgeConfig.load + client factory -- config-driven subprocess timeout
+# --------------------------------------------------------------------------
+
+def test_judge_config_loads_timeout_seconds():
+    cfg = JudgeConfig.load(_CONFIG_DIR)
+    assert cfg.timeout_seconds == 600
+
+
+def test_judge_config_default_model_is_sonnet():
+    # Default switched Fable -> Sonnet (2026-07-24): Sonnet is the best coherence-judge
+    # tier at low latency/cost; Fable remains a selectable option.
+    cfg = JudgeConfig.load(_CONFIG_DIR)
+    assert cfg.judge_model == "claude-sonnet-5"
+    # The default must still be one of the offered dropdown options.
+    assert cfg.judge_model in cfg.model_options
+
+
+def test_all_dropdown_judge_models_are_priced():
+    # Every selectable judge model (the RAW --model string) must have a pricing row,
+    # or its cost lookup would fail-fast at run time (persona_cost joins on --model).
+    cfg = JudgeConfig.load(_CONFIG_DIR)
+    table = load_pricing_table()
+    for model in cfg.model_options:
+        price_in, price_out = table.get(model)  # KeyError (fail-fast) if unpriced
+        assert price_in >= 0 and price_out >= 0
+    # Pin the four current dropdown models explicitly as a regression guard.
+    assert set(cfg.model_options) == {
+        "claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5",
+    }
+
+
+def test_default_client_factory_passes_timeout(monkeypatch):
+    """The judge factory threads cfg.timeout_seconds into the client (no live CLI)."""
+    import population_synthetic.clients.claude_code_client as ccc_mod
+
+    captured: dict = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(ccc_mod, "ClaudeCodeClient", _FakeClient)
+
+    cfg = JudgeConfig.load(_CONFIG_DIR)
+    _default_client_factory(cfg)
+
+    assert captured["timeout"] == cfg.timeout_seconds
+    assert captured["model_name"] == cfg.judge_model
+    assert captured["default_config"] == {"temperature": cfg.temperature}
+
+
+# --------------------------------------------------------------------------
 # prompt.py -- template parsing + persona rendering
 # --------------------------------------------------------------------------
 
@@ -290,3 +347,85 @@ def test_build_prompts_substitutes_only_persona_block():
     # system passed through verbatim (literal braces preserved)
     assert system_str == "SYSTEM {keep}"
     assert user_str == "before sex: male after"
+
+
+# --------------------------------------------------------------------------
+# prompt.py -- real mapped record shape (raw integer age, NO age_group key)
+# --------------------------------------------------------------------------
+
+# The Sweden analyzed axis exactly as ``scheme_attributes("swedish")`` yields it:
+# it lists ``age_group`` (a derived axis), while a real mapped record stores the
+# raw integer ``age`` instead. Rendering must derive age_group on demand rather
+# than KeyError-ing on the absent ``age_group`` key.
+_SWEDEN_ANALYZED_ATTRS = [
+    "age_group",
+    "biological_sex",
+    "education_level",
+    "employment_status",
+    "socioeconomic_class",
+    "parental_structure",
+    "region",
+    "civil_status",
+    "industry_sector",
+    "employment_type",
+    "housing_tenure",
+    "household_size",
+    "income_source",
+    "birth_country_detail",
+]
+
+
+def _real_shaped_sweden_persona() -> dict:
+    """A real mapped record: raw integer ``age`` (65), NO ``age_group`` key."""
+    return {
+        "id": "real-000042",
+        "age": 65,  # raw integer, as stored in 03_Analysis/mapping/*.json
+        "biological_sex": "male",
+        "education_level": "tertiary",
+        "employment_status": "employed",
+        "socioeconomic_class": "middle",
+        "parental_structure": "couple_with_children",
+        "region": "Stockholm",
+        "civil_status": "married",
+        "industry_sector": "health",
+        "employment_type": "permanent",
+        "housing_tenure": "owned",
+        "household_size": 2,
+        "income_source": "employment",
+        "birth_country_detail": "Sweden",
+    }
+
+
+def test_render_persona_block_derives_age_group_from_raw_age():
+    persona = _real_shaped_sweden_persona()
+    assert "age_group" not in persona  # precondition: real record has no bin
+
+    block = prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS)
+
+    # No KeyError, and the age_group line carries a derived bracket string
+    # (a bin label such as "65-74"/"65+"), never the raw integer 65.
+    age_group_line = next(ln for ln in block.splitlines() if ln.startswith("age_group:"))
+    rendered_value = age_group_line.split(": ", 1)[1]
+    assert rendered_value != "65"
+    assert not rendered_value.isdigit()
+    assert any(ch.isdigit() for ch in rendered_value)  # a bin string, e.g. "65-74"
+    # Every analyzed axis is present exactly once.
+    assert block.count("age_group:") == 1
+    assert "biological_sex: male" in block
+
+
+def test_build_prompts_real_shaped_persona_no_keyerror():
+    persona = _real_shaped_sweden_persona()
+    system_str, user_str = prompt.build_prompts(
+        persona, _SWEDEN_ANALYZED_ATTRS, "SYS", "P: {persona_block}"
+    )
+    assert system_str == "SYS"
+    assert "age_group:" in user_str
+    assert "age: 65" not in user_str  # raw age never leaks into the block
+
+
+def test_render_persona_block_missing_age_still_fails_fast():
+    persona = _real_shaped_sweden_persona()
+    del persona["age"]  # no raw age and no age_group -> genuinely absent
+    with pytest.raises(KeyError, match="age_group"):
+        prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS)

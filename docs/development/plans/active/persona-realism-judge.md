@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-23
 **Author:** Basil
-**Status:** In Progress (all 6 phases implemented 2026-07-23; pending review/test before /plan-finish)
+**Status:** In Progress
 **Base Branch:** `feature/cap-population-to-n`
 **Branch:** `feature/persona-realism-judge`
 
@@ -17,7 +17,7 @@
 
 ## Overview
 
-A new analysis subpackage, `persona_realism`, that uses an LLM (Claude, default `claude-fable-5`)
+A new analysis subpackage, `persona_realism`, that uses an LLM (Claude, default `claude-sonnet-5`)
 as a judge to score the **individual coherence** of each synthetic persona — asking, per persona,
 "could these demographic attributes belong to one real person?" It ranks every generation
 combination (model × strategy) **plus the SCB-sampled real population as one more competitor** on
@@ -52,7 +52,7 @@ substantiate the "SCB tables lack links between them" claim quantitatively.
    metric (ICC / Krippendorff's α across rounds).
 4. SCB real population judged as an additional competitor per country and used as the dispersion
    reference.
-5. Config-driven judge model (dropdown, default `claude-fable-5`), N-rounds, temperature, severity
+5. Config-driven judge model (dropdown, default `claude-sonnet-5`), N-rounds, temperature, severity
    weights, typicality anchors, prompt template, sampling size, and bootstrap params — all in
    `config/analysis/persona_realism/`.
 6. Resumable, parallel judge calls (per-persona on-disk cache, ThreadPool fan-out, round-based retry)
@@ -89,7 +89,7 @@ substantiate the "SCB tables lack links between them" claim quantitatively.
       the successful-call count carried on every metric.
 - [ ] A failed/absent judge call is represented distinctly from a "judged possible" verdict; the
       impossibility rate is gated on successful calls and the dropped count is logged.
-- [ ] The judge model is selected from config (default `claude-fable-5`); changing it requires no
+- [ ] The judge model is selected from config (default `claude-sonnet-5`); changing it requires no
       code edit; a missing/malformed judge config **raises**.
 - [ ] Cost metadata (tokens + USD via `model_pricing.yaml`) is emitted per combination; a missing
       `claude-fable-5` pricing row raises (fail-fast), and the row is added.
@@ -185,7 +185,7 @@ output-dir resolution (those live in the script); it receives an already-resolve
 
 ```
 config/analysis/persona_realism/
-  judge.yaml            # judge_model (default claude-fable-5) + model_options[] (dropdown);
+  judge.yaml            # judge_model (default claude-sonnet-5) + model_options[] (dropdown);
                         # n_rounds: 3; temperature: 0.0; severity_weights {S3, S2, S1: 0};
                         # impossibility_severities: [S3]; sample_size (per combo, nullable);
                         # bootstrap {iterations, seed, ci_level}; workers; prompt_template: <path>
@@ -319,47 +319,20 @@ new `tests/test_realism_artifacts.py`.
 **Completed:** 2026-07-23
 
 - [x] 5.1 — `scripts/analyze/analyze_persona_realism.py`: argparse (`--slug`/`--model`/`--strategy`/
-      `--country` repeatable filters **plus** the GUI per_combo singular aliases
-      `--model-id`/`--strategy-id`/`--country-id`, `--output-base`, `--force`, `--workers`, `--sample`,
-      `--judge-model` override, `--dpi`); `resolve_output_base`;
-      `out_root = analysis_output_dir("persona_realism", base)`; enumerate mapped combos from the
-      mapping `_index.json` (`decompose_slug`) + `real_{country}.json` with `for_read=True`; per-combo
-      dispatch grouped by country + real reference (its `ComboRealism` is the `scb_ref`); idempotent
-      per-combo skip (report-exists gate skips the judge fan-out, preserving the cost log); runner →
-      `write_combo_artifacts` → `write_headline_map`.
-- [x] 5.2 — Added `persona_realism` task to `config/gui/flows/analysis_workflow.yaml` (`enabled: true`,
-      `supports_force: true`, `force: false`, `options` incl. `judge-model:`/`sample:`/`workers:`/
-      `output-base:`, `depends_on: [mapping]`; no `min_combos` guard — see note) + node in the sibling
-      `.layout.json`.
-- [x] 5.3 — End-to-end smoke test with a **stubbed** judge client (no live CLI):
-      `tests/test_persona_realism_smoke.py` — tiny fixture population + real reference → runner →
-      artifacts (combo + headline map) on `tmp_path`; asserts the `raw/` cache, combo CSV/JSON,
-      figures, `headline_map`/`run_report.json`, and well-formed metrics; plus resumption (skip
-      without `--force`) and failed-call-≠-possible accounting.
+      `--country`, `--output-base`, `--force`, `--workers`, `--sample`, `--judge-model` override,
+      `--dpi`); `resolve_output_base`; `out_root = analysis_output_dir("persona_realism", base)`;
+      read mapped combos + `real_{country}.json` with `for_read=True`; per-combo dispatch + real
+      reference; idempotent per-combo skip; call `artifacts`.
+- [x] 5.2 — Add `persona_realism` task to `config/gui/flows/analysis_workflow.yaml` (`enabled`,
+      `supports_force`, `options` incl. `judge-model`/`sample`, `depends_on: [mapping]`) + node in the
+      sibling `.layout.json`.
+- [x] 5.3 — End-to-end smoke test with a **stubbed** judge client (no live CLI): tiny fixture
+      population → runner → reduce → stats → artifacts; assert files written and metrics well-formed.
 
 **Files Modified:** new `scripts/analyze/analyze_persona_realism.py`,
 `config/gui/flows/analysis_workflow.yaml`, `config/gui/flows/analysis_workflow.layout.json`,
-new `tests/test_persona_realism_smoke.py`; test-fixture updates for the additive node
-(`tests/test_workflow_state.py`, `tests/test_analysis_registry.py`).
+new `tests/test_persona_realism_smoke.py`.
 **Dependencies:** Phase 4.
-
-> **Notes (Phase 5 decisions):**
-> - **Axis flags.** The registry dispatch is `per_combo`, so the GUI emits `--model-id/--strategy-id/
->   --country-id` (one combo per subprocess). The script accepts those *and* the plan-specified
->   repeatable `--country/--model/--strategy/--slug` filters (the `-id` singulars fold into the
->   filters), so it is both GUI-runnable and CLI-batchable.
-> - **Cross-combo map vs per_combo dispatch.** In GUI `per_combo` mode each subprocess sees one
->   synthetic combo + its country's real reference (a valid 2-point map). The *full* cross-combo
->   ranking (all combos on one headline map) is a **CLI-batch** capability: run the script once with
->   broad filters so a single process enumerates every combo. Hence **no `min_combos` guard** — a
->   single checked combo is a valid `per_combo` unit.
-> - **`no-charts`.** Not exposed: `write_combo_artifacts` has no chart-suppression switch (charts are
->   emitted per its own genuinely-empty rule), so a `--no-charts` flag would be a no-op; omitted rather
->   than faked.
-> - **Multi-country headline map.** The `scb_label` (y==0 reference marker) is set only for a
->   single-country run; a multi-country CLI batch emits the map without a marked reference (logged).
-> - **Provenance.** Passed as `None` so `artifacts` builds the canonical cfg-derived provenance meta
->   (single source), rather than the script duplicating that logic across the layer boundary.
 
 ### Phase 6: Documentation
 **Goal:** Discoverable and reproducible.
@@ -414,7 +387,7 @@ new `tests/test_persona_realism_smoke.py`; test-fixture updates for the additive
 - [x] Update `docs/architecture/commands.md` with the new command.
 - [x] Create user guide: `docs/development/persona-realism-judge.md`.
 - [x] Add a `claude-fable-5` note to the `model_pricing.yaml` header/source comment.
-- [x] Inline docstrings on the four-layer contract per module.
+- [ ] Inline docstrings on the four-layer contract per module.
 
 ---
 
@@ -444,6 +417,8 @@ new `tests/test_persona_realism_smoke.py`; test-fixture updates for the additive
 | Self-preference bias (judge favors same-family combos) | Low–Med | Med | Standardized mapped schema removes the stylistic channel; deferred panel approach noted; watch same-family combos scoring high. |
 | Ragged/malformed LLM JSON | High | Low | Single fail-loud parser boundary; round-retry; failed rounds distinct from possible. |
 | Non-determinism harms reproducibility | Med | Med | Cold temperature; seed the bootstrap RNG; persist run_metadata (model+version, prompt hash, N, config, lib versions) and raw per-round outputs. |
+| Judge subprocess timeout too tight for Fable | Med | Med | Judge subprocess timeout is now **config-driven** (`judge.yaml` `timeout_seconds`, default 600) and threaded into the client via `_default_client_factory(timeout=cfg.timeout_seconds)`. Fable 5 single turns run for minutes; the client's own hardwired 120 s default caused whole rounds to fail. `ClaudeCodeClient`'s default stays 120 (only the judge factory raises it). |
+| Cached judge input under-priced (`prompt_tokens=2`) | Med | Med | The judge prompt is prompt-cached, so `ClaudeCodeClient` sees `input_tokens≈2` (uncached remainder) while the real prompt lands in cache. The client now **additively** captures `cache_read_input_tokens`/`cache_creation_input_tokens` into `last_metadata` (as `cache_read_tokens`/`cache_creation_tokens`) without changing `prompt_tokens` semantics; these flow through `LLMInteractionEntry` → parser → `persona_metrics` → `cost.persona_cost(..., cache_read_tokens=, cache_creation_tokens=)`. Cache tokens are priced against the base input rate via a config-driven `cache_multipliers: {read: 0.1, write: 1.25}` block in `model_pricing.yaml` (fail-fast if cache tokens are supplied but the block is absent). Fully backward-compatible: `generation_metadata`'s cost path supplies no cache tokens, so its cost is byte-for-byte unchanged. |
 
 ---
 
@@ -455,31 +430,3 @@ new `tests/test_persona_realism_smoke.py`; test-fixture updates for the additive
 - Orchestration template: `scripts/generate/generate_identities_parallel.py`
 - Registry + output-dir: `config/analysis/analysis_registry.yaml`, `src/population_synthetic/analysis/utils/registry.py`
 - Shared stats: `src/population_synthetic/analysis/utils/stats_tests.py`, `.../utils/_stats.py`
-
----
-
-## Modified Files
-
-<!-- auto-generated by /plan-implement — do not edit manually -->
-<!-- Feature files ONLY. Unrelated cap-population working-tree changes (generate_parallel.yaml,
-     docs/architecture/diagrams/real/*, sweden-generation-explorer/*, draw_generation_dags.py,
-     manuscript-motivation-map.md, docs/index.html, headless_run_generate_flow.py) and the
-     git-ignored analysis_workflow.layout.json are deliberately excluded. -->
-- CLAUDE.md
-- config/analysis/analysis_registry.yaml
-- config/analysis/model_pricing.yaml
-- config/analysis/persona_realism/
-- config/gui/flows/analysis_workflow.yaml
-- docs/architecture/commands.md
-- docs/development/brainstorms/individual-persona-realism-judge.md
-- docs/development/persona-realism-judge.md
-- docs/development/plans/active/persona-realism-judge.md
-- scripts/analyze/analyze_persona_realism.py
-- src/population_synthetic/analysis/persona_realism/
-- src/population_synthetic/analysis/utils/stats_tests.py
-- tests/test_analysis_registry.py
-- tests/test_persona_realism_smoke.py
-- tests/test_realism_artifacts.py
-- tests/test_realism_judge_parse.py
-- tests/test_realism_stats.py
-- tests/test_workflow_state.py

@@ -33,8 +33,15 @@ from population_synthetic.analysis.persona_realism.runner import (  # noqa: E402
 )
 
 _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
+# Price every selectable judge dropdown model (mirrors model_pricing.yaml raw-string
+# rows) so cost lookups resolve whichever model the judge config defaults to.
 _PRICING = PricingTable(
-    rates={"claude-fable-5": (10.0, 50.0)},
+    rates={
+        "claude-sonnet-5": (3.0, 15.0),
+        "claude-opus-4-8": (5.0, 25.0),
+        "claude-haiku-4-5": (1.0, 5.0),
+        "claude-fable-5": (10.0, 50.0),
+    },
     observed_date="2026-07-23", source="smoke-test", currency="USD",
 )
 _TYP_RE = re.compile(r"TYP(\d+)")

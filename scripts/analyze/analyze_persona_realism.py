@@ -50,6 +50,7 @@ Usage:
 --force                    Re-judge personas and re-write artifacts (default: resume/skip).
 --workers                  Override the config judge-call fan-out width.
 --sample                   Override the config per-combo persona sample size.
+--rounds                   Override the config judge rounds per persona (n_rounds; must be >= 1).
 --judge-model              Override the config judge model (must be in model_options).
 --dpi                      PNG render resolution. Default: 200.
 """
@@ -132,6 +133,8 @@ def _parse_args() -> argparse.Namespace:
                         help="Override the config judge-call fan-out width (ThreadPool workers).")
     parser.add_argument("--sample", type=int, default=None,
                         help="Override the config per-combo persona sample size.")
+    parser.add_argument("--rounds", type=int, default=None, dest="rounds",
+                        help="Judge rounds per persona (blank = config default, currently 3). Must be >= 1.")
     parser.add_argument("--judge-model", dest="judge_model", default=None,
                         help="Override the config judge model (must be in the config model_options).")
     parser.add_argument("--dpi", type=int, default=200, help="PNG render resolution. Default: 200.")
@@ -182,6 +185,10 @@ def _apply_overrides(cfg: JudgeConfig, args: argparse.Namespace) -> JudgeConfig:
         if args.sample < 1:
             raise ValueError(f"--sample must be >= 1, got {args.sample}")
         updates["sample_size"] = args.sample
+    if args.rounds is not None:
+        if args.rounds < 1:
+            raise ValueError(f"--rounds must be >= 1, got {args.rounds}")
+        updates["n_rounds"] = args.rounds
     return dataclasses.replace(cfg, **updates) if updates else cfg
 
 

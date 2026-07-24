@@ -134,9 +134,16 @@ Nested structure: **N rounds ⊂ persona ⊂ combination (N tunable, default 3).
   Temperature (2603.28304), Verbalized Sampling/typicality (2510.01171).
 
 ## Judge invocation (decided 2026-07-23)
+> **DECISION UPDATE (2026-07-24): DEFAULT switched Fable → Sonnet (`claude-sonnet-5`).** Based on the
+> JudgeSense/coherence evidence that coherence judging peaks at the **Sonnet tier and inverts above
+> it** (a bigger judge is not a better coherence judge), plus Fable being the slowest (single turns
+> ran for minutes and timed out whole rounds) and most expensive tier. Sonnet gives coherence-judge
+> quality with low latency and low cost. **Fable remains a selectable dropdown option**, just no
+> longer the default. The rest of this section (dated 2026-07-23) is preserved as the original record.
 - **Judge model selectable via a config-driven dropdown; Claude models only; DEFAULT = Fable
-  (`claude-fable-5`).** Fable is untested for data *generation* here but used as the *judge*.
-  Dropdown options: claude-fable-5 (default), claude-opus-4-8, claude-sonnet-5, claude-haiku-4-5.
+  (`claude-fable-5`).** [Superseded 2026-07-24 — default is now `claude-sonnet-5`; see the update
+  note above.] Fable is untested for data *generation* here but used as the *judge*.
+  Dropdown options: claude-fable-5, claude-opus-4-8, claude-sonnet-5 (default), claude-haiku-4-5.
   List lives in CONFIG (not hardcoded), matching axis-composition model mapping.
 - **Invoked through the SAME `claude` CLI provider the project already uses** (`--provider claude`,
   CLI on PATH — NOT the Anthropic API SDK). Headless call shape:

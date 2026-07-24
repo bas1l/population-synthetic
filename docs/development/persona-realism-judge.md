@@ -15,8 +15,10 @@ internally-incoherent individuals (a 19-year-old with a doctorate); an LLM gener
 marginals but rarely emit an incoherent individual. This task fills that gap.
 
 Per persona (the bare mapped demographic tuple; Sweden's deprecated `birth_location` is excluded to
-match `ComparisonScheme.attributes`), the judge is called **N cold rounds** and returns two
-orthogonal axes plus a structured clash list:
+match `ComparisonScheme.attributes`, and `age` is shown to the judge as the bracketed `age_group`
+derived on demand from the raw integer via the canonical `attr_value` accessor, matching the analyzed
+scheme), the judge is called **N cold rounds** and returns two orthogonal axes plus a structured
+clash list:
 
 - **`can_exist`** — binary: can this attribute set describe one real person? False **only** on a hard
   biological/legal/temporal contradiction (severity S3), never for merely-unusual-but-possible.
@@ -51,6 +53,7 @@ CLI flags (`--help` is authoritative):
 | `--force` | Re-judge personas and re-write artifacts (default: resume — skip a combo whose report exists and personas already cached). |
 | `--workers N` | Override the config judge-call fan-out width. |
 | `--sample N` | Override the config per-combo persona sample size. |
+| `--rounds N` | Override the config judge rounds per persona (`n_rounds`; must be ≥ 1). |
 | `--judge-model MODEL` | Override the config judge model (must be in `model_options`). |
 | `--dpi N` | PNG resolution (default 200). |
 
@@ -76,8 +79,8 @@ All judge behaviour is config-driven; a missing or malformed value **raises** (n
 
 | Key | Purpose |
 |-----|---------|
-| `judge_model` | Raw string passed to `claude -p ... --model`; must match a row in `model_pricing.yaml`. Default `claude-fable-5`. |
-| `model_options` | GUI dropdown (Claude family). First entry is the default and must equal `judge_model`. |
+| `judge_model` | Raw string passed to `claude -p ... --model`; must match a row in `model_pricing.yaml`. Default `claude-sonnet-5` (best coherence-judge tier + low latency + cost). |
+| `model_options` | GUI dropdown (Claude family). `judge_model` must be one of these; Fable-5 is the slowest/most-expensive selectable option. |
 | `n_rounds` | Independent judge calls per persona (default 3). N≥2 is required for any reliability or per-persona SD. |
 | `temperature` | Judge sampling temperature (default 0.0 — cold, for reproducibility). |
 | `severity_weights` | Weight per severity when folding clashes into a per-persona clash score (S1 = 0). |
@@ -86,6 +89,7 @@ All judge behaviour is config-driven; a missing or malformed value **raises** (n
 | `bootstrap` | `{iterations, seed, ci_level}` for the impossibility-rate CI (seed recorded in run metadata). |
 | `reliability.typicality_level` | Krippendorff's-α measurement level for typicality: `ordinal` (default) or `interval`. `can_exist` reliability is always nominal (not configurable). |
 | `workers` | Parallel judge-call fan-out (ThreadPool `max_workers`). |
+| `timeout_seconds` | Per-call subprocess wall-clock timeout (default 600). Threaded into the `ClaudeCodeClient` the judge factory builds; 600 s is a generous ceiling that also covers the slowest *selectable* judge (a Fable/Opus single turn can run for minutes) if you select it — Sonnet, the default, finishes in seconds. The client's own 120 s default is too tight for the slow tiers and is raised only for the judge. |
 | `prompt_template` | Path (relative to the config dir) to the system+user template. |
 
 `judge_prompt.md` — the constraint-scaffolded system + user template (biological/legal/temporal
@@ -105,14 +109,23 @@ judge is repeatable", never as "the judge is right".
 
 ## Cost sizing
 
-The judge issues roughly **N × personas × combinations** LLM calls (default N=3), so a full run over
-every combination is large. Controls:
+The judge issues roughly **N × personas × combinations** LLM calls (N = `n_rounds`, default 3), so a
+full run over every combination is large. Controls:
 
 - `sample_size` (or `--sample`) caps personas per combination via seeded sampling.
+- `n_rounds` (or `--rounds`) is the N multiplier — lowering it cuts cost proportionally but N ≥ 2 is
+  required for any reliability or per-persona SD number.
+- `workers` (or `--workers`) sets the parallel fan-out width, and `timeout_seconds` bounds each call's
+  wall clock; neither changes total cost, only wall-clock time and per-call failure behaviour.
 - The per-persona `raw/` cache makes runs **resumable**: a re-run without `--force` skips personas
   already cached and skips a combo whose report already exists.
 - Per-combo cost (tokens + USD) is priced from `config/analysis/model_pricing.yaml`; a missing
   pricing row for the judge model **raises** (fail-fast).
+- **Cache tokens:** the judge prompt is prompt-cached, so the client sees `input_tokens ≈ 2` (the
+  uncached remainder) while the bulk lands in cache. The cost chain additionally records
+  `cache_read_tokens` / `cache_creation_tokens` and prices them against the base input rate via the
+  `cache_multipliers: {read, write}` block in `model_pricing.yaml` (fail-fast if cache tokens are
+  present but the block is absent).
 
 **Resume/truncate cost-coverage caveat:** `llm_interactions.jsonl` is truncated each run, so a
 resumed run's cost report covers only personas judged *that run*. The report carries a
@@ -120,14 +133,30 @@ resumed run's cost report covers only personas judged *that run*. The report car
 (log covers every cached persona), `partial` (resumed run — cost is under-counted), or `none`.
 Treat a `partial` cost figure as a lower bound.
 
-## Fable availability smoke-test
+## Judge-model availability smoke-test
 
-`claude-fable-5` is the default judge but its availability is **account-dependent**. Smoke-test
-before a large run:
+The default judge is `claude-sonnet-5` (best coherence-judge tier, low latency, low cost). Any judge
+model's availability is **account-dependent** — smoke-test the one you intend to use before a large
+run:
+
+```bash
+claude -p "ping" --model claude-sonnet-5 --output-format json
+```
+
+**If you select Fable** (`--judge-model claude-fable-5`, the slowest/most-expensive selectable
+option) — smoke-test it too, since its availability is plan-dependent:
 
 ```bash
 claude -p "ping" --model claude-fable-5 --output-format json
 ```
 
-If the model does not resolve, pick a fallback from `model_options` (`--judge-model claude-opus-4-8`
-/ `claude-sonnet-5` / `claude-haiku-4-5`) and add its pricing row if absent.
+Fable/Opus single turns can run for **minutes** on hard personas, which is why `timeout_seconds`
+defaults to 600 (a ceiling generous enough for the slow tiers if chosen; Sonnet finishes in seconds,
+and the client's own 120 s default is raised only for the judge). A round that times out or errors
+is recorded as a **failed** round — kept distinct from a judged "possible" verdict — and only failed
+rounds are retried; the impossibility rate is gated on successful calls and the dropped count is
+logged.
+
+If a model does not resolve, pick another entry from `model_options` (`--judge-model
+claude-opus-4-8` / `claude-haiku-4-5` / `claude-fable-5`); every dropdown model already has a
+pricing row in `model_pricing.yaml`.

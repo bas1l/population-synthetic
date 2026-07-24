@@ -20,8 +20,10 @@ module-level declarative tables below, keyed by option name (CLI flag form):
 from __future__ import annotations
 
 import io
+import logging
 from typing import Any
 
+import yaml
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import (
@@ -43,15 +45,57 @@ from PyQt5.QtWidgets import (
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
+from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.gui.flow_config_model import FlowConfigModel
 from population_synthetic.gui.widgets.collapsible_section import CollapsibleSection
 
+_log = logging.getLogger(__name__)
+
 _COMPLEX_FG = QColor("#336699")
+
+# Persona-realism judge config dir (structural constant, not a distribution):
+# source of the judge-model dropdown's model list. Read at import by
+# _populate_judge_model_enum below.
+_PERSONA_REALISM_CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
 
 # Options rendered as a dropdown. Values are (display_label, saved_value)
 # pairs; a saved_value of None writes YAML null (= "use the script default").
-# Currently empty: the shipped flows' options are all bool/int/str/null.
+# Populated at import (see _populate_judge_model_enum for judge-model); config
+# is the source of truth for any option list, never a hardcoded table here.
 _OPTION_ENUMS: dict[str, list[tuple[str, object]]] = {}
+
+
+def _populate_judge_model_enum() -> None:
+    """Fill ``_OPTION_ENUMS["judge-model"]`` from the persona_realism judge config.
+
+    The model list is config-sourced (``model_options`` in ``judge.yaml``) — never
+    hardcoded. The leading ``("(default)", None)`` sentinel preserves the existing
+    "blank = use judge.yaml default" semantics (``_option_args`` omits
+    ``--judge-model`` on a ``None`` saved value); each configured model follows as a
+    ``(m, m)`` pair.
+
+    GUI-robustness: this is a convenience feature, so any read/parse failure degrades
+    gracefully — log a warning and leave ``judge-model`` out of the enum table, so its
+    row falls back to the free-text field (still valid; the script validates the id).
+    Never raise at import, or ``import population_synthetic.gui...`` would break.
+    """
+    judge_path = _PERSONA_REALISM_CONFIG_DIR / "judge.yaml"
+    try:
+        with judge_path.open(encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+        model_options = data["model_options"]
+        entries: list[tuple[str, object]] = [("(default)", None)]
+        entries.extend((str(m), str(m)) for m in model_options)
+        _OPTION_ENUMS["judge-model"] = entries
+    except (OSError, yaml.YAMLError, KeyError, TypeError) as exc:
+        _log.warning(
+            "Could not load judge-model options from %s: %s; judge-model falls back to free text",
+            judge_path,
+            exc,
+        )
+
+
+_populate_judge_model_enum()
 
 # Conditional visibility: controller option -> {dependent option: set of
 # controller values for which the dependent row is shown}.

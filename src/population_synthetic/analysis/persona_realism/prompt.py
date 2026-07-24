@@ -103,18 +103,29 @@ def render_persona_block(persona: dict[str, Any], analyzed_attrs: list[str]) -> 
     """Render the analyzed tuple as raw ``attribute: value`` lines (one per line).
 
     Iterates *analyzed_attrs* in order (the config-sourced comparison axis, which
-    already excludes the deprecated axis). Raises ``KeyError`` naming the missing
-    field when the persona lacks an analyzed axis -- the caller adds persona/combo
-    context (fail-fast per the plan's edge-case contract).
+    already excludes the deprecated axis). Each value is resolved through the
+    canonical accessor :func:`attr_value` so that a real mapped record -- which
+    stores the raw integer ``age`` rather than a pre-binned ``age_group`` -- has its
+    ``age_group`` derived on demand from ``age`` (matching how the fidelity pipeline
+    reads the same populations). Raises ``KeyError`` naming the axis when the value
+    resolves to ``None`` (axis genuinely absent, or ``age`` missing/out-of-range) --
+    the caller adds persona/combo context (fail-fast per the plan's edge-case
+    contract).
     """
+    # Lazy import: this pure rendering layer must not pull the statistics stack
+    # (numpy/scipy, via evaluator) at module import time. ``attr_value`` is the
+    # single source of truth for age_group derivation.
+    from population_synthetic.analysis.fidelity.evaluator import attr_value
+
     lines: list[str] = []
     for attr in analyzed_attrs:
-        if attr not in persona:
+        value = attr_value(persona, attr)
+        if value is None:
             raise KeyError(
                 f"persona is missing analyzed axis {attr!r} "
                 f"(present axes: {sorted(persona)})"
             )
-        lines.append(f"{attr}: {persona[attr]}")
+        lines.append(f"{attr}: {value}")
     return "\n".join(lines)
 
 

@@ -133,7 +133,8 @@ python scripts/analyze/summarize_generation_metadata.py --model claude_haiku --n
 python scripts/analyze/summarize_generation_metadata.py --country swedish --verbose --metrics time cost
 
 # Persona realism judge (LLM-as-judge): judge each mapped persona's internal coherence with the
-# Claude CLI (default claude-fable-5) over N cold rounds -- can_exist (binary) + typicality (0-10) +
+# Claude CLI (default claude-sonnet-5; Fable is the slowest/most-expensive selectable option) over N
+# cold rounds -- can_exist (binary) + typicality (0-10) +
 # severity-tagged clash issues -- and rank every combination PLUS the SCB real reference on a per-
 # combination impossibility rate (bootstrap CI) x typicality-dispersion-vs-SCB (Levene), with an
 # ICC/alpha judge self-consistency metric. Two-stage: run map_populations.py first (depends_on:
@@ -143,6 +144,9 @@ python scripts/analyze/summarize_generation_metadata.py --country swedish --verb
 # GUI per_combo dispatch judges ONE combo per node run.
 python scripts/analyze/analyze_persona_realism.py --country swedish
 python scripts/analyze/analyze_persona_realism.py --slug swedish_all_pick_claude_sonnet --sample 200 --force
+# --rounds overrides the judge rounds per persona (default 3); --judge-model picks a model_options
+# entry; --workers sets the fan-out width; --output-base/--dpi as usual
+python scripts/analyze/analyze_persona_realism.py --country swedish --rounds 5 --judge-model claude-sonnet-5 --workers 8
 
 # Launch the GUI: the config-driven Flow Runner (requires pip install -e ".[gui]")
 python -m population_synthetic.gui.main

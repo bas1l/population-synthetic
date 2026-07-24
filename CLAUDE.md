@@ -95,7 +95,7 @@ every combination **plus the SCB real reference as a competitor** on a per-combi
 rate (bootstrap CI), typicality dispersion vs SCB (Levene), and a judge self-reliability metric
 (ICC / Krippendorff's α — self-consistency, **not** validity; the config-driven hard-rules subset is
 the only validity anchor); judge model + params config-driven in `config/analysis/persona_realism/`,
-cost via `model_pricing.yaml` (needs the `[analysis]` extra),
+cost via `model_pricing.yaml`,
 and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 

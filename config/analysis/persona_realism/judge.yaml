@@ -10,11 +10,14 @@
 
 # Judge model: the raw string passed to `claude -p ... --model <judge_model>`.
 # Must match a row key in config/analysis/model_pricing.yaml for cost lookup.
-judge_model: "claude-fable-5"
+# Default is Sonnet 5: it is the best coherence-judge tier (coherence judging
+# peaks at the Sonnet tier and inverts above it) with low latency and low cost.
+# Fable remains a selectable option but is the slowest and most expensive.
+judge_model: "claude-sonnet-5"
 
-# GUI dropdown options (Claude family only). The first entry is the default and
-# must equal judge_model. Each must resolve on the account before use (Fable is
-# plan-dependent; smoke-test before wiring -- see the plan Manual Verification).
+# GUI dropdown options (Claude family only). judge_model must be one of these.
+# Each must resolve on the account before use (Fable is plan-dependent; smoke-test
+# before wiring -- see the plan Manual Verification).
 model_options:
   - "claude-fable-5"
   - "claude-opus-4-8"
@@ -65,6 +68,14 @@ reliability:
 
 # Parallel judge-call fan-out (ThreadPoolExecutor max_workers).
 workers: 8
+
+# Subprocess wall-clock timeout (seconds) per judge call, threaded into the
+# ClaudeCodeClient the judge factory constructs. 600 s is a generous ceiling that
+# also covers the slowest *selectable* judge (Fable/Opus single turns can run for
+# minutes on hard personas) if one is chosen; Sonnet (the new default) finishes in
+# seconds. The client's own 120 s default was too tight for the slow tiers and
+# caused whole rounds to fail, so the config threads this value in explicitly.
+timeout_seconds: 600
 
 # Prompt template, resolved relative to this config file's directory.
 prompt_template: "judge_prompt.md"

@@ -123,13 +123,20 @@ def _provenance_meta(cfg: JudgeConfig) -> dict[str, Any]:
     }
 
 
-def _pricing_meta(pricing: PricingTable) -> dict[str, str]:
+def _pricing_meta(pricing: PricingTable) -> dict[str, Any]:
     """The pricing-provenance stamps carried into every report."""
-    return {
+    meta: dict[str, Any] = {
         "observed_date": pricing.observed_date,
         "source": pricing.source,
         "currency": pricing.currency,
     }
+    if pricing.cache_multipliers is not None:
+        meta["cache_multipliers"] = dict(pricing.cache_multipliers)
+        meta["cache_note"] = (
+            "Cached input is priced at the config cache_multipliers relative to the "
+            "base input rate (read x, write x); uncached input/output at the base rates."
+        )
+    return meta
 
 
 # --------------------------------------------------------------------------- #
@@ -185,6 +192,8 @@ def _combo_cost(
     input_tokens: list[int | None] = []
     output_tokens: list[int | None] = []
     total_tokens: list[int | None] = []
+    cache_read_tokens: list[int | None] = []
+    cache_creation_tokens: list[int | None] = []
     costs: list[float] = []
     n_calls = 0
     n_costed = 0
@@ -194,7 +203,15 @@ def _combo_cost(
         input_tokens.append(pm.input_tokens)
         output_tokens.append(pm.output_tokens)
         total_tokens.append(pm.total_tokens)
-        usd = persona_cost(judge_model, pm.input_tokens, pm.output_tokens, pricing)  # raises if unpriceable
+        cache_read_tokens.append(pm.cache_read_tokens)
+        cache_creation_tokens.append(pm.cache_creation_tokens)
+        # Cache tokens are priced via the config `cache_multipliers` block; passing
+        # them makes the input-cost line reflect the (prompt-cached) judge prompt.
+        usd = persona_cost(
+            judge_model, pm.input_tokens, pm.output_tokens, pricing,
+            cache_read_tokens=pm.cache_read_tokens,
+            cache_creation_tokens=pm.cache_creation_tokens,
+        )  # raises if unpriceable
         if usd is not None:
             costs.append(usd)
             n_costed += 1
@@ -212,6 +229,8 @@ def _combo_cost(
         "input_tokens": _sum_optional(input_tokens),
         "output_tokens": _sum_optional(output_tokens),
         "total_tokens": _sum_optional(total_tokens),
+        "cache_read_tokens": _sum_optional(cache_read_tokens),
+        "cache_creation_tokens": _sum_optional(cache_creation_tokens),
         "usd": sum(costs) if costs else None,
         "n_calls": n_calls,
         "n_personas_costed": n_costed,

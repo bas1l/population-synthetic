@@ -116,11 +116,12 @@ tasks:
                                   # its real reference (a valid 2-point map); the cross-combo
                                   # ranking is a CLI-batch capability (broad filters, one process)
     supports_force: true          # node shows a Force checkbox -> --force (re-judge + re-write)
-    force: false
+    force: true
     options:
-      judge-model:                # --judge-model (blank = config default claude-fable-5)
+      judge-model: claude-sonnet-5 # --judge-model (blank = config default claude-fable-5)
       sample:                     # --sample (blank = judge every persona; int caps per combo)
-      workers:                    # --workers (blank = config default fan-out width)
+      rounds: '3'                 # --rounds (blank = config default n_rounds, currently 3)
+      workers: '2'                # --workers (blank = config default fan-out width)
       output-base:                # --output-base (blank = script default)
     depends_on: [mapping]
 

@@ -38,6 +38,10 @@ class LLMInteractionEntry:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    # Prompt-cache token telemetry (Anthropic). Optional/None-default so existing
+    # writers are unaffected; populated from ``last_metadata`` where available.
+    cache_read_tokens: int | None = None
+    cache_creation_tokens: int | None = None
     error_category: str | None = None
 
 
