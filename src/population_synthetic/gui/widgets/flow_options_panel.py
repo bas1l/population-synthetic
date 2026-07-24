@@ -64,6 +64,13 @@ _PERSONA_REALISM_CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_re
 # is the source of truth for any option list, never a hardcoded table here.
 _OPTION_ENUMS: dict[str, list[tuple[str, object]]] = {}
 
+# Per-option display-label overrides (key -> label). Absent keys fall back to
+# the title-cased key. Only changes the GUI label; the option key / CLI flag /
+# config are untouched.
+_OPTION_LABELS: dict[str, str] = {
+    "real-sample": "Real Database N Sample",
+}
+
 
 def _populate_judge_model_enum() -> None:
     """Fill ``_OPTION_ENUMS["judge-model"]`` from the persona_realism judge config.
@@ -144,6 +151,9 @@ def option_widget_kind(key: str, value: Any) -> str:
 
 
 def _option_header(key: str) -> str:
+    override = _OPTION_LABELS.get(key)
+    if override is not None:
+        return override
     return key.replace("-", " ").replace("_", " ").title()
 
 

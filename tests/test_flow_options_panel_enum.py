@@ -41,3 +41,10 @@ def test_judge_model_enum_populated_from_config() -> None:
 def test_judge_model_dispatches_to_enum_widget() -> None:
     """A null judge-model value still resolves to the combo-box ('enum') shape."""
     assert panel.option_widget_kind("judge-model", None) == "enum"
+
+
+def test_option_header_uses_label_override() -> None:
+    """An overridden key gets its friendly label; others fall back to title-case."""
+    assert panel._OPTION_LABELS["real-sample"] == "Real Database N Sample"
+    assert panel._option_header("real-sample") == "Real Database N Sample"
+    assert panel._option_header("workers") == "Workers"
