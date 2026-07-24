@@ -22,16 +22,19 @@ to have run first. Judge model, rounds, temperature, sampling size, and bootstra
 params are config-driven (``config/analysis/persona_realism/``); cost per combo
 reuses ``config/analysis/model_pricing.yaml`` (fail-fast on a missing pricing row).
 
-Outputs, under the analysis-stage persona_realism folder:
-    {combo}/persona_XXXXX.json       per-persona verdict cache (combo root; resumable)
-    {combo}/persona_XXXXX.jsonl      per-persona token/timing telemetry (1:1 with the cache)
-    {combo}/{combo}.csv / .json      per-combination stats + cost + validation
-    {combo}/typicality.png/.svg      per-combo typicality distribution
-    {combo}/clash_taxonomy.png/.svg  per-combo attribute-clash taxonomy
-    real_{country}/...               the judged real reference (same layout)
-    headline_map.png/.svg            impossibility rate x typicality-dispersion-vs-SCB
-    realism_summary.csv              one row per competitor
-    run_report.json                  provenance + per-combo summaries + plotted points
+Outputs are nested one level per country (``persona_realism/{country}/...``), matching
+the repo's other per-country analysis outputs:
+    {country}/{combo}/persona_XXXXX.json    per-persona verdict cache (combo root; resumable)
+    {country}/{combo}/persona_XXXXX.jsonl   per-persona token/timing telemetry (1:1 with the cache)
+    {country}/{combo}/{combo}.csv / .json   per-combination stats + cost + validation
+    {country}/{combo}/typicality.png/.svg   per-combo typicality distribution
+    {country}/{combo}/clash_taxonomy.png/.svg  per-combo attribute-clash taxonomy
+    {country}/real_{country}/...            the judged real reference (same layout)
+    {country}/headline_map.png/.svg         impossibility rate x typicality-dispersion-vs-real
+    {country}/realism_summary.csv           one row per competitor (this country)
+    {country}/run_report.json               provenance + per-combo summaries + plotted points
+The run-level headline artifacts are per-country: a multi-country CLI batch emits one
+headline map / summary / run report under each selected country's folder.
 
 Usage:
     python scripts/analyze/analyze_persona_realism.py
@@ -49,7 +52,8 @@ Usage:
 --output-base              Base output directory. Default: experiment_defaults.yaml.
 --force                    Re-judge personas and re-write artifacts (default: resume/skip).
 --workers                  Override the config judge-call fan-out width.
---sample                   Override the config per-combo persona sample size.
+--sample                   Override the config per-combo persona sample size (synthetic combos).
+--real-sample              Cap personas judged for the real reference population (real_{country}).
 --rounds                   Override the config judge rounds per persona (n_rounds; must be >= 1).
 --judge-model              Override the config judge model (must be in model_options).
 --dpi                      PNG render resolution. Default: 200.
@@ -133,7 +137,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--workers", type=int, default=None,
                         help="Override the config judge-call fan-out width (ThreadPool workers).")
     parser.add_argument("--sample", type=int, default=None,
-                        help="Override the config per-combo persona sample size.")
+                        help="Override the config per-combo persona sample size (synthetic combos).")
+    parser.add_argument("--real-sample", type=int, default=None, dest="real_sample",
+                        help="Cap personas judged for the real reference population "
+                             "(blank = config default, currently 100).")
     parser.add_argument("--rounds", type=int, default=None, dest="rounds",
                         help="Judge rounds per persona (blank = config default, currently 3). Must be >= 1.")
     parser.add_argument("--judge-model", dest="judge_model", default=None,
@@ -186,6 +193,10 @@ def _apply_overrides(cfg: JudgeConfig, args: argparse.Namespace) -> JudgeConfig:
         if args.sample < 1:
             raise ValueError(f"--sample must be >= 1, got {args.sample}")
         updates["sample_size"] = args.sample
+    if args.real_sample is not None:
+        if args.real_sample < 1:
+            raise ValueError(f"--real-sample must be >= 1, got {args.real_sample}")
+        updates["real_sample_size"] = args.real_sample
     if args.rounds is not None:
         if args.rounds < 1:
             raise ValueError(f"--rounds must be >= 1, got {args.rounds}")
@@ -273,6 +284,7 @@ def _run_one_combo(
     force: bool,
     hard_rules: Any,
     pricing: Any,
+    sample_size_override: int | None = None,
 ) -> ComboArtifacts:
     """Judge (top-up if needed) then compute + render one combination's artifacts.
 
@@ -293,7 +305,8 @@ def _run_one_combo(
     report_exists = report_path.exists()
 
     summary = run_combo_judgements(
-        individuals, label, analyzed_attrs, out_dir, cfg, force=force, logger=logger,
+        individuals, label, analyzed_attrs, out_dir, cfg, force=force,
+        sample_size_override=sample_size_override, logger=logger,
     )
     if summary.failed:
         logger.warning(
@@ -387,28 +400,35 @@ def main() -> None:
 
     logger.info(
         "persona_realism: %d combo(s) across %d country/countries; judge_model=%s "
-        "n_rounds=%d workers=%d sample=%s",
+        "n_rounds=%d workers=%d sample=%s real_sample=%s",
         len(combos), len(combos_by_country), cfg.judge_model, cfg.n_rounds, cfg.workers,
-        cfg.sample_size,
+        cfg.sample_size, cfg.real_sample_size,
     )
 
-    all_artifacts: list[ComboArtifacts] = []
+    # One country per iteration: judge that country's real reference, then its synthetic
+    # combos against it, then write that country's own headline map / summary / run report
+    # under persona_realism/{country}/ (each country has its own real reference marker, so
+    # a multi-country batch produces one anchored map per country -- no shared/unmarked map).
+    total_ranked = 0
     for country in sorted(combos_by_country):
         analyzed_attrs = scheme_attributes(country)
         real_label = f"real_{country}"
+        country_root = out_root / country
         print(f"=== {country.upper()} :: {real_label} (real reference) ===")
 
         real_individuals = _load_individuals(
             mapping_dir / f"{real_label}.json", what=f"real {country}",
         )
-        # The real reference is its own dispersion baseline (no scb_ref); it is
-        # flagged the headline reference below via scb_label.
+        # The real reference is its own dispersion baseline (no scb_ref) and is capped
+        # independently by real_sample_size (deterministic first-N prefix, not the seeded
+        # sample_size draw used for synthetic combos); it is the headline reference below.
         real_ca = _run_one_combo(
             label=real_label, individuals=real_individuals, analyzed_attrs=analyzed_attrs,
-            out_dir=out_root / real_label, scb_ref=None,
+            out_dir=country_root / real_label, scb_ref=None,
             cfg=cfg, dpi=args.dpi, force=args.force, hard_rules=hard_rules, pricing=pricing,
+            sample_size_override=cfg.real_sample_size,
         )
-        all_artifacts.append(real_ca)
+        country_artifacts: list[ComboArtifacts] = [real_ca]
         scb_ref = real_ca.combo  # this country's real ComboRealism (== load_combo_realism)
 
         for slug, _c, strategy, model in combos_by_country[country]:
@@ -416,33 +436,26 @@ def main() -> None:
             individuals = _load_individuals(mapping_dir / f"{slug}.json", what=f"synthetic {slug}")
             ca = _run_one_combo(
                 label=slug, individuals=individuals, analyzed_attrs=analyzed_attrs,
-                out_dir=out_root / slug, scb_ref=scb_ref,
+                out_dir=country_root / slug, scb_ref=scb_ref,
                 cfg=cfg, dpi=args.dpi, force=args.force, hard_rules=hard_rules, pricing=pricing,
             )
-            all_artifacts.append(ca)
+            country_artifacts.append(ca)
 
-    # Cross-combo headline map + combined CSV + run report. The reference y==0 point
-    # is marked only when the run covers a single country (one real reference); a
-    # multi-country CLI batch produces the map without a marked reference.
-    if len(combos_by_country) == 1:
-        scb_label: str | None = f"real_{next(iter(combos_by_country))}"
-    else:
-        scb_label = None
-        logger.warning(
-            "multi-country run (%s): the headline map is emitted without a marked SCB "
-            "reference point; run one country at a time for the reference-anchored map.",
-            sorted(combos_by_country),
+        # Per-country headline map + combined CSV + run report. This country's real
+        # reference is always the marked y==0 point (one reference per country).
+        written = write_headline_map(
+            country_artifacts, country_root,
+            cfg=cfg, dpi=args.dpi, force=args.force, scb_label=real_label,
+            pricing=pricing, logger=logger,
         )
+        total_ranked += len(country_artifacts)
+        print(f"[{country}] headline map + summary written under {country_root} "
+              f"({len(written)} file(s)).")
 
-    written = write_headline_map(
-        all_artifacts, out_root,
-        cfg=cfg, dpi=args.dpi, force=args.force, scb_label=scb_label,
-        pricing=pricing, logger=logger,
-    )
     print()
-    print(f"Headline map + summary written under {out_root} ({len(written)} file(s)).")
-    print(f"Competitors ranked: {len(all_artifacts)} "
-          f"({len(combos_by_country)} real reference(s) + {len(combos)} synthetic combo(s)).")
+    print(f"Competitors ranked: {total_ranked} "
+          f"({len(combos_by_country)} real reference(s) + {len(combos)} synthetic combo(s)) "
+          f"across {len(combos_by_country)} country/countries.")
 
 
 if __name__ == "__main__":

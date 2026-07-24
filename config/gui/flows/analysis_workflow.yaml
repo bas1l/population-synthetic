@@ -119,7 +119,8 @@ tasks:
     force: true
     options:
       judge-model: claude-sonnet-5 # --judge-model (blank = config default claude-fable-5)
-      sample:                     # --sample (blank = judge every persona; int caps per combo)
+      sample:                     # --sample (blank = judge every synthetic persona; int caps per combo)
+      real-sample:                # --real-sample (blank = config default 100; caps the real_{country} reference)
       rounds: '3'                 # --rounds (blank = config default n_rounds, currently 3)
       workers: '2'                # --workers (blank = config default fan-out width)
       output-base:                # --output-base (blank = script default)

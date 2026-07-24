@@ -153,10 +153,11 @@ def test_persona_realism_end_to_end(tmp_path):
     cfg = _cfg()
     attrs = scheme_attributes("swedish")
     out_root = tmp_path / "persona_realism"
+    country_root = out_root / "swedish"          # nested one level per country
     slug = "swedish_all_pick_claude_haiku"
 
     # --- real reference -------------------------------------------------------
-    real_dir = out_root / "real_swedish"
+    real_dir = country_root / "real_swedish"
     real_summary = run_combo_judgements(
         _real_population(attrs), "real_swedish", attrs, real_dir, cfg,
         client_factory=_stub_factory(),
@@ -169,7 +170,7 @@ def test_persona_realism_end_to_end(tmp_path):
     )
 
     # --- synthetic combo (real reference as scb_ref) --------------------------
-    syn_dir = out_root / slug
+    syn_dir = country_root / slug
     syn_summary = run_combo_judgements(
         _synthetic_population(attrs), slug, attrs, syn_dir, cfg,
         client_factory=_stub_factory(),
@@ -207,15 +208,15 @@ def test_persona_realism_end_to_end(tmp_path):
     assert combo_report["cost"]["usd"] is not None
     assert combo_report["cost_coverage"]["status"] == "complete"
 
-    # --- cross-combo headline map + summary + run report ----------------------
+    # --- per-country headline map + summary + run report ----------------------
     written = A.write_headline_map(
-        [real_ca, syn_ca], out_root, cfg=cfg, dpi=80, force=True,
+        [real_ca, syn_ca], country_root, cfg=cfg, dpi=80, force=True,
         scb_label="real_swedish", pricing=_PRICING,
     )
-    assert (out_root / "headline_map.png").is_file()
-    assert (out_root / "headline_map.svg").is_file()
-    assert (out_root / "realism_summary.csv").is_file()
-    run_report = json.loads((out_root / "run_report.json").read_text(encoding="utf-8"))
+    assert (country_root / "headline_map.png").is_file()
+    assert (country_root / "headline_map.svg").is_file()
+    assert (country_root / "realism_summary.csv").is_file()
+    run_report = json.loads((country_root / "run_report.json").read_text(encoding="utf-8"))
     points = {p["label"]: p for p in run_report["headline_map"]["points"]}
     assert points["real_swedish"]["is_reference"] is True
     assert points["real_swedish"]["dispersion_distance"] == 0.0
@@ -241,6 +242,38 @@ def test_runner_resumes_without_force(tmp_path):
         client_factory=_stub_factory(),
     )
     assert second.skipped == 4 and second.requested == 0
+
+
+def test_real_sample_size_override_selects_first_n_prefix(tmp_path):
+    """``sample_size_override`` caps the real combo to the first-N personas (deterministic
+    prefix, not the seeded draw), while a synthetic combo with ``sample_size=None`` judges
+    all. Guards the real-reference cap wiring: real population of 5, override=2 -> only
+    personas 00000, 00001 are judged (indices 0..N-1)."""
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    cfg = dataclasses.replace(_cfg(), sample_size=None)  # synthetic combos judge all
+
+    # --- real reference: population of 5, capped to first 2 by the override -----
+    real_pop = [_persona(attrs, marker_attr, f"TYP{i}") for i in range(5)]
+    real_dir = tmp_path / "swedish" / "real_swedish"
+    real_summary = run_combo_judgements(
+        real_pop, "real_swedish", attrs, real_dir, cfg,
+        client_factory=_stub_factory(), sample_size_override=2,
+    )
+    assert real_summary.n_selected == 2 and real_summary.written == 2
+    # First-N prefix: personas 00000 + 00001 judged; 00002..00004 are not.
+    assert (real_dir / "persona_00000.json").is_file()
+    assert (real_dir / "persona_00001.json").is_file()
+    for idx in (2, 3, 4):
+        assert not (real_dir / f"persona_{idx:05d}.json").exists()
+
+    # --- synthetic combo: no override, sample_size=None -> all 4 judged ---------
+    syn_dir = tmp_path / "swedish" / "swedish_all_pick_claude_haiku"
+    syn_summary = run_combo_judgements(
+        _synthetic_population(attrs), "swedish_all_pick_claude_haiku", attrs, syn_dir, cfg,
+        client_factory=_stub_factory(),
+    )
+    assert syn_summary.n_selected == 4 and syn_summary.written == 4
 
 
 def test_runner_tops_up_rounds_and_appends_telemetry(tmp_path):
@@ -345,7 +378,8 @@ def test_cli_combo_dispatch_tops_up_even_when_report_exists(tmp_path, monkeypatc
 
     calls: dict[str, object] = {}
 
-    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False, logger=None):
+    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False,
+                    sample_size_override=None, logger=None):
         calls["runner_called"] = True
         calls["force"] = force
         return _summary(combo_label, o, topped_up=len(individuals))  # runner tops up
@@ -382,7 +416,8 @@ def test_cli_combo_dispatch_skips_rewrite_when_nothing_changed(tmp_path, monkeyp
 
     calls: dict[str, object] = {}
 
-    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False, logger=None):
+    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False,
+                    sample_size_override=None, logger=None):
         calls["runner_called"] = True
         return _summary(combo_label, o, skipped=len(individuals))  # everything already cached
 

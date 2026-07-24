@@ -125,6 +125,7 @@ class JudgeConfig:
     severity_weights: dict[str, float]
     impossibility_severities: tuple[str, ...]
     sample_size: int | None
+    real_sample_size: int | None
     bootstrap: dict[str, Any]
     workers: int
     timeout_seconds: int
@@ -146,7 +147,8 @@ class JudgeConfig:
         required = [
             "judge_model", "model_options", "n_rounds", "temperature",
             "severity_weights", "impossibility_severities", "sample_size",
-            "bootstrap", "workers", "timeout_seconds", "prompt_template",
+            "real_sample_size", "bootstrap", "workers", "timeout_seconds",
+            "prompt_template",
         ]
         missing = [key for key in required if key not in data]
         if missing:
@@ -172,6 +174,14 @@ class JudgeConfig:
             if sample_size < 1:
                 raise ValueError(f"judge config 'sample_size' must be >= 1 or null, got {sample_size}")
 
+        real_sample_size = data["real_sample_size"]
+        if real_sample_size is not None:
+            real_sample_size = int(real_sample_size)
+            if real_sample_size < 1:
+                raise ValueError(
+                    f"judge config 'real_sample_size' must be >= 1 or null, got {real_sample_size}"
+                )
+
         return cls(
             judge_model=str(data["judge_model"]),
             model_options=tuple(str(m) for m in data["model_options"]),
@@ -180,6 +190,7 @@ class JudgeConfig:
             severity_weights=dict(data["severity_weights"]),
             impossibility_severities=tuple(str(s) for s in data["impossibility_severities"]),
             sample_size=sample_size,
+            real_sample_size=real_sample_size,
             bootstrap=dict(data["bootstrap"]),
             workers=workers,
             timeout_seconds=timeout_seconds,
@@ -238,6 +249,21 @@ def _select_indices(n: int, sample_size: int | None, seed: Any) -> list[int]:
         return list(range(n))
     rng = random.Random(seed)
     return sorted(rng.sample(range(n), sample_size))
+
+
+def _select_prefix_indices(n: int, sample_size: int | None) -> list[int]:
+    """Choose the first *sample_size* population indices (0..N-1); all if unbounded.
+
+    Deterministic FIRST-N prefix, NOT seeded random (contrast :func:`_select_indices`).
+    Used only for the real-reference cap (``sample_size_override``): the SCB population
+    is already an i.i.d. sample, so a prefix is a valid random subsample, it is
+    reproducible across runs, and it reuses any already-cached prefix personas -- so the
+    round-count-aware resume/top-up gate selects the same personas on every run.
+    ``sample_size`` null or >= population size -> all personas (no error).
+    """
+    if sample_size is None or sample_size >= n:
+        return list(range(n))
+    return list(range(sample_size))
 
 
 def _record_call(
@@ -435,6 +461,7 @@ def run_combo_judgements(
     cfg: JudgeConfig,
     *,
     force: bool = False,
+    sample_size_override: int | None = None,
     client_factory: Callable[[], Any] | None = None,
     logger: logging.Logger | None = None,
 ) -> RunnerSummary:
@@ -458,6 +485,13 @@ def run_combo_judgements(
     force:
         Re-judge every selected persona from scratch, truncating both the verdict
         json and the telemetry jsonl (ignores any cached rounds).
+    sample_size_override:
+        When not ``None``, overrides ``cfg.sample_size`` for THIS call and selects
+        the personas as a deterministic FIRST-N prefix (indices 0..N-1) rather than
+        the seeded random draw. Used for the real-reference cap (``real_sample_size``):
+        the SCB population is already an i.i.d. sample, so a prefix is a valid random
+        subsample, reproducible across runs, and reuses already-cached prefix personas.
+        The synthetic combos leave this ``None`` and keep the seeded ``sample_size`` draw.
     client_factory:
         Zero-arg factory returning a judge client (duck-typed ``generate_content``
         + ``last_metadata`` + optional ``close``). Defaults to a real
@@ -475,7 +509,12 @@ def run_combo_judgements(
 
     system_str, user_template = load_prompt_template(cfg.prompt_template)
 
-    selected = _select_indices(len(population), cfg.sample_size, cfg.bootstrap.get("seed"))
+    # The real-reference cap (sample_size_override) uses a deterministic first-N prefix;
+    # synthetic combos use the seeded random draw governed by cfg.sample_size.
+    if sample_size_override is not None:
+        selected = _select_prefix_indices(len(population), sample_size_override)
+    else:
+        selected = _select_indices(len(population), cfg.sample_size, cfg.bootstrap.get("seed"))
 
     # Round-count-aware resume gate. For each selected persona decide skip / top-up /
     # fresh, recording the already-cached rounds (``existing[idx]``) to extend and

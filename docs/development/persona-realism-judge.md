@@ -52,17 +52,22 @@ CLI flags (`--help` is authoritative):
 | `--output-base DIR` | Analysis-stage parent (default: `experiment_defaults.yaml` `output_base`). |
 | `--force` | Re-judge personas from scratch and re-write artifacts (truncates each persona's verdict json + telemetry jsonl). Default: resume — the runner is always consulted; a persona is skipped only once it holds `>= n_rounds` cached rounds, else the shortfall is topped up. Artifacts are re-written only when the runner changed the cache, the report is missing, or under `--force`. |
 | `--workers N` | Override the config judge-call fan-out width. |
-| `--sample N` | Override the config per-combo persona sample size. |
+| `--sample N` | Override the config per-combo persona sample size (**synthetic combos**). |
+| `--real-sample N` | Cap personas judged for the **real reference** population (`real_{country}`). Blank = config default (`real_sample_size`, currently 100). First-N prefix, not the seeded `--sample` draw. |
 | `--rounds N` | Override the config judge rounds per persona (`n_rounds`; must be ≥ 1). |
 | `--judge-model MODEL` | Override the config judge model (must be in `model_options`). |
 | `--dpi N` | PNG resolution (default 200). |
 
 Outputs land under `03_Analysis/persona_realism/` (resolved via
-`analysis_output_dir("persona_realism", base)`). Each combo directory holds, **at its root** (no
-`raw/` subdir), one `persona_XXXXX.json` verdict cache **and** its sibling `persona_XXXXX.jsonl`
-per-persona telemetry (1:1 — a persona has a `.jsonl` iff it has a cached verdict), plus the per-combo
-CSV/JSON + figures; the cross-combo `headline_map.png/.svg` + `run_report.json` sit at the
-`persona_realism/` root.
+`analysis_output_dir("persona_realism", base)`), **nested one level per country** to match the repo's
+other per-country analysis outputs: `persona_realism/<country>/<combo_label>/…` (e.g.
+`persona_realism/swedish/real_swedish/…` and `persona_realism/swedish/swedish_all_pick_claude_sonnet/…`).
+Each combo directory holds, **at its root** (no `raw/` subdir), one `persona_XXXXX.json` verdict cache
+**and** its sibling `persona_XXXXX.jsonl` per-persona telemetry (1:1 — a persona has a `.jsonl` iff it
+has a cached verdict), plus the per-combo CSV/JSON + figures. The run-level `headline_map.png/.svg`,
+`realism_summary.csv` + `run_report.json` are **per-country**, written under `persona_realism/<country>/`;
+a multi-country CLI batch emits one headline map / summary / run report per selected country (each
+anchored on that country's own real reference).
 
 ### GUI headline-map limitation
 
@@ -70,8 +75,9 @@ The registry dispatch is `per_combo`, so a GUI node run judges **one combination
 (that combo + its country's real reference — a valid 2-point map). The **full cross-combo headline
 map** (every combination on one map) is a **CLI-batch capability**: run the script once with broad
 filters so a single process enumerates every combo, e.g. `analyze_persona_realism.py --country
-swedish`. A multi-country batch emits the map without a marked SCB reference marker (the `y==0`
-reference is only set for a single-country run).
+swedish`. The headline map is **per-country** — each country's map is anchored on that country's own
+real reference (the `y==0` marker), so a multi-country batch produces one anchored map per country
+(under each `persona_realism/<country>/`).
 
 ## Config knobs — `config/analysis/persona_realism/`
 
@@ -87,7 +93,8 @@ All judge behaviour is config-driven; a missing or malformed value **raises** (n
 | `temperature` | Judge sampling temperature (default 0.0 — cold, for reproducibility). |
 | `severity_weights` | Weight per severity when folding clashes into a per-persona clash score (S1 = 0). |
 | `impossibility_severities` | Which severities force `can_exist=false` at aggregation (default `[S3]`). |
-| `sample_size` | Personas judged per combination (nullable → all). Caps judge cost via seeded sampling. |
+| `sample_size` | Personas judged per **synthetic** combination (nullable → all). Caps judge cost via seeded sampling. |
+| `real_sample_size` | Personas judged for the **real reference** combo (`real_{country}`) only (nullable → all; default 100). The real API-sourced population (~10,000) dwarfs the synthetic combos, so it is capped independently. Selected as a deterministic **first-N prefix** (indices 0..N-1, not seeded random): the SCB population is already an i.i.d. sample, so a prefix is a valid random subsample, is reproducible across runs, and reuses already-cached prefix personas. |
 | `bootstrap` | `{iterations, seed, ci_level}` for the impossibility-rate CI (seed recorded in run metadata). |
 | `reliability.typicality_level` | Krippendorff's-α measurement level for typicality: `ordinal` (default) or `interval`. `can_exist` reliability is always nominal (not configurable). |
 | `workers` | Parallel judge-call fan-out (ThreadPool `max_workers`). |
