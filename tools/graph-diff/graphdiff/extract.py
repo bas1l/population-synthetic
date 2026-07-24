@@ -86,6 +86,38 @@ def _resolve_package(tree_root: Path, package_path: str) -> tuple[Path, str]:
     )
 
 
+def iter_package_modules(
+    tree_root: Path | str, package_path: str
+) -> Iterator[tuple[str, Path]]:
+    """Yield ``(dotted_module_name, absolute_file_path)`` for every ``.py`` in a package.
+
+    Resolves ``package_path`` under ``tree_root`` with the exact same rules as
+    :func:`extract_graph` (filesystem path *or* dotted name), then walks every
+    ``.py`` file under the package directory and maps each to the dotted module
+    name grimp would assign it: ``__init__.py`` maps to its package's name, and
+    every other file maps to ``<package>.<...>.<stem>``.
+
+    This is the single source of truth for path→module resolution, shared by the
+    graph extractor and the source-capture stage so the two never diverge.
+
+    Yielded in sorted-path order for deterministic downstream output.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``package_path`` does not resolve to a directory under ``tree_root``.
+    """
+    source_root, package_name = _resolve_package(Path(tree_root), package_path)
+    pkg_dir = source_root.joinpath(*package_name.split("."))
+    for py_file in sorted(pkg_dir.rglob("*.py")):
+        rel = py_file.relative_to(source_root).with_suffix("")
+        parts = list(rel.parts)
+        if parts and parts[-1] == "__init__":
+            parts = parts[:-1]
+        dotted = ".".join(parts)
+        yield dotted, py_file.resolve()
+
+
 @contextlib.contextmanager
 def _package_on_path(source_root: Path, top_level: str) -> Iterator[None]:
     """Temporarily front-load ``source_root`` on ``sys.path`` for grimp's finder.

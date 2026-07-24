@@ -40,11 +40,17 @@ if str(_TOOL_ROOT) not in sys.path:
     sys.path.insert(0, str(_TOOL_ROOT))
 
 from graphdiff.diff import compute_delta  # noqa: E402 — after sys.path bootstrap
+from graphdiff.explorer import write_html  # noqa: E402
 from graphdiff.extract import extract_graph  # noqa: E402
 from graphdiff.render import ALL_FORMATS, render_delta  # noqa: E402
+from graphdiff.sources import capture_sources  # noqa: E402
 from graphdiff.worktree import worktree  # noqa: E402
 
 _DEFAULT_OUTPUT = "graph-diff-out"
+
+# The interactive HTML explorer is an opt-in format (source capture is extra
+# work) and is NOT part of the default --format set.
+_HTML_FORMAT = "html"
 
 
 def _parse_csv(value: str | None) -> list[str]:
@@ -121,7 +127,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--format",
         default=",".join(ALL_FORMATS),
-        help="Comma-separated subset of {svg,png,dot,json,md}. Defaults to all.",
+        help="Comma-separated subset of {svg,png,dot,json,md} plus the opt-in "
+        "'html' (a self-contained, offline interactive explorer). Defaults to the "
+        "five static formats; 'html' must be requested explicitly and is "
+        "incompatible with --depth.",
     )
     parser.add_argument(
         "--exclude",
@@ -131,20 +140,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _extract_at_ref(
+def _process_ref(
     ref: str,
     repo_root: str | None,
     package_path: str,
     depth: int | None,
     exclude: list[str],
+    capture_html: bool,
 ):
-    """Open a throwaway worktree at ``ref`` and extract the package graph from it.
+    """Open a throwaway worktree at ``ref`` and extract its graph (and, opt, sources).
 
     The worktree is created and torn down within this call; nothing about it
-    escapes. Returns the canonical :class:`~graphdiff.diff.Graph`.
+    escapes. Returns ``(Graph, sources)`` where ``sources`` is the captured
+    ``{module -> ModuleSource}`` map when ``capture_html`` is set, else ``None``.
+    Both the graph and the sources are read from the SAME materialised tree.
     """
     with worktree(ref, repo_root=repo_root) as tree_root:
-        return extract_graph(tree_root, package_path, depth=depth, exclude=exclude)
+        graph = extract_graph(tree_root, package_path, depth=depth, exclude=exclude)
+        sources = capture_sources(tree_root, package_path, exclude) if capture_html else None
+        return graph, sources
 
 
 def _print_summary(
@@ -181,17 +195,43 @@ def main(argv: list[str] | None = None) -> int:
     exclude = _parse_csv(args.exclude)
     out_dir = Path(args.output)
 
+    lowered = {f.lower() for f in formats}
+    capture_html = _HTML_FORMAT in lowered
+    static_formats = [f for f in formats if f.lower() != _HTML_FORMAT]
+
     try:
+        # The html explorer works at full module granularity; --depth collapse is
+        # meaningless for it. Fail loudly rather than silently mislead.
+        if capture_html and args.depth is not None:
+            raise ValueError(
+                "--format html works at full module granularity and is "
+                "incompatible with --depth (a collapsed graph cannot map a node "
+                "back to a single .py file's source). Drop --depth for the html "
+                "explorer, or drop html for a collapsed static diagram."
+            )
+        if not static_formats and not capture_html:
+            raise ValueError(
+                f"No output formats requested. Choose a subset of "
+                f"{list(ALL_FORMATS)} and/or '{_HTML_FORMAT}'."
+            )
+
         head_ref = args.head_ref or _current_branch(args.repo_root)
-        base_graph = _extract_at_ref(
-            args.base_ref, args.repo_root, args.package_path, args.depth, exclude
+        base_graph, base_sources = _process_ref(
+            args.base_ref, args.repo_root, args.package_path, args.depth, exclude, capture_html
         )
-        head_graph = _extract_at_ref(
-            head_ref, args.repo_root, args.package_path, args.depth, exclude
+        head_graph, head_sources = _process_ref(
+            head_ref, args.repo_root, args.package_path, args.depth, exclude, capture_html
         )
         delta = compute_delta(base_graph, head_graph)
         title = f"{args.base_ref} -> {head_ref}"
-        written = render_delta(delta, out_dir, title, formats)
+
+        written: dict[str, Path] = {}
+        if static_formats:
+            written.update(render_delta(delta, out_dir, title, static_formats))
+        if capture_html:
+            written[_HTML_FORMAT] = write_html(
+                delta, base_sources, head_sources, out_dir, title
+            )
     except Exception as exc:  # noqa: BLE001 — CLI boundary: report cleanly, exit nonzero
         print(f"graph-diff error: {exc}", file=sys.stderr)
         return 1

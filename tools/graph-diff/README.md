@@ -69,7 +69,7 @@ python tools/graph-diff/graph_diff.py \
 | `--repo-root` | no | git top-level of cwd | Repository to operate on. |
 | `--depth` | no | full granularity | Collapse each module to its first N dotted components (e.g. `--depth 3` turns `a.b.c.d` into `a.b.c`); edges internal to a collapsed node are dropped. |
 | `--output` | no | `./graph-diff-out` | Directory for the artifacts (created if absent). |
-| `--format` | no | `svg,png,dot,json,md` | Comma-separated subset of the five formats. |
+| `--format` | no | `svg,png,dot,json,md` | Comma-separated subset of the five static formats, **plus the opt-in `html`** (a self-contained interactive explorer — see below). `html` is not in the default set; request it explicitly (may combine with others) and it is **incompatible with `--depth`**. |
 | `--exclude` | no | — | Comma-separated substrings; any module whose name contains one is dropped, along with every edge touching it. |
 
 ### How it works (safe by construction)
@@ -93,9 +93,48 @@ Written into `--output` with fixed names:
 | `graph_delta.png` | Raster image (300 dpi) | The rendered diagram for embedding in docs/PRs. |
 | `graph_delta.json` | JSON | Full node/edge sets (`added`/`removed`/`unchanged`) plus a summary block — machine-readable. |
 | `graph_delta.md` | Markdown | Counts table plus an explicit enumeration of every added/removed edge and node. |
+| `graph_explorer.html` | Self-contained HTML | Opt-in (`--format html`) interactive explorer — see below. Only written when `html` is requested. |
 
 All emitters are deterministic (everything sorted), so artifacts diff cleanly
 between runs.
+
+## Interactive HTML explorer (`--format html`)
+
+`--format html` emits a single **`graph_explorer.html`** that is fully
+**self-contained and offline**: all graph data, the module source at each ref, a
+vanilla-JS force-directed renderer, and the CSS are inlined. There is **no
+server, no CDN, no vendored library, and no external `src`/`href`** — open it by
+double-click and copy it into any repo. (Module names appear only as embedded
+runtime data, exactly as they do in the `.json`/`.md`; the tool's own source
+stays repo-agnostic.)
+
+```bash
+python tools/graph-diff/graph_diff.py \
+  --package-path src/mypkg \
+  --base-ref dev \
+  --head-ref my-feature \
+  --format html \
+  --output graph-diff-out
+```
+
+What you get:
+
+- **The full import graph**, delta-highlighted — added nodes/edges green,
+  removed red (dashed), unchanged grey. Drag the background to **pan**, wheel to
+  **zoom**, drag a node to reposition it.
+- **Click a node** → a right-hand **detail panel** showing:
+  - a **status badge** (added / removed / unchanged),
+  - **Signatures** — AST-extracted top-level `def`/`async def`/`class` and class
+    methods (arg names + return annotation where present),
+  - **Source** — the module's full text at the head ref (collapsible),
+  - **Diff** — a colourised base→head unified diff (green added lines, red
+    removed lines); an added module diffs against an empty base, a removed module
+    against an empty head.
+
+The explorer works at **full module granularity** (one node = one `.py` module)
+so "click → this file's source" is unambiguous. It is therefore **incompatible
+with `--depth`** (a collapsed node cannot map back to a single file); requesting
+both fails loudly rather than silently misleading.
 
 ## Worked example
 
@@ -154,10 +193,12 @@ tools/graph-diff/
 ├── graphdiff/
 │   ├── __init__.py
 │   ├── worktree.py      # temporary detached git-worktree context manager
-│   ├── extract.py       # grimp → canonical (nodes, edges) Graph
+│   ├── extract.py       # grimp → canonical (nodes, edges) Graph; path→module helper
 │   ├── diff.py          # pure set-diff over two Graphs → Delta
-│   └── render.py        # Delta → dot / svg / png / json / md
-└── tests/               # diff, extract, worktree, render, CLI
+│   ├── sources.py       # per-module source + AST signatures at one ref (for html)
+│   ├── render.py        # Delta → dot / svg / png / json / md
+│   └── explorer.py      # Delta + sources → one self-contained graph_explorer.html
+└── tests/               # diff, extract, worktree, render, sources, explorer, CLI
 ```
 
 ## Running the tests

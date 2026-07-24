@@ -311,6 +311,77 @@ Fully additive and self-contained — nothing outside `tools/graph-diff/` is tou
 
 ---
 
+## Phase 5: Interactive HTML explorer (added 2026-07-24)
+
+**Goal:** A self-contained, offline, interactive explorer of the graph delta. Pan/zoom the full
+import graph (delta highlighted); click a node to open a detail panel showing that module's
+signatures, full source, and base→head diff. Pulls the plan's out-of-scope "clickable explorer"
+(previously "future work") into scope on request.
+
+**Started:** 2026-07-24
+**Completed:** 2026-07-24
+
+### Design decisions (user-chosen 2026-07-24)
+- **Graph scope:** the FULL import graph, with the delta highlighted (added=green, removed=red,
+  unchanged=grey). Not delta-only — the user explores the whole structure.
+- **Click detail:** function/class **signatures** (AST-extracted), the full **module source** at the
+  head ref (expandable), and a **base→head unified diff** for changed modules. "Snapshot" = source
+  at each ref.
+- **Delivery:** ONE self-contained `graph_explorer.html` — all graph data, source, and an inlined
+  **vanilla-JS** force-directed renderer + CSS embedded. No server, no CDN, no vendored library; opens
+  offline by double-click and is copyable to any repo (preserves the standalone/repo-agnostic
+  guarantee). Grep of `.py` source stays free of `population_synthetic`/country names (module names
+  appear only as runtime DATA, exactly as they already do in the `.md`/`.json`).
+- **Granularity:** module-level (one node = one `.py` module). The explorer works at full module
+  granularity so "click → this file's source/signatures" is unambiguous; `--depth` collapse does not
+  apply to the `html` format (fail-fast if both are requested, or document as ignored — implementer's
+  call, but must not silently mislead).
+- **Opt-in:** `html` is NOT in the default `--format` set (source capture is extra work); the user
+  requests `--format html` (may combine with others). Source capture runs only when `html` is
+  requested.
+
+### New module contracts (respect the boundaries)
+| Module | Responsibility | Inputs → Outputs | Must NOT know about |
+|--------|----------------|------------------|---------------------|
+| `graphdiff/sources.py` | Capture per-module source text + AST signatures under a tree root | `(tree_root, package_path, exclude) → dict[module → {source, signatures, path, lineno}]` | git, rendering, the *other* ref |
+| `graphdiff/explorer.py` | Serialise `(Delta + base/head sources)` into ONE self-contained interactive HTML | `(Delta, base_sources, head_sources, out_dir, title) → graph_explorer.html` | git, grimp, how the delta/sources were captured |
+
+`graph_diff.py` gains: when `html` ∈ formats, capture sources in EACH worktree (base + head) alongside
+graph extraction, then call `explorer.write_html(...)`. Orchestration only.
+
+### Tasks
+- [x] `graphdiff/sources.py`: walk the package under `tree_root`, map each `.py` file → dotted module
+  name (reuse/extract the path→module helper already in `extract.py` — factored out as the shared
+  `iter_package_modules`), read its source (UTF-8), and AST-parse top-level + class-method
+  `def`/`async def` signatures (arg names + return annotation if present) and `class` defs
+  (name + bases). Apply `--exclude`. Fail-fast on unparseable source (reports the module). Pure of
+  git/rendering.
+- [x] `graphdiff/explorer.py`: build the self-contained HTML. Embeds a JSON dataset: every node with
+  `{id, status: added|removed|unchanged, signatures, head_source, base_source, unified_diff}` (diff
+  precomputed in Python via `difflib.unified_diff`; empty for identical) and every edge with
+  `{src, dst, status}`. Inlines a vanilla-JS force-directed layout (static SVG skeleton animated by
+  JS — no `createElementNS`, so no SVG-namespace URL) with: pan (drag background), zoom (wheel),
+  node drag, and click → right-hand detail panel rendering signatures / collapsible source /
+  colourised unified diff. Colour-blind-safe palette consistent with the SVG output. Deterministic
+  embedding (sorted). No external `src`/`href` to any http(s) host.
+- [x] `graph_diff.py`: added `html` as an opt-in `--format` value; when requested, captures sources in
+  both worktrees (same worktree as extraction) and invokes the explorer. Both worktrees cleaned up on
+  all paths. Rejects `--depth` + `html` loudly.
+- [x] Tests: `test_sources.py` (signature extraction + path→module + exclude on the fixture package);
+  `test_explorer.py` (a known `(Delta, sources)` yields HTML containing the embedded dataset, the node
+  ids, the status classes, the panel scaffold, AND zero external `http(s)`/`src=`/`href=` references);
+  `test_cli.py` extended (`--format html` writes `graph_explorer.html`; `--depth`+`html` exits nonzero).
+- [x] End-to-end: `--package-path src/population_synthetic --base-ref dev --head-ref
+  feature/persona-realism-judge --format html`; produced a 2.85 MB self-contained file (151 nodes /
+  274 edges, 15 added), the `...persona_realism.runner` node present as `added` with 16 signatures and
+  a 31 KB "new file" diff, no external resource links. README updated with the `html` format section.
+
+**Files Modified:** `tools/graph-diff/graphdiff/sources.py` (new), `tools/graph-diff/graphdiff/explorer.py` (new), `tools/graph-diff/graph_diff.py` (extend), `tools/graph-diff/graphdiff/extract.py` (factor path→module helper), `tools/graph-diff/tests/test_sources.py` + `test_explorer.py` (new), `tools/graph-diff/README.md` (extend).
+
+**Dependencies:** Phase 3.
+
+---
+
 ## Modified Files
 
 <!-- auto-generated by /plan-implement — do not edit manually -->
@@ -322,8 +393,10 @@ Fully additive and self-contained — nothing outside `tools/graph-diff/` is tou
 - tools/graph-diff/graph_diff.py
 - tools/graph-diff/graphdiff/__init__.py
 - tools/graph-diff/graphdiff/diff.py
+- tools/graph-diff/graphdiff/explorer.py
 - tools/graph-diff/graphdiff/extract.py
 - tools/graph-diff/graphdiff/render.py
+- tools/graph-diff/graphdiff/sources.py
 - tools/graph-diff/graphdiff/worktree.py
 - tools/graph-diff/requirements.txt
 - tools/graph-diff/tests/fixtures/samplepkg/__init__.py
@@ -332,6 +405,8 @@ Fully additive and self-contained — nothing outside `tools/graph-diff/` is tou
 - tools/graph-diff/tests/fixtures/samplepkg/core.py
 - tools/graph-diff/tests/test_cli.py
 - tools/graph-diff/tests/test_diff.py
+- tools/graph-diff/tests/test_explorer.py
 - tools/graph-diff/tests/test_extract.py
 - tools/graph-diff/tests/test_render.py
+- tools/graph-diff/tests/test_sources.py
 - tools/graph-diff/tests/test_worktree.py

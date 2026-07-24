@@ -77,6 +77,56 @@ def test_identical_refs_empty_delta_exit_zero(tmp_path, capsys):
     assert listing.count("worktree ") == 1  # only the main working tree
 
 
+def test_format_html_writes_explorer(tmp_path):
+    repo = tmp_path / "repo"
+    _make_repo_with_package(repo)
+    out_dir = tmp_path / "out"
+
+    code = graph_diff.main(
+        [
+            "--package-path", "src/tinypkg",
+            "--base-ref", "HEAD",
+            "--head-ref", "HEAD",
+            "--repo-root", str(repo),
+            "--output", str(out_dir),
+            "--format", "html",
+        ]
+    )
+    assert code == 0
+
+    html_path = out_dir / "graph_explorer.html"
+    assert html_path.is_file()
+    doc = html_path.read_text(encoding="utf-8")
+    assert "tinypkg.core" in doc
+    assert "http://" not in doc and "https://" not in doc
+    # html is opt-in only: the static artifacts were not requested here.
+    assert not (out_dir / "graph_delta.json").exists()
+
+    listing = _git(repo, "worktree", "list", "--porcelain").stdout
+    assert listing.count("worktree ") == 1
+
+
+def test_html_with_depth_is_rejected(tmp_path, capsys):
+    repo = tmp_path / "repo"
+    _make_repo_with_package(repo)
+
+    code = graph_diff.main(
+        [
+            "--package-path", "src/tinypkg",
+            "--base-ref", "HEAD",
+            "--head-ref", "HEAD",
+            "--repo-root", str(repo),
+            "--output", str(tmp_path / "out"),
+            "--format", "html",
+            "--depth", "2",
+        ]
+    )
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "graph-diff error" in err
+    assert "incompatible with --depth" in err
+
+
 def test_unresolvable_ref_returns_nonzero(tmp_path, capsys):
     repo = tmp_path / "repo"
     _make_repo_with_package(repo)
