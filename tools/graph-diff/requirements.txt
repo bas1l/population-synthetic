@@ -1,0 +1,6 @@
+# Runtime dependencies for the graph-diff tool.
+# grimp: exact static import-graph extraction (powers import-linter).
+grimp>=3.5,<4
+# graphviz: Python bindings that shell out to the Graphviz `dot` binary
+# (used by the Phase 3 renderer; the `dot` executable must be on PATH).
+graphviz>=0.20,<1

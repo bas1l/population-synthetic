@@ -10,7 +10,30 @@
 observed_date: "2026-07-23"
 source: "OpenRouter model pages + platform.claude.com pricing (see plan appendix)"
 currency: "USD_per_1M_tokens"
+
+# Prompt-cache pricing multipliers, applied to the per-model base INPUT rate.
+# Standard Anthropic prompt caching: a cache READ costs ~0.1x base input, a cache
+# WRITE (creation) ~1.25x base input. Cost adds:
+#   cache_read_tokens  * in_rate * read  / 1e6
+#   + cache_creation_tokens * in_rate * write / 1e6
+# Only consulted when cache tokens are supplied; token-only cost is unchanged.
+cache_multipliers:
+  read: 0.1
+  write: 1.25
+
 models:
+  # --- persona_realism judge models (RAW --model strings) ---
+  # Keyed by the RAW model string passed to the judge CLI (`claude -p ... --model
+  # claude-sonnet-5`), which is also the `judge_model` / `model_options` values in
+  # config/analysis/persona_realism/judge.yaml. Unlike the generation rows below
+  # (keyed by model AXIS id like `claude_sonnet`), the judge is not a generation-axis
+  # model, so its cost lookup joins on the --model string directly via
+  # persona_cost(judge_model, ...). One row per selectable judge dropdown model so
+  # any choice prices correctly (fail-fast otherwise). Anthropic first-party rates.
+  claude-sonnet-5:          {in: 3.00,  out: 15.00}   # Anthropic Sonnet 5 (LLM-as-judge default)
+  claude-opus-4-8:          {in: 5.00,  out: 25.00}   # Anthropic Opus 4.8
+  claude-haiku-4-5:         {in: 1.00,  out: 5.00}    # Anthropic Haiku 4.5
+  claude-fable-5:           {in: 10.00, out: 50.00}   # Anthropic Fable 5 (slowest/most-expensive selectable option)
   claude_sonnet:            {in: 3.00,  out: 15.00}   # Anthropic first-party (Sonnet 5)
   claude_haiku:             {in: 1.00,  out: 5.00}    # Anthropic first-party (Haiku 4.5)
   claude_opus:              {in: 5.00,  out: 25.00}   # Anthropic first-party (Opus 4.8)

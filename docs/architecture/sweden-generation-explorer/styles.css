@@ -324,6 +324,30 @@ svg.show-values .value-chip { display: inline; }
 .prob-row.current .pp { color: var(--accent); }
 .problist.selectable .prob-row.current .radio { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 44%, transparent 48%); }
 
+/* ---- Population statistics tab ---- */
+.sv-meta {
+  display: flex; flex-wrap: wrap; gap: 10px 22px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 16px; margin: 4px 0 20px;
+}
+.sv-meta-item { display: flex; flex-direction: column; gap: 2px; }
+.sv-meta-k { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.sv-meta-v { font-family: var(--font-mono); font-size: .9rem; color: var(--ink); }
+.sv-block {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 16px 14px; margin: 0 0 14px;
+}
+.sv-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 2px; }
+.sv-head h3 { margin: 0; font-size: 1rem; color: var(--ink); }
+.sv-count { margin-left: auto; font-size: .74rem; color: var(--muted); font-family: var(--font-mono); }
+.sv-badge {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .04em;
+  background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--muted);
+  padding: 1px 8px; border-radius: 999px;
+}
+.sv-denom { display: block; font-size: .78rem; color: var(--muted); font-style: italic; margin: 0 0 8px; }
+.sv-error { color: var(--warn); font-family: var(--font-mono); }
+
 footer {
   margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line);
   font-size: .82rem; color: var(--muted); line-height: 1.7;

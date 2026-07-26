@@ -14,6 +14,7 @@ _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 
 _SYNTHETIC_MAPPERS: dict[str, type[AbstractSyntheticMapper]] = {
     "swedish": SwedishSyntheticMapper,
+    "swedish_02": SwedishSyntheticMapper,  # guided-prompt A/B arm (simulation config 006)
     "italian": ItalianSyntheticMapper,
 }
 

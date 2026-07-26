@@ -17,11 +17,22 @@
   marginalizes away</em>.</p>
 
   <div class="viewtabs" role="tablist" aria-label="Explorer view">
-    <button type="button" class="viewtab" role="tab" id="tab-dag" data-view="dag" aria-selected="true" aria-controls="view-dag" tabindex="0">Generation DAG</button>
+    <button type="button" class="viewtab" role="tab" id="tab-stats" data-view="stats" aria-selected="true" aria-controls="view-stats" tabindex="0">Population statistics</button>
+    <button type="button" class="viewtab" role="tab" id="tab-dag" data-view="dag" aria-selected="false" aria-controls="view-dag" tabindex="-1">Generation DAG</button>
     <button type="button" class="viewtab" role="tab" id="tab-catalog" data-view="catalog" aria-selected="false" aria-controls="view-catalog" tabindex="-1">By output category</button>
   </div>
 
-  <section id="view-dag" class="view" role="tabpanel" aria-labelledby="tab-dag">
+  <section id="view-stats" class="view" role="tabpanel" aria-labelledby="tab-stats">
+    <h2>Population statistics &mdash; value proportions per category</h2>
+    <p class="lede sub">The share each value takes within every demographic attribute of the embedded reference
+    SCB population. Bars are scaled to the largest share in each block for contrast; the percentage shown is the
+    exact proportion. Gated attributes (industry, employment attachment/hours, detailed birth country) apply only
+    to a subset of persons, and their proportions are taken over that applicable subset &mdash; the "applies to&hellip;"
+    line states the denominator.</p>
+    <div id="stats-root"></div>
+  </section>
+
+  <section id="view-dag" class="view" role="tabpanel" aria-labelledby="tab-dag" hidden>
   <p class="lede sub">Solid arrows are the conditioning the sampler actually uses. Turn on
   <b>&ldquo;Show available-but-unused filters&rdquo;</b> to reveal the dashed edge where the fetch query omits a
   breakdown (age) the source table could otherwise provide. Click any node for its table, query, categories and
@@ -117,6 +128,7 @@
 <script src="js/data.js"></script>
 <script src="js/dag-view.js"></script>
 <script src="js/catalog-view.js"></script>
+<script src="js/stats-view.js"></script>
 <script src="js/tabs.js"></script>
 </body>
 </html>

@@ -50,9 +50,20 @@ python scripts/generate/generate_identity.py --provider openrouter --model opena
 # Compare two population files
 python scripts/analyze/score_fidelity.py pop_a.json pop_b.json
 
+# Cap stage (pipeline ROOT): seeded per-combo cap of a combination's generated personas to N.
+# Copies the selected persona_* dirs (plus combo logs/metadata) into the canonical capped mirror
+# at {output_base}/03_Analysis/population_cap/{slug}/. mapping and generation_metadata read this
+# mirror instead of 01_Raw and fail loudly if it is absent (no 01_Raw fallback), so run this FIRST.
+# --n is required (raises if missing); --sample-seed defaults to 0 (0 is a valid seed); --force
+# overwrites an existing mirror; --output-base defaults to experiment_defaults.yaml.
+python scripts/analyze/cap_populations.py --model-id claude_haiku --strategy-id all_pick --country-id swedish --n 100
+python scripts/analyze/cap_populations.py --model-id claude_haiku --strategy-id all_pick --country-id swedish \
+    --n 100 --sample-seed 7 --force --output-base {output_base}
+
 # Map stage: map the targeted synthetic populations + their real populations to the canonical schema
 # (reads config/analysis/comparison_targets.yaml; writes {output_base}/03_Analysis/mapping/ -- folder
-# name owned by the analysis registry; legacy on-disk mapped/ is still read as a fallback).
+# name owned by the analysis registry; legacy on-disk mapped/ is still read as a fallback). Personas are
+# read from the capped mirror (03_Analysis/population_cap/{slug}/), never 01_Raw -- run cap_populations.py first.
 # Run this BEFORE any compare command -- the compare scripts consume these pre-mapped files.
 python scripts/analyze/map_populations.py
 python scripts/analyze/map_populations.py --targets config/analysis/comparison_targets.yaml
@@ -113,11 +124,29 @@ python scripts/analyze/analyze_real_population_stats.py --country-id swedish --c
 # input/output/total tokens, LLM calls, retry & error rates, latency p95/max, success rate,
 # estimated USD cost from config/analysis/model_pricing.yaml), plus per-combo deep diagnostics
 # and per-country cross-factor significance (Kruskal-Wallis + Dunn/Holm across the model and
-# method factors). Reads the 01_Raw LLM-call telemetry; emits ONE per-country CSV + JSON + charts.
+# method factors). Reads the LLM-call telemetry from the capped mirror (03_Analysis/population_cap/,
+# produced by cap_populations.py -- fail-fast if absent, no 01_Raw fallback); emits ONE per-country
+# CSV + JSON + charts.
 python scripts/analyze/summarize_generation_metadata.py --country swedish
 python scripts/analyze/summarize_generation_metadata.py --model claude_haiku --no-charts --force
 # --verbose prints per-combo deep diagnostics; --metrics limits the comparison to a metric subset
 python scripts/analyze/summarize_generation_metadata.py --country swedish --verbose --metrics time cost
+
+# Persona realism judge (LLM-as-judge): judge each mapped persona's internal coherence with the
+# Claude CLI (default claude-sonnet-5; Fable is the slowest/most-expensive selectable option) over N
+# cold rounds -- can_exist (binary) + typicality (0-10) +
+# severity-tagged clash issues -- and rank every combination PLUS the SCB real reference on a per-
+# combination impossibility rate (bootstrap CI) x typicality-dispersion-vs-SCB (Levene), with an
+# ICC/alpha judge self-consistency metric. Two-stage: run map_populations.py first (depends_on:
+# [mapping]; reads the mapped populations). Config-driven judge model/params in
+# config/analysis/persona_realism/; cost priced via config/analysis/model_pricing.yaml. Filters are
+# repeatable; run once with broad filters (CLI batch) to put every combo on one headline map -- the
+# GUI per_combo dispatch judges ONE combo per node run.
+python scripts/analyze/analyze_persona_realism.py --country swedish
+python scripts/analyze/analyze_persona_realism.py --slug swedish_all_pick_claude_sonnet --sample 200 --force
+# --rounds overrides the judge rounds per persona (default 3); --judge-model picks a model_options
+# entry; --workers sets the fan-out width; --output-base/--dpi as usual
+python scripts/analyze/analyze_persona_realism.py --country swedish --rounds 5 --judge-model claude-sonnet-5 --workers 8
 
 # Launch the GUI: the config-driven Flow Runner (requires pip install -e ".[gui]")
 python -m population_synthetic.gui.main
@@ -129,6 +158,14 @@ ruff check src/
 A pytest suite lives under `tests/` (covers the `analysis/generation_metadata/` layer and `clients/call_context`).
 Run it with `pytest` (requires `pip install -e ".[dev]"`).
 
+## Developer tools
+
+Standalone helpers under `tools/` (self-contained, not part of the analysis pipeline):
+
+| Tool | What it does | Entry point |
+|------|--------------|-------------|
+| `graph-diff` | Renders the change in a package's import/dependency graph between two git refs — added edges green, removed red, unchanged grey — as SVG/PNG/DOT + JSON/MD. Repo-agnostic; needs the Graphviz `dot` binary for SVG/PNG. See [`tools/graph-diff/README.md`](../../tools/graph-diff/README.md). | `python tools/graph-diff/graph_diff.py --package-path src/population_synthetic --base-ref dev` |
+
 ## Analysis registry (canonical id → label → folder → script)
 
 `config/analysis/analysis_registry.yaml` (accessor `analysis/utils/registry.py`) is the single
@@ -138,6 +175,7 @@ resolve their output dir via `analysis_output_dir(id, output_base)` rather than 
 
 | Canonical id (= GUI task key = folder) | Label | Output folder (under `03_Analysis/`) | Script | Dispatch |
 |---|---|---|---|---|
+| `population_cap` | Cap Population (N) | `population_cap/` | `cap_populations.py` | per_combo |
 | `mapping` | Map Populations | `mapping/` (legacy read: `mapped/`) | `map_populations.py` | per_combo |
 | `fidelity` | Compare Synthetic to Real | `fidelity/` | `score_fidelity_all.py` | slugs |
 | `multivariate_fidelity` | Multivariate Joint Fidelity | `multivariate_fidelity/` | `score_multivariate_fidelity.py` | slugs |
@@ -148,6 +186,7 @@ resolve their output dir via `analysis_output_dir(id, output_base)` rather than 
 | `cross_country` | Cross-Country (real vs real) | `cross_country/` | `compare_real_countries.py` | cli (CLI-only) |
 | `real_population_stats` | Real Reference Population Stats | `real_population_stats/{country}/` | `analyze_real_population_stats.py` | per_country |
 | `generation_metadata` | Generation Metadata (country × model × method) | `generation_metadata/` | `summarize_generation_metadata.py` | slugs |
+| `persona_realism` | Persona Realism Judge (LLM-as-judge) | `persona_realism/` | `analyze_persona_realism.py` | per_combo |
 
 ## See also
 

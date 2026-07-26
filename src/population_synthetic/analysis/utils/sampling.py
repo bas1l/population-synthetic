@@ -25,6 +25,40 @@ from __future__ import annotations
 import numpy as np
 
 
+def select_indices(total: int, n: int, seed: int = 0) -> list[int]:
+    """Return a reproducible, sorted, without-replacement draw of *n* indices in ``[0, total)``.
+
+    The shared index-selection primitive behind both the fidelity subsample
+    (:func:`subsample_population`) and the population-cap task, so the two stay
+    algorithmically consistent. It uses the project's established RNG idiom --
+    ``np.random.default_rng(seed).choice(total, size=n, replace=False)`` -- and sorts
+    the drawn indices so retained items keep their original relative order and a given
+    ``(total, n, seed)`` triple always reproduces the same subset.
+
+    Args:
+        total: Number of available items to draw from (the population/collection size).
+        n: Number of indices to draw. When ``n >= total`` every index is returned
+            (there is nothing to subsample).
+        seed: Seed for the without-replacement draw (default ``0``); the same seed and
+            ``(total, n)`` reproduce the same indices.
+
+    Returns:
+        A sorted ``list[int]`` of distinct indices in ``range(total)``: all ``total``
+        indices when ``n >= total``, otherwise exactly ``n`` seeded-drawn indices.
+
+    Raises:
+        ValueError: If ``total`` or ``n`` is negative.
+    """
+    if total < 0:
+        raise ValueError(f"select_indices requires a non-negative total; got {total!r}.")
+    if n < 0:
+        raise ValueError(f"select_indices requires a non-negative n; got {n!r}.")
+    if n >= total:
+        return list(range(total))
+    idx = np.random.default_rng(seed).choice(total, size=n, replace=False)
+    return [int(i) for i in sorted(idx)]
+
+
 def subsample_population(population: dict, n: int | None, seed: int = 0) -> dict:
     """Return a copy of *population* with ``individuals`` capped to *n*.
 
@@ -68,8 +102,8 @@ def subsample_population(population: dict, n: int | None, seed: int = 0) -> dict
         )
         return population
 
-    idx = np.random.default_rng(seed).choice(available, size=n, replace=False)
-    subset = [individuals[i] for i in sorted(idx)]
+    idx = select_indices(available, n, seed)
+    subset = [individuals[i] for i in idx]
 
     capped = dict(population)
     capped["individuals"] = subset

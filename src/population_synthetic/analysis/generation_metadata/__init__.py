@@ -60,6 +60,7 @@ from population_synthetic.analysis.generation_metadata.persona_metrics import (
 from population_synthetic.analysis.generation_metadata.pricing import PricingTable, load_pricing_table
 from population_synthetic.analysis.generation_metadata.report_writer import write_reports
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
+from population_synthetic.analysis.utils.capped_source import resolve_stage_source
 from population_synthetic.analysis.utils.registry import analysis_output_dir, resolve_output_base
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
@@ -246,9 +247,11 @@ def summarize(
         ``{country: {"csv": path, "json": path}}`` for every country actually written.
     """
     base = resolve_output_base(str(output_base) if output_base is not None else None)
-    raw_root = base / _RAW_STAGE_DIR
+    # Personas are read from the capped mirror, never from 01_Raw. resolve_stage_source
+    # raises FileNotFoundError (fail-fast, no fallback) if population_cap has not run.
+    raw_root = resolve_stage_source(base)
     if not raw_root.is_dir():
-        raise FileNotFoundError(f"Raw generation stage not found: {raw_root}")
+        raise FileNotFoundError(f"Capped generation stage not found: {raw_root}")
 
     pricing = load_pricing_table(pricing_path)
     pricing_meta = {

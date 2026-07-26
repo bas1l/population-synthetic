@@ -67,7 +67,8 @@
         "lone father",
         "ensamstående",
         "foster",
-        "familjehem"
+        "familjehem",
+        "non-traditional"
       ],
       "equals": [
         "Natural Parents",
@@ -103,7 +104,9 @@
         "Gift par med barn",
         "Sambopar med barn",
         "Gifta föräldrar",
-        "Sammanboende föräldrar"
+        "Sammanboende föräldrar",
+        "Two-biological-parents",
+        "two-biological-parents"
       ],
       "contains": [
         "biological parents",
@@ -130,8 +133,22 @@
         "gift par med barn",
         "sambopar med barn",
         "married couple with children",
+        "mother and father",
+        "mor och far",
         "genitori biologici",
-        "famiglia nucleare"
+        "famiglia nucleare",
+        "traditional",
+        "heterosexual",
+        "cohabiting parents",
+        "cohabitating parents",
+        "gifta föräldra",
+        "två gifta",
+        "same-sex",
+        "same sex",
+        "gay couple",
+        "lesbian couple",
+        "two mothers",
+        "two fathers"
       ]
     },
     "Mother and Stepparent": {

@@ -21,6 +21,32 @@
 stage_dir: "03_Analysis"
 
 processes:
+  validate_raw:
+    label: "Validate Raw Personas"
+    description: >
+      Atomistic per-combo completeness check of the raw generated personas. For each
+      persona_* directory it records whether identity.json exists and whether every expected
+      category has a non-empty value (any value; correctness is NOT judged here). Writes one
+      CSV per combo (row per persona: passed + failure detail). Non-destructive; the analysis
+      DAG root -- mapping depends on it, and population_cap consumes its verdict.
+    folder: "validate_raw"
+    script: "scripts/analyze/validate_raw_personas.py"
+    dispatch: "per_combo"
+
+  population_cap:
+    label: "Cap Population (N)"
+    description: >
+      Seeded cap of each combination to N VALIDATED personas. Runs last of the validation
+      gate (validate_raw -> mapping -> validate_mapped -> population_cap): it selects N personas
+      that pass BOTH validity CSVs, copies the selected raw persona directories (identity +
+      telemetry + combo logs/metadata) into the capped mirror, and writes a capped mapped file
+      (_mapped/{slug}.json) for the same N. Every downstream analysis consumes this capped clean
+      set, so no task analyzes more than N personas and none analyzes an incomplete or unmapped
+      one.
+    folder: "population_cap"
+    script: "scripts/analyze/cap_populations.py"
+    dispatch: "per_combo"
+
   mapping:
     label: "Map Populations"
     description: >
@@ -31,6 +57,18 @@ processes:
     folder: "mapping"
     legacy_folder: "mapped"
     script: "scripts/analyze/map_populations.py"
+    dispatch: "per_combo"
+
+  validate_mapped:
+    label: "Validate Mapped Personas"
+    description: >
+      Atomistic per-combo check of the mapped personas. For each mapped record it records
+      whether any canonical field is left as the __UNMAPPED__ sentinel (a value the mappers
+      could not resolve, e.g. a city where a country was expected). Writes one CSV per combo
+      (row per persona: passed + the unmapped fields). Non-destructive; runs between mapping
+      and population_cap, whose seeded cap consumes its verdict.
+    folder: "validate_mapped"
+    script: "scripts/analyze/validate_mapped_personas.py"
     dispatch: "per_combo"
 
   fidelity:
@@ -129,3 +167,21 @@ processes:
     folder: "generation_metadata"
     script: "scripts/analyze/summarize_generation_metadata.py"
     dispatch: "slugs"
+
+  persona_realism:
+    label: "Persona Realism Judge (LLM-as-judge)"
+    description: >
+      LLM-as-judge scoring of each individual persona's internal coherence: per
+      persona, N judge rounds (default 3, cold temperature) return can_exist
+      (binary possibility) and typicality (0-10 ordinal) plus severity-tagged
+      attribute-clash issues. Aggregates round -> persona -> combination into a
+      per-combination impossibility rate (bootstrap CI), typicality dispersion vs
+      the SCB real reference (Levene variance-equality test), and a judge
+      self-reliability metric (ICC / Krippendorff's alpha across rounds). The real
+      API-sourced population is judged as an additional competitor. Judge model,
+      rounds, temperature, severity weights, sampling size, and bootstrap params
+      are config-driven (config/analysis/persona_realism/); cost per combo reuses
+      config/analysis/model_pricing.yaml.
+    folder: "persona_realism"
+    script: "scripts/analyze/analyze_persona_realism.py"
+    dispatch: "per_combo"

@@ -602,16 +602,6 @@ class FlowRunnerWindow(QMainWindow):
                 "No selection — please check at least one item in each axis.",
             )
             return
-        if len(combos) > 20:
-            answer = QMessageBox.question(
-                self,
-                "Large Batch",
-                f"This will run {len(combos)} combinations. Proceed?",
-                QMessageBox.Yes | QMessageBox.No,
-            )
-            if answer != QMessageBox.Yes:
-                return
-
         options = self._model.get_options()
         force = self._model.get_force() if self._model.has_force() else False
 
@@ -660,16 +650,6 @@ class FlowRunnerWindow(QMainWindow):
                 "No selection — please check at least one item in each axis.",
             )
             return
-        if len(combos) > 20:
-            answer = QMessageBox.question(
-                self,
-                "Large Batch",
-                f"Each per-combo task will run over {len(combos)} combinations. Proceed?",
-                QMessageBox.Yes | QMessageBox.No,
-            )
-            if answer != QMessageBox.Yes:
-                return
-
         try:
             state = WorkflowState(self._model.to_plain(), PROJECT_ROOT)
             state.validate()

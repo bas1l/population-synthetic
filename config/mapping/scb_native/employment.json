@@ -170,6 +170,35 @@
         "hemmafru",
         "hemvårdare"
       ]
+    },
+    "Student": {
+      "equals": [
+        "Student",
+        "Studerande",
+        "Full-time student",
+        "Part-time student"
+      ],
+      "contains": [
+        "student",
+        "studerande",
+        "studying",
+        "studies",
+        "pupil"
+      ]
+    },
+    "Retired": {
+      "equals": [
+        "Retired",
+        "Pensioner",
+        "Pensionär",
+        "Pensionerad",
+        "Ålderspension"
+      ],
+      "contains": [
+        "retired",
+        "pension",
+        "retire"
+      ]
     }
   }
 }

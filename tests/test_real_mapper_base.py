@@ -20,6 +20,7 @@ from __future__ import annotations
 import pytest
 
 from population_synthetic.analysis.mapping.real_mapper.base import BaseRealMapper
+from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED
 
 from ._mapping_fixtures import new_shape_mappings
 
@@ -89,8 +90,8 @@ def test_real_absent_field_uses_absent_directive():
     assert out["employment_type"] == "Not Applicable"
 
 
-def test_real_total_miss_resolves_to_none():
-    # An unmatched token with no on_miss -> None.
+def test_real_total_miss_resolves_to_unmapped():
+    # An unmatched token with no on_miss -> the UNMAPPED sentinel (not a bare None).
     mapper = BaseRealMapper(new_shape_mappings())
     out = mapper.normalize_individual({"id": "r", "age": 40, "biological_sex": {"label": "unmatched"}})
-    assert out["biological_sex"] is None
+    assert out["biological_sex"] == UNMAPPED

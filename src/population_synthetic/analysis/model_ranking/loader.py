@@ -33,6 +33,7 @@ from typing import Any, Callable
 
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
+from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.country_config import mappings_for_country
 from population_synthetic.analysis.utils.registry import analysis_output_dir
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
@@ -175,7 +176,7 @@ def load_combo_performances(
     are injectable for tests.
     """
     output_base = Path(output_base)
-    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    mapped_dir = resolve_mapped_dir(output_base)
     comparison_dir = analysis_output_dir("fidelity", output_base)
 
     index_path = mapped_dir / "_index.json"

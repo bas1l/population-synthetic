@@ -16,6 +16,7 @@ import logging
 from collections import Counter
 
 from population_synthetic.analysis.fidelity.evaluator import attr_value
+from population_synthetic.analysis.utils.mapping_sentinel import is_unmapped
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,9 @@ def compute_proportions(
 
     Proportion definition matches the fidelity evaluator:
     ``count(category) / total_non_null``, where *total_non_null* is the number of
-    individuals whose value for *attr* is non-null. Extraction goes through
+    individuals whose value for *attr* is present -- i.e. neither ``None`` nor the
+    ``UNMAPPED`` sentinel (a mapped attribute with no canonical equivalent is
+    excluded from the base exactly as ``None`` is). Extraction goes through
     :func:`attr_value`, so the on-demand ``age_group`` binning stays identical to
     the evaluator's (a population that stores raw integer ``age`` is binned here
     exactly as it is when scored).
@@ -67,7 +70,7 @@ def compute_proportions(
     counts: Counter = Counter()
     for ind in individuals:
         val = attr_value(ind, attr)
-        if val is not None:
+        if not is_unmapped(val):
             counts[val] += 1
 
     total = sum(counts.values())

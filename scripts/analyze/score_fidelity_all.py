@@ -44,6 +44,7 @@ from population_synthetic.analysis.fidelity.charts import plot_radar_grid
 from population_synthetic.analysis.fidelity.evaluator import StatisticalEvaluator
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.utils.axes import decompose_slug
+from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.country_config import mappings_for_country
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
@@ -191,7 +192,7 @@ def main() -> None:
     model_ids = sorted(all_model_ids)
 
     output_base = resolve_output_base(args.output_base)
-    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    mapped_dir = resolve_mapped_dir(output_base)
     comparison_dir = analysis_output_dir("fidelity", output_base)
 
     index_path = mapped_dir / "_index.json"

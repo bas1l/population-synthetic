@@ -11,26 +11,60 @@ package can score them against each other. This is the densest part of the archi
 config READMEs (`config/mapping/scb_native/README.md` — Sweden's native tier, the default —
 plus `config/mapping/scb/README.md` and `config/mapping/istat/README.md`).
 
-## Two-stage flow (map -> compare)
+## Pipeline flow (validate -> map -> cap -> compare)
 
-Mapping is a standalone pipeline stage, not an inline step of each comparison script.
+Mapping is a standalone pipeline stage, not an inline step of each comparison script. The analysis DAG
+is a **validation gate**: `validate_raw` (root) -> `mapping` -> `validate_mapped` -> `population_cap`
+-> the mapped-file consumers (`fidelity`, `multivariate_fidelity`, `model_ranking`,
+`method_significance`, `real_population_stats`, `persona_realism`, `consistency`,
+`pairwise_comparison`) plus the persona-dir consumer (`generation_metadata`).
+
+**Stage 0 (validate raw)** -- `validate_raw`, the analysis-DAG root, runs before mapping. It
+atomistically checks each combo's `01_Raw/{slug}/persona_*` and writes one CSV per combo
+(`{output_base}/03_Analysis/validate_raw/{slug}.csv`, columns
+`persona_id,passed,has_identity_json,missing_categories`): a persona passes only if it has an
+`identity.json` and every config-derived category is populated (expected keys = the country mapping
+`_index.json` attributes, with the `age_group`->`age` alias). It is non-destructive — it copies and
+mutates nothing.
 
 **Stage 1 (map)** -- `scripts/analyze/map_populations.py` reads the explicit completeness list
 `config/analysis/comparison_targets.yaml` (entries are plain manifest-path strings or
-`{manifest, country}` mappings), maps each target's synthetic population (`load_synthetic_population`
--> `map_population`) and its real population once per country (`load_real_population` ->
-`map_population`), and writes to `{output_base}/03_Analysis/mapping/` (folder name owned by the
-analysis registry; legacy on-disk `mapped/` is still read as a fallback): `{slug}.json` (mapped
-synthetic, one per target), `real_{country}.json` (mapped real population, deduped one per country),
-and `_index.json` (list of `{slug, country, synthetic_file, real_file, n, skipped}`).
-Missing/empty seed roots warn and skip, never crash.
+`{manifest, country}` mappings), maps each target's synthetic population from the **full `01_Raw`
+pool** (not a capped subset) via `load_synthetic_population` -> `map_population` and its real
+population once per country (`load_real_population` -> `map_population`), and writes to
+`{output_base}/03_Analysis/mapping/` (folder name owned by the analysis registry; legacy on-disk
+`mapped/` is still read as a fallback): `{slug}.json` (mapped synthetic, one per target — each mapped
+individual carrying an `id` equal to its source `persona_XXXXX` dir name), `real_{country}.json`
+(mapped real population, deduped one per country), and `_index.json` (list of
+`{slug, country, synthetic_file, real_file, n, skipped}`). Missing/empty seed roots warn and skip,
+never crash.
 
-**Stage 2 (compare)** -- the three comparison scripts perform **no** mapping; they `json.load` the
-pre-mapped files (a missing mapped file raises a clear "Run scripts/analyze/map_populations.py
-first." error) and run the existing evaluator/chart path. `score_fidelity_all.py` iterates
-`mapping/_index.json` (imports zero mappers); `score_fidelity_sweden.py` /
-`score_fidelity_italy.py` resolve mapped files from `--mapped-dir` (default
-`{output_base}/03_Analysis/mapping`, legacy `mapped/` read-fallback) + `{slug}`, or take explicit `--mapped-synthetic` /
+**Stage 2 (validate mapped)** -- `validate_mapped` atomistically checks each mapped `{slug}.json` and
+writes one CSV per combo (`{output_base}/03_Analysis/validate_mapped/{slug}.csv`, columns
+`persona_id,passed,unmapped_fields`), flagging any field left as the `__UNMAPPED__` sentinel. Like
+`validate_raw`, it is non-destructive.
+
+**Stage 3 (cap)** -- `scripts/analyze/cap_populations.py` (`population_cap`) runs **last** in the
+gate. Per combo it intersects the two per-combo validity CSVs (`validate_raw` + `validate_mapped`)
+down to the clean persona ids, seeded-selects exactly `--n` of them, and materializes **two** outputs:
+(1) the capped persona-dir mirror at `{output_base}/03_Analysis/population_cap/{slug}/` (combo
+telemetry: `logs/` / `run_metadata.json` / `manifest_snapshot.yaml`), consumed **only** by
+`generation_metadata` via `analysis/utils/capped_source.resolve_stage_source`; and (2) the capped
+mapped dir `{output_base}/03_Analysis/population_cap/_mapped/` holding the capped subset `{slug}.json`,
+the copied `real_{country}.json`, and `_index.json`, read by every mapped-file consumer via
+`analysis/utils/capped_source.resolve_mapped_dir(output_base)`. Both resolvers **raise
+`FileNotFoundError` when their source is absent — there is no fallback** (`generation_metadata` never
+falls back to `01_Raw`; the mapped-file consumers never fall back to `mapping/`), so no downstream task
+can analyze more than N personas. When fewer than N clean personas exist it cap-shorts with a loud
+warning (a visible, clean shortfall); it never fails the batch.
+
+**Stage 4 (compare)** -- the comparison scripts perform **no** mapping; they `json.load` the
+**capped** pre-mapped files from `population_cap/_mapped/` (resolved via
+`capped_source.resolve_mapped_dir`; a missing capped-mapped file fails loudly, directing you to run
+the cap stage first) and run the existing evaluator/chart path. `score_fidelity_all.py` iterates the
+capped `_mapped/_index.json` (imports zero mappers); `score_fidelity_sweden.py` /
+`score_fidelity_italy.py` resolve mapped files from `--mapped-dir` (default the capped
+`{output_base}/03_Analysis/population_cap/_mapped`) + `{slug}`, or take explicit `--mapped-synthetic` /
 `--mapped-real`. All comparison artifacts land under
 `{output_base}/03_Analysis/fidelity/{slug}/` (per-target JSON report + CSV + 15 bar charts +
 radar + `{slug}_association.csv` and `{slug}_association_heatmap.png` from the multivariate block),
@@ -41,11 +75,11 @@ The **multivariate / joint-fidelity** block (C2ST, pairwise Cramér's-V associat
 TV, k-way combination plausibility -- defined via the scheme's `grounded_joint_pairs` /
 `combination_checks` / `c2st` tuning) is also available as a **standalone process**:
 `score_multivariate_fidelity.py` recomputes only that block (through the shared
-`StatisticalEvaluator.compute_multivariate()`) over the same `mapping/_index.json` targets and writes
+`StatisticalEvaluator.compute_multivariate()`) over the same capped `_mapped/_index.json` targets and writes
 it to its own `{output_base}/03_Analysis/multivariate_fidelity/` folder -- per-combo envelope JSON +
 `{slug}_association.csv` + `{slug}_association_heatmap.png`, plus a per-country roll-up
 `{country}_multivariate_fidelity.json`/`.csv` and a cross-combo `{country}_c2st_vs_grounded_tv.png`. It
-depends only on `map_populations` and is fully additive: it never writes under `.../fidelity/` or
+depends on `population_cap` (reading the capped `_mapped/` files) and is fully additive: it never writes under `.../fidelity/` or
 `.../model_ranking/`. See the `multivariate_fidelity/` subpackage in
 [Sub-packages](sub-packages.md).
 

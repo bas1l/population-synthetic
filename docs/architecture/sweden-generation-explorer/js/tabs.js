@@ -5,6 +5,7 @@
 (function () {
   const tabs = Array.from(document.querySelectorAll(".viewtabs .viewtab"));
   const views = {
+    stats: document.getElementById("view-stats"),
     dag: document.getElementById("view-dag"),
     catalog: document.getElementById("view-catalog"),
   };
@@ -17,6 +18,7 @@
     });
     Object.keys(views).forEach(k => { if (views[k]) views[k].hidden = (k !== view); });
     if (view === "catalog" && typeof window.buildCatalog === "function") window.buildCatalog();
+    if (view === "stats" && typeof window.buildStats === "function") window.buildStats();
   }
 
   tabs.forEach((t, i) => {

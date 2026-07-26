@@ -26,6 +26,7 @@ from population_synthetic.analysis.fidelity.scheme import (
     GroundedJointPair,
     load_scheme,
 )
+from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED
 
 _AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85"]
 
@@ -116,6 +117,25 @@ def test_unmapped_categories_detected_in_b():
     assert "Stockholm" not in metrics["unmapped"]
 
 
+def test_unmapped_sentinel_marginals_identical_to_none():
+    # The UNMAPPED sentinel must be excluded from marginal scoring EXACTLY as None
+    # is: same categories, same TV distance, and NOT surfaced as an unmapped category
+    # (a real synthetic-only value like "Atlantis" still would be).
+    a = [_person(i, region="Stockholm") for i in range(3)]
+    scheme = _scheme(["region"], {"region": ["Stockholm"]})
+
+    b_none = [_person(0, region="Stockholm"), _person(1, region=None)]
+    b_sentinel = [_person(0, region="Stockholm"), _person(1, region=UNMAPPED)]
+    m_none = StatisticalEvaluator(_pop(a), _pop(b_none), scheme=scheme).compute_marginals()["region"]
+    m_sentinel = StatisticalEvaluator(_pop(a), _pop(b_sentinel), scheme=scheme).compute_marginals()["region"]
+
+    assert m_sentinel["categories"] == m_none["categories"] == ["Stockholm"]
+    assert m_sentinel["tv_distance"] == m_none["tv_distance"]
+    assert m_sentinel["max_diff"] == m_none["max_diff"]
+    # Neither None nor the sentinel is reported as an unmapped (synthetic-only) category.
+    assert m_sentinel["unmapped"] == m_none["unmapped"] == []
+
+
 def test_empty_attribute_yields_nan_metrics():
     # Neither population carries 'income_source' and the scheme declares no
     # categories for it -> no scored categories -> NaN metrics.
@@ -172,6 +192,24 @@ def test_coherence_flags_unseen_combination():
     assert coherence["score"] == 0.0
     assert len(coherence["flagged"]) == 1
     assert coherence["flagged"][0]["id"] == 0
+
+
+def test_coherence_unmapped_sentinel_treated_as_missing_like_none():
+    # A coherence tuple carrying the UNMAPPED sentinel is treated as impossible
+    # (probability 0 -> flagged) EXACTLY as a None in the tuple is, and an unmapped
+    # real-population record is excluded from the joint support the same way.
+    a = [
+        _person(i, age_group="25-34", education_level="University Degree", employment_status="Employed")
+        for i in range(10)
+    ]
+    b_none = [_person(0, age_group="25-34", education_level=None, employment_status="Employed")]
+    b_sentinel = [_person(0, age_group="25-34", education_level=UNMAPPED, employment_status="Employed")]
+    coh_none = StatisticalEvaluator(_pop(a), _pop(b_none), scheme=_COHERENCE_SCHEME).compute_coherence()
+    coh_sentinel = StatisticalEvaluator(_pop(a), _pop(b_sentinel), scheme=_COHERENCE_SCHEME).compute_coherence()
+
+    assert coh_sentinel["score"] == coh_none["score"] == 0.0
+    assert len(coh_sentinel["flagged"]) == len(coh_none["flagged"]) == 1
+    assert coh_sentinel["flagged"][0]["probability"] == coh_none["flagged"][0]["probability"] == 0.0
 
 
 # --- report + csv --------------------------------------------------------

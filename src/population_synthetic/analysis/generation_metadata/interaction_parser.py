@@ -8,7 +8,8 @@ Both formats contain the fields defined by LLMInteractionEntry:
     category, method, step, prompt, raw_response,
     parsed_value, error, attempt, timestamp, persona_id, call_index,
     provider, model, request_sent_at, response_received_at, elapsed_ms,
-    prompt_tokens, completion_tokens, total_tokens, error_category
+    prompt_tokens, completion_tokens, total_tokens,
+    cache_read_tokens, cache_creation_tokens, error_category
 
 Fields that are absent or null in a record are normalised to their default
 values so callers can always rely on the same keys being present.  The
@@ -47,6 +48,10 @@ _FIELD_DEFAULTS: dict[str, Any] = {
     "prompt_tokens": None,
     "completion_tokens": None,
     "total_tokens": None,
+    # Prompt-cache token telemetry (present in newer JSONL; absent/None in legacy
+    # logs and for providers that don't report caching).
+    "cache_read_tokens": None,
+    "cache_creation_tokens": None,
     "error_category": None,
 }
 

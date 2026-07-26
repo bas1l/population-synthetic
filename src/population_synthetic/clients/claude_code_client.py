@@ -306,6 +306,11 @@ class ClaudeCodeClient:
             "prompt_tokens": None,
             "completion_tokens": None,
             "total_tokens": None,
+            # Prompt-cache token telemetry (Anthropic). ``prompt_tokens`` remains the
+            # UNCACHED input remainder; these are captured additively so cost can
+            # price the cached portion. ``None`` when the CLI omits them.
+            "cache_read_tokens": None,
+            "cache_creation_tokens": None,
             "status": None,
             "error_category": None,
             "error": None,
@@ -336,6 +341,10 @@ class ClaudeCodeClient:
 
                 prompt_tokens = usage.get("input_tokens")
                 completion_tokens = usage.get("output_tokens")
+                # Prompt-cache tokens are captured separately; `prompt_tokens` keeps its
+                # "uncached input" semantics that other consumers rely on.
+                cache_read_tokens = usage.get("cache_read_input_tokens")
+                cache_creation_tokens = usage.get("cache_creation_input_tokens")
                 total_tokens = (
                     prompt_tokens + completion_tokens
                     if prompt_tokens is not None and completion_tokens is not None
@@ -344,15 +353,18 @@ class ClaudeCodeClient:
                 metadata["prompt_tokens"] = prompt_tokens
                 metadata["completion_tokens"] = completion_tokens
                 metadata["total_tokens"] = total_tokens
+                metadata["cache_read_tokens"] = cache_read_tokens
+                metadata["cache_creation_tokens"] = cache_creation_tokens
                 metadata["status"] = "ok"
                 metadata["error_category"] = None
                 metadata["error"] = None
 
                 self.logger.info(
                     "claude call: model=%s t_launch_ms=%.0f t_inference_ms=%.0f "
-                    "prompt_tokens=%s completion_tokens=%s%s",
+                    "prompt_tokens=%s completion_tokens=%s "
+                    "cache_read_tokens=%s cache_creation_tokens=%s%s",
                     target_model, launch_ms, t_inference_ms, prompt_tokens, completion_tokens,
-                    format_corr_token(),
+                    cache_read_tokens, cache_creation_tokens, format_corr_token(),
                 )
                 return result
 

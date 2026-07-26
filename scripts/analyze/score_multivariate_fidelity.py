@@ -56,6 +56,7 @@ from population_synthetic.analysis.multivariate_fidelity.charts import (
     plot_c2st_vs_grounded_tv,
     plot_joint_association_heatmap,
 )
+from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.country_config import mappings_for_country
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
@@ -139,7 +140,7 @@ def main() -> None:
     slug_filter = _split_csv(args.slugs)
 
     output_base = resolve_output_base(args.output_base)
-    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    mapped_dir = resolve_mapped_dir(output_base)
     joint_dir = analysis_output_dir("multivariate_fidelity", output_base)
 
     index_path = mapped_dir / "_index.json"

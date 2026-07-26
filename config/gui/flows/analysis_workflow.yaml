@@ -11,16 +11,42 @@
 #   per_country -- one invocation per DISTINCT checked country: --country-id only
 #                  (model/strategy ticks ignored -- real-population-only tasks)
 tasks:
-  mapping:
+  validate_raw:                   # pipeline root -- per-combo raw-persona completeness check
     enabled: true
-    supports_force: true          # node shows a Force checkbox -> --force
+    supports_force: true          # node shows a Force checkbox -> --force (overwrite CSV)
     force: false
     options:
       output-base:                # --output-base (blank = script default)
     depends_on: []
 
-  fidelity:
+  mapping:                        # map the full validated raw pool (reads 01_Raw, not the cap)
     enabled: true
+    supports_force: true          # node shows a Force checkbox -> --force
+    force: false
+    options:
+      output-base:                # --output-base (blank = script default)
+    depends_on: [validate_raw]
+
+  validate_mapped:                # per-combo mapped-persona check (unmapped-value detection)
+    enabled: true
+    supports_force: true          # node shows a Force checkbox -> --force (overwrite CSV)
+    force: false
+    options:
+      output-base:                # --output-base (blank = script default)
+    depends_on: [mapping]
+
+  population_cap:                 # seeded cap of each combo to N VALIDATED personas (runs last of the gate)
+    enabled: true
+    supports_force: true          # node shows a Force checkbox -> --force (overwrite mirror)
+    force: false
+    options:
+      n: '100'                    # --n (required; task raises if blank/missing)
+      sample-seed: 0              # --sample-seed (int, reproducible draw)
+      output-base:                # --output-base (blank = script default)
+    depends_on: [validate_mapped]
+
+  fidelity:
+    enabled: false
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options:
@@ -29,10 +55,10 @@ tasks:
       output-base:
       n-synthetic: '100'          # blank = no cap; integer = cap each population to this size
       sample-seed: 0              # seed for the without-replacement draw (reproducible)
-    depends_on: [mapping]
+    depends_on: [population_cap]
 
   multivariate_fidelity:
-    enabled: true
+    enabled: false
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options:
@@ -40,16 +66,16 @@ tasks:
       output-base:                # blank = script default
       n-synthetic: '100'          # blank = no cap; integer = cap each population to this size
       sample-seed: 0              # seed for the without-replacement draw (reproducible)
-    depends_on: [mapping]
+    depends_on: [population_cap]
 
   consistency:
-    enabled: true
+    enabled: false
     supports_force: true
     force: false
     options:
       no-charts: false
       output-base:
-    depends_on: [mapping]
+    depends_on: [population_cap]
 
   model_ranking:
     enabled: true
@@ -83,23 +109,38 @@ tasks:
     options:
       output:                     # --output (blank = script default)
       no-charts: false
-    depends_on: [mapping]
+    depends_on: [population_cap]
 
   real_population_stats:          # per_country dispatch -- real population only, ignores model/strategy
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options: {}
-    depends_on: [mapping]
+    depends_on: [population_cap]
 
   generation_metadata:            # independent -- isolated node (slugs dispatch)
-    enabled: true
+    enabled: false
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options:
       output-base:                # --output-base (blank = script default)
       no-charts: false            # --no-charts (flag when true; charts default ON)
-    depends_on: []
+    depends_on: [population_cap]
+
+  persona_realism:                # per_combo dispatch -- LLM-as-judge per-persona coherence
+    enabled: false                # no min_combos: each invocation judges 1 synthetic combo +
+                                  # its real reference (a valid 2-point map); the cross-combo
+                                  # ranking is a CLI-batch capability (broad filters, one process)
+    supports_force: true          # node shows a Force checkbox -> --force (re-judge + re-write)
+    force: false
+    options:
+      judge-model: claude-sonnet-5 # --judge-model (blank = config default claude-fable-5)
+      sample:                     # --sample (blank = judge every synthetic persona; int caps per combo)
+      real-sample: '100'          # --real-sample (blank = config default 100; caps the real_{country} reference)
+      rounds: '3'                 # --rounds (blank = config default n_rounds, currently 3)
+      workers: '2'                # --workers (blank = config default fan-out width)
+      output-base:                # --output-base (blank = script default)
+    depends_on: [population_cap]
 
 selection:                        # shared by ALL tasks in the chain
   models: [claude_haiku, claude_opus, claude_sonnet, ollama_deepseek_r1_14b, 

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from population_synthetic.analysis.mapping.real_mapper.base import BaseRealMapper
 from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
+from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED
 
 # ---------------------------------------------------------------------------
 # Shared new-shape config, keyed by file stem (as load_mappings would return),
@@ -184,11 +185,11 @@ def test_real_mapper_delegates_end_to_end():
     assert out["household_size"] == "4+ persons"
 
 
-def test_real_missing_field_resolves_to_none():
+def test_real_missing_field_resolves_to_unmapped():
     mapper = BaseRealMapper(_MAPPINGS)
     record = {"id": "real-2", "age": 40, "biological_sex": {"label": "unmatched-token"}}
     out = mapper.normalize_individual(record)
-    assert out["biological_sex"] is None  # miss, no fuzzy, no on_miss
+    assert out["biological_sex"] == UNMAPPED  # miss, no fuzzy, no on_miss
 
 
 # ---------------------------------------------------------------------------
