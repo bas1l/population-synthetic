@@ -42,8 +42,12 @@ Two stacked parts:
 
 ## Key cross-country differences captured
 
-- **Sweden** is the data-richest: real `income_source` conditional table, and
-  `employment_type` built from two tables (attachment × hours) at true `(age, sex)` cells.
+- **Sweden** is the data-richest: `employment_status` is an `(age × education × sex)`
+  odds-merge of two register tables (`ArRegArbStatus × ArbStatusUtbM`, on by default;
+  `--no-merge-status-education` reverts to the `(age, sex)`-only table); a real
+  `income_source` conditional table; and `employment_type` built from two tables
+  (attachment × hours) at true `(age, sex)` cells. `birth_location` and `housing_tenure`
+  are `(age, sex)` conditionals (not marginals).
 - **Norway** drops `income_source` (no SSB v2 table); `employment_type` and
   `birth_country_detail` are sex/age-agnostic marginals broadcast to every cell;
   `birth_location` is derived as population − immigrants (2 API calls).
