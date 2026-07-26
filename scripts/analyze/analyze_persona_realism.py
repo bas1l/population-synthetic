@@ -81,6 +81,7 @@ from population_synthetic.analysis.persona_realism.artifacts import (
 from population_synthetic.analysis.persona_realism.reduce import ComboRealism
 from population_synthetic.analysis.persona_realism.runner import JudgeConfig, run_combo_judgements
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
+from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.registry import analysis_output_dir, resolve_output_base
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
@@ -362,7 +363,7 @@ def main() -> None:
 
     output_base = resolve_output_base(args.output_base)
     out_root = analysis_output_dir("persona_realism", output_base)
-    mapping_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    mapping_dir = resolve_mapped_dir(output_base)
 
     try:
         combos, skipped = _enumerate_combos(
