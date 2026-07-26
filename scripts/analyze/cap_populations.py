@@ -1,18 +1,19 @@
 """cap_populations.py -- per-combo CLI entrypoint for the population_cap task.
 
-The population-cap task is the pipeline root: before any mapping or generation-metadata
-analysis, it seeded-selects exactly ``--n`` of a combination's generated personas and
-copies them into a canonical capped mirror under
-``{output_base}/03_Analysis/population_cap/{slug}/``. Every downstream raw-persona
-consumer reads that mirror instead of the full ``01_Raw/{slug}/`` directory, so no task
-analyzes more than N personas.
+The population-cap task runs LAST of the validation gate (validate_raw -> mapping ->
+validate_mapped -> population_cap). For a combination it intersects the two per-combo
+validity CSVs to the clean persona ids, seeded-selects ``--n`` of them, copies the
+selected raw persona directories into the capped mirror under
+``{output_base}/03_Analysis/population_cap/{slug}/`` (telemetry for generation-metadata),
+and writes the capped mapped file + copied real reference under
+``.../population_cap/_mapped/`` (consumed by every mapped-file analysis). No downstream
+task analyzes more than N personas, or an incomplete/unmapped one.
 
-This script is a thin per-combo wrapper: it resolves the combo slug from the axis IDs,
-resolves the raw source and capped-mirror destination directories, delegates the actual
-seeded selection + copy to
-:func:`population_synthetic.analysis.population_cap.cap_combo`, and records the per-combo
-summary in the stage-level ``_index.json``. It knows nothing about how personas are
-selected or copied, nor about any statistics.
+This script is a thin per-combo wrapper: it resolves the combo slug from the axis IDs and
+the source/destination directories, delegates the seeded selection + copy + mapped-filter
+to :func:`population_synthetic.analysis.population_cap.cap_combo`, and records the per-combo
+summary in the stage-level ``_index.json`` (raw mirror) and ``_mapped/_index.json``. It
+knows nothing about how personas are selected or copied, nor about any statistics.
 
 Usage:
     python scripts/analyze/cap_populations.py \
@@ -45,6 +46,7 @@ from pathlib import Path
 from typing import Any
 
 from population_synthetic.analysis.population_cap import CapSummary, cap_combo
+from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -64,9 +66,10 @@ _CAP_PROCESS_ID = "population_cap"
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Seeded-cap one combination's generated personas to N, copying the selected "
-            "persona directories into the canonical capped mirror consumed by mapping and "
-            "generation-metadata."
+            "Seeded-cap one combination's VALIDATED personas to N: select from personas "
+            "passing both validity gates, copy the selected raw persona directories into the "
+            "capped mirror, and write the capped mapped file consumed by the downstream "
+            "mapped-file analyses."
         )
     )
     parser.add_argument("--model-id", required=True, help="Axis model ID (e.g., 'claude_haiku').")
@@ -121,6 +124,23 @@ def _upsert_index_entry(index_path: Path, entry: dict[str, Any]) -> None:
         json.dump(entries, f, indent=2, ensure_ascii=False)
 
 
+def _mapped_index_entry(summary: CapSummary) -> dict[str, Any]:
+    """Build the ``_mapped/_index.json`` entry from a cap summary.
+
+    Mirrors the mapping stage's ``_index.json`` schema
+    (``{slug, country, synthetic_file, real_file, n, skipped}``) so the downstream
+    mapped-file consumers iterate the capped index exactly as they did the mapping index.
+    """
+    return {
+        "slug": summary["slug"],
+        "country": summary["country"],
+        "synthetic_file": summary["synthetic_file"],
+        "real_file": summary["real_file"],
+        "n": summary["mapped_n"],
+        "skipped": summary["synthetic_file"] is None,
+    }
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     args = _parse_args()
@@ -135,13 +155,22 @@ def main() -> None:
             f"Generate the population for this combo before capping."
         )
 
+    mapping_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    validate_raw_csv = analysis_output_dir("validate_raw", output_base, for_read=True) / f"{slug}.csv"
+    validate_mapped_csv = (
+        analysis_output_dir("validate_mapped", output_base, for_read=True) / f"{slug}.csv"
+    )
+
     cap_stage_dir = analysis_output_dir(_CAP_PROCESS_ID, output_base)
     dest_dir = cap_stage_dir / slug
+    mapped_dest_dir = cap_stage_dir / MAPPED_SUBDIR
     index_path = cap_stage_dir / "_index.json"
+    mapped_index_path = mapped_dest_dir / "_index.json"
 
     logger.info("population_cap: combo %r (n=%d, seed=%d)", slug, args.n, args.sample_seed)
-    logger.info("  raw source : %s", raw_slug_dir)
-    logger.info("  capped dest: %s", dest_dir)
+    logger.info("  raw source  : %s", raw_slug_dir)
+    logger.info("  capped dest : %s", dest_dir)
+    logger.info("  mapped dest : %s", mapped_dest_dir)
 
     if dest_dir.exists() and not args.force:
         logger.info(
@@ -151,23 +180,31 @@ def main() -> None:
         return
 
     summary: CapSummary = cap_combo(
-        raw_slug_dir,
-        args.n,
-        args.sample_seed,
-        dest_dir,
+        slug=slug,
+        country=args.country_id,
+        raw_slug_dir=raw_slug_dir,
+        mapping_dir=mapping_dir,
+        validate_raw_csv=validate_raw_csv,
+        validate_mapped_csv=validate_mapped_csv,
+        n=args.n,
+        seed=args.sample_seed,
+        dest_dir=dest_dir,
+        mapped_dest_dir=mapped_dest_dir,
         force=args.force,
     )
 
     _upsert_index_entry(index_path, dict(summary))
+    _upsert_index_entry(mapped_index_path, _mapped_index_entry(summary))
 
     logger.info(
-        "  capped %d/%d persona dir(s) (requested n=%d, truncated=%s)",
+        "  capped %d/%d clean persona dir(s) (requested n=%d, truncated=%s); mapped n=%d",
         summary["selected"],
-        summary["available"],
+        summary["clean_available"],
         summary["requested_n"],
         summary["truncated"],
+        summary["mapped_n"],
     )
-    logger.info("  index upserted at %s (slug=%s)", index_path, slug)
+    logger.info("  indexes upserted: %s , %s", index_path, mapped_index_path)
 
 
 if __name__ == "__main__":
