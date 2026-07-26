@@ -196,7 +196,8 @@
       ],
       "contains": [
         "retired",
-        "pension"
+        "pension",
+        "retire"
       ]
     }
   }

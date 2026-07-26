@@ -194,7 +194,21 @@
         "fulltime",
         "heltid",
         "employed",
-        "employee"
+        "employee",
+        "fulltid",
+        "volltid",
+        "tillvidare",
+        "anstellning",
+        "obestämd",
+        "indefinite",
+        "indeterminate",
+        "företagsanställ",
+        "förtagsanställ",
+        "förlagd anställ",
+        "förlagd arbetare",
+        "lönarbetare",
+        "löntagare",
+        "anständig anställ"
       ]
     },
     "Permanent Part-time": {
@@ -290,7 +304,9 @@
         "visstid",
         "fixed-term",
         "seasonal",
-        "säsong"
+        "säsong",
+        "tillfällig",
+        "påkallad"
       ]
     },
     "Temporary Part-time": {
@@ -428,9 +444,7 @@
       "none_of": [
         "jobb",
         "job",
-        "arbet",
         "assistant",
-        "anställ",
         "worker",
         "intern"
       ],
