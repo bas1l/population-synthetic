@@ -159,7 +159,14 @@
     "Sweden": {
       "equals": [
         "Sweden",
-        "Sverige"
+        "Sverige",
+        "SE",
+        "Kingdom of Sweden",
+        "Konungariket Sverige"
+      ],
+      "contains": [
+        "sverige",
+        "sweden"
       ]
     },
     "Syria": {
@@ -183,6 +190,11 @@
       "equals": [
         "Poland",
         "Polen"
+      ],
+      "contains": [
+        "poland",
+        "polen",
+        "polska"
       ]
     },
     "Iran": {
@@ -211,6 +223,12 @@
       "equals": [
         "Turkey",
         "Turkiet"
+      ],
+      "contains": [
+        "turkey",
+        "turkiet",
+        "türkiye",
+        "turkiye"
       ]
     },
     "Germany": {

@@ -38,9 +38,9 @@ from population_synthetic.analysis.utils.axes import (
     decompose_slug,
     diagnose_slug,
 )
+from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.figures import save_figure
 from population_synthetic.analysis.utils.marginals import compute_proportions
-from population_synthetic.analysis.utils.registry import analysis_output_dir
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 logger = logging.getLogger(__name__)
@@ -125,7 +125,7 @@ def load_marginal_series(
     attributes = scheme.attributes
     categories = scheme.categories
 
-    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    mapped_dir = resolve_mapped_dir(output_base)
     index_path = mapped_dir / "_index.json"
     if not index_path.is_file():
         raise FileNotFoundError(

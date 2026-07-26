@@ -535,3 +535,276 @@ def mixed_logit_interaction(frame: Any) -> dict[str, Any]:
     if not converged:
         out["note"] = "MixedLM did not converge; interaction p suppressed"
     return out
+
+
+# =========================================================================== #
+# Reliability / dispersion / resampling primitives                            #
+# (bootstrap CI, ICC(1,1), Krippendorff's alpha, Levene/Brown-Forsythe).      #
+# Added for the persona-realism judge process: N judge rounds per persona are  #
+# repeated measurements whose agreement (ICC / alpha) is the judge's           #
+# self-consistency, and per-combination rates/dispersions need interval        #
+# estimates and a variance-equality test vs the real reference.                #
+#                                                                              #
+# Degenerate-input policy (matches the rest of this module): a case that       #
+# cannot be computed (empty / singleton / zero-variance / single round)        #
+# returns a dict with the metric field ``None`` and an explicit ``"note"``     #
+# skipped-reason -- never a bare ``NaN`` that flows downstream unnoticed.       #
+# =========================================================================== #
+
+
+def bootstrap_ci(
+    values: Sequence[float],
+    statistic: Any = None,
+    *,
+    iterations: int = 2000,
+    ci_level: float = 0.95,
+    seed: int | None = None,
+) -> dict[str, Any]:
+    """Percentile bootstrap confidence interval for a sample statistic.
+
+    Resamples *values* with replacement ``iterations`` times, applies
+    *statistic* (default :func:`numpy.mean` -- so a 0/1 sample gives the rate) to
+    each resample, and returns the ``ci_level`` percentile interval of the
+    resampled statistics. The sampling unit is one element of *values* (for the
+    impossibility rate: one persona), so pass per-unit values, not pre-aggregated
+    scalars.
+
+    Randomness uses a local :func:`numpy.random.default_rng` seeded with *seed*
+    (never the legacy global ``np.random.seed``), so the interval is byte-stable
+    for a given ``(values, seed, iterations)`` and the seed can be recorded in run
+    metadata. ``ci_level`` is the central mass (e.g. ``0.95`` -> the 2.5th/97.5th
+    percentiles).
+
+    Returns ``{"point","lo","hi","ci_level","iterations","n","method"}`` where
+    ``point`` is the statistic on the observed sample and ``lo``/``hi`` are the
+    percentile bounds. Degenerate input (empty sample) returns those keys with
+    ``point``/``lo``/``hi`` ``None`` and a ``"note"``. A single-element or
+    zero-variance sample is *not* degenerate here: the bootstrap is exact
+    (``lo == hi == point``), which is the correct, honest interval.
+
+    Raises
+    ------
+    ValueError
+        If ``iterations < 1`` or ``ci_level`` is not in the open interval
+        ``(0, 1)`` -- a malformed request, surfaced rather than defaulted.
+    """
+    if iterations < 1:
+        raise ValueError(f"bootstrap iterations must be >= 1, got {iterations}")
+    if not 0.0 < ci_level < 1.0:
+        raise ValueError(f"ci_level must be in (0, 1), got {ci_level}")
+
+    stat_fn = statistic if statistic is not None else np.mean
+    arr = np.asarray(values, dtype=float)
+    n = int(arr.size)
+    base = {"ci_level": ci_level, "iterations": iterations, "n": n, "method": "percentile"}
+    if n == 0:
+        return {"point": None, "lo": None, "hi": None, **base, "note": "empty sample"}
+
+    point = float(stat_fn(arr))
+    rng = np.random.default_rng(seed)
+    resampled = np.empty(iterations, dtype=float)
+    for i in range(iterations):
+        sample = rng.choice(arr, size=n, replace=True)
+        resampled[i] = float(stat_fn(sample))
+
+    tail = (1.0 - ci_level) / 2.0
+    lo = float(np.quantile(resampled, tail))
+    hi = float(np.quantile(resampled, 1.0 - tail))
+    return {"point": point, "lo": lo, "hi": hi, **base}
+
+
+def icc(ratings: Sequence[Sequence[float]]) -> dict[str, Any]:
+    """Intraclass correlation ICC(1,1) -- one-way random-effects, single measure.
+
+    Input: ``ratings`` is a ``subjects x measurements`` layout -- one row per
+    subject (persona), each row the ``k`` repeated measurements (judge rounds) in
+    any order. The one-way model (Shrout & Fleiss 1979, ICC(1,1)) is the right
+    form here because the ``k`` rounds are *interchangeable* repeated calls of the
+    same judge, not ``k`` fixed distinct raters: each subject is measured by ``k``
+    randomly-drawn rounds and the round index carries no identity across subjects.
+
+    ``ICC(1,1) = (MSB - MSW) / (MSB + (k-1)*MSW)`` with ``MSB`` the between-subject
+    mean square (``df = n-1``) and ``MSW`` the within-subject mean square
+    (``df = n*(k-1)``). Requires a rectangular matrix (every subject the same
+    ``k``); ragged input raises.
+
+    Returns ``{"icc","n","k","msb","msw","model"}`` on success. Degenerate inputs
+    return those keys with ``icc`` ``None`` and a ``"note"``: fewer than 2
+    subjects, a single measurement (``k < 2`` -> MSW undefined, ``df_w = 0``), or
+    zero total variance (all values identical -> ICC undefined, not ``0``).
+
+    Raises
+    ------
+    ValueError
+        On ragged rows (unequal measurement counts) -- an absent cell must be
+        resolved by the caller, not silently rectangularized.
+    """
+    rows = [list(r) for r in ratings]
+    n = len(rows)
+    if n < 2:
+        return {"icc": None, "n": n, "k": 0, "msb": None, "msw": None,
+                "model": "ICC(1,1)", "note": "need >=2 subjects"}
+    widths = {len(r) for r in rows}
+    if len(widths) != 1:
+        raise ValueError(f"icc requires a rectangular subjects x measurements matrix, got row widths {sorted(widths)}")
+    k = widths.pop()
+    if k < 2:
+        return {"icc": None, "n": n, "k": k, "msb": None, "msw": None,
+                "model": "ICC(1,1)", "note": "need >=2 measurements per subject (ICC undefined for a single round)"}
+
+    arr = np.asarray(rows, dtype=float)
+    grand = float(arr.mean())
+    subject_means = arr.mean(axis=1)
+    ss_between = k * float(np.sum((subject_means - grand) ** 2))
+    ss_within = float(np.sum((arr - subject_means[:, None]) ** 2))
+    if ss_between == 0.0 and ss_within == 0.0:
+        return {"icc": None, "n": n, "k": k, "msb": 0.0, "msw": 0.0,
+                "model": "ICC(1,1)", "note": "zero variance (all ratings identical); ICC undefined"}
+    msb = ss_between / (n - 1)
+    msw = ss_within / (n * (k - 1))
+    denom = msb + (k - 1) * msw
+    if denom == 0.0:
+        return {"icc": None, "n": n, "k": k, "msb": msb, "msw": msw,
+                "model": "ICC(1,1)", "note": "zero denominator; ICC undefined"}
+    return {"icc": float((msb - msw) / denom), "n": n, "k": k,
+            "msb": msb, "msw": msw, "model": "ICC(1,1)"}
+
+
+def _krippendorff_delta_matrix(values: list[float], marginals: np.ndarray, level: str) -> np.ndarray:
+    """Squared difference function ``delta^2(c, k)`` over the ordered value set.
+
+    ``level`` selects the metric: ``nominal`` (0 if equal else 1), ``interval``
+    (``(v_c - v_k)^2``), or ``ordinal`` (Krippendorff's rank metric, which folds
+    the marginal counts ``marginals`` of the values *between* c and k). Values must
+    be numeric for ``interval``/``ordinal``.
+    """
+    v = len(values)
+    delta = np.zeros((v, v), dtype=float)
+    if level == "nominal":
+        for c in range(v):
+            for kk in range(v):
+                if c != kk:
+                    delta[c, kk] = 1.0
+        return delta
+    if level == "interval":
+        arr = np.asarray(values, dtype=float)
+        return (arr[:, None] - arr[None, :]) ** 2
+    if level == "ordinal":
+        # delta(c,k) = ( sum_{g=c..k} n_g - (n_c + n_k)/2 )^2, values ordered ascending.
+        for c in range(v):
+            for kk in range(c + 1, v):
+                between = float(np.sum(marginals[c:kk + 1]))
+                d = between - (marginals[c] + marginals[kk]) / 2.0
+                delta[c, kk] = d * d
+                delta[kk, c] = delta[c, kk]
+        return delta
+    raise ValueError(f"unknown krippendorff level {level!r}; expected nominal|interval|ordinal")
+
+
+def krippendorff_alpha(
+    data: Sequence[Sequence[float | None]],
+    *,
+    level: str = "interval",
+) -> dict[str, Any]:
+    """Krippendorff's alpha reliability coefficient across repeated ratings.
+
+    Input: ``data`` is a ``units x coders`` layout -- one row per unit (persona),
+    each row the ratings assigned by each coder (judge round); ``None`` marks a
+    missing rating (a failed round), handled natively. ``level`` is the
+    measurement level of the ratings: ``nominal`` (e.g. the boolean ``can_exist``),
+    ``interval`` (default; treat the 0-10 ``typicality`` as evenly spaced), or
+    ``ordinal`` (Krippendorff's rank metric on ``typicality``).
+
+    ``alpha = 1 - Do/De`` where ``Do`` is the observed disagreement and ``De`` the
+    disagreement expected by chance, both built from the coincidence matrix over
+    all within-unit rating pairs (each unit contributes its ``m(m-1)`` ordered
+    pairs weighted ``1/(m-1)``). ``alpha = 1`` is perfect agreement; ``0`` is
+    chance; negative values indicate systematic disagreement.
+
+    Returns ``{"alpha","n_units","n_values","level"}`` on success. Degenerate
+    inputs return those keys with ``alpha`` ``None`` and a ``"note"``: fewer than 2
+    units with >=2 ratings each, or only a single distinct value used across all
+    ratings (zero variance -> alpha undefined, reported as skipped, not ``NaN``).
+
+    Raises
+    ------
+    ValueError
+        If ``level`` is not one of ``nominal``/``interval``/``ordinal``.
+    """
+    if level not in ("nominal", "interval", "ordinal"):
+        raise ValueError(f"unknown krippendorff level {level!r}; expected nominal|interval|ordinal")
+
+    units = [[x for x in row if x is not None] for row in data]
+    units = [u for u in units if len(u) >= 2]
+    n_units = len(units)
+    if n_units < 2:
+        return {"alpha": None, "n_units": n_units, "n_values": 0, "level": level,
+                "note": "need >=2 units with >=2 ratings each"}
+
+    value_set = sorted({x for u in units for x in u})
+    v = len(value_set)
+    if v < 2:
+        return {"alpha": None, "n_units": n_units, "n_values": v, "level": level,
+                "note": "only one distinct value used; alpha undefined (zero variance)"}
+
+    idx = {val: i for i, val in enumerate(value_set)}
+    o = np.zeros((v, v), dtype=float)
+    for u in units:
+        m = len(u)
+        w = 1.0 / (m - 1)
+        for a in range(m):
+            for b in range(m):
+                if a != b:
+                    o[idx[u[a]], idx[u[b]]] += w
+    n_c = o.sum(axis=1)
+    n_total = float(o.sum())
+
+    delta = _krippendorff_delta_matrix(value_set, n_c, level)
+    do = float(np.sum(o * delta)) / n_total
+    de = float(np.sum(np.outer(n_c, n_c) * delta)) / (n_total * (n_total - 1.0))
+    if de == 0.0:
+        return {"alpha": None, "n_units": n_units, "n_values": v, "level": level,
+                "note": "zero expected disagreement; alpha undefined"}
+    return {"alpha": float(1.0 - do / de), "n_units": n_units, "n_values": v, "level": level}
+
+
+def variance_equality_test(
+    groups: dict[str, list[float]],
+    *,
+    center: str = "median",
+) -> dict[str, Any]:
+    """Levene / Brown-Forsythe test of equal variance (dispersion) across groups.
+
+    Tests the null that every group has the same spread -- the dispersion-side
+    complement to a location test, used here to ask whether a combination's
+    typicality spread differs from the real (SCB) reference's. Delegates to
+    :func:`scipy.stats.levene`; ``center="median"`` is the **Brown-Forsythe**
+    variant (robust to non-normal, skewed data -- the safe default), ``center=
+    "mean"`` is the original Levene test.
+
+    Input ``groups`` maps a group label to its sample list. Returns
+    ``{"statistic","p","k","center","n"}`` on success. Degenerate inputs return
+    those keys with ``statistic``/``p`` ``None`` and a ``"note"``: fewer than 2
+    groups with >=2 samples each, or zero variance in *every* group (all values
+    identical -> the statistic is undefined rather than a meaningful ``NaN``).
+
+    Raises
+    ------
+    ValueError
+        If ``center`` is not ``median`` or ``mean``.
+    """
+    if center not in ("median", "mean"):
+        raise ValueError(f"center must be 'median' or 'mean', got {center!r}")
+
+    usable = {g: v for g, v in groups.items() if len(v) >= 2}
+    n_total = sum(len(v) for v in usable.values())
+    if len(usable) < 2:
+        return {"statistic": None, "p": None, "k": len(usable), "center": center,
+                "n": n_total, "note": "need >=2 groups with >=2 samples each"}
+    if all(float(np.var(v)) == 0.0 for v in usable.values()):
+        return {"statistic": None, "p": None, "k": len(usable), "center": center,
+                "n": n_total, "note": "zero variance in every group; test undefined"}
+
+    stat, p = stats.levene(*usable.values(), center=center)
+    return {"statistic": float(stat), "p": float(p), "k": len(usable),
+            "center": center, "n": n_total}

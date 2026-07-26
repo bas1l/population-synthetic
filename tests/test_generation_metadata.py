@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -35,12 +36,12 @@ from population_synthetic.analysis.generation_metadata.combo_aggregator import (
     aggregate_combo,
 )
 from population_synthetic.analysis.generation_metadata.cost import persona_cost
+from population_synthetic.analysis.generation_metadata.interaction_parser import parse_interactions
 from population_synthetic.analysis.generation_metadata.persona_metrics import (
     PersonaMetrics,
     reduce_persona,
 )
 from population_synthetic.analysis.generation_metadata.pricing import PricingTable, load_pricing_table
-from population_synthetic.analysis.population_cap import cap_combo
 from population_synthetic.analysis.utils._stats import mean, stddev
 from population_synthetic.analysis.utils.registry import analysis_output_dir
 
@@ -132,6 +133,59 @@ def test_reduce_persona_empty_entries():
     assert pm.error_rate is None
 
 
+def test_reduce_persona_sums_cache_tokens():
+    entries = [
+        {"prompt_tokens": 2, "completion_tokens": 40, "cache_read_tokens": 1000,
+         "cache_creation_tokens": 0},
+        {"prompt_tokens": 2, "completion_tokens": 60, "cache_read_tokens": 1000,
+         "cache_creation_tokens": 500},
+    ]
+    pm = reduce_persona(entries)
+    assert pm.cache_read_tokens == 2000
+    assert pm.cache_creation_tokens == 500
+
+
+def test_reduce_persona_cache_tokens_none_when_absent():
+    # Legacy entries with no cache fields -> the sums stay None (absent != 0).
+    entries = [{"prompt_tokens": 100, "completion_tokens": 40}]
+    pm = reduce_persona(entries)
+    assert pm.cache_read_tokens is None
+    assert pm.cache_creation_tokens is None
+
+
+# --------------------------------------------------------------------------- #
+# interaction_parser: cache-token round-trip incl. legacy logs
+# --------------------------------------------------------------------------- #
+
+
+def test_parser_round_trips_cache_tokens_and_defaults_legacy(tmp_path: Path):
+    log = tmp_path / "llm_interactions.jsonl"
+    lines = [
+        # New-format line carrying the cache fields.
+        {"category": "persona_realism", "method": "judge", "step": "round_0",
+         "prompt": "p", "raw_response": "r", "prompt_tokens": 2, "completion_tokens": 40,
+         "cache_read_tokens": 1000, "cache_creation_tokens": 500},
+        # Legacy line lacking the cache fields entirely -> parsed as None (no KeyError).
+        {"category": "persona_realism", "method": "judge", "step": "round_1",
+         "prompt": "p", "raw_response": "r", "prompt_tokens": 2, "completion_tokens": 60},
+    ]
+    with open(log, "w", encoding="utf-8") as fh:
+        for rec in lines:
+            fh.write(json.dumps(rec) + "\n")
+
+    entries = parse_interactions(log)
+    assert entries[0]["cache_read_tokens"] == 1000
+    assert entries[0]["cache_creation_tokens"] == 500
+    # Legacy line: keys present (normalised) and defaulted to None.
+    assert entries[1]["cache_read_tokens"] is None
+    assert entries[1]["cache_creation_tokens"] is None
+
+    # The reduce layer sums across the mixed log (absent counts as absent, not 0).
+    pm = reduce_persona(entries)
+    assert pm.cache_read_tokens == 1000
+    assert pm.cache_creation_tokens == 500
+
+
 # --------------------------------------------------------------------------- #
 # (c) cost.persona_cost
 # --------------------------------------------------------------------------- #
@@ -166,6 +220,55 @@ def test_persona_cost_zero_for_ollama():
 def test_persona_cost_raises_when_tokened_but_unpriced():
     with pytest.raises(KeyError):
         persona_cost("some_unpriced_model", 100, 50, _pricing())
+
+
+def _pricing_with_cache() -> PricingTable:
+    return PricingTable(
+        rates={"claude_haiku": (1.0, 5.0)},
+        observed_date="2026-07-23",
+        source="unit-test",
+        currency="USD_per_1M_tokens",
+        cache_multipliers={"read": 0.1, "write": 1.25},
+    )
+
+
+def test_persona_cost_without_cache_tokens_is_unchanged():
+    # A pricing table WITH a cache block must still return the plain token-only
+    # cost when no cache tokens are supplied (backward-compat with existing callers).
+    priced = _pricing_with_cache()
+    assert persona_cost("claude_haiku", 300, 100, priced) == pytest.approx(0.0008)
+    # Explicit zeros are the same as omission.
+    assert persona_cost(
+        "claude_haiku", 300, 100, priced, cache_read_tokens=0, cache_creation_tokens=0
+    ) == pytest.approx(0.0008)
+    # None cache tokens (as summed from a persona with no cache telemetry) also gate off.
+    assert persona_cost(
+        "claude_haiku", 300, 100, priced, cache_read_tokens=None, cache_creation_tokens=None
+    ) == pytest.approx(0.0008)
+
+
+def test_persona_cost_with_cache_tokens_adds_multiplied_input():
+    # base = 300*1/1e6 + 100*5/1e6 = 0.0008
+    # cache read     = 1000 * 1.0 * 0.10 / 1e6 = 0.0001
+    # cache creation =  500 * 1.0 * 1.25 / 1e6 = 0.000625
+    cost = persona_cost(
+        "claude_haiku", 300, 100, _pricing_with_cache(),
+        cache_read_tokens=1000, cache_creation_tokens=500,
+    )
+    assert cost == pytest.approx(0.0008 + 0.0001 + 0.000625)
+
+
+def test_persona_cost_cache_tokens_without_multipliers_raises():
+    # Cache tokens supplied but the pricing config omitted the cache_multipliers
+    # block -> fail-fast (never silently priced at a default).
+    with pytest.raises(ValueError, match="cache_multipliers"):
+        persona_cost("claude_haiku", 300, 100, _pricing(), cache_read_tokens=1000)
+
+
+def test_real_pricing_config_has_cache_multipliers():
+    table = load_pricing_table()
+    assert table.cache_multipliers == {"read": 0.1, "write": 1.25}
+    assert table.cache_mults() == (0.1, 1.25)
 
 
 # --------------------------------------------------------------------------- #
@@ -298,18 +401,21 @@ def _build_raw_fixture(output_base: Path) -> None:
     _write_jsonl(raw / _TOKENLESS_SLUG / "persona_0001" / "llm_interactions.jsonl", _tokenless_entries())
 
 
-def _cap_raw_fixture(output_base: Path, n: int = 100) -> None:
-    """Run the real population_cap over every 01_Raw combo into the capped mirror.
+def _cap_raw_fixture(output_base: Path) -> None:
+    """Materialize the capped persona-dir mirror population_cap produces for the fixture.
 
-    generation_metadata now reads the capped mirror exclusively (never 01_Raw), so the
-    true pipeline order is cap -> summarize. ``n`` is deliberately larger than any
-    combo's persona count, so every fixture persona is retained and the summarize
-    assertions still hold over the full fixture.
+    generation_metadata reads the capped mirror exclusively (never 01_Raw), globbing each
+    combo's ``population_cap/{slug}/persona_*/llm_interactions.jsonl`` telemetry. Here every
+    fixture persona is clean, so the mirror is the full 01_Raw pool copied verbatim (the
+    same layout the cap writes for an n above every combo's persona count) -- letting the
+    summarize assertions hold over the whole fixture without wiring the full validity gate.
     """
     raw = output_base / "01_Raw"
     cap_stage = analysis_output_dir("population_cap", output_base)
     for slug_dir in sorted(p for p in raw.iterdir() if p.is_dir()):
-        cap_combo(slug_dir, n, 0, cap_stage / slug_dir.name)
+        dest = cap_stage / slug_dir.name
+        for persona_dir in sorted(slug_dir.glob("persona_*")):
+            shutil.copytree(persona_dir, dest / persona_dir.name)
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:

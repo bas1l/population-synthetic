@@ -65,16 +65,20 @@ These are enforced guardrails, not suggestions. Full rationale in
 `src/` layout; the `population_synthetic` namespace holds the two data producers under
 `generators/` -- `generators/real/` (per-country data layers over a shared parent) and
 `generators/synthetic/` (LLM persona generation) -- plus `analysis/` (the
-post-generation family, one subpackage per process: `population_cap/` the pipeline **root** —
-seeded per-combo cap of each combination's generated personas to `--n`, copying the selected
-`persona_*` dirs (plus combo logs/metadata) into a layout-identical capped mirror at
-`03_Analysis/population_cap/{slug}/`; every raw-persona consumer (mapping, generation_metadata)
-reads that mirror instead of `01_Raw` and **fails loudly (`FileNotFoundError`) if it is absent —
-no `01_Raw` fallback**, `mapping/` raw -> canonical schema
+post-generation family, one subpackage per process: `validate_raw/` the analysis-DAG **root** —
+an atomistic per-combo raw-completeness check (per persona: `identity.json` present + every
+config-derived category populated) writing one CSV per combo; `mapping/` raw -> canonical schema
 (two tiers, selected per country by the axis YAML `parameters.mappings`: a **native**
 within-country high-fidelity tier — `config/mapping/scb_native`, the default for Sweden —
 and a coarser, cross-country **global** tier — `config/mapping/scb` — whose collapse is
 deferred/design-only; see [Comparison & mapping](docs/architecture/comparison-mapping.md)),
+`validate_mapped/` an atomistic per-combo check writing one CSV per combo (row per mapped persona:
+which canonical fields are left as the `__UNMAPPED__` sentinel), `population_cap/` the validation
+gate's final stage — intersects the two validity CSVs to the clean persona ids, seeded-caps `--n` of
+them, copies the selected `persona_*` dirs (plus combo logs/metadata) into the capped mirror at
+`03_Analysis/population_cap/{slug}/` (telemetry for `generation_metadata`) and writes the capped
+mapped file + copied real reference under `.../population_cap/_mapped/` (read by every mapped-file
+analysis via `analysis/utils/capped_source.resolve_mapped_dir`, fail-fast, no `mapping/` fallback),
 `fidelity/` two-stage map -> score statistical scoring + charts (synthetic vs real), `multivariate_fidelity/` standalone
 multivariate fidelity (recomputes the `multivariate` block over the mapped populations into
 its own `03_Analysis/multivariate_fidelity/` folder), `model_ranking/` cross-model
@@ -89,6 +93,13 @@ rates, latency p95/max, success rate, estimated USD cost from `config/analysis/m
 plus per-combo deep diagnostics and per-country cross-factor significance (Kruskal-Wallis + Dunn/Holm
 across the model and method factors), read from the LLM-call telemetry of the **capped mirror**
 (`03_Analysis/population_cap/`, produced by `population_cap`), not `01_Raw` directly,
+`persona_realism/` an LLM-as-judge coherence task — judges each individual mapped persona N cold
+rounds (`can_exist` binary + `typicality` 0-10 ordinal + severity-tagged clash issues) and ranks
+every combination **plus the SCB real reference as a competitor** on a per-combination impossibility
+rate (bootstrap CI), typicality dispersion vs SCB (Levene), and a judge self-reliability metric
+(ICC / Krippendorff's α — self-consistency, **not** validity; the config-driven hard-rules subset is
+the only validity anchor); judge model + params config-driven in `config/analysis/persona_realism/`,
+cost via `model_pricing.yaml`,
 and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
@@ -100,10 +111,13 @@ registry key, the GUI workflow task key, and the `03_Analysis/` output-folder na
 can never drift. Scripts resolve their output dir via `analysis_output_dir(id, base)` — no hardcoded
 `03_Analysis`/folder literals (the sole `"03_Analysis"` definition lives in `registry.py`). The map
 stage folder was renamed `mapped/` → `mapping/`; readers pass `for_read=True` to transparently fall
-back to any legacy on-disk `mapped/` (deprecation-logged) until re-mapped. `population_cap` is the
-analysis-DAG **root**: `mapping` and `generation_metadata` `depends_on: [population_cap]` and read
-its `03_Analysis/population_cap/` capped mirror via `analysis/utils/capped_source.py` (fail-fast, no
-`01_Raw` fallback).
+back to any legacy on-disk `mapped/` (deprecation-logged) until re-mapped. The analysis DAG is a
+validation gate: `validate_raw` (**root**) → `mapping` (reads the full `01_Raw` pool) →
+`validate_mapped` → `population_cap` → every other process. `population_cap` intersects the two
+per-combo validity CSVs, seeded-caps `--n` clean personas, and materializes both the capped
+persona-dir mirror and `03_Analysis/population_cap/_mapped/`; `generation_metadata` reads the
+mirror's telemetry via `analysis/utils/capped_source.py` and the mapped-file consumers read
+`_mapped/` via `resolve_mapped_dir` (fail-fast, no `01_Raw`/`mapping/` fallback).
 
 | Topic | Page |
 |-------|------|

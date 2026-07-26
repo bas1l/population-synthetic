@@ -14,6 +14,7 @@ _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 
 _REAL_MAPPERS: dict[str, type[AbstractRealMapper]] = {
     "swedish": SwedishRealMapper,
+    "swedish_02": SwedishRealMapper,  # guided-prompt A/B arm (simulation config 006)
     "italian": ItalianRealMapper,
 }
 

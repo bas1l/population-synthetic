@@ -132,6 +132,22 @@ python scripts/analyze/summarize_generation_metadata.py --model claude_haiku --n
 # --verbose prints per-combo deep diagnostics; --metrics limits the comparison to a metric subset
 python scripts/analyze/summarize_generation_metadata.py --country swedish --verbose --metrics time cost
 
+# Persona realism judge (LLM-as-judge): judge each mapped persona's internal coherence with the
+# Claude CLI (default claude-sonnet-5; Fable is the slowest/most-expensive selectable option) over N
+# cold rounds -- can_exist (binary) + typicality (0-10) +
+# severity-tagged clash issues -- and rank every combination PLUS the SCB real reference on a per-
+# combination impossibility rate (bootstrap CI) x typicality-dispersion-vs-SCB (Levene), with an
+# ICC/alpha judge self-consistency metric. Two-stage: run map_populations.py first (depends_on:
+# [mapping]; reads the mapped populations). Config-driven judge model/params in
+# config/analysis/persona_realism/; cost priced via config/analysis/model_pricing.yaml. Filters are
+# repeatable; run once with broad filters (CLI batch) to put every combo on one headline map -- the
+# GUI per_combo dispatch judges ONE combo per node run.
+python scripts/analyze/analyze_persona_realism.py --country swedish
+python scripts/analyze/analyze_persona_realism.py --slug swedish_all_pick_claude_sonnet --sample 200 --force
+# --rounds overrides the judge rounds per persona (default 3); --judge-model picks a model_options
+# entry; --workers sets the fan-out width; --output-base/--dpi as usual
+python scripts/analyze/analyze_persona_realism.py --country swedish --rounds 5 --judge-model claude-sonnet-5 --workers 8
+
 # Launch the GUI: the config-driven Flow Runner (requires pip install -e ".[gui]")
 python -m population_synthetic.gui.main
 
@@ -141,6 +157,14 @@ ruff check src/
 
 A pytest suite lives under `tests/` (covers the `analysis/generation_metadata/` layer and `clients/call_context`).
 Run it with `pytest` (requires `pip install -e ".[dev]"`).
+
+## Developer tools
+
+Standalone helpers under `tools/` (self-contained, not part of the analysis pipeline):
+
+| Tool | What it does | Entry point |
+|------|--------------|-------------|
+| `graph-diff` | Renders the change in a package's import/dependency graph between two git refs — added edges green, removed red, unchanged grey — as SVG/PNG/DOT + JSON/MD. Repo-agnostic; needs the Graphviz `dot` binary for SVG/PNG. See [`tools/graph-diff/README.md`](../../tools/graph-diff/README.md). | `python tools/graph-diff/graph_diff.py --package-path src/population_synthetic --base-ref dev` |
 
 ## Analysis registry (canonical id → label → folder → script)
 
@@ -162,6 +186,7 @@ resolve their output dir via `analysis_output_dir(id, output_base)` rather than 
 | `cross_country` | Cross-Country (real vs real) | `cross_country/` | `compare_real_countries.py` | cli (CLI-only) |
 | `real_population_stats` | Real Reference Population Stats | `real_population_stats/{country}/` | `analyze_real_population_stats.py` | per_country |
 | `generation_metadata` | Generation Metadata (country × model × method) | `generation_metadata/` | `summarize_generation_metadata.py` | slugs |
+| `persona_realism` | Persona Realism Judge (LLM-as-judge) | `persona_realism/` | `analyze_persona_realism.py` | per_combo |
 
 ## See also
 

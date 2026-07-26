@@ -122,6 +122,37 @@ def test_italian_nordic_born_folds_into_europe_other():
     assert out["birth_location"] == "Europe (Other)"
 
 
+@pytest.mark.parametrize(
+    ("raw_status", "expected"),
+    [
+        ("Full-time student", "Student"),   # was a null-source miss -> None
+        ("Student", "Student"),
+        ("studerande", "Student"),
+        ("Retired", "Retired"),
+        ("Pensionär", "Retired"),
+        ("Employed", "Employed"),           # regression: unchanged
+        ("Anställd heltid", "Employed"),     # regression: unchanged
+        ("Arbetslös", "Unemployed"),         # regression: unchanged
+    ],
+)
+def test_swedish_employment_status_student_and_retired_matchers(raw_status, expected):
+    # employment.json gained Student/Retired synthetic blocks (previously latent None);
+    # "Full-time student" must route to Student, not Employed (Employed's "full time"
+    # space-token cannot substring-match the hyphenated "full-time").
+    mapper = get_synthetic_mapper("swedish")
+    out = mapper.map_individual(_swedish_identity(employment_status=raw_status), "p")
+    assert out["employment_status"] == expected
+
+
+def test_swedish_natural_parents_mother_and_father_phrasing():
+    # parental_structure.json Natural Parents gained "mother and father" so the common
+    # LLM phrasing "Mother and father (married)" no longer resolves to None.
+    mapper = get_synthetic_mapper("swedish")
+    out = mapper.map_individual(
+        _swedish_identity(parental_structure="Mother and father (married)"), "p")
+    assert out["parental_structure"] == "Natural Parents"
+
+
 def _swedish_identity(**overrides) -> dict:
     """A minimal valid flat identity (passes the age gate) with overridable fields."""
     base = {

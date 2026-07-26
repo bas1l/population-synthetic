@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
+from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR
 from population_synthetic.analysis.utils.registry import analysis_output_dir
 
 ATTRIBUTES = ["age_group", "biological_sex", "education_level"]
@@ -138,14 +139,18 @@ def build_workspace(
     tmp_path: Path,
     entries: list[dict[str, Any]],
 ) -> Path:
-    """Materialise ``mapped/_index.json`` + per-slug comparison reports under *tmp_path*.
+    """Materialise ``population_cap/_mapped/_index.json`` + per-slug comparison reports.
 
     Each entry: ``{"slug", "country", "report" (dict | None), "skipped" (bool, optional)}``.
     ``report=None`` leaves the index entry in place but writes no comparison
     report (the loader's missing-report case); ``skipped=True`` marks the entry
     skipped during mapping. Returns *tmp_path* (the output_base).
+
+    The mapped index/files live in the CAPPED mapped dir
+    (``population_cap/_mapped/``) the loader now resolves via ``resolve_mapped_dir``,
+    not the full ``mapping/`` output.
     """
-    mapped_dir = analysis_output_dir("mapping", tmp_path)
+    mapped_dir = analysis_output_dir("population_cap", tmp_path) / MAPPED_SUBDIR
     comparison_dir = analysis_output_dir("fidelity", tmp_path)
     mapped_dir.mkdir(parents=True, exist_ok=True)
 

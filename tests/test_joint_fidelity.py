@@ -19,6 +19,7 @@ from population_synthetic.analysis.multivariate_fidelity.builder import (
     aggregate_multivariate_fidelity,
     build_multivariate_fidelity,
 )
+from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR
 from population_synthetic.analysis.utils.registry import analysis_output_dir
 
 _AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85"]
@@ -132,7 +133,9 @@ def _load_driver():
 def test_driver_writes_joint_fidelity_tree(tmp_path, monkeypatch):
     driver = _load_driver()
 
-    mapped_dir = analysis_output_dir("mapping", tmp_path)
+    # The driver reads its mapped populations from the CAPPED mapped dir
+    # (population_cap/_mapped/) via resolve_mapped_dir, not the full mapping/ output.
+    mapped_dir = analysis_output_dir("population_cap", tmp_path) / MAPPED_SUBDIR
     mapped_dir.mkdir(parents=True)
 
     real, synth = _real_and_synth()

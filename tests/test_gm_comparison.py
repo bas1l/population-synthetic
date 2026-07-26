@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -38,7 +39,6 @@ from population_synthetic.analysis.generation_metadata.comparison import (
     group_label,
     significance_from_comparison,
 )
-from population_synthetic.analysis.population_cap import cap_combo
 from population_synthetic.analysis.utils.registry import analysis_output_dir
 
 
@@ -273,11 +273,14 @@ def _build_2x2_fixture(output_base: Path) -> None:
                     raw / slug / f"persona_{i:04d}" / "llm_interactions.jsonl",
                     _entries(magnitudes[model] + i),
                 )
-    # generation_metadata reads the capped mirror, not 01_Raw: run the real cap first
-    # (n larger than any combo's persona count keeps every fixture persona).
+    # generation_metadata reads the capped persona-dir mirror, not 01_Raw. Every fixture
+    # persona is clean, so the mirror is the full 01_Raw pool copied verbatim -- the same
+    # layout the cap writes for an n above every combo's persona count.
     cap_stage = analysis_output_dir("population_cap", output_base)
     for slug_dir in sorted(p for p in raw.iterdir() if p.is_dir()):
-        cap_combo(slug_dir, 100, 0, cap_stage / slug_dir.name)
+        dest = cap_stage / slug_dir.name
+        for persona_dir in sorted(slug_dir.glob("persona_*")):
+            shutil.copytree(persona_dir, dest / persona_dir.name)
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:

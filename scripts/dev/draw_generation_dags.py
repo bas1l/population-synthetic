@@ -99,6 +99,25 @@ def _base_dag():
 
 def sweden_spec():
     nodes, edges, marginals = _base_dag()
+    # --- Sweden-specific conditioning, verified against sweden/sample_service.py (2026-07) ---
+    # employment_status default path is the (age x education x sex) odds-merge of two register
+    # tables (ArRegArbStatus x ArbStatusUtbM); --no-merge-status-education reverts to the
+    # (age, sex)-only ArRegArbStatus table.
+    nodes["employment"]["detail"] = "| age, education, sex (merge)"
+    edges.append(("agesex", "employment", "solid"))
+    # industry_sector conditions on (age_group, sex) as well as the employed gate.
+    edges.append(("agesex", "industry", "age"))
+    # birth_location is now an (age_group, sex) conditional (FolkmFodlandHVD age x sex query),
+    # no longer a national marginal; it still parents birth_country_detail.
+    nodes["birthloc"] = dict(x=8.9, y=9.3, kind="cond",
+                             label="birth_location", detail="| age_group, sex")
+    edges.append(("agesex", "birthloc", "solid"))
+    # housing_tenure is now an (age_group, sex) conditional (person-level register HushallT31);
+    # promote it out of the pure-marginals strip.
+    marginals = [m for m in marginals if m != "housing_tenure"]
+    nodes["housing_tenure"] = dict(x=9.5, y=7.3, kind="cond",
+                                   label="housing_tenure", detail="| age_group, sex")
+    edges.append(("agesex", "housing_tenure", "solid"))
     return dict(
         key="sweden",
         title="Sweden  -  SCB synthetic population generation",
@@ -106,15 +125,17 @@ def sweden_spec():
                  "(conditional chained sampling, ~14 draws)",
         etl=[
             ("SCBPxWebClient", "PxWeb\njson-stat2 (POST)", C_SRC),
-            ("12 SCB tables", "BE / UF / AM\nHE / LE / BO", C_SRC),
-            ("load_all", "single client\n14x fetch_*", C_SRC),
+            ("13 SCB tables", "BE / UF / AM\nHE / LE", C_SRC),
+            ("load_all", "single client\nstatus x edu merge", C_SRC),
             ("parsers", "json-stat2\n-> prob dicts", C_SRC),
-            ("PopulationDistributions", "all 16 fields\n(income_source real)", C_DIST),
+            ("PopulationDistributions", "16 fields; employment\nage x edu x sex", C_DIST),
             ("SampleService", "sample_population", C_HUB),
         ],
         nodes=nodes, edges=edges, marginals=marginals,
-        notes="Most data-rich: only country with a real income_source conditional table "
-              "and employment_type built from two tables (attachment x hours) at true (age,sex) cells.",
+        notes="Most data-rich: employment_status is an (age x education x sex) two-table odds-merge "
+              "(default; --no-merge-status-education opts out), a real income_source conditional table, "
+              "and employment_type from two tables (attachment x hours). birth_location & housing_tenure "
+              "are (age,sex) conditionals.",
     )
 
 

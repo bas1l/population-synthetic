@@ -1,0 +1,91 @@
+# Persona-realism LLM-as-judge configuration -- the single source of truth for the
+# persona_realism analysis process. Read (fail-fast) by the judge-call layer and
+# the aggregation/stats layer; a missing or malformed value must RAISE, never
+# silently default.
+#
+# The judge scores each individual mapped persona N times (n_rounds) at cold
+# temperature, returning can_exist (binary possibility) and typicality (0-10
+# ordinal) plus severity-tagged attribute-clash issues. See judge_prompt.md for
+# the prompt contract and hard_rules.yaml for the deterministic can_exist audit.
+
+# Judge model: the raw string passed to `claude -p ... --model <judge_model>`.
+# Must match a row key in config/analysis/model_pricing.yaml for cost lookup.
+# Default is Sonnet 5: it is the best coherence-judge tier (coherence judging
+# peaks at the Sonnet tier and inverts above it) with low latency and low cost.
+# Fable remains a selectable option but is the slowest and most expensive.
+judge_model: "claude-sonnet-5"
+
+# GUI dropdown options (Claude family only). judge_model must be one of these.
+# Each must resolve on the account before use (Fable is plan-dependent; smoke-test
+# before wiring -- see the plan Manual Verification).
+model_options:
+  - "claude-fable-5"
+  - "claude-opus-4-8"
+  - "claude-sonnet-5"
+  - "claude-haiku-4-5"
+
+# Number of independent judge calls per persona. N>=2 is required for any
+# reliability (ICC / Krippendorff's alpha) or per-persona SD to be defined.
+n_rounds: 3
+
+# Sampling temperature for the judge. Cold (0.0) for reproducibility; the residual
+# stochasticity across rounds is the measured quantity, not noise to eliminate.
+temperature: 0.0
+
+# Weight of each issue severity when folding clashes into a per-persona clash
+# score. S1 (unusual-but-possible) is reported but never penalized (weight 0).
+severity_weights:
+  S3: 1.0
+  S2: 0.5
+  S1: 0.0
+
+# Which severities force can_exist=false at aggregation. A hard contradiction (S3)
+# is the only impossibility driver; S2/S1 are near/possible and do not gate.
+impossibility_severities:
+  - "S3"
+
+# Personas to judge per combination (nullable). null -> judge every persona; an
+# integer caps the count via seeded sampling (bounds judge cost). If larger than
+# the population, all personas are used with no error. Governs the SYNTHETIC combos
+# only; the real reference is capped separately by `real_sample_size` below.
+sample_size: null
+
+# Personas to judge for the REAL reference combo (`real_{country}`) only (nullable).
+# The real API-sourced population (~10,000 individuals) dwarfs the synthetic combos,
+# so it is capped independently of `sample_size` to keep the competitor comparable.
+# null -> judge every real persona; an integer caps the count via a deterministic
+# FIRST-N prefix (indices 0..N-1, NOT seeded random): the SCB population is already
+# an i.i.d. sample so a prefix is a valid random subsample, it is reproducible across
+# runs, and it reuses any already-cached prefix personas. Distinct from `sample_size`.
+real_sample_size: 100
+
+# Bootstrap parameters for the impossibility-rate confidence interval. The RNG is
+# seeded with `seed` (recorded in run metadata) via numpy.random.default_rng.
+bootstrap:
+  iterations: 2000
+  seed: 20260723
+  ci_level: 0.95
+
+# Judge self-consistency (reliability) settings for the aggregation/stats layer.
+# `typicality_level` is the Krippendorff's-alpha measurement level for the ordinal
+# 0-10 typicality across rounds: "ordinal" (default; a rating is a rank, not an
+# interval -- the principled choice) or "interval" (treat the 0-10 scale as evenly
+# spaced). The can_exist reliability is always nominal (a boolean has no interval
+# meaning) and is not configurable. These measure the judge's precision, NOT its
+# correctness -- validity is anchored only by hard_rules.yaml.
+reliability:
+  typicality_level: "ordinal"
+
+# Parallel judge-call fan-out (ThreadPoolExecutor max_workers).
+workers: 8
+
+# Subprocess wall-clock timeout (seconds) per judge call, threaded into the
+# ClaudeCodeClient the judge factory constructs. 600 s is a generous ceiling that
+# also covers the slowest *selectable* judge (Fable/Opus single turns can run for
+# minutes on hard personas) if one is chosen; Sonnet (the new default) finishes in
+# seconds. The client's own 120 s default was too tight for the slow tiers and
+# caused whole rounds to fail, so the config threads this value in explicitly.
+timeout_seconds: 600
+
+# Prompt template, resolved relative to this config file's directory.
+prompt_template: "judge_prompt.md"

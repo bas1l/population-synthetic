@@ -31,6 +31,9 @@ def persona_cost(
     input_tokens: int | None,
     output_tokens: int | None,
     pricing: PricingTable,
+    *,
+    cache_read_tokens: int | None = 0,
+    cache_creation_tokens: int | None = 0,
 ) -> float | None:
     """Estimated USD cost for one persona; ``None`` when ungated, raises when unpriceable.
 
@@ -43,22 +46,41 @@ def persona_cost(
         provider reported none for that side).
     pricing:
         The loaded :class:`PricingTable`.
+    cache_read_tokens, cache_creation_tokens:
+        Optional prompt-cache token sums. When either is > 0 the input component
+        gains ``cache_read_tokens * price_in * read_mult / 1e6`` and
+        ``cache_creation_tokens * price_in * write_mult / 1e6``, with the
+        multipliers sourced from the pricing config's ``cache_multipliers`` block.
+        Defaulting both to 0 keeps existing positional callers byte-for-byte
+        identical -- the cache branch is never entered when they are absent.
 
     Returns
     -------
     float | None
-        ``in_tok * price_in / 1e6 + out_tok * price_out / 1e6``, or ``None`` when
-        the persona has no token telemetry at all.
+        ``in_tok * price_in / 1e6 + out_tok * price_out / 1e6`` (plus the cache
+        component when cache tokens are supplied), or ``None`` when the persona has
+        no prompt/completion token telemetry at all.
 
     Raises
     ------
     KeyError
         When the persona has token telemetry but *model_id* is absent from the
         pricing table (delegated to :meth:`PricingTable.get`).
+    ValueError
+        When cache tokens are supplied but the pricing config omits the
+        ``cache_multipliers`` block (delegated to :meth:`PricingTable.cache_mults`).
     """
     if input_tokens is None and output_tokens is None:
         return None
     price_in, price_out = pricing.get(model_id)  # raises loudly if the id is unknown
     in_tok = input_tokens or 0
     out_tok = output_tokens or 0
-    return in_tok * price_in / _PER_MILLION + out_tok * price_out / _PER_MILLION
+    cost = in_tok * price_in / _PER_MILLION + out_tok * price_out / _PER_MILLION
+
+    cache_read = cache_read_tokens or 0
+    cache_creation = cache_creation_tokens or 0
+    if cache_read or cache_creation:
+        read_mult, write_mult = pricing.cache_mults()  # raises if the block is absent
+        cost += cache_read * price_in * read_mult / _PER_MILLION
+        cost += cache_creation * price_in * write_mult / _PER_MILLION
+    return cost

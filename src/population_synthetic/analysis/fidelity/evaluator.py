@@ -18,6 +18,7 @@ import numpy as np
 from scipy.stats import chi2_contingency, chisquare
 
 from population_synthetic.analysis.fidelity.scheme import ComparisonScheme
+from population_synthetic.analysis.utils.mapping_sentinel import is_unmapped
 from population_synthetic.generators.real.helpers import age_to_group
 
 # The comparison axis (attributes, categories, joint pairs, coherence attributes,
@@ -93,10 +94,10 @@ class StatisticalEvaluator:
             # set, so values the real population never emits cannot appear, and synthetic-only
             # values fall outside the axis (reported as unmapped, not silently scored).
             all_categories = list(self.scheme.categories[attr])
-            unmapped = [c for c in counts_b if c is not None and c not in all_categories]
+            unmapped = [c for c in counts_b if not is_unmapped(c) and c not in all_categories]
         else:
-            all_categories = sorted((set(counts_a) | set(counts_b)) - {None})
-            unmapped = [c for c in counts_b if c not in counts_a and c is not None]
+            all_categories = sorted(c for c in (set(counts_a) | set(counts_b)) if not is_unmapped(c))
+            unmapped = [c for c in counts_b if c not in counts_a and not is_unmapped(c)]
         unknown_count_b = int(counts_b.get("Non-standard label", 0))
         unknown_count_a = int(counts_a.get("Non-standard label", 0))
 
@@ -163,8 +164,14 @@ class StatisticalEvaluator:
     # --- Joint chi-squared -------------------------------------------------
 
     def _joint_chi_sq(self, attr_x: str, attr_y: str) -> float:
-        all_x = sorted({attr_value(ind, attr_x) for ind in self.individuals_a + self.individuals_b} - {None})
-        all_y = sorted({attr_value(ind, attr_y) for ind in self.individuals_a + self.individuals_b} - {None})
+        all_x = sorted(
+            v for v in {attr_value(ind, attr_x) for ind in self.individuals_a + self.individuals_b}
+            if not is_unmapped(v)
+        )
+        all_y = sorted(
+            v for v in {attr_value(ind, attr_y) for ind in self.individuals_a + self.individuals_b}
+            if not is_unmapped(v)
+        )
 
         def _crosstab(individuals: list[dict]) -> np.ndarray:
             table = np.zeros((len(all_x), len(all_y)), dtype=float)
@@ -205,7 +212,7 @@ class StatisticalEvaluator:
         tuple_counts: Counter = Counter()
         for ind in self.individuals_a:
             key = tuple(attr_value(ind, a) for a in coherence_attrs)
-            if None not in key:
+            if not any(is_unmapped(v) for v in key):
                 tuple_counts[key] += 1
 
         total = sum(tuple_counts.values()) or 1
@@ -215,7 +222,7 @@ class StatisticalEvaluator:
         n_plausible = 0
         for ind in self.individuals_b:
             key = tuple(attr_value(ind, a) for a in coherence_attrs)
-            if None in key:
+            if any(is_unmapped(v) for v in key):
                 prob = 0.0
             else:
                 prob = joint_probs.get(key, 0.0)
@@ -370,7 +377,7 @@ class StatisticalEvaluator:
             tuple_counts: Counter = Counter()
             for ind in self.individuals_a:
                 key = tuple(attr_value(ind, a) for a in attrs)
-                if None not in key:
+                if not any(is_unmapped(v) for v in key):
                     tuple_counts[key] += 1
             total = sum(tuple_counts.values()) or 1
             joint_probs = {k: v / total for k, v in tuple_counts.items()}
@@ -380,7 +387,7 @@ class StatisticalEvaluator:
             n_plausible = 0
             for ind in self.individuals_b:
                 key = tuple(attr_value(ind, a) for a in attrs)
-                prob = 0.0 if None in key else joint_probs.get(key, 0.0)
+                prob = 0.0 if any(is_unmapped(v) for v in key) else joint_probs.get(key, 0.0)
                 if prob <= 0.0:
                     n_impossible += 1
                 elif prob < threshold:

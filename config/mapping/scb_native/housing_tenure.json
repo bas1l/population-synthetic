@@ -54,7 +54,8 @@
         "Owned",
         "Äga",
         "Ägt bostad",
-        "Egen hem"
+        "Egen hem",
+        "Own"
       ],
       "contains": [
         "villa",
@@ -74,7 +75,11 @@
         "owning",
         "owned",
         "mortgage",
-        "freehold"
+        "freehold",
+        "äger",
+        "ägd",
+        "ägar",
+        "owns"
       ]
     },
     "Tenant-owned apartment (bostadsrätt)": {
@@ -139,7 +144,8 @@
         "student",
         "shared apartment",
         "shared student",
-        "social housing"
+        "social housing",
+        "förstahand"
       ]
     }
   }

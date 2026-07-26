@@ -1,0 +1,6 @@
+id: "swedish_02"
+label: "Sweden 02 (config 006, guided prompt)"
+parameters:
+  config: "config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json"
+  reference: "data/scb_api/scb_population_n10000_seed42_merge-status-edu_2026-07-16.json"
+  mappings: "config/mapping/scb_native"

@@ -69,6 +69,41 @@ routed to the finer native categories (`industry_sector` retains its `on_miss �
 tier). `age_group` is left at the coarse 7-bin scheme this pass (single-year bins are deferred —
 see the plan's Out of Scope).
 
+## Classification note: same-sex-couple families → `Natural Parents`
+
+`parental_structure.json` (synthetic) routes same-sex-couple values (`same-sex couple`,
+`two mothers`, `gay couple`, …) to **`Natural Parents`**, and vetoes only `non-traditional`.
+This is **not an ad-hoc choice** — it mirrors how the official statistics that define these
+categories actually classify such children. Rationale (researched 2026-07-26):
+
+- **No official framework has a distinct "same-sex family" category.** SCB, Eurostat, and the
+  UN/UNECE census recommendations all place same-sex couples with children **by legal
+  parenthood, not by the parents' sex.**
+- **SCB's own `familjetyp` variable** (LE0102, the source of these 6 categories) is keyed on
+  **"ursprunglig förälder" = biological _or_ adoptive parent** and **"styvförälder" = a
+  co-resident adult who is _not_ a registered legal parent.** It is register-derived from legal
+  parent–child links; there is no biology test and no same-sex flag. So "Natural Parents" here
+  is really SCB's *two original (legal) parents* — which **includes adoptive parents**, and
+  therefore includes a same-sex couple who are both legal parents.
+- **UNECE** defines a *family nucleus* to explicitly include *"a marital (registered) same-sex
+  couple"*, counted as a two-parent couple family; **Eurostat**: *"couples include adults in
+  same-sex as well as opposite-sex relationships."*
+- **Swedish law makes dual legal parenthood the modal case** for these children — same-sex
+  adoption (2003), assisted reproduction for female couples (2005), gender-neutral marriage
+  (2009), and the **parenthood presumption for married female couples (2022)**.
+
+SCB's deterministic rule (which we approximate): **both partners legal parents → Natural
+Parents**; **only one legal parent + non-legal co-resident → Mother/Father and Stepparent**;
+**neither → Other Than Parents**. Our generator emits only "same-sex couple, child present"
+with no legal-parenthood flag, so the **register-consistent default is `Natural Parents`** (the
+modal Swedish outcome). The rare blended case ("same-sex couple with children from previous
+relationships") is formally a stepfamily, but is not reliably detectable from the free text and
+is left to the default.
+
+Sources: SCB barn- och familjestatistik (LE0102 `familjetyp`); UNECE CES Recommendations for
+the 2020/2030 censuses, ch. Household & family; Eurostat "Household composition statistics";
+MFoF / Government.se on the 2022 parenthood presumption.
+
 ## Note on value counts
 
 The success-criteria shorthand "12 / 9 / 6 native values" counts the real-producible
