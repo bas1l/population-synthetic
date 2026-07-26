@@ -143,7 +143,9 @@ _TV = {"age_group": 0.1, "biological_sex": 0.2, "education_level": 0.3}
 
 
 def test_load_missing_index_raises(tmp_path):
-    with pytest.raises(FileNotFoundError, match="map_populations"):
+    # No population_cap output: resolve_mapped_dir fails fast on the absent capped
+    # mapped dir before any index is read (no fallback to the full mapping/ output).
+    with pytest.raises(FileNotFoundError, match="population_cap"):
         load_combo_performances(tmp_path, axis_ids=AXIS_IDS, attributes_for_country=_attrs)
 
 

@@ -49,7 +49,6 @@ import argparse
 import atexit
 import json
 import logging
-import subprocess
 import sys
 import threading
 import time

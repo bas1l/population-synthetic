@@ -113,19 +113,24 @@ def test_shipped_workflow_validates():
 def test_shipped_workflow_ordering():
     order = [task.name for task in _shipped_state().ordered_tasks()]
     assert set(order) == {
-        "population_cap", "mapping", "fidelity", "multivariate_fidelity", "consistency",
+        "validate_raw", "mapping", "validate_mapped", "population_cap",
+        "fidelity", "multivariate_fidelity", "consistency",
         "model_ranking", "method_significance", "pairwise_comparison", "real_population_stats",
         "generation_metadata", "persona_realism",
     }
-    # population_cap is the pipeline root: mapping and generation_metadata depend on it.
-    assert order.index("population_cap") < order.index("mapping")
+    # validate_raw is the DAG root; the validation gate is a linear chain
+    # validate_raw -> mapping -> validate_mapped -> population_cap, and every
+    # downstream analysis depends on population_cap (the last gate node).
+    assert order.index("validate_raw") < order.index("mapping")
+    assert order.index("mapping") < order.index("validate_mapped")
+    assert order.index("validate_mapped") < order.index("population_cap")
+    assert order.index("population_cap") < order.index("fidelity")
+    assert order.index("population_cap") < order.index("multivariate_fidelity")
+    assert order.index("population_cap") < order.index("consistency")
+    assert order.index("population_cap") < order.index("pairwise_comparison")
+    assert order.index("population_cap") < order.index("real_population_stats")
     assert order.index("population_cap") < order.index("generation_metadata")
-    assert order.index("mapping") < order.index("fidelity")
-    assert order.index("mapping") < order.index("multivariate_fidelity")
-    assert order.index("mapping") < order.index("consistency")
-    assert order.index("mapping") < order.index("pairwise_comparison")
-    assert order.index("mapping") < order.index("real_population_stats")
-    assert order.index("mapping") < order.index("persona_realism")
+    assert order.index("population_cap") < order.index("persona_realism")
     assert order.index("fidelity") < order.index("model_ranking")
     assert order.index("fidelity") < order.index("method_significance")
 
@@ -135,8 +140,8 @@ def test_shipped_workflow_ordering_deterministic():
     order_a = [task.name for task in _shipped_state().ordered_tasks()]
     order_b = [task.name for task in _shipped_state().ordered_tasks()]
     assert order_a == order_b
-    # population_cap is the sole DAG root, emitted before every released dependent.
-    assert order_a[0] == "population_cap"
+    # validate_raw is the sole DAG root, emitted before every released dependent.
+    assert order_a[0] == "validate_raw"
 
 
 # ---------------------------------------------------------------------------
@@ -153,16 +158,27 @@ def test_disabled_task_cannot_run():
 
 def test_dep_incomplete_blocks_then_mark_completed_unlocks():
     state = _shipped_state()
-    assert state.can_run("population_cap")  # the DAG root: no deps, enabled
-    assert not state.can_run("mapping")  # now depends on population_cap
+    assert state.can_run("validate_raw")  # the DAG root: no deps, enabled
+    assert not state.can_run("mapping")  # depends on validate_raw
+    assert not state.can_run("validate_mapped")  # transitive dep incomplete
+    assert not state.can_run("population_cap")
     assert not state.can_run("fidelity")  # dep incomplete
     assert not state.can_run("model_ranking")
 
-    state.mark_completed("population_cap")
+    state.mark_completed("validate_raw")
     assert state.can_run("mapping")  # root satisfied -> mapping released
 
     state.mark_completed("mapping")
-    assert state.can_run("fidelity")
+    assert state.can_run("validate_mapped")
+    assert not state.can_run("population_cap")  # still needs validate_mapped
+
+    state.mark_completed("validate_mapped")
+    assert state.can_run("population_cap")  # gate satisfied -> cap released
+
+    state.mark_completed("population_cap")
+    # fidelity is disabled in the shipped YAML (opt-in), so it never runs itself; but its
+    # dependent model_ranking stays blocked until fidelity is marked completed (as the
+    # runner would when the node is enabled).
     assert not state.can_run("model_ranking")  # transitive dep still incomplete
 
     state.mark_completed("fidelity")

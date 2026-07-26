@@ -24,6 +24,8 @@ from population_synthetic.analysis.utils.registry import (
 # Canonical id -> canonical on-disk folder. `mapping` is aligned to its id (`mapping/`);
 # the pre-rename `mapped/` folder is reachable only via the legacy-read fallback.
 _EXPECTED_FOLDERS = {
+    "validate_raw": "validate_raw",
+    "validate_mapped": "validate_mapped",
     "population_cap": "population_cap",
     "mapping": "mapping",
     "fidelity": "fidelity",

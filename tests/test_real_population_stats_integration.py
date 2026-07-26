@@ -48,7 +48,9 @@ def _build_individuals(n: int = 5) -> list[dict]:
 
 
 def _write_mapped_real_population(output_base: Path, n: int = 5) -> Path:
-    mapping_dir = output_base / "03_Analysis" / "mapping"
+    # real_population_stats now reads the CAPPED mapped dir (population_cap/_mapped/)
+    # via resolve_mapped_dir, not the full mapping/ output.
+    mapping_dir = output_base / "03_Analysis" / "population_cap" / "_mapped"
     mapping_dir.mkdir(parents=True, exist_ok=True)
     real_path = mapping_dir / f"real_{COUNTRY}.json"
     real_pop = {
@@ -122,10 +124,11 @@ def test_force_overwrites(tmp_path: Path):
     assert sample_file.stat().st_mtime_ns >= mtime_before
 
 
-def test_missing_mapped_real_population_fails_fast_naming_mapping_task(tmp_path: Path):
-    # No 03_Analysis/mapping/real_swedish.json written at all.
+def test_missing_capped_mapped_dir_fails_fast_naming_population_cap(tmp_path: Path):
+    # Nothing written: population_cap never ran, so the capped mapped dir is absent.
+    # resolve_mapped_dir fails fast (no fallback to the full mapping/ output) and the
+    # message points the user at running population_cap.
     result = _run_cli(tmp_path)
 
     assert result.returncode != 0
-    assert "mapping" in result.stderr
-    assert f"real_{COUNTRY}.json" in result.stderr
+    assert "population_cap" in result.stderr

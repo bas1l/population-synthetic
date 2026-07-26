@@ -42,6 +42,7 @@ from population_synthetic.analysis.fidelity.evaluator import StatisticalEvaluato
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.mapping.real_mapper import map_population
 from population_synthetic.analysis.utils.axes import decompose_slug
+from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.registry import analysis_output_dir, resolve_output_base
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
@@ -90,7 +91,7 @@ def _resolve_slug_pair(slugs: list[str], output_base: Path) -> tuple[dict, dict,
         )
     country = countries[0]
 
-    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    mapped_dir = resolve_mapped_dir(output_base)
     pops: list[dict] = []
     for slug in slugs:
         mapped_path = mapped_dir / f"{slug}.json"

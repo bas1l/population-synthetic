@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -41,7 +42,6 @@ from population_synthetic.analysis.generation_metadata.persona_metrics import (
     reduce_persona,
 )
 from population_synthetic.analysis.generation_metadata.pricing import PricingTable, load_pricing_table
-from population_synthetic.analysis.population_cap import cap_combo
 from population_synthetic.analysis.utils._stats import mean, stddev
 from population_synthetic.analysis.utils.registry import analysis_output_dir
 
@@ -401,18 +401,21 @@ def _build_raw_fixture(output_base: Path) -> None:
     _write_jsonl(raw / _TOKENLESS_SLUG / "persona_0001" / "llm_interactions.jsonl", _tokenless_entries())
 
 
-def _cap_raw_fixture(output_base: Path, n: int = 100) -> None:
-    """Run the real population_cap over every 01_Raw combo into the capped mirror.
+def _cap_raw_fixture(output_base: Path) -> None:
+    """Materialize the capped persona-dir mirror population_cap produces for the fixture.
 
-    generation_metadata now reads the capped mirror exclusively (never 01_Raw), so the
-    true pipeline order is cap -> summarize. ``n`` is deliberately larger than any
-    combo's persona count, so every fixture persona is retained and the summarize
-    assertions still hold over the full fixture.
+    generation_metadata reads the capped mirror exclusively (never 01_Raw), globbing each
+    combo's ``population_cap/{slug}/persona_*/llm_interactions.jsonl`` telemetry. Here every
+    fixture persona is clean, so the mirror is the full 01_Raw pool copied verbatim (the
+    same layout the cap writes for an n above every combo's persona count) -- letting the
+    summarize assertions hold over the whole fixture without wiring the full validity gate.
     """
     raw = output_base / "01_Raw"
     cap_stage = analysis_output_dir("population_cap", output_base)
     for slug_dir in sorted(p for p in raw.iterdir() if p.is_dir()):
-        cap_combo(slug_dir, n, 0, cap_stage / slug_dir.name)
+        dest = cap_stage / slug_dir.name
+        for persona_dir in sorted(slug_dir.glob("persona_*")):
+            shutil.copytree(persona_dir, dest / persona_dir.name)
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:

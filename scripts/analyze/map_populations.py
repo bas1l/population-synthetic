@@ -45,7 +45,6 @@ from population_synthetic.analysis.mapping.synthetic_mapper import (
 from population_synthetic.analysis.mapping.synthetic_mapper import (
     map_population as map_synthetic,
 )
-from population_synthetic.analysis.utils.capped_source import resolve_combo_source
 from population_synthetic.analysis.utils.country_config import (
     infer_country,
     known_country_ids,
@@ -59,6 +58,10 @@ from population_synthetic.analysis.utils.registry import (
 from population_synthetic.generators.synthetic.manifest_loader import compose_manifest, load_manifest
 
 _DEFAULT_TARGETS = PROJECT_ROOT / "config" / "analysis" / "comparison_targets.yaml"
+
+# The raw generation stage folder under output_base. Mapping now runs BEFORE the cap and
+# maps the full generated pool from here; population_cap later selects N clean personas.
+_RAW_STAGE_DIR = "01_Raw"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -194,9 +197,10 @@ def _map_one_target(
         n_skipped = existing["metadata"].get("skipped", 0)
         print(f"  SKIP (exists): {synthetic_file} (n={n_mapped}, skipped={n_skipped})")
     else:
-        # Read personas from the capped mirror, never from 01_Raw. resolve_combo_source
-        # raises FileNotFoundError (fail-fast, no fallback) if population_cap has not run.
-        seed_root = resolve_combo_source(slug, output_base)
+        # Read personas from the full raw pool (01_Raw), not the capped mirror: mapping
+        # runs BEFORE population_cap now, so it maps every generated persona. An absent
+        # combo dir or a combo with no identity.json simply yields a skipped entry.
+        seed_root = Path(output_base) / _RAW_STAGE_DIR / slug
 
         persona_files = list(seed_root.glob("persona_*/identity.json"))
         if not persona_files:
@@ -296,8 +300,8 @@ def main() -> None:
             )
             sys.exit(1)
         manifest = compose_manifest(args.model_id, args.strategy_id, args.country_id)
-        # parallel_output_dir is only the canonical naming source now; personas are
-        # read from the capped mirror inside _map_one_target, not from this path.
+        # parallel_output_dir is only the canonical naming source; personas are read from
+        # 01_Raw/{slug} inside _map_one_target, not from this path.
         raw_naming_dir = manifest.parallel_output_dir
         slug = (
             raw_naming_dir.name
@@ -332,8 +336,8 @@ def main() -> None:
         manifest = load_manifest(manifest_path)
         country = _resolve_country(manifest, target["country"], manifest_path)
 
-        # parallel_output_dir is only the canonical naming source now; personas are
-        # read from the capped mirror inside _map_one_target, not from this path.
+        # parallel_output_dir is only the canonical naming source; personas are read from
+        # 01_Raw/{slug} inside _map_one_target, not from this path.
         raw_naming_dir = manifest.parallel_output_dir
         slug = raw_naming_dir.name if raw_naming_dir is not None else manifest_path.stem
 

@@ -52,6 +52,7 @@ from population_synthetic.analysis.consistency.builder import (
 )
 from population_synthetic.analysis.consistency.charts import plot_violation_rates
 from population_synthetic.analysis.consistency.rules import load_rules
+from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -118,7 +119,7 @@ def main() -> None:
     slug_filter = _split_csv(args.slugs)
 
     output_base = resolve_output_base(args.output_base)
-    mapped_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    mapped_dir = resolve_mapped_dir(output_base)
     consistency_dir = analysis_output_dir("consistency", output_base)
 
     index_path = mapped_dir / "_index.json"

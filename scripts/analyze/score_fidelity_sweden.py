@@ -37,6 +37,7 @@ from pathlib import Path
 from population_synthetic.analysis.fidelity.artifacts import write_comparison_artifacts
 from population_synthetic.analysis.fidelity.evaluator import StatisticalEvaluator
 from population_synthetic.analysis.fidelity.scheme import load_scheme
+from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -251,7 +252,7 @@ def main() -> None:
     country = resolve_country(args, manifest)
     output_base = resolve_output_base(args.output_base)
     mapped_dir = (
-        Path(args.mapped_dir) if args.mapped_dir else analysis_output_dir("mapping", output_base, for_read=True)
+        Path(args.mapped_dir) if args.mapped_dir else resolve_mapped_dir(output_base)
     )
 
     synthetic_path = Path(args.mapped_synthetic) if args.mapped_synthetic else mapped_dir / f"{slug}.json"

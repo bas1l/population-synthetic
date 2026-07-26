@@ -32,6 +32,7 @@ from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.real_population_stats.artifacts import (
     write_real_population_stats,
 )
+from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.country_config import known_country_ids
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
@@ -114,7 +115,7 @@ def main() -> None:
 
     output_base = resolve_output_base(args.output_base)
     out_root = analysis_output_dir("real_population_stats", output_base)
-    mapping_dir = analysis_output_dir("mapping", output_base, for_read=True)
+    mapping_dir = resolve_mapped_dir(output_base)
 
     for country in country_ids:
         country_dir = out_root / country
