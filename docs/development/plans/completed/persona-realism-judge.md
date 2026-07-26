@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-23
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-07-26 19:02
 **Base Branch:** `feature/cap-population-to-n`
 **Branch:** `feature/persona-realism-judge`
 
