@@ -29,6 +29,26 @@ Configuration lives under `config/gui/`:
   UI metadata (enum choices, labels, groups) is **not** in the YAML — it lives
   in declarative tables in `widgets/flow_options_panel.py`, keyed by option name.
 
+Two of those enum tables are themselves **config-sourced**, filled at import by
+populator functions rather than hardcoded in Python:
+
+| Option | Source config | Entries |
+|--------|---------------|---------|
+| `judge-model` | `config/analysis/persona_realism/judge.yaml` (`model_options`) | `("(default)", None)` sentinel + one `(m, m)` pair per model |
+| `ollama-host` | `config/synthetic/ollama_hosts.yaml` (`hosts:`) | one `(host.label, host.id)` pair per host — **no** `(default)` sentinel |
+
+`ollama-host` deliberately has no sentinel: a saved `None` would omit the flag and
+let the run silently resolve the registry's `default_host`, which is the
+wrong-GPU failure the option exists to prevent. An explicit host every run is the
+point. Both populators share the same degrade-gracefully contract — any
+read/parse failure logs a warning and leaves the key **out** of the enum table, so
+its row falls back to the free-text field; neither may raise at import, or
+`import population_synthetic.gui...` would break the whole GUI.
+
+Adding a host is therefore config-only: declare it in `ollama_hosts.yaml`, add one
+key per model axis `workers` map, and it appears in both the dropdown and the
+`--ollama-host` argparse `choices` with zero `.py` edits.
+
 ## Execution contract — GUI translates flow YAML → CLI
 
 **The spawned scripts never read the flow YAML.** On Run, the GUI *translates*

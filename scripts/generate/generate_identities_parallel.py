@@ -55,6 +55,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from population_synthetic.generators.synthetic import ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
 from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
 
@@ -250,7 +251,15 @@ def main() -> None:
     parser.add_argument(
         "--base-url",
         default=None,
-        help="Base URL for Ollama or OpenAI-compatible provider (overrides manifest)",
+        help="Base URL for Ollama or OpenAI-compatible provider (overrides manifest and --ollama-host)",
+    )
+    parser.add_argument(
+        "--ollama-host",
+        default=None,
+        choices=ollama_hosts.host_ids(),
+        help="Ollama inference host id from config/synthetic/ollama_hosts.yaml. Selects the "
+             "endpoint and the per-host worker count of the model axis file. Omitted: the "
+             "registry's default_host. Inert for non-Ollama providers.",
     )
     parser.add_argument(
         "--api-key-env",
@@ -287,8 +296,8 @@ def main() -> None:
         action="store_true",
         default=False,
         help="For Ollama models only: override --workers with the model axis file's "
-             "parallel.workers (the per-model VRAM-optimal value from the parallelism POC). "
-             "No-op for cloud providers. Default: off.",
+             "parallel.workers value for the selected host (the per-model, per-GPU "
+             "VRAM-optimal count). No-op for cloud providers. Default: off.",
     )
     args = parser.parse_args()
 
@@ -333,7 +342,7 @@ def main() -> None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
         from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
-        m = compose_manifest(args.model_id, args.strategy_id, args.country_id)
+        m = compose_manifest(args.model_id, args.strategy_id, args.country_id, args.ollama_host)
         _composed_manifest = m
         logger.info("Composed manifest: %s", m.name)
         if args.provider is None:
@@ -354,6 +363,9 @@ def main() -> None:
             args.workers = m.parallel_workers
         if args.output_dir is None and m.parallel_output_dir is not None:
             args.output_dir = str(m.parallel_output_dir)
+        # Composition set m.base_url from the selected Ollama host; an explicit
+        # --base-url is the documented escape hatch and outranks it (this branch
+        # only fills the value in when the flag was omitted).
         if args.base_url is None and m.base_url is not None:
             args.base_url = m.base_url
         if args.api_key_env is None and m.api_key_env_var is not None:
@@ -374,6 +386,36 @@ def main() -> None:
     if args.structured_output is None:
         args.structured_output = False
 
+    # Ollama endpoint resolution happens here, in the orchestration layer, and the
+    # resolved OllamaHost is reused for the parallelism warning and for provenance
+    # below (resolve_host re-reads the registry on every call, so it is resolved
+    # once). The axis path already resolved the same host inside compose_manifest;
+    # this also covers the --manifest and explicit-CLI paths, where nothing else
+    # would supply an endpoint.
+    ollama_host = None
+    if args.provider == "ollama":
+        _resolved_host = ollama_hosts.resolve_host(args.ollama_host)
+        if args.base_url is None:
+            args.base_url = _resolved_host.base_url
+        if args.base_url == _resolved_host.base_url:
+            ollama_host = _resolved_host
+            logger.info(
+                "Ollama host: %s (%s) -> %s",
+                _resolved_host.id,
+                _resolved_host.label,
+                _resolved_host.base_url,
+            )
+        else:
+            # The run is not hitting the registry host, so recording its id would
+            # attribute the output to a machine it never touched.
+            logger.warning(
+                "--base-url %s overrides Ollama host '%s' (%s); this run is not attributed "
+                "to any registry host.",
+                args.base_url,
+                _resolved_host.id,
+                _resolved_host.base_url,
+            )
+
     # Ollama-only: prefer the model axis file's per-model VRAM-optimal worker count
     # over whatever --workers was passed (e.g. the GUI's global default). This lets a
     # mixed cloud+local batch keep a single global --workers for cloud combos while each
@@ -393,6 +435,22 @@ def main() -> None:
                 "(no manifest/axis composed); keeping --workers %d",
                 args.workers,
             )
+
+    # server_num_parallel is a human-declared value that Ollama exposes on no
+    # endpoint, so it can never gate a run -- exceeding it is a throughput
+    # disappointment, not an error.
+    if ollama_host is not None and args.workers > ollama_host.server_num_parallel:
+        logger.warning(
+            "%d workers exceeds the declared OLLAMA_NUM_PARALLEL=%d of host '%s' (%s): "
+            "requests beyond the first %d will queue on the server instead of batching, "
+            "so the extra workers buy no throughput. Proceeding -- this is an unverifiable "
+            "declared value. Raise OLLAMA_NUM_PARALLEL on that host or lower --workers.",
+            args.workers,
+            ollama_host.server_num_parallel,
+            ollama_host.id,
+            ollama_host.label,
+            ollama_host.server_num_parallel,
+        )
 
     if not args.mode or not args.config:
         parser.error("Either --manifest or both --mode and --config are required")
@@ -468,6 +526,11 @@ def main() -> None:
             "n": args.n,
             "workers": args.workers,
             "ollama_auto_workers": args.ollama_auto_workers,
+            # Which GPU produced this run. Without it, wall-clock and latency
+            # figures from two hosts pool indistinguishably in the
+            # generation_metadata analysis and are unrecoverable after the fact.
+            # The endpoint itself is recorded above as model_config.base_url.
+            "ollama_host": ollama_host.id if ollama_host is not None else None,
             "output_dir": args.output_dir,
             "force": args.force,
             "retry_until_success": args.retry_until_success,

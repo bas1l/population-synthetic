@@ -27,7 +27,12 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from population_synthetic.generators.synthetic.manifest_loader import compose_manifest, discover_axis_values
+from population_synthetic.generators.synthetic.manifest_loader import (
+    ManifestConfig,
+    compose_manifest,
+    discover_axis_values,
+    workers_for_host,
+)
 from population_synthetic.gui.widgets.persona_count_worker import PersonaCountWorker
 
 _DASH = "—"
@@ -85,6 +90,7 @@ class PopulationSummaryPanel(QWidget):
         self,
         combos: list[tuple[str, str, str]],
         total_override: int | None = None,
+        ollama_host_id: str | None = None,
     ) -> None:
         """(Re)build the table from *combos* and kick a background count refresh.
 
@@ -92,6 +98,11 @@ class PopulationSummaryPanel(QWidget):
         sends to the script as ``--n``); when given it is the per-combo total
         for every row. When ``None`` each row falls back to
         ``compose_manifest(...).parallel_n`` (the experiment-defaults value).
+
+        *ollama_host_id* is the flow YAML's ``ollama-host`` option (what the GUI
+        sends as ``--ollama-host``). It drives the Workers column only — see
+        :meth:`_workers_cell` for why that column cannot read the composed
+        manifest's ``parallel_workers``.
         """
         self._generation += 1
         self._combos = list(combos)
@@ -101,6 +112,8 @@ class PopulationSummaryPanel(QWidget):
         self._active_row = None
 
         country_labels = {c["id"]: c["label"] for c in discover_axis_values("countries")}
+        # Raw model axis dicts, for the host-aware Workers lookup below.
+        model_axes = {m["id"]: m for m in discover_axis_values("models")}
 
         if not combos:
             self._table.setRowCount(0)
@@ -120,7 +133,7 @@ class PopulationSummaryPanel(QWidget):
                 self._counts.append(0)
                 continue
 
-            workers = str(cfg.parallel_workers) if cfg.parallel_workers is not None else _DASH
+            workers = self._workers_cell(cfg, model_axes.get(model_id), ollama_host_id)
             total = total_override if total_override is not None else cfg.parallel_n
             generated = f"{_PENDING} / {total}" if total is not None else _PENDING
             self._set_row(row, [*axis_cols, cfg.provider or _DASH, workers, generated])
@@ -162,6 +175,34 @@ class PopulationSummaryPanel(QWidget):
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _workers_cell(
+        cfg: ManifestConfig,
+        model_data: dict | None,
+        ollama_host_id: str | None,
+    ) -> str:
+        """Render the Workers cell for the **selected** Ollama host.
+
+        ``compose_manifest`` above is deliberately called with no host id: the row's
+        other cells (output dir, n, provider, name) are host-independent, and passing
+        the selected host would make an unsupported (host, model) pair raise and
+        collapse the whole row into an error string. But that also means
+        ``cfg.parallel_workers`` was collapsed against the registry's *default* host —
+        showing it here would report one machine's numbers while the run targets
+        another.
+
+        So for an Ollama combo the count is re-read from the model axis file against
+        the selected host through the non-raising :func:`workers_for_host`, which
+        returns ``None`` for a pair the host does not serve; that renders as an em
+        dash. The panel is a preview, not a gate — the run itself still fails fast in
+        ``compose_manifest`` before any persona directory is created. Non-Ollama
+        providers keep their scalar ``parallel_workers`` (they have no host).
+        """
+        if cfg.provider == "ollama" and ollama_host_id is not None and model_data is not None:
+            workers = workers_for_host(model_data, ollama_host_id)
+            return str(workers) if workers is not None else _DASH
+        return str(cfg.parallel_workers) if cfg.parallel_workers is not None else _DASH
 
     def _spawn_count_worker(self) -> None:
         rows = [(row, output_dir) for row, output_dir in enumerate(self._output_dirs)]

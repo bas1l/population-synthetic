@@ -134,6 +134,7 @@ mirror's telemetry via `analysis/utils/capped_source.py` and the mapped-file con
 - `GEMINI_API_KEY` environment variable required for identity generation with `--provider gemini` (raises `ValueError` if missing)
 - `--provider claude` requires the `claude` CLI on PATH; raises `RuntimeError` at construction if not found; no extra API key needed (Claude Code manages its own auth)
 - `OPENROUTER_API_KEY` environment variable required for identity generation with `--provider openrouter` (raises `ValueError` if missing)
+- `--provider ollama` needs no API key, but it **does** need an endpoint: select one with `--ollama-host <id>` from the registry at `config/synthetic/ollama_hosts.yaml` (omitted → that file's `default_host`). There is no default base URL in code and no `OLLAMA_BASE_URL` env read — both were removed, since a silent fallback dispatches a whole sweep to the wrong GPU while the outputs look normal. `--base-url` remains as an explicit ad-hoc override. Worker counts are per (model × host), declared in each `ollama_*` axis file's `parameters.parallel.workers` map; an unsupported (host, model) pair raises before any persona is generated. See [Ollama hosts](docs/ollama_server_models.md).
 - Population generation (SCB/SSB scripts) does not require any API keys
 
 ## Documentation

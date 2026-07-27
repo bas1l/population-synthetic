@@ -69,6 +69,19 @@ def test_per_combo_empty_combos_raises():
         build_per_combo_cmds(SCRIPT, [], OPTIONS, force=False)
 
 
+def test_per_combo_ollama_host_translates_to_flag_and_value():
+    """The GUI's ``ollama-host`` selection reaches the script as ``--ollama-host <id>``.
+
+    The GUI translates the flow YAML into CLI flags — spawned scripts never read
+    the flow YAML — so the host id can only reach a run through this vector. The
+    builders need no per-option knowledge: a plain string value is enough.
+    """
+    (cmd,) = build_per_combo_cmds(
+        SCRIPT, COMBOS[:1], {"ollama-host": "windows_4070tis"}, force=False
+    )
+    assert cmd[-2:] == ["--ollama-host", "windows_4070tis"]
+
+
 # ---------------------------------------------------------------------------
 # build_slugs_cmd
 # ---------------------------------------------------------------------------

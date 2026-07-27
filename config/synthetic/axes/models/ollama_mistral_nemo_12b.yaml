@@ -3,7 +3,8 @@ label: "Ollama Mistral Nemo 12B"
 model_config:
   provider: "ollama"
   model: "mistral-nemo:12b"
-  base_url: "http://192.168.0.19:11434"
+  # base_url removed -- the endpoint is a host property, chosen per run
+  # (config/synthetic/ollama_hosts.yaml)
   generation_config:
     temperature: 0.7
     top_p: null
@@ -11,6 +12,12 @@ model_config:
     max_output_tokens: 2048
 parameters:
   parallel:
-    # VRAM-max knee per docs/development/ollama-parallelism-poc/REPORT.md (peak 2.48x).
-    # Only effective if the server's OLLAMA_NUM_PARALLEL matches; else requests queue.
-    workers: 4
+    # Per-host worker count. A host absent from this map does not serve this model.
+    # linux_3060: VRAM-max knee per docs/development/ollama-parallelism-poc/REPORT.md
+    #   (peak 2.48x). Only effective if that host's OLLAMA_NUM_PARALLEL matches;
+    #   else requests queue.
+    # windows_4070tis: VRAM-fit ceiling measured on the RTX 4070 Ti SUPER 16 GB
+    #   (0.640 GB KV/slot; 902 MiB headroom at 10 slots, spills to CPU at 11).
+    workers:
+      linux_3060: 4
+      windows_4070tis: 10
