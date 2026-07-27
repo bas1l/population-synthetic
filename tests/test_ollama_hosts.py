@@ -195,6 +195,66 @@ def test_load_hosts_rejects_non_positive_int_server_num_parallel(tmp_path, value
 
 
 # ---------------------------------------------------------------------------
+# control_url -- optional, but shape-checked when declared
+# ---------------------------------------------------------------------------
+
+def test_load_hosts_absent_control_url_yields_none(tmp_path) -> None:
+    """A host with no ``control_url`` still loads; the field is an explicit None.
+
+    Absence is a legal statement -- "this host has no control service" -- and must
+    read as such downstream rather than as a missing attribute or an empty string.
+    """
+    hosts = load_hosts(_write(tmp_path, _VALID_REGISTRY))
+    assert hosts["alpha"].control_url is None
+    assert hosts["beta"].control_url is None
+
+
+def test_load_hosts_declared_control_url_is_materialized(tmp_path) -> None:
+    """A well-formed ``control_url`` is carried through verbatim."""
+    data = yaml.safe_load(_VALID_REGISTRY)
+    data["hosts"]["alpha"]["control_url"] = "http://alpha.invalid:11435"
+    hosts = load_hosts(_write(tmp_path, yaml.safe_dump(data)))
+    assert hosts["alpha"].control_url == "http://alpha.invalid:11435"
+    # Optional per host: declaring it on one says nothing about the other.
+    assert hosts["beta"].control_url is None
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("", id="empty-string"),
+        pytest.param("   ", id="blank-string"),
+        pytest.param("192.168.0.19:11435", id="no-scheme"),
+        pytest.param("ftp://alpha.invalid:11435", id="wrong-scheme"),
+        pytest.param(11435, id="bare-int"),
+        pytest.param(True, id="bool"),
+    ],
+)
+def test_load_hosts_malformed_control_url_raises_naming_host_and_file(tmp_path, value) -> None:
+    """A *declared* but unusable ``control_url`` raises, naming the host and file.
+
+    Absence is legal; a malformed value is a typo. Catching it at load time is far
+    cheaper than surfacing it as a connection error mid-sweep, and there is no
+    substituted default -- the registry is the only source for this endpoint.
+    """
+    data = yaml.safe_load(_VALID_REGISTRY)
+    data["hosts"]["alpha"]["control_url"] = value
+    path = _write(tmp_path, yaml.safe_dump(data))
+    with pytest.raises(ValueError, match="control_url") as excinfo:
+        load_hosts(path)
+    message = str(excinfo.value)
+    assert "alpha" in message
+    assert str(path) in message
+
+
+def test_real_registry_declares_a_control_url_for_both_hosts() -> None:
+    """Both shipped hosts run the control service, so both declare its endpoint."""
+    hosts = load_hosts()
+    assert hosts["linux_3060"].control_url == "http://192.168.0.19:11435"
+    assert hosts["windows_4070tis"].control_url == "http://localhost:11435"
+
+
+# ---------------------------------------------------------------------------
 # resolve_host
 # ---------------------------------------------------------------------------
 

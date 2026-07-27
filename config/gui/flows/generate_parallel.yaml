@@ -4,13 +4,20 @@
 options:
   n: 150                     # --n
   workers: 16                # --workers (applies to cloud combos; Ollama combos self-tune below)
-  ollama-host: linux_3060    # --ollama-host: which Ollama endpoint serves the run. Host ids are
+  ollama-host: windows_4070tis # --ollama-host: which Ollama endpoint serves the run. Host ids are
                              #   declared in config/synthetic/ollama_hosts.yaml (the dropdown is
                              #   built from that file). Inert for non-Ollama providers.
   ollama-auto-workers: true  # --ollama-auto-workers (flag when true): Ollama combos ignore
                              #   `workers` above and use the model axis file's
                              #   parallel.workers entry for the selected host
                              #   (VRAM-optimal per the parallelism POC). No-op for cloud providers.
+  ollama-reconfigure: true   # --ollama-reconfigure (flag when true): before generating, set the
+                             #   selected host's OLLAMA_NUM_PARALLEL to the worker count resolved
+                             #   above and warm the model up. Pressing Run may therefore RESTART
+                             #   that host's Ollama container, but only when the value differs:
+                             #   a server already at the right value is read and left untouched,
+                             #   so a multi-combo Run restarts at most once. Inert for non-Ollama
+                             #   providers and for hosts declaring no control_url.
   retry-until-success: true  # --retry-until-success (flag when true)
 selection:
   models: [ollama_deepseek_r1_14b]

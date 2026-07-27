@@ -19,7 +19,10 @@ Failure policy (fail-fast):
   names a non-existent default fails on the first load rather than on the first
   run that omits ``--ollama-host``;
 * an unknown host id raises, listing the valid ids -- never a silent fallback to
-  the default (a silently wrong GPU is worse than a crash).
+  the default (a silently wrong GPU is worse than a crash);
+* ``control_url`` is optional, but a *declared* one is shape-checked at load
+  time: absence is a legal statement ("this host has no control service"),
+  whereas a malformed value is a typo and raises naming the host and the file.
 """
 
 from __future__ import annotations
@@ -36,7 +39,12 @@ _REGISTRY_PATH = PROJECT_ROOT / "config" / "synthetic" / "ollama_hosts.yaml"
 
 # Every key a host entry must declare (fail-fast if any is absent -- there is no
 # default endpoint, no default GPU and no assumed server parallelism).
+# ``control_url`` is deliberately absent: it is optional (see :class:`OllamaHost`).
 _REQUIRED_HOST_KEYS = ("label", "base_url", "gpu", "server_num_parallel")
+
+# Schemes a declared endpoint URL may use. Anything else is a typo, not a host
+# we cannot reach yet, so it fails at load rather than at the first request.
+_URL_SCHEMES = ("http://", "https://")
 
 
 @dataclass(frozen=True)
@@ -53,6 +61,12 @@ class OllamaHost:
     # rather than batch). Ollama exposes this on no endpoint, so it is an
     # unverifiable declared value and must never gate a run.
     server_num_parallel: int
+    # Optional endpoint of the host's control service, which is adjacent to
+    # Ollama rather than part of it. **Absence means no auto-reconfigure**: a
+    # host without it loads and runs exactly as before, it simply cannot have
+    # its server-side parallelism tuned to match a run. Declared last because
+    # every other field is non-default.
+    control_url: str | None = None
 
 
 def _load_raw(path: Path) -> dict[str, Any]:
@@ -87,6 +101,27 @@ def _load_raw(path: Path) -> dict[str, Any]:
     return raw
 
 
+def _build_control_url(host_id: str, entry: dict[str, Any], path: Path) -> str | None:
+    """Materialize the optional ``control_url`` of one entry, or ``None`` if absent.
+
+    Absence is legal and yields ``None``. *Presence* is validated strictly: a
+    declared-but-unusable endpoint is a typo in the registry, and surfacing it at
+    load time is far cheaper than surfacing it as a connection error in the
+    middle of a sweep.
+    """
+    declared = entry.get("control_url")
+    if declared is None:
+        return None
+
+    control_url = str(declared)
+    if not control_url.startswith(_URL_SCHEMES):
+        raise ValueError(
+            f"Ollama host entry for {host_id!r} has malformed 'control_url' {declared!r}: expected a "
+            f"non-empty string starting with {' or '.join(_URL_SCHEMES)}: {path}"
+        )
+    return control_url
+
+
 def _build_host(host_id: str, entry: Any, path: Path) -> OllamaHost:
     """Validate one registry entry and materialize it as an :class:`OllamaHost`."""
     if not isinstance(entry, dict):
@@ -111,6 +146,7 @@ def _build_host(host_id: str, entry: Any, path: Path) -> OllamaHost:
         base_url=str(entry["base_url"]),
         gpu=str(entry["gpu"]),
         server_num_parallel=server_num_parallel,
+        control_url=_build_control_url(host_id, entry, path),
     )
 
 
