@@ -58,6 +58,11 @@ from pathlib import Path
 from population_synthetic.generators.synthetic import ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
 from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
+from population_synthetic.generators.synthetic.manifest_loader import (
+    compose_manifest,
+    load_manifest,
+    serialize_manifest,
+)
 
 _SCRIPT_START_TIME = time.time()
 
@@ -142,6 +147,11 @@ def _generate_one(
 
     client = None
     generator = None
+    # The client imports below stay function-local on purpose (unlike the
+    # module-scope imports at the top of this file): gemini_client pulls the
+    # `google` SDK and openai_compat_client pulls `openai`. Hoisting them would
+    # make every run import both third-party SDKs -- including --provider ollama,
+    # which needs neither -- and hard-fail when either is not installed.
     try:
         if provider == "gemini":
             from population_synthetic.clients.gemini_client import GeminiClient
@@ -309,7 +319,6 @@ def main() -> None:
     _composed_manifest = None
 
     if args.manifest:
-        from population_synthetic.generators.synthetic.manifest_loader import load_manifest
         m = load_manifest(args.manifest)
         logger.info("Loaded manifest: %s", m.name)
         if args.provider is None:
@@ -341,7 +350,6 @@ def main() -> None:
     elif args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
-        from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
         m = compose_manifest(args.model_id, args.strategy_id, args.country_id, args.ollama_host)
         _composed_manifest = m
         logger.info("Composed manifest: %s", m.name)
@@ -478,7 +486,6 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if _composed_manifest is not None:
-        from population_synthetic.generators.synthetic.manifest_loader import serialize_manifest
         snapshot_path = output_dir / "manifest_snapshot.yaml"
         snapshot_path.write_text(serialize_manifest(_composed_manifest), encoding="utf-8")
         logger.info("Manifest snapshot written to %s", snapshot_path)
