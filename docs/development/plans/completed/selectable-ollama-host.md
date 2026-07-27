@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-27
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-07-27 14:26
 **Base Branch:** `dev`
 **Branch:** `feature/selectable-ollama-host`
 
