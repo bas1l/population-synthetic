@@ -6,7 +6,7 @@ authoritative list of endpoints — no base URL is baked into any `.py` file or 
 
 | Host id | Label | Endpoint | GPU | `server_num_parallel` |
 |---------|-------|----------|-----|-----------------------|
-| `linux_3060` *(default)* | Linux server — RTX 3060 12 GB | `http://192.168.0.19:11434` (Docker `ai-stack` network) | NVIDIA RTX 3060, 12 GB | 4 |
+| `linux_3060` *(default)* | Linux server — RTX 3060 12 GB | `http://192.168.0.19:11434` (Docker `ai-stack` network) | NVIDIA RTX 3060, 12 GB | 1 |
 | `windows_4070tis` | Windows PC — RTX 4070 Ti SUPER 16 GB | `http://localhost:11434` | NVIDIA RTX 4070 Ti SUPER, 16 GB | 1 |
 
 The **host id** is the only identifier that travels: it is what `--ollama-host` takes, what the
@@ -16,9 +16,14 @@ stamped into `run_metadata.json` / `manifest_snapshot.yaml`. It is never a hostn
 > `server_num_parallel` is the human-declared `OLLAMA_NUM_PARALLEL` of that host's Ollama
 > process. It is **not** a worker count and is never used as one — its sole purpose is a warning
 > when a resolved worker count exceeds it (requests then queue rather than batch). Ollama exposes
-> it on no endpoint, so the code cannot verify it and it must never gate a run. The Windows
-> container is still at `NUM_PARALLEL=1`, well below every VRAM ceiling below, so runs against
-> it currently log that warning and queue.
+> it on no endpoint, so the code cannot verify it and it must never gate a run.
+>
+> **Both hosts are currently at `NUM_PARALLEL=1`**, well below every VRAM ceiling below, so any
+> run whose worker count exceeds 1 currently logs that warning and queues rather than batches.
+> For `linux_3060` this is verifiable out-of-band via `GET http://192.168.0.19:11435/status`
+> (the bespoke control API, confirmed 2026-07-27); the parallelism POC stepped that value per
+> model via the same API's `/reconfigure`, so it reflects whichever run last touched it. The
+> Windows host has no `:11435` equivalent, so its value can only be asserted by hand.
 
 ## Model availability and per-host worker counts
 
