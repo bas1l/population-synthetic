@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 import random
 import time
 from datetime import datetime
@@ -19,8 +18,6 @@ import requests
 from population_synthetic.clients.call_context import format_corr_token
 from population_synthetic.clients.llm_protocol import LLMClient  # noqa: F401  # for type-checking
 
-_DEFAULT_BASE_URL = "http://192.168.0.19:11434"
-
 
 class OllamaClient:
     """
@@ -29,24 +26,36 @@ class OllamaClient:
     Targets the native POST /api/chat endpoint on a self-hosted Ollama server.
     Each generate_content() call is stateless from the server's perspective
     (no multi-turn conversation state is maintained across calls).
+
+    The client is configuration-free: it speaks HTTP to exactly the endpoint it is
+    handed and knows nothing about the host registry, host ids, YAML or the
+    environment. ``base_url`` is therefore **required** -- there is no default and
+    no ``OLLAMA_BASE_URL`` read. Both were removed deliberately: a client that can
+    pick a machine on its own dispatches a whole sweep to the wrong GPU while the
+    outputs look perfectly normal, and a silently wrong number is worse than a
+    crash. The endpoint is resolved in the orchestration layer, where all other
+    configuration is resolved.
     """
 
     def __init__(
         self,
         model_name: str = "llama3.1",
-        base_url: str | None = None,
+        *,
+        base_url: str,
         default_config: dict[str, Any] | None = None,
         max_retries: int = 3,
         base_delay: float = 2.0,
         max_delay: float = 30.0,
         timeout: int | None = None,
     ):
+        if not base_url:
+            raise ValueError(
+                f"OllamaClient requires an explicit base_url, got {base_url!r}. "
+                f"Resolve it from the Ollama host registry "
+                f"(config/synthetic/ollama_hosts.yaml) before constructing the client."
+            )
         self.default_model_name = model_name
-        self.base_url = (
-            base_url
-            or os.environ.get("OLLAMA_BASE_URL")
-            or _DEFAULT_BASE_URL
-        ).rstrip("/")
+        self.base_url = base_url.rstrip("/")
         self._max_retries = max_retries
         self._base_delay = base_delay
         self._max_delay = max_delay
@@ -74,22 +83,26 @@ class OllamaClient:
         )
 
     def _validate_server(self) -> None:
+        # Name the exact endpoint probed, not just the base URL: with the host
+        # selectable per run, "which machine did this run actually talk to" must be
+        # answerable from the failure message alone.
+        endpoint = f"{self.base_url}/api/tags"
         try:
-            resp = self._session.get(f"{self.base_url}/api/tags", timeout=10)
+            resp = self._session.get(endpoint, timeout=10)
             resp.raise_for_status()
         except requests.exceptions.ConnectionError as e:
             raise ConnectionError(
-                f"Ollama server unreachable at {self.base_url}. "
+                f"Ollama server unreachable at {endpoint}. "
                 f"Ensure the server is running and the URL is correct. Original error: {e}"
             ) from e
         except requests.exceptions.Timeout as e:
             raise ConnectionError(
-                f"Ollama server timed out at {self.base_url} during startup validation. "
+                f"Ollama server timed out at {endpoint} during startup validation. "
                 f"Original error: {e}"
             ) from e
         except requests.exceptions.HTTPError as e:
             raise ConnectionError(
-                f"Ollama server at {self.base_url} returned HTTP {e.response.status_code} "
+                f"Ollama server at {endpoint} returned HTTP {e.response.status_code} "
                 f"during startup validation. Original error: {e}"
             ) from e
 

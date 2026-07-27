@@ -3,7 +3,8 @@ label: "Ollama Gemma2 9B (discarded for now)"
 model_config:
   provider: "ollama"
   model: "gemma2:9b"
-  base_url: "http://192.168.0.19:11434"
+  # base_url removed -- the endpoint is a host property, chosen per run
+  # (config/synthetic/ollama_hosts.yaml)
   generation_config:
     temperature: 0.7
     top_p: null
@@ -11,6 +12,8 @@ model_config:
     max_output_tokens: 2048
 parameters:
   parallel:
-    # Single slot only per docs/development/ollama-parallelism-poc/REPORT.md
-    # (head_dim=256 => large KV; only 1 slot fits VRAM). No parallelism to gain.
-    workers: 1
+    # Per-host worker count. A host absent from this map does not serve this model.
+    # linux_3060: single slot only per docs/development/ollama-parallelism-poc/REPORT.md
+    #   (head_dim=256 => large KV; only 1 slot fits VRAM). No parallelism to gain.
+    workers:
+      linux_3060: 1

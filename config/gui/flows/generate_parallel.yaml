@@ -4,8 +4,12 @@
 options:
   n: 150                     # --n
   workers: 16                # --workers (applies to cloud combos; Ollama combos self-tune below)
+  ollama-host: linux_3060    # --ollama-host: which Ollama endpoint serves the run. Host ids are
+                             #   declared in config/synthetic/ollama_hosts.yaml (the dropdown is
+                             #   built from that file). Inert for non-Ollama providers.
   ollama-auto-workers: true  # --ollama-auto-workers (flag when true): Ollama combos ignore
-                             #   `workers` above and use each model axis file's parallel.workers
+                             #   `workers` above and use the model axis file's
+                             #   parallel.workers entry for the selected host
                              #   (VRAM-optimal per the parallelism POC). No-op for cloud providers.
   retry-until-success: true  # --retry-until-success (flag when true)
 selection:

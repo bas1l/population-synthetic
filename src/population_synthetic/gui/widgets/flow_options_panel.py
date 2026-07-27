@@ -46,6 +46,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.generators.synthetic.ollama_hosts import load_hosts
 from population_synthetic.gui.flow_config_model import FlowConfigModel
 from population_synthetic.gui.widgets.collapsible_section import CollapsibleSection
 
@@ -69,6 +70,7 @@ _OPTION_ENUMS: dict[str, list[tuple[str, object]]] = {}
 # config are untouched.
 _OPTION_LABELS: dict[str, str] = {
     "real-sample": "Real Database N Sample",
+    "ollama-host": "Ollama Host",
 }
 
 
@@ -102,7 +104,38 @@ def _populate_judge_model_enum() -> None:
         )
 
 
+def _populate_ollama_host_enum() -> None:
+    """Fill ``_OPTION_ENUMS["ollama-host"]`` from the Ollama host registry.
+
+    The host list is config-sourced (``config/synthetic/ollama_hosts.yaml``) — never
+    hardcoded, so declaring a new endpoint there makes it selectable with no Python
+    edit. Each entry is ``(host.label, host.id)``: the id is what is saved to the flow
+    YAML and what travels as ``--ollama-host`` (argparse ``choices`` validates it).
+
+    Deliberately **no** ``("(default)", None)`` sentinel, unlike ``judge-model``: the
+    registry removed every implicit endpoint fallback, and a ``None`` saved value would
+    omit the flag and let the run silently resolve ``default_host`` — the exact
+    wrong-GPU failure this option exists to prevent. An explicit host every run is the
+    point.
+
+    Same degrade-gracefully contract as :func:`_populate_judge_model_enum`: any
+    read/parse failure logs a warning and leaves ``ollama-host`` out of the enum table,
+    so its row falls back to the free-text field. Never raise at import, or
+    ``import population_synthetic.gui...`` would break.
+    """
+    try:
+        hosts = load_hosts()
+        _OPTION_ENUMS["ollama-host"] = [(host.label, host.id) for host in hosts.values()]
+    except (OSError, yaml.YAMLError, ValueError, KeyError, TypeError) as exc:
+        _log.warning(
+            "Could not load ollama-host options from the host registry: %s; "
+            "ollama-host falls back to free text",
+            exc,
+        )
+
+
 _populate_judge_model_enum()
+_populate_ollama_host_enum()
 
 # Conditional visibility: controller option -> {dependent option: set of
 # controller values for which the dependent row is shown}.

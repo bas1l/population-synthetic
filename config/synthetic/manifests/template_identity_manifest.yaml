@@ -24,8 +24,11 @@ model_config:
   model: "haiku"
 
   # [OPTIONAL] Base URL for the Ollama server. Only used when provider is "ollama".
-  # Falls back to OLLAMA_BASE_URL env var, then http://192.168.0.19:11434 if not set.
-  # base_url: "http://192.168.0.19:11434"
+  # There is no default and no environment fallback: the endpoint normally comes from
+  # the host registry (config/synthetic/ollama_hosts.yaml), selected per run with
+  # --ollama-host (omitted: that file's default_host). Set this key only to pin an
+  # ad-hoc endpoint that is not in the registry; an explicit --base-url overrides both.
+  # base_url: "http://<host>:11434"
 
   # [OPTIONAL] Generation parameters passed to the LLM client.
   # For gemini: maps to GenerateContentConfig kwargs (temperature, top_p, etc.)

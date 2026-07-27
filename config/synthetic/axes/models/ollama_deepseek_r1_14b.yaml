@@ -3,7 +3,8 @@ label: "Ollama DeepSeek-R1 14B"
 model_config:
   provider: "ollama"
   model: "deepseek-r1:14b"
-  base_url: "http://192.168.0.19:11434"
+  # base_url removed -- the endpoint is a host property, chosen per run
+  # (config/synthetic/ollama_hosts.yaml)
   generation_config:
     temperature: 0.7
     top_p: null
@@ -11,6 +12,12 @@ model_config:
     max_output_tokens: 2048
 parameters:
   parallel:
-    # VRAM-max knee per docs/development/ollama-parallelism-poc/REPORT.md (peak 1.60x).
-    # Only effective if the server's OLLAMA_NUM_PARALLEL matches; else requests queue.
-    workers: 2
+    # Per-host worker count. A host absent from this map does not serve this model.
+    # linux_3060: VRAM-max knee per docs/development/ollama-parallelism-poc/REPORT.md
+    #   (peak 1.60x). Only effective if that host's OLLAMA_NUM_PARALLEL matches;
+    #   else requests queue.
+    # windows_4070tis: VRAM-fit ceiling measured on the RTX 4070 Ti SUPER 16 GB
+    #   (0.680 GB KV/slot; 1158 MiB headroom at 6 slots, spills to CPU at 7).
+    workers:
+      linux_3060: 2
+      windows_4070tis: 6

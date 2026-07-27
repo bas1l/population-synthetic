@@ -3,7 +3,8 @@ label: "Ollama Lucie 7B Instruct (discarded for now)"
 model_config:
   provider: "ollama"
   model: "OpenLLM-France/Lucie-7B-Instruct:latest"
-  base_url: "http://192.168.0.19:11434"
+  # base_url removed -- the endpoint is a host property, chosen per run
+  # (config/synthetic/ollama_hosts.yaml)
   generation_config:
     temperature: 0.7
     top_p: null
@@ -12,6 +13,9 @@ model_config:
 parameters:
   structured_output: true
   parallel:
-    # VRAM-max knee per docs/development/ollama-parallelism-poc/REPORT.md (peak 2.26x).
-    # Only effective if the server's OLLAMA_NUM_PARALLEL matches; else requests queue.
-    workers: 7
+    # Per-host worker count. A host absent from this map does not serve this model.
+    # linux_3060: VRAM-max knee per docs/development/ollama-parallelism-poc/REPORT.md
+    #   (peak 2.26x). Only effective if that host's OLLAMA_NUM_PARALLEL matches;
+    #   else requests queue.
+    workers:
+      linux_3060: 7

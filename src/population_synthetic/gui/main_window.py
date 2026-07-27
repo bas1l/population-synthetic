@@ -440,7 +440,9 @@ class FlowRunnerWindow(QMainWindow):
             self.refresh_dag(model)
             # Preview existing on-disk counts and expose the Configure/Summary toggle.
             self._summary_panel.populate_combos(
-                self._axis_selector.checked_combos(), self._effective_total()
+                self._axis_selector.checked_combos(),
+                self._effective_total(),
+                self._effective_ollama_host(),
             )
             self._view_toggle_bar.setVisible(True)
             self._show_configure_page()
@@ -472,9 +474,41 @@ class FlowRunnerWindow(QMainWindow):
         n = self._model.get_options().get("n")
         return int(n) if isinstance(n, int) and not isinstance(n, bool) and n > 0 else None
 
-    def _on_option_changed(self, _key: str) -> None:
-        """FlowOptionsPanel wrote through the model (now dirty) — reflect it in the title."""
+    def _effective_ollama_host(self) -> str | None:
+        """The flow YAML's ``ollama-host`` option (sent as ``--ollama-host``), or None.
+
+        The summary panel needs the *selected* host id, not the registry default:
+        ``compose_manifest`` resolves ``default_host`` when given none, so without this
+        the Workers column would show one GPU's numbers while the run targets another.
+        None => flows with no ``ollama-host`` key (analysis/compare flows), where the
+        panel keeps the composed scalar. Uses ``get_options().get(...)`` rather than
+        ``get_option(...)``, which raises KeyError on flows lacking the key.
+        """
+        if self._model is None:
+            return None
+        host = self._model.get_options().get("ollama-host")
+        return str(host) if host else None
+
+    def _on_option_changed(self, key: str) -> None:
+        """FlowOptionsPanel wrote through the model (now dirty) — reflect it in the title.
+
+        ``ollama-host`` additionally feeds the summary panel's Workers column (worker
+        capacity is per host), so switching hosts re-renders the preview immediately
+        instead of leaving stale numbers on screen until the next axis tick. Only
+        while idle — during a run the summary_timer owns refreshes.
+        """
         self._refresh_title()
+        if (
+            key == "ollama-host"
+            and self._runner is None
+            and self._current_entry is not None
+            and self._current_entry.kind == "script"
+        ):
+            self._summary_panel.populate_combos(
+                self._axis_selector.checked_combos(),
+                self._effective_total(),
+                self._effective_ollama_host(),
+            )
 
     def _on_selection_changed(self) -> None:
         """AxisSelector wrote through the model (now dirty) — title + DAG re-fire.
@@ -489,7 +523,9 @@ class FlowRunnerWindow(QMainWindow):
             # Only re-glob counts while idle — during a run the summary_timer owns refreshes.
             if self._runner is None:
                 self._summary_panel.populate_combos(
-                    self._axis_selector.checked_combos(), self._effective_total()
+                    self._axis_selector.checked_combos(),
+                    self._effective_total(),
+                    self._effective_ollama_host(),
                 )
 
     # ------------------------------------------------------------------
@@ -618,7 +654,7 @@ class FlowRunnerWindow(QMainWindow):
             axis_mode="per_combo",
         )
         # Rebuild the summary for exactly the combos about to run and auto-show it.
-        self._summary_panel.populate_combos(combos, self._effective_total())
+        self._summary_panel.populate_combos(combos, self._effective_total(), self._effective_ollama_host())
         self._show_summary_page()
 
         runner = CombinationRunner(combos, action, options, force)
