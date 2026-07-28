@@ -58,6 +58,7 @@ from pathlib import Path
 from typing import Any
 
 from population_synthetic.clients.ollama_control_client import OllamaControlClient
+from population_synthetic.clients.retry_policy import MAX_RETRY_ATTEMPTS
 from population_synthetic.generators.synthetic import ollama_concurrency, ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
 from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
@@ -196,6 +197,11 @@ def _generate_one(
                 _active_clients.add(client)
         else:
             raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini', 'claude', 'ollama', 'openai_compat', or 'openrouter'.")
+        # The transport layer honours the same flag as the generator, so a flaky
+        # endpoint is ridden out inside the client instead of costing the persona
+        # every category resolved so far (see clients/retry_policy.py). Clients
+        # without a retry loop simply never read it.
+        client.retry_until_success = retry_until_success
         generator = FactoryIdentityGenerator.create_generator(mode, client)
         generator.retry_until_success = retry_until_success
         generator.use_structured_output = structured_output
@@ -257,9 +263,11 @@ def _ollama_preflight(
     """Tune and warm the run's Ollama host once, and return what actually happened.
 
     Returns the three pre-flight facts as separate serializable blocks
-    (``reconfigure``, ``warm_up``, ``readiness``), each ``None`` when that fact was
-    never established. They are kept apart because they are independent: a run can
-    have its parallelism applied, fail to warm the model, and still be ready.
+    (``reconfigure``, ``warm_up``, ``readiness``), plus the raw before/after server
+    snapshots the verdicts were reached from (``server_state``), each ``None`` when
+    that fact was never established. The three verdicts are kept apart because they
+    are independent: a run can have its parallelism applied, fail to warm the model,
+    and still be ready.
 
     Decision on record -- a generation run is permitted to restart shared
     infrastructure. Context: the host's container also serves Open WebUI and, on the
@@ -278,11 +286,13 @@ def _ollama_preflight(
     in ``run_metadata.json`` so a later timing analysis can filter on it rather than
     silently pooling a run that queued with one that batched.
 
-    Logging happens inside :func:`ollama_concurrency.preflight`, which emits one line
-    per fact at the level that fact deserves; only the skipped path is logged here,
-    because that path never reaches the policy layer.
+    Stage logging happens inside :func:`ollama_concurrency.preflight`, which emits one
+    line per stage at the level that stage deserves. Only what never reaches the policy
+    layer is logged here: the skipped path, and the drift check's verdict -- the policy
+    function returns that one as a value for this layer to voice, so both its outcomes
+    are voiced in the same place.
     """
-    record: dict[str, Any] = {"reconfigure": None, "warm_up": None, "readiness": None}
+    record: dict[str, Any] = {"reconfigure": None, "warm_up": None, "readiness": None, "server_state": None}
 
     if not requested or provider != "ollama":
         return record
@@ -303,6 +313,16 @@ def _ollama_preflight(
         drift = ollama_concurrency.check_worker_drift(client, model, workers)
         if drift is not None:
             logger.warning("%s", drift)
+        else:
+            # A drift check that agreed and a drift check that never ran look the same
+            # from the console unless agreement says so out loud. With a client bound,
+            # None is documented to mean exactly one thing: the two values match.
+            logger.info(
+                "Ollama pre-flight drift check: config's %d workers for %s agrees with %s/models.",
+                workers,
+                model,
+                ollama_host.control_url,
+            )
         outcome = ollama_concurrency.preflight(
             client, ollama_host.base_url, model, workers, session=session
         )
@@ -314,6 +334,13 @@ def _ollama_preflight(
     record["reconfigure"] = asdict(outcome.reconfigure)
     record["warm_up"] = asdict(outcome.warm_up)
     record["readiness"] = asdict(outcome.readiness)
+    # The evidence beside the verdicts: what the host looked like before this run
+    # touched it and what it looked like afterwards, each field null where the fact
+    # could not be established. Serialised the same way as the three blocks above.
+    record["server_state"] = {
+        "before": asdict(outcome.state_before),
+        "after": asdict(outcome.state_after),
+    }
     return record
 
 
@@ -384,7 +411,9 @@ def main() -> None:
         "--retry-until-success",
         action="store_true",
         default=False,
-        help="Retry failed persona slots and LLM evaluation calls until all N succeed (default: disabled)",
+        help="Retry every layer (transport, JSON parse, weight reconcile, persona slot) "
+             f"up to {MAX_RETRY_ATTEMPTS} times instead of each layer's small default "
+             "(default: disabled)",
     )
     parser.add_argument(
         "--structured-output",
@@ -411,7 +440,27 @@ def main() -> None:
              "'no_control_url' -- for cloud providers, for --base-url runs, and for "
              "hosts declaring no control endpoint. Default: off.",
     )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Verbosity of both the console and the run log file. DEBUG adds the raw "
+             "before/after Ollama server snapshots and every unreadable-endpoint "
+             "detail the pre-flight tolerated. Default: INFO.",
+    )
     args = parser.parse_args()
+
+    # The *root* level is the only lever that works. A handler set to DEBUG below a
+    # logger left at INFO is inert -- Logger.isEnabledFor drops the record before any
+    # handler is consulted -- which is how the file handler's DEBUG level came to
+    # promise a detail level the run log never received. Setting it here, on the root,
+    # keeps the console and the run log at one level: a run log that silently diverged
+    # from what the operator watched would be worse than either.
+    logging.getLogger().setLevel(getattr(logging, args.log_level))
+    if args.log_level == "DEBUG":
+        # urllib3 logs a line per HTTP connection, and a run makes one per persona
+        # attempt; that volume would bury the pre-flight snapshots DEBUG is for.
+        logging.getLogger("urllib3").setLevel(logging.INFO)
 
     axis_ids = [args.model_id, args.strategy_id, args.country_id]
     if args.manifest and any(x is not None for x in axis_ids):
@@ -587,7 +636,8 @@ def main() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"run_{time.strftime('%Y%m%d_%H%M%S')}.log"
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)
+    # Deliberately no handler level: --log-level sets the root logger, and a handler
+    # level could then only ever subtract from what the operator asked for.
     file_handler.setFormatter(_ElapsedFormatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
     logging.getLogger().addHandler(file_handler)
     logger.info("Log file: %s", log_file)
@@ -674,6 +724,13 @@ def main() -> None:
             "ollama_reconfigure": preflight_record["reconfigure"],
             "ollama_warm_up": preflight_record["warm_up"],
             "ollama_readiness": preflight_record["readiness"],
+            # The evidence behind those three verdicts: {before, after} snapshots of
+            # the host, taken by the same probe function either side of the acting.
+            # Without them a finished run can say 'already_correct' but not what was
+            # already correct, and 'resident_model' -- which model the host actually
+            # had loaded, and therefore which one the warm-up evicted -- is
+            # recoverable from nothing else after the fact.
+            "ollama_server_state": preflight_record["server_state"],
             "output_dir": args.output_dir,
             "force": args.force,
             "retry_until_success": args.retry_until_success,
@@ -742,6 +799,15 @@ def main() -> None:
         if not failed_indices:
             break
 
+        # Same ceiling as every other retry layer: "until success" must not mean
+        # a run that can never end.
+        if round_num >= MAX_RETRY_ATTEMPTS:
+            logger.error(
+                "Retry ceiling reached after %d rounds — %d slot(s) still failing, giving up.",
+                round_num, len(failed_indices),
+            )
+            break
+
         pending_indices = failed_indices
 
     results = list(all_results.values())
@@ -754,6 +820,7 @@ def main() -> None:
     run_metadata["retry_stats"] = {
         "retry_until_success": args.retry_until_success,
         "rounds": round_num,
+        "max_rounds": MAX_RETRY_ATTEMPTS if args.retry_until_success else 1,
     }
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(run_metadata, f, indent=2, ensure_ascii=False)

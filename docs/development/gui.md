@@ -68,6 +68,13 @@ restores the previous behaviour exactly (the argparse default is `False`, so the
 YAML is the only thing that turns it on). The option is inert for non-Ollama providers
 and for hosts declaring no `control_url`.
 
+What the console pane shows while that happens is three numbered lines —
+`[1/3] PROBE`, `[2/3] ACT`, `[3/3] GATE` — emitted once per combo whether or not the
+pre-flight acted, each naming the facts behind its verdict (see
+[Ollama hosts](../ollama_server_models.md#watching-it-from-the-console) for a sample).
+Over a five-combo Run that is what makes "one restart, four skips" visible rather than
+merely claimed.
+
 The GUI knows none of this. It renders a boolean and lets the arg-vector machinery
 emit a bare `--ollama-reconfigure`; control URLs, HTTP and the five outcome states
 live entirely on the script side. See

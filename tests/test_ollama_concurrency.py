@@ -28,6 +28,7 @@ HTTP session are both injected fakes (``tests/_ollama_fakes.py``).
 from __future__ import annotations
 
 import logging
+import re
 
 import pytest
 import requests
@@ -566,6 +567,183 @@ def test_vram_spill_warns_and_proceeds(caplog) -> None:
     assert result.readiness.state == READINESS_READY
     assert result.readiness.vram_fully_loaded is False
     assert "spilled to CPU" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Stage reporting -- a stage that stayed silent looks like one that never ran
+# ---------------------------------------------------------------------------
+
+STAGE_MARKERS = ("[1/3]", "[2/3]", "[3/3]")
+
+
+def _stages(caplog) -> dict[str, str]:
+    """Map each stage marker to the message that carried it.
+
+    Assertions below are on the *facts* a stage reported -- an outcome constant, a
+    model name, a duration -- never on the sentence around them: pinning prose would
+    make every wording change a failing test.
+    """
+    found: dict[str, str] = {}
+    for record in caplog.records:
+        message = record.getMessage()
+        for marker in STAGE_MARKERS:
+            if marker in message:
+                found[marker] = message
+    return found
+
+
+def _seconds_reported(message: str) -> bool:
+    """Whether *message* states a duration rather than merely an outcome."""
+    return re.search(r"\d+\.\d+s", message) is not None
+
+
+def test_every_stage_reports_even_when_none_of_them_acts(caplog) -> None:
+    """The fully-warm path is the one that used to print a single line.
+
+    PROBE, ACT and GATE each ran; without a line apiece, "skipped" and "never
+    reached" are indistinguishable from the console.
+    """
+    control = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": "4"})
+    session = FakeSession(_routes(ps=FakeResponse(ps_body(MODEL))))
+
+    with caplog.at_level(logging.INFO):
+        _preflight(control, session)
+
+    assert sorted(_stages(caplog)) == sorted(STAGE_MARKERS)
+    assert all(r.levelno == logging.INFO for r in caplog.records if any(m in r.getMessage() for m in STAGE_MARKERS))
+
+
+def test_act_line_names_why_the_reconfigure_was_skipped(caplog) -> None:
+    """``already_correct`` alone is a conclusion; the facts behind it are the point."""
+    control = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": "4"})
+    session = FakeSession(_routes(ps=FakeResponse(ps_body(MODEL))))
+
+    with caplog.at_level(logging.INFO):
+        _preflight(control, session)
+
+    act = _stages(caplog)["[2/3]"]
+    assert OUTCOME_ALREADY_CORRECT in act
+    assert "skip" in act.lower()
+    # The observed parallelism that made the skip correct, not just the verdict.
+    assert "4" in act
+
+
+def test_act_line_reports_the_cost_of_a_reconfigure_it_actually_ran(caplog) -> None:
+    control = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": "1"})
+    session = FakeSession(_routes(ps=FakeResponse(ps_body(None))))
+
+    with caplog.at_level(logging.INFO):
+        _preflight(control, session)
+
+    act = _stages(caplog)["[2/3]"]
+    assert OUTCOME_APPLIED in act
+    assert _seconds_reported(act)
+
+
+def test_act_line_names_the_resident_model_behind_a_skipped_warm_up(caplog) -> None:
+    """"warm-up skipped" is only checkable if it says which model made it unnecessary."""
+    control = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": "4"})
+    session = FakeSession(_routes(ps=FakeResponse(ps_body(MODEL))))
+
+    with caplog.at_level(logging.INFO):
+        _preflight(control, session)
+
+    act = _stages(caplog)["[2/3]"]
+    assert "warm-up" in act and "skip" in act.lower()
+    assert MODEL in act
+
+
+def test_probe_line_names_the_model_the_warm_up_is_about_to_evict(caplog) -> None:
+    """With ``MAX_LOADED_MODELS=1`` the resident stranger is what the warm-up displaces."""
+    control = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": "4"})
+    session = FakeSession(_routes(ps=FakeResponse(ps_body(OTHER_MODEL))))
+
+    with caplog.at_level(logging.INFO):
+        _preflight(control, session)
+
+    probe_line = _stages(caplog)["[1/3]"]
+    assert OTHER_MODEL in probe_line
+    assert MODEL in probe_line  # and which model was wanted instead
+
+
+def test_unmeasured_vram_reads_differently_from_vram_confirmed_full(caplog) -> None:
+    """``True`` and ``None`` were indistinguishable while only ``False`` was reported."""
+    control = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": "4"})
+    # An /api/ps entry without size fields: the model is resident, its VRAM occupancy
+    # is not knowable. That is not the same statement as "it fits".
+    sizeless = FakeResponse({"models": [{"name": MODEL, "model": MODEL}]})
+
+    with caplog.at_level(logging.INFO):
+        _preflight(control, FakeSession(_routes(ps=FakeResponse(ps_body(MODEL)))))
+    full = _stages(caplog)["[3/3]"]
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        _preflight(control, FakeSession(_routes(ps=sizeless)))
+    unknown = _stages(caplog)["[3/3]"]
+
+    assert full != unknown
+    assert "unknown" in unknown and "unknown" not in full
+
+
+def test_gate_line_reports_how_long_it_waited_on_success(caplog) -> None:
+    """The wait was only ever reported when it failed, which is when it matters least."""
+    control = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": "4"})
+    session = FakeSession(_routes(ps=FakeResponse(ps_body(MODEL))))
+
+    with caplog.at_level(logging.INFO):
+        result = _preflight(control, session)
+
+    gate = _stages(caplog)["[3/3]"]
+    assert result.readiness.state == READINESS_READY
+    assert READINESS_READY in gate
+    assert _seconds_reported(gate)
+
+
+def test_debug_emits_both_server_states_labelled_for_comparison(caplog) -> None:
+    """The module rests on a before/after comparison; DEBUG makes it readable.
+
+    One snapshot proves nothing on its own -- "did acting achieve what we wanted?" is
+    answerable only from the pair, so a DEBUG that showed only the first would still
+    be an assumption dressed as a measurement.
+    """
+    control = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": "1"})
+    session = FakeSession(
+        _routes(ps=[FakeResponse(ps_body(None)), FakeResponse(ps_body(None)), FakeResponse(ps_body(MODEL))])
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        result = _preflight(control, session)
+
+    snapshots = [r.getMessage() for r in caplog.records if "ServerState(" in r.getMessage()]
+    assert len(snapshots) == 2
+    before, after = snapshots
+    assert "BEFORE" in before and "AFTER" in after
+    # The records are the states the caller is handed, so a reader can trust the pair.
+    assert repr(result.state_before) in before
+    assert repr(result.state_after) in after
+    assert f"resident_model={MODEL!r}" in after
+
+
+def test_the_probe_snapshots_ride_along_with_the_verdicts(caplog) -> None:
+    """Live logging is not provenance: the states must survive the call as data."""
+    control = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": "4"})
+    # The stranger is resident for the opening probe and the warm-up's own check; the
+    # warm-up evicts it, so the closing probe sees the model this run wanted.
+    session = FakeSession(
+        _routes(
+            ps=[FakeResponse(ps_body(OTHER_MODEL)), FakeResponse(ps_body(OTHER_MODEL)), FakeResponse(ps_body(MODEL))]
+        )
+    )
+
+    result = _preflight(control, session)
+
+    assert result.state_before.resident_model == OTHER_MODEL
+    assert result.state_before.num_parallel == 4
+    # Not the wanted model, so its VRAM occupancy was never measured -- and is not
+    # invented here.
+    assert result.state_before.vram_fully_loaded is None
+    assert result.state_after.resident_model == MODEL
 
 
 # ---------------------------------------------------------------------------

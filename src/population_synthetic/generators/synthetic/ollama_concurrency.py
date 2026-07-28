@@ -29,6 +29,15 @@ orchestration layer records that verbatim in ``run_metadata.json``. The observed
 value is always read back; the requested one is never recorded as if it had been
 applied.
 
+**Every stage reports that it ran, whether or not it acted.** Each of the three emits
+one INFO line naming what it observed and *why* it did or did not act -- a skipped
+reconfigure names the two ``/status`` facts that made it unnecessary, a skipped
+warm-up names the model that was already resident. An outcome without its reasons is
+a conclusion, and a stage that stayed silent is indistinguishable from one that never
+ran. At DEBUG the two :class:`ServerState` snapshots are emitted verbatim, labelled
+BEFORE and AFTER, so the comparison this module rests on is readable rather than
+merely asserted.
+
 Scope (module contract): this module decides and carries out. It knows nothing about
 argparse, Qt, output paths or YAML, and it never reads config -- ``base_url``,
 ``model`` and ``desired`` arrive resolved from the orchestration layer. Its only
@@ -172,11 +181,18 @@ class PreflightOutcome:
     They are kept apart deliberately: "the parallelism was applied", "the model was
     loaded" and "the server was ready" are independent, and a run can succeed at one
     while failing another.
+
+    The two raw snapshots ride along beside them. The three blocks above are verdicts;
+    the snapshots are the evidence those verdicts were reached from, and only the pair
+    makes a finished run auditable -- "already_correct" read afterwards is a claim,
+    whereas a before-snapshot showing ``num_parallel=6`` is what supports it.
     """
 
     reconfigure: ReconfigureOutcome
     warm_up: WarmUpOutcome
     readiness: ReadinessOutcome
+    state_before: ServerState
+    state_after: ServerState
 
 
 # ---------------------------------------------------------------------------
@@ -619,8 +635,11 @@ def preflight(
     a literal reading of the three stages would put it, because a warm-up fired at a
     container Docker has recreated but Ollama has not yet bound to would simply fail.
     """
+    control_url = control_client.control_url if control_client is not None else None
+
     before = probe(control_client, base_url, model, session=session)
-    logger.debug("Pre-flight probe of %s: %s", base_url, before)
+    logger.debug("Ollama pre-flight ServerState of %s BEFORE acting: %s", base_url, before)
+    _log_probe_stage(before, control_url, base_url, model)
 
     reconfigure_outcome = ensure_num_parallel(control_client, model, desired)
 
@@ -646,14 +665,22 @@ def preflight(
     else:
         warm_up_outcome = warm_up(base_url, model, session=session, timeout_s=warm_up_timeout_s)
 
+    # Reported before the closing probe rather than after it, so the console shows what
+    # ACT did at the moment it finishes doing it -- on the Windows host the two stages
+    # are ~10 s and ~83 s apart.
+    _log_act_stage(reconfigure_outcome, warm_up_outcome, before, desired)
+
     after = probe(control_client, base_url, model, session=session)
+    logger.debug("Ollama pre-flight ServerState of %s AFTER acting:  %s", base_url, after)
     readiness = _classify_readiness(after, desired, model, waited_seconds)
 
-    _log_preflight(reconfigure_outcome, warm_up_outcome, readiness, model, desired, base_url)
+    _log_gate_stage(readiness, after, model, desired, base_url)
     return PreflightOutcome(
         reconfigure=reconfigure_outcome,
         warm_up=warm_up_outcome,
         readiness=readiness,
+        state_before=before,
+        state_after=after,
     )
 
 
@@ -694,25 +721,132 @@ def _classify_readiness(
     )
 
 
-def _log_preflight(
+# ---------------------------------------------------------------------------
+# Stage reporting -- one INFO line per stage, on every run, act or not
+# ---------------------------------------------------------------------------
+
+# Padded so the three stage names line up in a terminal: a mis-tuned pre-flight is
+# spotted by scanning a column, not by reading three sentences.
+_STAGE_PROBE = "[1/3] PROBE"
+_STAGE_ACT = "[2/3] ACT  "
+_STAGE_GATE = "[3/3] GATE "
+
+
+def _yes_no_unknown(value: bool | None) -> str:
+    """Render a tri-state fact without collapsing ``None`` into ``False``."""
+    if value is None:
+        return "unknown"
+    return "yes" if value else "no"
+
+
+def _vram_word(value: bool | None) -> str:
+    """Render VRAM occupancy, keeping "not measured" distinct from "measured full"."""
+    if value is None:
+        return "unknown"
+    return "full" if value else "spilled-to-cpu"
+
+
+def _describe_control(state: ServerState, control_url: str | None) -> str:
+    """Summarise the control service's half of a snapshot."""
+    if control_url is None:
+        return "no control endpoint bound"
+    if state.reachable is False:
+        return f"{control_url} unreachable"
+    return (
+        f"{control_url} container_running={_yes_no_unknown(state.container_running)} "
+        f"num_parallel={'unknown' if state.num_parallel is None else state.num_parallel}"
+    )
+
+
+def _describe_residency(state: ServerState, model: str) -> str:
+    """Summarise which model is loaded, naming the one about to be evicted."""
+    if state.resident_model is None:
+        return f"resident=none ({model} not loaded)"
+    if state.resident_model == model:
+        return f"resident={model}"
+    # With OLLAMA_MAX_LOADED_MODELS=1 this is precisely what the warm-up is about to
+    # evict, and a named eviction is the difference between an explained pause of
+    # tens of seconds and an unexplained one.
+    return f"resident={state.resident_model} (not {model}; the warm-up will evict it)"
+
+
+def _describe_num_parallel(observed: int | None, desired: int) -> str:
+    """Render the parallelism comparison, never as a bare verdict."""
+    if observed is None:
+        return f"num_parallel unknown vs {desired} wanted"
+    return f"num_parallel {observed}{'==' if observed == desired else '!='}{desired}"
+
+
+def _describe_reconfigure(outcome: ReconfigureOutcome, before: ServerState, desired: int) -> str:
+    """Say what the reconfigure step did **and** which facts decided it.
+
+    ``already_correct`` on its own is a conclusion; the two ``/status`` facts that
+    produced it are what let a reader tell a correct skip from a wrong one.
+    """
+    if outcome.outcome == OUTCOME_ALREADY_CORRECT:
+        return (
+            f"reconfigure=skipped(already_correct: container running, "
+            f"{_describe_num_parallel(outcome.observed, desired)})"
+        )
+    if outcome.outcome == OUTCOME_APPLIED:
+        return (
+            f"reconfigure=applied(num_parallel "
+            f"{'unknown' if before.num_parallel is None else before.num_parallel} -> {outcome.observed} "
+            f"read back from /status, in {outcome.elapsed_seconds:.2f}s)"
+        )
+    if outcome.outcome == OUTCOME_MISMATCH:
+        return (
+            f"reconfigure=mismatch(requested {desired}, /status reports {outcome.observed}, "
+            f"in {outcome.elapsed_seconds:.2f}s)"
+        )
+    if outcome.outcome == OUTCOME_NO_CONTROL_URL:
+        return "reconfigure=skipped(no_control_url: this run has no control endpoint to talk to)"
+    if outcome.outcome == OUTCOME_FAILED:
+        # The detail is long and belongs in the warning that follows this line.
+        return "reconfigure=failed(could not verify -- see the warning below)"
+    raise ValueError(f"Unhandled reconfigure outcome {outcome.outcome!r}")
+
+
+def _describe_warm_up(outcome: WarmUpOutcome) -> str:
+    """Say whether the model was loaded here, and if not, why it did not need to be."""
+    if not outcome.performed:
+        if outcome.error is not None:
+            return f"warm-up=none ({outcome.error})"
+        return f"warm-up=skipped({outcome.model} already resident)"
+    if outcome.error is None:
+        return (
+            f"warm-up=loaded {outcome.model} in {outcome.load_seconds or 0.0:.1f}s "
+            f"(cold load attributed here, not to persona_00000)"
+        )
+    return f"warm-up=failed after {outcome.load_seconds or 0.0:.1f}s -- see the warning above"
+
+
+def _log_probe_stage(state: ServerState, control_url: str | None, base_url: str, model: str) -> None:
+    """STAGE 1: report what the host was doing before this run touched it."""
+    logger.info(
+        "Ollama pre-flight %s %s | %s %s vram=%s",
+        _STAGE_PROBE,
+        _describe_control(state, control_url),
+        base_url,
+        _describe_residency(state, model),
+        _vram_word(state.vram_fully_loaded),
+    )
+
+
+def _log_act_stage(
     reconfigure_outcome: ReconfigureOutcome,
     warm_up_outcome: WarmUpOutcome,
-    readiness: ReadinessOutcome,
-    model: str,
+    before: ServerState,
     desired: int,
-    base_url: str,
 ) -> None:
-    """Emit one line per pre-flight fact, at the level that fact deserves."""
-    if reconfigure_outcome.outcome in (OUTCOME_ALREADY_CORRECT, OUTCOME_APPLIED):
-        logger.info(
-            "Ollama pre-flight: OLLAMA_NUM_PARALLEL=%s (%s) for %s on %s%s",
-            reconfigure_outcome.observed,
-            reconfigure_outcome.outcome,
-            model,
-            base_url,
-            "" if reconfigure_outcome.elapsed_seconds is None else f" in {reconfigure_outcome.elapsed_seconds:.2f}s",
-        )
-    else:
+    """STAGE 2: report both act steps, including the reason each one was skipped."""
+    logger.info(
+        "Ollama pre-flight %s %s  %s",
+        _STAGE_ACT,
+        _describe_reconfigure(reconfigure_outcome, before, desired),
+        _describe_warm_up(warm_up_outcome),
+    )
+    if reconfigure_outcome.outcome not in (OUTCOME_ALREADY_CORRECT, OUTCOME_APPLIED):
         logger.warning(
             "Ollama pre-flight: could not set OLLAMA_NUM_PARALLEL=%d (%s): %s",
             desired,
@@ -720,12 +854,30 @@ def _log_preflight(
             reconfigure_outcome.detail,
         )
 
-    if warm_up_outcome.performed and warm_up_outcome.error is None:
-        logger.info(
-            "Ollama pre-flight: warmed up %s in %.1fs (cold load attributed here, not to persona_00000).",
-            model,
-            warm_up_outcome.load_seconds or 0.0,
-        )
+
+def _log_gate_stage(
+    readiness: ReadinessOutcome,
+    state: ServerState,
+    model: str,
+    desired: int,
+    base_url: str,
+) -> None:
+    """STAGE 3: report the verdict together with the three facts it is made of."""
+    verdict = "ready" if readiness.state == READINESS_READY else f"not_ready({readiness.reason})"
+    port = (
+        "port never answered /api/tags"
+        if readiness.waited_seconds is None
+        else f"port answered /api/tags in {readiness.waited_seconds:.2f}s"
+    )
+    logger.info(
+        "Ollama pre-flight %s %s -- %s, %s, %s, vram=%s",
+        _STAGE_GATE,
+        verdict,
+        port,
+        _describe_num_parallel(state.num_parallel, desired),
+        _describe_residency(state, model),
+        _vram_word(readiness.vram_fully_loaded),
+    )
 
     if readiness.state == READINESS_NOT_READY:
         logger.warning(

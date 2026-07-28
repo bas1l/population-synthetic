@@ -37,6 +37,7 @@ from population_synthetic.generators.synthetic.ollama_hosts import OllamaHost
 from ._ollama_fakes import BASE_URL, CONTROL_URL, FakeControlClient, FakeResponse, FakeSession, ps_body
 
 MODEL = "deepseek-r1:14b"
+OTHER_MODEL = "mistral-nemo:12b"
 WORKERS = 6
 
 CONFIG = PROJECT_ROOT / "config" / "synthetic" / "simulation_configs" / "simulation_config_004_swedish_generative.json"
@@ -115,7 +116,7 @@ def test_flag_off_leaves_the_host_untouched() -> None:
     record = driver._ollama_preflight(
         _host(), "ollama", MODEL, WORKERS, requested=False, control_client_factory=_boom_factory
     )
-    assert record == {"reconfigure": None, "warm_up": None, "readiness": None}
+    assert record == {"reconfigure": None, "warm_up": None, "readiness": None, "server_state": None}
 
 
 def test_preflight_is_skipped_for_non_ollama_providers() -> None:
@@ -129,7 +130,7 @@ def test_preflight_is_skipped_for_non_ollama_providers() -> None:
         record = driver._ollama_preflight(
             _host(), provider, MODEL, WORKERS, requested=True, control_client_factory=_boom_factory
         )
-        assert record == {"reconfigure": None, "warm_up": None, "readiness": None}
+        assert record == {"reconfigure": None, "warm_up": None, "readiness": None, "server_state": None}
 
 
 def test_no_host_bound_records_no_control_url_without_probing() -> None:
@@ -149,6 +150,7 @@ def test_no_host_bound_records_no_control_url_without_probing() -> None:
     # Never established, so never invented.
     assert record["warm_up"] is None
     assert record["readiness"] is None
+    assert record["server_state"] is None
 
 
 def test_host_without_control_url_records_no_control_url() -> None:
@@ -232,6 +234,62 @@ def test_drift_between_config_and_the_server_is_warned_alongside_the_preflight(c
     assert record["reconfigure"]["observed"] == WORKERS
 
 
+def test_drift_agreement_is_stated_rather_than_left_silent(caplog) -> None:
+    """Silence cannot distinguish "the check agreed" from "the check never ran"."""
+    driver = _load_driver()
+    client = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": str(WORKERS)}, models={MODEL: WORKERS})
+    with caplog.at_level(logging.INFO):
+        driver._ollama_preflight(
+            _host(), "ollama", MODEL, WORKERS, requested=True,
+            control_client_factory=lambda url: client, session=_warm_session(),
+        )
+
+    agreed = [r.getMessage() for r in caplog.records if "drift" in r.getMessage().lower()]
+    assert len(agreed) == 1
+    assert MODEL in agreed[0] and str(WORKERS) in agreed[0]
+    assert not any(r.levelno >= logging.WARNING for r in caplog.records if "drift" in r.getMessage().lower())
+
+
+def test_server_state_block_records_the_evidence_behind_the_verdicts() -> None:
+    """A finished run must be auditable, not only a live one.
+
+    ``resident_model`` is the sharpest case: which model the host actually had loaded
+    -- and therefore which one this run's warm-up evicted -- is recoverable from
+    nothing else once the run is over.
+    """
+    driver = _load_driver()
+    client = FakeControlClient(env={"OLLAMA_NUM_PARALLEL": "1"}, models={MODEL: WORKERS})
+    session = FakeSession(
+        {
+            "/api/ps": [
+                FakeResponse(ps_body(OTHER_MODEL)),
+                FakeResponse(ps_body(None)),
+                FakeResponse(ps_body(MODEL)),
+            ],
+            "/api/tags": FakeResponse({"models": []}),
+            "/api/chat": FakeResponse({"message": {"role": "assistant", "content": "ready"}}),
+        }
+    )
+    record = driver._ollama_preflight(
+        _host(), "ollama", MODEL, WORKERS, requested=True,
+        control_client_factory=lambda url: client, session=session,
+    )
+
+    before = record["server_state"]["before"]
+    after = record["server_state"]["after"]
+    assert before["resident_model"] == OTHER_MODEL
+    assert before["num_parallel"] == 1
+    # Not the model this run wanted, so its VRAM occupancy was never measured.
+    assert before["vram_fully_loaded"] is None
+    assert after["resident_model"] == MODEL
+    assert after["num_parallel"] == WORKERS
+
+    # It lands in run_metadata.json as JSON, and the absent facts stay null there.
+    round_tripped = json.loads(json.dumps(record))["server_state"]
+    assert round_tripped["before"]["vram_fully_loaded"] is None
+    assert round_tripped["after"]["resident_model"] == MODEL
+
+
 def test_a_fully_warm_host_costs_nothing() -> None:
     """Parallelism already right and model already resident: zero restarts, zero loads."""
     driver = _load_driver()
@@ -264,11 +322,14 @@ def cli(tmp_path, monkeypatch):
     submit time), so no client of any provider is ever constructed. The run's file
     handler is detached afterwards: it is added to the *root* logger and never
     removed, so leaving it would keep writing every later test's log lines into a
-    deleted temp directory.
+    deleted temp directory. The root *level* is restored for the same reason --
+    ``--log-level`` sets it globally, and a run left at DEBUG would change what every
+    later test in the session captures.
     """
     driver = _load_driver()
     root = logging.getLogger()
     before = list(root.handlers)
+    before_level = root.level
 
     def _run(argv: list[str]) -> dict[str, Any]:
         out_dir = tmp_path / f"run_{len(list(tmp_path.iterdir()))}"
@@ -293,6 +354,7 @@ def cli(tmp_path, monkeypatch):
 
     yield _run
 
+    root.setLevel(before_level)
     for handler in list(root.handlers):
         if handler not in before:
             root.removeHandler(handler)
@@ -323,6 +385,27 @@ def test_cli_base_url_run_skips_the_preflight_entirely(cli, monkeypatch, caplog)
     assert params["ollama_reconfigure"]["observed"] is None
     assert params["ollama_warm_up"] is None
     assert params["ollama_readiness"] is None
+
+
+def test_cli_log_level_lowers_the_root_logger_not_just_a_handler(cli) -> None:
+    """The only lever that works is the root level.
+
+    A file handler set to DEBUG under a root logger left at INFO is inert -- the
+    record is dropped by ``Logger.isEnabledFor`` before any handler is consulted --
+    so the run log silently never received the detail its handler level advertised.
+    """
+    root = logging.getLogger()
+
+    cli(["--provider", "claude", "--model", "sonnet"])
+    assert root.level == logging.INFO
+
+    cli(["--provider", "claude", "--model", "sonnet", "--log-level", "DEBUG"])
+    assert root.level == logging.DEBUG
+    # And nothing between the logger and the run log file subtracts from that, so the
+    # log an operator reads afterwards matches the console they watched.
+    file_handlers = [h for h in root.handlers if isinstance(h, logging.FileHandler)]
+    assert file_handlers
+    assert all(h.level == logging.NOTSET for h in file_handlers)
 
 
 def test_cli_non_ollama_provider_records_three_null_blocks(cli, monkeypatch) -> None:
@@ -356,6 +439,16 @@ def test_cli_records_every_block_and_suppresses_the_stale_warning(cli, monkeypat
             "state": ollama_concurrency.READINESS_READY, "reason": None,
             "waited_seconds": 14.68, "vram_fully_loaded": True,
         },
+        "server_state": {
+            "before": {
+                "reachable": True, "container_running": True, "num_parallel": 1,
+                "resident_model": "mistral-nemo:12b", "vram_fully_loaded": None,
+            },
+            "after": {
+                "reachable": True, "container_running": True, "num_parallel": WORKERS,
+                "resident_model": MODEL, "vram_fully_loaded": True,
+            },
+        },
     }
     seen: dict[str, Any] = {}
 
@@ -380,6 +473,7 @@ def test_cli_records_every_block_and_suppresses_the_stale_warning(cli, monkeypat
     assert params["ollama_reconfigure"] == applied["reconfigure"]
     assert params["ollama_warm_up"] == applied["warm_up"]
     assert params["ollama_readiness"] == applied["readiness"]
+    assert params["ollama_server_state"] == applied["server_state"]
     assert not any("exceeds the declared OLLAMA_NUM_PARALLEL" in r.getMessage() for r in caplog.records)
 
 
@@ -397,6 +491,16 @@ def test_cli_failed_outcome_still_warns_and_records_a_null_observed(cli, monkeyp
             "state": ollama_concurrency.READINESS_NOT_READY,
             "reason": ollama_concurrency.REASON_UNREACHABLE,
             "waited_seconds": 0.0, "vram_fully_loaded": None,
+        },
+        "server_state": {
+            "before": {
+                "reachable": False, "container_running": None, "num_parallel": None,
+                "resident_model": None, "vram_fully_loaded": None,
+            },
+            "after": {
+                "reachable": False, "container_running": None, "num_parallel": None,
+                "resident_model": None, "vram_fully_loaded": None,
+            },
         },
     }
     monkeypatch.setattr(driver, "_ollama_preflight", lambda *a, **k: failed, raising=True)

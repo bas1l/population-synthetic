@@ -64,6 +64,34 @@ into `failed` ("could not verify"). None of the five states aborts the run: gene
 at any parallelism, only slower. The warm-up and the readiness gate are recorded as two further
 blocks (`ollama_warm_up`, `ollama_readiness`), because a run whose warm-up failed still carries a
 cold load in `persona_00000`'s wall-clock, and that must stay visible to a later timing analysis.
+A fourth block, `ollama_server_state`, carries the raw `{before, after}` snapshots the three
+verdicts were reached from — `reachable`, `container_running`, `num_parallel`, `resident_model`,
+`vram_fully_loaded`, each `null` where the fact could not be established. Without it a finished run
+records that the parallelism was `already_correct` but not *what* was already correct, and which
+model the host had loaded — and therefore which one this run's warm-up evicted — is recoverable
+from nothing else.
+
+### Watching it from the console
+
+Each stage reports once per run whether or not it acted, because a stage that stays silent when it
+skips is indistinguishable from one that never ran. The fully-warm path, which does nothing at all:
+
+```
+Ollama pre-flight drift check: config's 6 workers for deepseek-r1:14b agrees with http://localhost:11435/models.
+Ollama pre-flight [1/3] PROBE http://localhost:11435 container_running=yes num_parallel=6 | http://localhost:11434 resident=deepseek-r1:14b vram=full
+Ollama pre-flight [2/3] ACT   reconfigure=skipped(already_correct: container running, num_parallel 6==6)  warm-up=skipped(deepseek-r1:14b already resident)
+Ollama pre-flight [3/3] GATE  ready -- port answered /api/tags in 0.08s, num_parallel 6==6, resident=deepseek-r1:14b, vram=full
+```
+
+Each line names the facts behind its verdict rather than the verdict alone: the two `/status`
+conditions that made the restart unnecessary, the model whose residency made the warm-up
+unnecessary (and, when a *different* model is loaded, that it is the one the warm-up is about to
+evict), how long the gate waited, and `full` / `spilled-to-cpu` / `unknown` for VRAM — never
+`unknown` silently rendered as `full`. Failures keep their own WARNING lines on top of these.
+
+`--log-level DEBUG` adds the two `ServerState` snapshots verbatim, labelled BEFORE and AFTER, which
+is the comparison the whole pre-flight rests on. The flag sets the **root** logger, so the console
+and `logs/run_*.log` always carry the same detail.
 
 > A reconfigure **restarts the container**, which evicts whatever model was loaded and kills any
 > in-flight request from another user of that GPU. That is an accepted, deliberate cost: the run is
