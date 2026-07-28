@@ -21,16 +21,19 @@ import yaml
 
 from population_synthetic.clients.call_context import set_correlation
 from population_synthetic.clients.llm_protocol import LLMClient
+from population_synthetic.clients.retry_policy import FATAL_ERROR_CATEGORIES, max_attempts
 
 from .base_identity_generator import BaseIdentityGenerator
 from .llm_interaction_log import LLMInteractionEntry
 
 _WEIGHT_COUNT_TOLERANCE_RATIO = 0.1
 
-# Hard ceiling on weight/candidate reconciliation retries. Applies even when
-# ``retry_until_success`` is set, so a model that never returns a valid weight
-# count fails loudly instead of hanging in an unbounded loop.
-_MAX_WEIGHT_RECONCILE_ATTEMPTS = 25
+# Attempt budgets for the two generator-level retry layers WITHOUT
+# ``retry_until_success``. With it, both rise to the shared MAX_RETRY_ATTEMPTS
+# ceiling (see clients/retry_policy.py): a model that never returns usable
+# output then fails loudly instead of hanging in a truly unbounded loop.
+_DEFAULT_JSON_ATTEMPTS = 3
+_DEFAULT_WEIGHT_RECONCILE_ATTEMPTS = 3
 
 
 class IdentityGeneratorConfigurable(BaseIdentityGenerator):
@@ -187,7 +190,8 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             else {}
         )
         last_error: Exception | None = None
-        for attempt in range(3):
+        attempts = max_attempts(self.retry_until_success, _DEFAULT_JSON_ATTEMPTS)
+        for attempt in range(attempts):
             raw = ""
             # One unique correlation key per client call (not per invocation): the
             # log line the client emits and the JSONL entry recorded below share it,
@@ -255,13 +259,21 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                         total_tokens=meta.get("total_tokens"),
                         error_category=error_category,
                     ))
+                # A fatal provider error (missing model, rejected credentials) is not
+                # made truthy by repetition: it must escape the budget immediately,
+                # or ``retry_until_success`` turns a misconfigured run into a
+                # 100-attempt-per-call grind that still fails.
+                if error_category in FATAL_ERROR_CATEGORIES:
+                    raise
                 last_error = e
                 raw_snippet = raw[:500] if raw else "(no response)"
                 logging.warning(
-                    "LLM JSON parse attempt %d/3 failed (%s): %s\n--- RAW RESPONSE ---\n%s\n--- END ---",
-                    attempt + 1, type(e).__name__, e, raw_snippet,
+                    "LLM JSON parse attempt %d/%d failed (%s): %s\n--- RAW RESPONSE ---\n%s\n--- END ---",
+                    attempt + 1, attempts, type(e).__name__, e, raw_snippet,
                 )
-        raise ValueError(f"LLM returned invalid or incomplete JSON after 3 retries. Last error: {last_error}")
+        raise ValueError(
+            f"LLM returned invalid or incomplete JSON after {attempts} attempts. Last error: {last_error}"
+        )
 
     def _build_context_block(self, resolved: dict) -> str:
         if not resolved:
@@ -527,6 +539,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             logging.warning(f"Truncating {len(candidates)} candidates to 25 for '{category_name}'.")
             candidates = candidates[:25]
 
+        reconcile_attempts = max_attempts(self.retry_until_success, _DEFAULT_WEIGHT_RECONCILE_ATTEMPTS)
         attempt = 0
         while True:
             attempt += 1
@@ -543,17 +556,15 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                 weights = reconciled
                 break
             tolerance = int(len(candidates) * _WEIGHT_COUNT_TOLERANCE_RATIO)
-            soft_exhausted = not self.retry_until_success and attempt >= 3
-            hard_exhausted = attempt >= _MAX_WEIGHT_RECONCILE_ATTEMPTS
-            if soft_exhausted or hard_exhausted:
+            if attempt >= reconcile_attempts:
                 raise ValueError(
                     f"Weight/candidate count mismatch for '{category_name}' after {attempt} attempts: "
                     f"{len(weights)} weights for {len(candidates)} candidates."
                 )
             logging.warning(
                 f"Weight/candidate mismatch for '{category_name}' "
-                f"(attempt {attempt}): {len(weights)} weights for {len(candidates)} candidates "
-                f"(exceeds tolerance of {tolerance}). Retrying."
+                f"(attempt {attempt}/{reconcile_attempts}): {len(weights)} weights for "
+                f"{len(candidates)} candidates (exceeds tolerance of {tolerance}). Retrying."
             )
 
         sel_prompt = self._build_select_prompt(category_name, candidates, resolved, system_instruction)
@@ -618,6 +629,7 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             logging.warning(f"Truncating {len(candidates)} candidates to 25 for '{category_name}'.")
             candidates = candidates[:25]
 
+        reconcile_attempts = max_attempts(self.retry_until_success, _DEFAULT_WEIGHT_RECONCILE_ATTEMPTS)
         attempt = 0
         while True:
             attempt += 1
@@ -634,17 +646,15 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                 weights = reconciled
                 break
             tolerance = int(len(candidates) * _WEIGHT_COUNT_TOLERANCE_RATIO)
-            soft_exhausted = not self.retry_until_success and attempt >= 3
-            hard_exhausted = attempt >= _MAX_WEIGHT_RECONCILE_ATTEMPTS
-            if soft_exhausted or hard_exhausted:
+            if attempt >= reconcile_attempts:
                 raise ValueError(
                     f"Weight/candidate count mismatch for '{category_name}' after {attempt} attempts: "
                     f"{len(weights)} weights for {len(candidates)} candidates."
                 )
             logging.warning(
                 f"Weight/candidate mismatch for '{category_name}' "
-                f"(attempt {attempt}): {len(weights)} weights for {len(candidates)} candidates "
-                f"(exceeds tolerance of {tolerance}). Retrying."
+                f"(attempt {attempt}/{reconcile_attempts}): {len(weights)} weights for "
+                f"{len(candidates)} candidates (exceeds tolerance of {tolerance}). Retrying."
             )
 
         return random.choices(candidates, weights=weights, k=1)[0]

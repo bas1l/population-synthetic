@@ -81,6 +81,12 @@ def test_ollama_host_dispatches_to_enum_widget() -> None:
     assert panel.option_widget_kind("ollama-host", "linux_3060") == "enum"
 
 
+def test_ollama_reconfigure_dispatches_to_checkbox() -> None:
+    """A boolean option needs no enum table -- shape dispatch renders it as a checkbox."""
+    assert "ollama-reconfigure" not in panel._OPTION_ENUMS
+    assert panel.option_widget_kind("ollama-reconfigure", True) == "bool"
+
+
 def test_option_header_uses_label_override() -> None:
     """An overridden key gets its friendly label; others fall back to title-case."""
     assert panel._OPTION_LABELS["real-sample"] == "Real Database N Sample"
@@ -88,4 +94,5 @@ def test_option_header_uses_label_override() -> None:
     assert panel._OPTION_LABELS["ollama-host"] == "Ollama Host"
     # Without the override the key would title-case to "Ollama-Host".
     assert panel._option_header("ollama-host") == "Ollama Host"
+    assert panel._option_header("ollama-reconfigure") == "Reconfigure Ollama Host"
     assert panel._option_header("workers") == "Workers"

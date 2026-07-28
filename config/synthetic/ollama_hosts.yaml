@@ -7,6 +7,9 @@ hosts:
   linux_3060:
     label: "Linux server - RTX 3060 12 GB"
     base_url: "http://192.168.0.19:11434"
+    # Optional control-service endpoint (adjacent to Ollama, not part of it).
+    # Absent = no auto-reconfigure for this host; the run proceeds untouched.
+    control_url: "http://192.168.0.19:11435"
     gpu: "NVIDIA RTX 3060, 12 GB"
     # Human-declared OLLAMA_NUM_PARALLEL of that host's Ollama process.
     # NOT a worker count -- never used as one. Warning threshold only;
@@ -20,6 +23,8 @@ hosts:
   windows_4070tis:
     label: "Windows PC - RTX 4070 Ti SUPER 16 GB"
     base_url: "http://localhost:11434"
+    # Optional control-service endpoint; see linux_3060 above.
+    control_url: "http://localhost:11435"
     gpu: "NVIDIA RTX 4070 Ti SUPER, 16 GB"
     # The container is still at OLLAMA_NUM_PARALLEL=1 today. The per-model
     # VRAM-fit ceilings now recorded in the axis files (6-84 slots, measured on

@@ -53,9 +53,13 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
-from population_synthetic.generators.synthetic import ollama_hosts
+from population_synthetic.clients.ollama_control_client import OllamaControlClient
+from population_synthetic.clients.retry_policy import MAX_RETRY_ATTEMPTS
+from population_synthetic.generators.synthetic import ollama_concurrency, ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
 from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
 from population_synthetic.generators.synthetic.manifest_loader import (
@@ -193,6 +197,11 @@ def _generate_one(
                 _active_clients.add(client)
         else:
             raise ValueError(f"Unknown provider: {provider!r}. Expected 'gemini', 'claude', 'ollama', 'openai_compat', or 'openrouter'.")
+        # The transport layer honours the same flag as the generator, so a flaky
+        # endpoint is ridden out inside the client instead of costing the persona
+        # every category resolved so far (see clients/retry_policy.py). Clients
+        # without a retry loop simply never read it.
+        client.retry_until_success = retry_until_success
         generator = FactoryIdentityGenerator.create_generator(mode, client)
         generator.retry_until_success = retry_until_success
         generator.use_structured_output = structured_output
@@ -230,6 +239,115 @@ def _generate_one(
             client.close()
             with _active_clients_lock:
                 _active_clients.discard(client)
+
+
+# The reconfigure outcomes after which the server's parallelism matches the run.
+# In both, the registry's declared server_num_parallel is stale rather than
+# violated, so the warning built on it no longer describes anything true.
+_TUNED_OUTCOMES = (
+    ollama_concurrency.OUTCOME_ALREADY_CORRECT,
+    ollama_concurrency.OUTCOME_APPLIED,
+)
+
+
+def _ollama_preflight(
+    ollama_host: ollama_hosts.OllamaHost | None,
+    provider: str,
+    model: str,
+    workers: int,
+    *,
+    requested: bool,
+    control_client_factory: Any | None = None,
+    session: Any | None = None,
+) -> dict[str, Any]:
+    """Tune and warm the run's Ollama host once, and return what actually happened.
+
+    Returns the three pre-flight facts as separate serializable blocks
+    (``reconfigure``, ``warm_up``, ``readiness``), plus the raw before/after server
+    snapshots the verdicts were reached from (``server_state``), each ``None`` when
+    that fact was never established. The three verdicts are kept apart because they
+    are independent: a run can have its parallelism applied, fail to warm the model,
+    and still be ready.
+
+    Decision on record -- a generation run is permitted to restart shared
+    infrastructure. Context: the host's container also serves Open WebUI and, on the
+    Linux host, ComfyUI, and ``OLLAMA_NUM_PARALLEL`` can only be changed by recreating
+    it. Decision: reconfigure anyway, because the run is about to monopolise that GPU
+    for minutes regardless, and running it mis-tuned wastes the same GPU for roughly
+    twice as long. Consequences, and the three things that bound the blast radius: the
+    skip check means a correctly-configured server is never touched; the call happens
+    once, before generation, never between personas; and the whole step is opt-in
+    (``--ollama-reconfigure``, off by default). No locking or in-use detection is
+    attempted -- ``/status`` reports ``container_running``, not whether someone else's
+    request is in flight.
+
+    Failure is tolerated but never swallowed. The run is correct at any parallelism,
+    only slower, so nothing here aborts it; instead every outcome is recorded verbatim
+    in ``run_metadata.json`` so a later timing analysis can filter on it rather than
+    silently pooling a run that queued with one that batched.
+
+    Stage logging happens inside :func:`ollama_concurrency.preflight`, which emits one
+    line per stage at the level that stage deserves. Only what never reaches the policy
+    layer is logged here: the skipped path, and the drift check's verdict -- the policy
+    function returns that one as a value for this layer to voice, so both its outcomes
+    are voiced in the same place.
+    """
+    record: dict[str, Any] = {"reconfigure": None, "warm_up": None, "readiness": None, "server_state": None}
+
+    if not requested or provider != "ollama":
+        return record
+
+    if ollama_host is None or ollama_host.control_url is None:
+        # Nothing to talk to: either the host declares no control endpoint, or
+        # --base-url pointed this run at a machine the registry does not describe.
+        # Never reconfigure a host the run is not using -- the outputs would look
+        # normal while another GPU was restarted.
+        outcome = ollama_concurrency.ensure_num_parallel(None, model, workers)
+        logger.warning("Ollama pre-flight skipped (%s): %s", outcome.outcome, outcome.detail)
+        record["reconfigure"] = asdict(outcome)
+        return record
+
+    factory = OllamaControlClient if control_client_factory is None else control_client_factory
+    client = factory(ollama_host.control_url)
+    try:
+        drift = ollama_concurrency.check_worker_drift(client, model, workers)
+        if drift is not None:
+            logger.warning("%s", drift)
+        else:
+            # A drift check that agreed and a drift check that never ran look the same
+            # from the console unless agreement says so out loud. With a client bound,
+            # None is documented to mean exactly one thing: the two values match.
+            logger.info(
+                "Ollama pre-flight drift check: config's %d workers for %s agrees with %s/models.",
+                workers,
+                model,
+                ollama_host.control_url,
+            )
+        outcome = ollama_concurrency.preflight(
+            client, ollama_host.base_url, model, workers, session=session
+        )
+    finally:
+        close = getattr(client, "close", None)
+        if callable(close):
+            close()
+
+    record["reconfigure"] = asdict(outcome.reconfigure)
+    record["warm_up"] = asdict(outcome.warm_up)
+    record["readiness"] = asdict(outcome.readiness)
+    # The evidence beside the verdicts: what the host looked like before this run
+    # touched it and what it looked like afterwards, each field null where the fact
+    # could not be established. Serialised the same way as the three blocks above.
+    record["server_state"] = {
+        "before": asdict(outcome.state_before),
+        "after": asdict(outcome.state_after),
+    }
+    return record
+
+
+def _server_parallelism_is_tuned(preflight_record: dict[str, Any]) -> bool:
+    """Whether the pre-flight left the server's OLLAMA_NUM_PARALLEL matching this run."""
+    reconfigure = preflight_record["reconfigure"]
+    return reconfigure is not None and reconfigure["outcome"] in _TUNED_OUTCOMES
 
 
 def main() -> None:
@@ -293,7 +411,9 @@ def main() -> None:
         "--retry-until-success",
         action="store_true",
         default=False,
-        help="Retry failed persona slots and LLM evaluation calls until all N succeed (default: disabled)",
+        help="Retry every layer (transport, JSON parse, weight reconcile, persona slot) "
+             f"up to {MAX_RETRY_ATTEMPTS} times instead of each layer's small default "
+             "(default: disabled)",
     )
     parser.add_argument(
         "--structured-output",
@@ -309,7 +429,38 @@ def main() -> None:
              "parallel.workers value for the selected host (the per-model, per-GPU "
              "VRAM-optimal count). No-op for cloud providers. Default: off.",
     )
+    parser.add_argument(
+        "--ollama-reconfigure",
+        action="store_true",
+        default=False,
+        help="For Ollama hosts declaring a control_url only: before generating, set the "
+             "server's OLLAMA_NUM_PARALLEL to the resolved worker count (which restarts "
+             "that host's container when the value differs) and warm the model up, so "
+             "the first persona does not pay the cold load. Skipped -- and recorded as "
+             "'no_control_url' -- for cloud providers, for --base-url runs, and for "
+             "hosts declaring no control endpoint. Default: off.",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Verbosity of both the console and the run log file. DEBUG adds the raw "
+             "before/after Ollama server snapshots and every unreadable-endpoint "
+             "detail the pre-flight tolerated. Default: INFO.",
+    )
     args = parser.parse_args()
+
+    # The *root* level is the only lever that works. A handler set to DEBUG below a
+    # logger left at INFO is inert -- Logger.isEnabledFor drops the record before any
+    # handler is consulted -- which is how the file handler's DEBUG level came to
+    # promise a detail level the run log never received. Setting it here, on the root,
+    # keeps the console and the run log at one level: a run log that silently diverged
+    # from what the operator watched would be worse than either.
+    logging.getLogger().setLevel(getattr(logging, args.log_level))
+    if args.log_level == "DEBUG":
+        # urllib3 logs a line per HTTP connection, and a run makes one per persona
+        # attempt; that volume would bury the pre-flight snapshots DEBUG is for.
+        logging.getLogger("urllib3").setLevel(logging.INFO)
 
     axis_ids = [args.model_id, args.strategy_id, args.country_id]
     if args.manifest and any(x is not None for x in axis_ids):
@@ -444,22 +595,13 @@ def main() -> None:
                 args.workers,
             )
 
-    # server_num_parallel is a human-declared value that Ollama exposes on no
-    # endpoint, so it can never gate a run -- exceeding it is a throughput
-    # disappointment, not an error.
-    if ollama_host is not None and args.workers > ollama_host.server_num_parallel:
-        logger.warning(
-            "%d workers exceeds the declared OLLAMA_NUM_PARALLEL=%d of host '%s' (%s): "
-            "requests beyond the first %d will queue on the server instead of batching, "
-            "so the extra workers buy no throughput. Proceeding -- this is an unverifiable "
-            "declared value. Raise OLLAMA_NUM_PARALLEL on that host or lower --workers.",
-            args.workers,
-            ollama_host.server_num_parallel,
-            ollama_host.id,
-            ollama_host.label,
-            ollama_host.server_num_parallel,
-        )
-
+    # Everything that can still refuse this run -- and the log file that will record
+    # it -- deliberately precedes the Ollama pre-flight below, which is the first
+    # step with a side effect on a machine other people share. Two reasons: a run
+    # about to die on a missing --config must not restart someone else's container
+    # first, and the pre-flight's own outcome (up to ~2 min of container restart and
+    # cold load on the Windows host) is exactly the provenance a later timing
+    # analysis needs, so it belongs in the run log rather than the console alone.
     if not args.mode or not args.config:
         parser.error("Either --manifest or both --mode and --config are required")
     if not args.n:
@@ -494,7 +636,8 @@ def main() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"run_{time.strftime('%Y%m%d_%H%M%S')}.log"
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)
+    # Deliberately no handler level: --log-level sets the root logger, and a handler
+    # level could then only ever subtract from what the operator asked for.
     file_handler.setFormatter(_ElapsedFormatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
     logging.getLogger().addHandler(file_handler)
     logger.info("Log file: %s", log_file)
@@ -511,6 +654,40 @@ def main() -> None:
         model = "openai/gpt-4o"
     else:
         model = "sonnet"
+
+    # PROBE -> ACT -> GATE, once per invocation: args.workers is final, ollama_host
+    # is bound, `model` is the tag the server will actually be asked for, and no
+    # OllamaClient exists yet (each of those probes /api/tags per persona, far too
+    # late to gate on). See _ollama_preflight for the decision to mutate a shared host.
+    preflight_record = _ollama_preflight(
+        ollama_host,
+        args.provider,
+        model,
+        args.workers,
+        requested=args.ollama_reconfigure,
+    )
+
+    # server_num_parallel is a human-declared value that Ollama exposes on no
+    # endpoint, so it can never gate a run -- exceeding it is a throughput
+    # disappointment, not an error. A successful pre-flight makes the declared value
+    # stale rather than violated, so the warning is suppressed there and only there:
+    # 'mismatch', 'failed' and 'no_control_url' all leave the condition standing.
+    if (
+        ollama_host is not None
+        and args.workers > ollama_host.server_num_parallel
+        and not _server_parallelism_is_tuned(preflight_record)
+    ):
+        logger.warning(
+            "%d workers exceeds the declared OLLAMA_NUM_PARALLEL=%d of host '%s' (%s): "
+            "requests beyond the first %d will queue on the server instead of batching, "
+            "so the extra workers buy no throughput. Proceeding -- this is an unverifiable "
+            "declared value. Raise OLLAMA_NUM_PARALLEL on that host or lower --workers.",
+            args.workers,
+            ollama_host.server_num_parallel,
+            ollama_host.id,
+            ollama_host.label,
+            ollama_host.server_num_parallel,
+        )
 
     kwargs = {}
     if args.strategy:
@@ -538,6 +715,22 @@ def main() -> None:
             # generation_metadata analysis and are unrecoverable after the fact.
             # The endpoint itself is recorded above as model_config.base_url.
             "ollama_host": ollama_host.id if ollama_host is not None else None,
+            # The three pre-flight facts, each recorded as its own block and each
+            # null when it was never established (the pre-flight was not requested,
+            # or stopped before that stage). They stay apart because they are
+            # independent: 'observed' is the value read back from the server, never
+            # the one requested, and a warm-up that failed means persona_00000's
+            # wall-clock still carries the cold load this feature exists to move.
+            "ollama_reconfigure": preflight_record["reconfigure"],
+            "ollama_warm_up": preflight_record["warm_up"],
+            "ollama_readiness": preflight_record["readiness"],
+            # The evidence behind those three verdicts: {before, after} snapshots of
+            # the host, taken by the same probe function either side of the acting.
+            # Without them a finished run can say 'already_correct' but not what was
+            # already correct, and 'resident_model' -- which model the host actually
+            # had loaded, and therefore which one the warm-up evicted -- is
+            # recoverable from nothing else after the fact.
+            "ollama_server_state": preflight_record["server_state"],
             "output_dir": args.output_dir,
             "force": args.force,
             "retry_until_success": args.retry_until_success,
@@ -606,6 +799,15 @@ def main() -> None:
         if not failed_indices:
             break
 
+        # Same ceiling as every other retry layer: "until success" must not mean
+        # a run that can never end.
+        if round_num >= MAX_RETRY_ATTEMPTS:
+            logger.error(
+                "Retry ceiling reached after %d rounds — %d slot(s) still failing, giving up.",
+                round_num, len(failed_indices),
+            )
+            break
+
         pending_indices = failed_indices
 
     results = list(all_results.values())
@@ -618,6 +820,7 @@ def main() -> None:
     run_metadata["retry_stats"] = {
         "retry_until_success": args.retry_until_success,
         "rounds": round_num,
+        "max_rounds": MAX_RETRY_ATTEMPTS if args.retry_until_success else 1,
     }
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(run_metadata, f, indent=2, ensure_ascii=False)

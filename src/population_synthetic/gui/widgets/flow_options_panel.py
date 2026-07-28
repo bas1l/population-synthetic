@@ -71,6 +71,7 @@ _OPTION_ENUMS: dict[str, list[tuple[str, object]]] = {}
 _OPTION_LABELS: dict[str, str] = {
     "real-sample": "Real Database N Sample",
     "ollama-host": "Ollama Host",
+    "ollama-reconfigure": "Reconfigure Ollama Host",
 }
 
 

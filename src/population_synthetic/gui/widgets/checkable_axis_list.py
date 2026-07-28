@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -42,7 +43,14 @@ class CheckableAxisList(QWidget):
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
-        self._scroll.setMaximumHeight(180)
+        # Height is the parent layout's call, not the content's: `Ignored`
+        # drops the "as tall as my N checkboxes" size hint, so an axis gets
+        # exactly the share its AxisSelector stretch weight asks for (a 20-item
+        # axis would otherwise claim 20 rows before stretch ever applies). The
+        # minimum keeps a short axis readable — roughly three rows — instead of
+        # collapsing to the scrollbar.
+        self._scroll.setMinimumHeight(60)
+        self._scroll.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Ignored)
         self._scroll_content = QWidget()
         self._scroll_layout = QVBoxLayout(self._scroll_content)
         self._scroll_layout.setContentsMargins(2, 2, 2, 2)
@@ -76,6 +84,25 @@ class CheckableAxisList(QWidget):
             self._checkboxes.append(cb)
 
         self._scroll_layout.addStretch()
+        self._apply_content_ceiling()
+
+    def _apply_content_ceiling(self) -> None:
+        """Cap the list at the height its own items need.
+
+        Without a ceiling a short axis handed a tall column keeps the surplus as
+        blank space below its last checkbox. Capping at the content height sends
+        that surplus back to the layout, which passes it to an axis that still
+        has rows to reveal. Recomputed on every :meth:`populate` so the ceiling
+        follows the discovered item count — never a fixed pixel budget.
+        """
+        content_height = self._scroll_content.sizeHint().height() + 2 * self._scroll.frameWidth()
+        self._scroll.setMaximumHeight(max(content_height, self._scroll.minimumHeight()))
+        # Qt does not propagate a layout's maximum up to the parent widget, so
+        # the ceiling has to be restated on this widget or the group box keeps
+        # the surplus as padding under the capped list. Chrome (group title +
+        # All/None row + margins) is this widget's minimum minus the list's.
+        chrome = max(self.minimumSizeHint().height() - self._scroll.minimumHeight(), 0)
+        self.setMaximumHeight(chrome + self._scroll.maximumHeight())
 
     def selected_ids(self) -> list[str]:
         return [

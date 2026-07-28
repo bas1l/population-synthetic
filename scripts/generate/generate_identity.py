@@ -45,6 +45,7 @@ import sys
 import time
 from pathlib import Path
 
+from population_synthetic.clients.retry_policy import MAX_RETRY_ATTEMPTS
 from population_synthetic.generators.synthetic import ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
 from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
@@ -145,7 +146,9 @@ def main() -> None:
         "--retry-until-success",
         action="store_true",
         default=False,
-        help="Retry LLM evaluation calls indefinitely until correct (default: cap at 3)",
+        help=f"Retry every layer (transport, JSON parse, weight reconcile) up to "
+             f"{MAX_RETRY_ATTEMPTS} times instead of each layer's small default "
+             f"(default: cap at 3)",
     )
     parser.add_argument(
         "--structured-output",
@@ -332,6 +335,9 @@ def main() -> None:
         raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini', 'claude', 'ollama', 'openai_compat', or 'openrouter'.")
 
     logger.info("Model: %s", client.get_current_configuration()["model"])
+    # The transport layer honours the same flag as the generator (see
+    # clients/retry_policy.py); clients without a retry loop never read it.
+    client.retry_until_success = args.retry_until_success
     generator = FactoryIdentityGenerator.create_generator(args.mode, client)
     generator.retry_until_success = args.retry_until_success
     generator.use_structured_output = args.structured_output

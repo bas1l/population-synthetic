@@ -1,30 +1,44 @@
-"""Flow selector widget — category-grouped exclusive toggle buttons.
+"""Flow selector widget — a full-width horizontal bar of tab-styled buttons.
 
-Port of the reference AnalysisRunnerGUI ``workflow_selector.py``: one checkable
-button per :class:`FlowEntry`, grouped under category headers, emitting
-``flow_changed`` with the selected entry.
+Sits at the very top of the central widget (mirroring the run bar at the
+bottom): one checkable button per :class:`FlowEntry`, laid out left to right
+and grouped by category via an inline grey label, with a vertical separator
+between groups and a horizontal rail beneath the whole row so the checked
+button reads as the active tab. Emits ``flow_changed`` with the selected
+entry.
 """
 
 from __future__ import annotations
 
 from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtGui import QFontMetrics
 from PyQt5.QtWidgets import (
-    QApplication,
     QButtonGroup,
     QFrame,
-    QGroupBox,
+    QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from population_synthetic.gui.menu_config import FlowEntry
 
+# Tab look: square bottom corners and no bottom border, so a checked button
+# sits directly on the rail drawn under the row.
+_TAB_BUTTON_STYLE = (
+    "QPushButton { padding: 5px 14px; border: 1px solid #b8b8b8; border-bottom: none;"
+    " border-top-left-radius: 4px; border-top-right-radius: 4px; }"
+    "QPushButton:checked { background-color: #4a90d9; color: white; font-weight: bold; }"
+)
+
+_CATEGORY_LABEL_STYLE = (
+    "QLabel { font-size: 10px; font-weight: bold; color: #888888; margin-left: 8px; margin-right: 2px; }"
+)
+
 
 class FlowSelector(QWidget):
-    """Left-column widget with exclusive toggle buttons for each flow entry."""
+    """Top-bar widget with exclusive tab-styled toggle buttons for each flow entry."""
 
     flow_changed = pyqtSignal(object)  # emits FlowEntry
 
@@ -35,62 +49,56 @@ class FlowSelector(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        group_box = QGroupBox("Flows")
-        self._btn_layout = QVBoxLayout(group_box)
-        self._btn_layout.setContentsMargins(6, 4, 6, 4)
+        button_row = QWidget()
+        self._btn_layout = QHBoxLayout(button_row)
+        self._btn_layout.setContentsMargins(6, 4, 6, 0)
         self._btn_layout.setSpacing(4)
+        layout.addWidget(button_row)
+
+        # The rail the tabs sit on (their own bottom border is suppressed).
+        rail = QFrame()
+        rail.setFrameShape(QFrame.HLine)
+        rail.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(rail)
 
         self._btn_group = QButtonGroup(self)
         self._btn_group.setExclusive(True)
         self._btn_group.idClicked.connect(self._on_button_clicked)
 
-        layout.addWidget(group_box)
+        # A top bar claims only its natural height; the splitter below takes the rest.
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
         self._populate(entries)
 
     # ------------------------------------------------------------------
 
     def _populate(self, entries: list[FlowEntry]) -> None:
-        """Build buttons grouped by category from *entries*."""
+        """Build buttons left to right, grouped by category, from *entries*."""
         self._entries = list(entries)
         current_category: str | None = None
         for i, entry in enumerate(self._entries):
             if entry.category != current_category:
+                if current_category is not None:  # separate this group from the previous one
+                    sep = QFrame()
+                    sep.setFrameShape(QFrame.VLine)
+                    sep.setFrameShadow(QFrame.Sunken)
+                    self._btn_layout.addWidget(sep)
                 current_category = entry.category
                 header = QLabel(current_category)
-                header.setStyleSheet(
-                    "QLabel { font-size: 10px; font-weight: bold; color: #888888;"
-                    " margin-top: 6px; margin-bottom: 1px; }"
-                )
+                header.setStyleSheet(_CATEGORY_LABEL_STYLE)
                 self._btn_layout.addWidget(header)
-                sep = QFrame()
-                sep.setFrameShape(QFrame.HLine)
-                sep.setFrameShadow(QFrame.Sunken)
-                self._btn_layout.addWidget(sep)
 
             btn = QPushButton(entry.name)
             btn.setCheckable(True)
             btn.setToolTip(str(entry.config))
-            btn.setStyleSheet(
-                "QPushButton { padding: 4px 10px; }"
-                "QPushButton:checked { background-color: #4a90d9; color: white; "
-                "font-weight: bold; }"
-            )
+            btn.setStyleSheet(_TAB_BUTTON_STYLE)
             self._btn_group.addButton(btn, i)
             self._btn_layout.addWidget(btn)
             self._buttons.append(btn)
 
-        self._btn_layout.addStretch()
-        self._set_minimum_width()
-
-    def _set_minimum_width(self) -> None:
-        if not self._buttons:
-            return
-        fm = QFontMetrics(QApplication.font())
-        max_text_w = max(fm.horizontalAdvance(btn.text()) for btn in self._buttons)
-        # button padding (10px each side) + group box content margins (6+6) + group box border (~4+4)
-        self.setMinimumWidth(max_text_w + 40)
+        self._btn_layout.addStretch()  # left-align the tabs
 
     def _on_button_clicked(self, btn_id: int) -> None:
         if 0 <= btn_id < len(self._entries):

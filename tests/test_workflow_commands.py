@@ -12,7 +12,9 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
+from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.gui.commands import build_per_combo_cmds, build_slugs_cmd
 from population_synthetic.gui.workflow_config_model import WorkflowConfigModel
 
@@ -80,6 +82,30 @@ def test_per_combo_ollama_host_translates_to_flag_and_value():
         SCRIPT, COMBOS[:1], {"ollama-host": "windows_4070tis"}, force=False
     )
     assert cmd[-2:] == ["--ollama-host", "windows_4070tis"]
+
+
+def test_generate_flow_yaml_turns_ollama_reconfigure_into_a_bare_flag():
+    """The shipped generate flow's ``ollama-reconfigure: true`` reaches the script as a bare flag.
+
+    Read from the real ``config/gui/flows/generate_parallel.yaml`` rather than a
+    literal, because the whole feature is switched on by that one YAML key: the
+    argparse default is ``False``, so the GUI is the only thing that turns
+    reconfiguration on, and a key removed or flipped there silently disables it.
+    The builders stay option-agnostic — a ``True`` boolean is all they need.
+    """
+    flow = yaml.safe_load(
+        (PROJECT_ROOT / "config" / "gui" / "flows" / "generate_parallel.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    options = flow["options"]
+    assert options["ollama-reconfigure"] is True
+
+    (cmd,) = build_per_combo_cmds(SCRIPT, COMBOS[:1], options, force=False)
+    assert "--ollama-reconfigure" in cmd
+    # Bare flag: the next token is another flag (or nothing), never a value.
+    tail = cmd[cmd.index("--ollama-reconfigure") + 1:]
+    assert not tail or tail[0].startswith("--")
 
 
 # ---------------------------------------------------------------------------

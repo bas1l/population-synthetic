@@ -1,18 +1,24 @@
 """Main window for the gui Flow Runner.
 
 Port of the reference AnalysisRunnerGUI ``runner_window.py`` (minus Prefect).
-Three-column splitter (FlowSelector | center | AxisSelector) over the reused
-:class:`ConsoleWidget` and a Run/Abort bar. The center column is a
-``QStackedWidget`` swapping tab sets by flow kind: script flows show
-[Options | DAG View]; workflow flows show [Workflow | Options].
+Layout, top to bottom: the :class:`FlowSelector` as a full-width tab bar, a
+two-column horizontal splitter, and the Run/Abort bar (the selector and the
+run bar bracket the splitter). The splitter's left side stacks the graph
+column over the reused :class:`ConsoleWidget`; its right side is the
+full-height **Options** column — a ``QTabWidget`` whose *Global* tab holds
+the :class:`AxisSelector` and whose *Task* tab holds the options of whatever
+is loaded. The graph column is a ``QStackedWidget`` swapping by flow kind:
+script flows show the strategy DAG, workflow flows the task DAG.
 
 Selecting a flow loads its editable YAML into a :class:`FlowConfigModel`
 (``kind: script``) or a :class:`WorkflowConfigModel` (``kind: workflow``); the
-Options tab edits it via the shape-dispatching :class:`FlowOptionsPanel`; the
-AxisSelector binds the ``selection:`` block (and ``force:`` for generate
-flows) to three checkable axis lists; the DAG View tab renders the strategy
-DAG of the first checked axis combo; the Workflow tab renders the task DAG
-with per-node Enabled/Force checkboxes and a live run-state overlay. A
+Task tab edits it via the shape-dispatching :class:`FlowOptionsPanel` (one
+panel per flow kind, stacked and raised by kind — a script flow's flat
+``options:`` block, or the clicked node's options for a workflow); the Global
+tab binds the ``selection:`` block (and ``force:`` for generate flows) to
+three checkable axis lists; the script page renders the strategy DAG of the
+first checked axis combo; the workflow page renders the task DAG with
+per-node Enabled/Force checkboxes and a live run-state overlay. A
 Save/Save-As toolbar writes the YAML back losslessly, with a dirty ``*`` in
 the title and confirm-discard on flow switch and close.
 
@@ -50,6 +56,7 @@ from PyQt5.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QStatusBar,
+    QTabWidget,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -138,7 +145,7 @@ class _TaskOptionsAdapter:
 
 
 class FlowRunnerWindow(QMainWindow):
-    """Three-column GUI: flow selector (left), options/workflow (center), axis selection (right)."""
+    """Flow-runner GUI: flow tab bar (top), graph + console (left), Options column (right)."""
 
     def __init__(self, entries: list[FlowEntry], parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -185,85 +192,34 @@ class FlowRunnerWindow(QMainWindow):
         self.addToolBar(toolbar)
 
     def _build_ui(self) -> None:
-        # Three-column horizontal splitter (flow panels)
-        self._splitter = QSplitter(Qt.Horizontal)
-
-        # --- Left column: flow selector ---
+        # --- Top bar: the flow selector as a full-width row of tabs ---
         self._flow_selector = FlowSelector(self._entries)
-        self._splitter.addWidget(self._flow_selector)
 
-        # --- Center column: a QStackedWidget swapping tab sets by flow kind ---
-        # Script flows show [Options | DAG View]; workflow flows show
-        # [Workflow | Options]. A stack (not a shared tab bar) keeps each flow
-        # kind's panels independent — a widget can live in only one tab set.
+        # --- Graph column: a QStackedWidget swapping pages by flow kind ---
+        # Script flows show the strategy DAG, workflow flows the task DAG; both
+        # kinds' options live in the right-hand Options column instead of under
+        # the graph, so a page here is a single widget.
         self._center_stack = QStackedWidget()
 
-        # Script page: the strategy DAG on top, the flow's options directly
-        # beneath it in a vertical splitter — both visible at once (mirrors the
-        # workflow page below).
-        self._script_page = QSplitter(Qt.Vertical)
-
+        # Script page: the strategy DAG (or an empty-state message).
         self._dag_view = _StrategyDagView()
         self._dag_message = self._build_placeholder("Select a flow to view its strategy DAG")
         self._dag_message.setWordWrap(True)
         self._dag_stack = QStackedWidget()
         self._dag_stack.addWidget(self._dag_message)
         self._dag_stack.addWidget(self._dag_view)
-        self._script_page.addWidget(self._dag_stack)
-
-        script_options_pane = QWidget()
-        script_options_layout = QVBoxLayout(script_options_pane)
-        script_options_layout.setContentsMargins(0, 0, 0, 0)
-        script_options_layout.setSpacing(2)
-        script_options_header = QLabel("Options")
-        script_options_header.setStyleSheet("font-weight: bold; padding: 2px 4px;")
-        script_options_layout.addWidget(script_options_header)
-        self._options_panel = FlowOptionsPanel()
-        self._options_panel.option_changed.connect(self._on_option_changed)
-        script_options_layout.addWidget(self._options_panel)
-        self._script_page.addWidget(script_options_pane)
-
-        self._script_page.setStretchFactor(0, 3)
-        self._script_page.setStretchFactor(1, 1)
-        # Pin the initial split (stretch only governs resize, not the first
-        # layout): graph gets the bulk, options a compact strip beneath it.
-        self._script_page.setSizes([600, 200])
+        # The script page IS the DAG stack (message/graph); named separately
+        # because the view toggle and _load_flow raise it in the center stack.
+        self._script_page: QWidget = self._dag_stack
         self._center_stack.addWidget(self._script_page)
 
-        # Workflow page: the task DAG on top, the clicked task's options directly
-        # beneath it in a vertical splitter — both visible at once, so selecting a
-        # node never hides the graph (and dragging a node never swaps a tab).
-        self._workflow_page = QSplitter(Qt.Vertical)
+        # Workflow page: the task DAG. Clicking a node retargets the Task tab
+        # of the Options column, so selecting a node never hides the graph.
         self._workflow_graph = WorkflowGraphView()
         self._workflow_graph.node_clicked.connect(self._on_workflow_node_clicked)
         self._workflow_graph.enabled_changed.connect(self._on_task_enabled_changed)
         self._workflow_graph.force_changed.connect(self._on_task_force_changed)
-        self._workflow_page.addWidget(self._workflow_graph)
-
-        options_pane = QWidget()
-        options_layout = QVBoxLayout(options_pane)
-        options_layout.setContentsMargins(0, 0, 0, 0)
-        options_layout.setSpacing(2)
-        options_header = QLabel("Task options")
-        options_header.setStyleSheet("font-weight: bold; padding: 2px 4px;")
-        options_layout.addWidget(options_header)
-        # Read-only description of the selected task, sourced from the analysis
-        # registry via WorkflowConfigModel.get_task_meta (secondary/subtle text).
-        self._workflow_task_desc = QLabel()
-        self._workflow_task_desc.setWordWrap(True)
-        self._workflow_task_desc.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self._workflow_task_desc.setStyleSheet("color: #888888; padding: 0px 4px 4px 4px;")
-        self._workflow_task_desc.setVisible(False)  # shown once a node is clicked
-        options_layout.addWidget(self._workflow_task_desc)
-        self._workflow_options_panel = FlowOptionsPanel()
-        self._workflow_options_panel.option_changed.connect(self._on_option_changed)
-        options_layout.addWidget(self._workflow_options_panel)
-        self._workflow_page.addWidget(options_pane)
-
-        self._workflow_page.setStretchFactor(0, 3)
-        self._workflow_page.setStretchFactor(1, 1)
-        # Same compact options strip as the script page above (see note there).
-        self._workflow_page.setSizes([600, 200])
+        self._workflow_page: QWidget = self._workflow_graph
         self._center_stack.addWidget(self._workflow_page)
 
         # Population summary page: a live per-combo persona-generation table,
@@ -280,45 +236,100 @@ class FlowRunnerWindow(QMainWindow):
         center_layout.setSpacing(2)
         center_layout.addWidget(self._build_view_toggle())
         center_layout.addWidget(self._center_stack, stretch=1)
-        self._splitter.addWidget(self._center_column)
-
-        # --- Right column: axis selection (three checkable lists bound to the flow YAML) ---
-        # Shown for BOTH `three_axis` and `workflow` flows: the checked combos
-        # feed the per-combo invocations / `--slug` lists at run time (Phase 5/7).
-        self._axis_selector = AxisSelector()
-        self._axis_selector.selection_changed.connect(self._on_selection_changed)
-        self._splitter.addWidget(self._axis_selector)
-
-        self._splitter.setStretchFactor(0, 0)   # flow selector — stays at content width
-        self._splitter.setStretchFactor(1, 14)  # options/workflow — lion's share
-        self._splitter.setStretchFactor(2, 3)   # axis selection
-        # Pin the initial widths so the right (axis) column is ~15% of the row
-        # (150 / (150 + 700 + 150)); center:axis 14:3 holds it on resize.
-        self._splitter.setSizes([150, 700, 150])
 
         # --- Console panel (reused from the legacy launcher, import only) ---
         self._console = ConsoleWidget()
 
-        # --- Vertical splitter: flow panels (top) + console (bottom) ---
+        # --- Left side: graph column (top) over the console (bottom) ---
+        # The console spans only this side; the Options column to its right is
+        # full height.
         self._vsplitter = QSplitter(Qt.Vertical)
-        self._vsplitter.addWidget(self._splitter)
+        self._vsplitter.addWidget(self._center_column)
         self._vsplitter.addWidget(self._console)
         self._vsplitter.setStretchFactor(0, 6)
         self._vsplitter.setStretchFactor(1, 4)
-        # Terminal defaults to 40% of the central area height (above the run bar).
+        # Terminal defaults to 40% of the left side's height.
         self._vsplitter.setSizes([600, 400])
 
-        # --- Wrap vertical splitter + run bar in a central QWidget ---
+        # --- Two-column horizontal splitter: graph+console | Options ---
+        self._splitter = QSplitter(Qt.Horizontal)
+        self._splitter.addWidget(self._vsplitter)
+        self._splitter.addWidget(self._build_options_column())
+        self._splitter.setStretchFactor(0, 12)  # graph + console
+        self._splitter.setStretchFactor(1, 5)   # options (axis lists + option rows)
+        # Pin the initial widths (stretch only governs resize, not the first
+        # layout): the Options column is ~⅓ of the row.
+        self._splitter.setSizes([700, 330])
+
+        # --- Central widget: flow tabs, the splitter, and the run bar ---
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self._vsplitter, stretch=1)
+        layout.addWidget(self._flow_selector)
+        layout.addWidget(self._splitter, stretch=1)
         layout.addWidget(self._build_run_bar())
         self.setCentralWidget(central)
 
         # --- Signals ---
         self._flow_selector.flow_changed.connect(self._load_flow)
+
+    def _build_options_column(self) -> QWidget:
+        """Right column: one "Options" header over a Global | Task tab set.
+
+        *Global* is the :class:`AxisSelector` — three checkable lists bound to
+        the flow YAML's ``selection:`` block (plus ``force:``), shown for BOTH
+        ``three_axis`` and ``workflow`` flows since the checked combos feed the
+        per-combo invocations / ``--slug`` lists at run time.
+
+        *Task* is the options of whatever is loaded. The two flow kinds get one
+        :class:`FlowOptionsPanel` each — a widget can live in only one place, and
+        the workflow panel carries an extra task-description label — stacked
+        here and raised by kind in :meth:`_load_flow`.
+        """
+        column = QWidget()
+        layout = QVBoxLayout(column)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        header = QLabel("Options")
+        header.setStyleSheet("font-weight: bold; padding: 2px 4px;")
+        layout.addWidget(header)
+
+        self._options_tabs = QTabWidget()
+
+        self._axis_selector = AxisSelector()
+        self._axis_selector.selection_changed.connect(self._on_selection_changed)
+        self._options_tabs.addTab(self._axis_selector, "Global")
+
+        self._task_stack = QStackedWidget()
+
+        # Script flows: the flat `options:` block of the flow YAML.
+        self._options_panel = FlowOptionsPanel()
+        self._options_panel.option_changed.connect(self._on_option_changed)
+        self._task_stack.addWidget(self._options_panel)
+
+        # Workflow flows: the clicked node's options, under a read-only
+        # description sourced from the analysis registry via
+        # WorkflowConfigModel.get_task_meta (secondary/subtle text).
+        self._workflow_task_pane = QWidget()
+        workflow_task_layout = QVBoxLayout(self._workflow_task_pane)
+        workflow_task_layout.setContentsMargins(0, 0, 0, 0)
+        workflow_task_layout.setSpacing(2)
+        self._workflow_task_desc = QLabel()
+        self._workflow_task_desc.setWordWrap(True)
+        self._workflow_task_desc.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self._workflow_task_desc.setStyleSheet("color: #888888; padding: 0px 4px 4px 4px;")
+        self._workflow_task_desc.setVisible(False)  # shown once a node is clicked
+        workflow_task_layout.addWidget(self._workflow_task_desc)
+        self._workflow_options_panel = FlowOptionsPanel()
+        self._workflow_options_panel.option_changed.connect(self._on_option_changed)
+        workflow_task_layout.addWidget(self._workflow_options_panel)
+        self._task_stack.addWidget(self._workflow_task_pane)
+
+        self._options_tabs.addTab(self._task_stack, "Task")
+        layout.addWidget(self._options_tabs, stretch=1)
+        return column
 
     @staticmethod
     def _build_placeholder(text: str) -> QLabel:
@@ -435,7 +446,10 @@ class FlowRunnerWindow(QMainWindow):
         self._save_as_action.setEnabled(True)
         self._run_button.setEnabled(True)
         self._run_label.setText(f"{entry.category} / {entry.name}  [{entry.kind}]")
+        # Both kinds open on the Global tab — combos are picked before options.
+        self._options_tabs.setCurrentWidget(self._axis_selector)
         if entry.kind == "script":
+            self._task_stack.setCurrentWidget(self._options_panel)
             self._options_panel.populate(model)
             self.refresh_dag(model)
             # Preview existing on-disk counts and expose the Configure/Summary toggle.
@@ -449,6 +463,7 @@ class FlowRunnerWindow(QMainWindow):
         else:  # workflow
             self._view_toggle_bar.setVisible(False)
             self._center_stack.setCurrentWidget(self._workflow_page)
+            self._task_stack.setCurrentWidget(self._workflow_task_pane)
             self._workflow_graph.populate(model)  # type: ignore[arg-type]
             self._workflow_task_desc.clear()
             self._workflow_task_desc.setVisible(False)
@@ -533,7 +548,7 @@ class FlowRunnerWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_workflow_node_clicked(self, name: str) -> None:
-        """Retarget the beneath-graph options pane onto the clicked task."""
+        """Retarget the Options column's Task tab onto the clicked task."""
         if not isinstance(self._model, WorkflowConfigModel):
             return
         # Registry-sourced description (see WorkflowConfigModel.get_task_meta).
@@ -542,6 +557,9 @@ class FlowRunnerWindow(QMainWindow):
         self._workflow_task_desc.setVisible(bool(description))
         adapter = _TaskOptionsAdapter(self._model, name)
         self._workflow_options_panel.populate(adapter)  # type: ignore[arg-type]
+        # Raise the Task tab — otherwise the click has no visible effect while
+        # the Global tab is showing.
+        self._options_tabs.setCurrentWidget(self._task_stack)
         self._workflow_graph.select_task(name)
 
     def _on_task_enabled_changed(self, name: str, enabled: bool) -> None:

@@ -49,6 +49,37 @@ Adding a host is therefore config-only: declare it in `ollama_hosts.yaml`, add o
 key per model axis `workers` map, and it appears in both the dropdown and the
 `--ollama-host` argparse `choices` with zero `.py` edits.
 
+### Reconfigure Ollama Host — pressing Run can restart the server
+
+The *LLM Synthetic Population* flow carries `ollama-reconfigure: true`, rendered as
+a **Reconfigure Ollama Host** checkbox (a plain bool needs no enum table — shape
+dispatch gives it a checkbox; only the friendly label is declared, in
+`_OPTION_LABELS`). It is **on by default**, so pressing **Run** does more than start
+Python: before the first persona of a combo, the script sets the selected host's
+`OLLAMA_NUM_PARALLEL` to that combo's resolved worker count, which means
+**recreating that host's Ollama container** — evicting whatever model was loaded and
+killing any in-flight request from another user of that GPU. It then warms the model
+up and waits for the server to serve again.
+
+Two things bound that. The restart is skipped when the server already reports the
+requested value, so a Run over N combos of one model restarts **at most once** and a
+correctly-configured server is never touched; and the box can be unticked, which
+restores the previous behaviour exactly (the argparse default is `False`, so the flow
+YAML is the only thing that turns it on). The option is inert for non-Ollama providers
+and for hosts declaring no `control_url`.
+
+What the console pane shows while that happens is three numbered lines —
+`[1/3] PROBE`, `[2/3] ACT`, `[3/3] GATE` — emitted once per combo whether or not the
+pre-flight acted, each naming the facts behind its verdict (see
+[Ollama hosts](../ollama_server_models.md#watching-it-from-the-console) for a sample).
+Over a five-combo Run that is what makes "one restart, four skips" visible rather than
+merely claimed.
+
+The GUI knows none of this. It renders a boolean and lets the arg-vector machinery
+emit a bare `--ollama-reconfigure`; control URLs, HTTP and the five outcome states
+live entirely on the script side. See
+[Ollama hosts](../ollama_server_models.md) for the control API and the outcomes.
+
 ## Execution contract — GUI translates flow YAML → CLI
 
 **The spawned scripts never read the flow YAML.** On Run, the GUI *translates*
