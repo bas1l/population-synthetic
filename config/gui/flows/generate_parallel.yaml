@@ -3,7 +3,7 @@
 # (the script does NOT read this file).
 options:
   n: 150                     # --n
-  workers: 16                # --workers (applies to cloud combos; Ollama combos self-tune below)
+  workers: 4                 # --workers (applies to cloud combos; Ollama combos self-tune below)
   ollama-host: windows_4070tis # --ollama-host: which Ollama endpoint serves the run. Host ids are
                              #   declared in config/synthetic/ollama_hosts.yaml (the dropdown is
                              #   built from that file). Inert for non-Ollama providers.
@@ -18,9 +18,14 @@ options:
                              #   a server already at the right value is read and left untouched,
                              #   so a multi-combo Run restarts at most once. Inert for non-Ollama
                              #   providers and for hosts declaring no control_url.
-  retry-until-success: true  # --retry-until-success (flag when true)
+  retry-until-success: true  # --retry-until-success (flag when true): every retry layer
+                             #   (HTTP transport, JSON parse, weight reconcile, persona slot)
+                             #   retries up to 100 times instead of its small default of 3.
+                             #   100 is a ceiling, not a target: a fatal provider error
+                             #   (bad key, model not pulled) still aborts on the first
+                             #   occurrence rather than consuming the budget.
 selection:
-  models: [ollama_deepseek_r1_14b]
+  models: [ollama_mistral_nemo_12b]
   strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick, 
       all_generate_pick, all_pick, all_pick_dag]
   countries: [swedish_02]   # config_006 guided-prompt A/B run; baseline uses [swedish] (config_004)

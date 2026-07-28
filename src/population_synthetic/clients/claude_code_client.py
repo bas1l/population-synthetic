@@ -21,6 +21,7 @@ from typing import Any
 
 from population_synthetic.clients.call_context import format_corr_token
 from population_synthetic.clients.llm_protocol import LLMClient  # noqa: F401  # for type-checking
+from population_synthetic.clients.retry_policy import max_attempts
 
 
 class ClaudeCodeClient:
@@ -51,6 +52,10 @@ class ClaudeCodeClient:
 
         self.default_model_name = model_name
         self._max_retries = max_retries
+        # Lifted to the shared ceiling once the run turns on retry_until_success.
+        # Assigned post-construction by the generation scripts, like the
+        # generator's flag of the same name.
+        self.retry_until_success: bool = False
         self._base_delay = base_delay
         self._max_delay = max_delay
         self._timeout = timeout
@@ -325,7 +330,8 @@ class ClaudeCodeClient:
 
         last_error: Exception | None = None
         last_error_category: str = "unknown"
-        for attempt in range(self._max_retries):
+        attempts = max_attempts(self.retry_until_success, self._max_retries)
+        for attempt in range(attempts):
             try:
                 metadata["request_sent_at"] = datetime.now().isoformat()
                 self._ensure_process(target_model, system_instruction)
@@ -379,22 +385,22 @@ class ClaudeCodeClient:
                 else:
                     last_error_category = "unknown"
                 self._close_process()
-                if attempt < self._max_retries - 1:
+                if attempt < attempts - 1:
                     delay = min(self._base_delay * (2 ** attempt), self._max_delay)
                     delay *= random.uniform(0.75, 1.25)
                     self.logger.warning(
                         "generate_content attempt %d/%d failed: %s — retrying in %.1fs",
-                        attempt + 1, self._max_retries, e, delay,
+                        attempt + 1, attempts, e, delay,
                     )
                     time.sleep(delay)
 
         self.logger.error(
-            "generate_content failed after %d attempts: %s", self._max_retries, last_error
+            "generate_content failed after %d attempts: %s", attempts, last_error
         )
         _fail(
             last_error_category,
-            f"claude CLI failed after {self._max_retries} attempts: {last_error}",
+            f"claude CLI failed after {attempts} attempts: {last_error}",
         )
         raise RuntimeError(
-            f"claude CLI failed after {self._max_retries} attempts: {last_error}"
+            f"claude CLI failed after {attempts} attempts: {last_error}"
         )

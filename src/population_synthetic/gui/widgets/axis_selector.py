@@ -1,4 +1,4 @@
-"""AxisSelector — right column: three checkable axis lists bound to a flow YAML.
+"""AxisSelector — the Options column's *Global* tab: three checkable axis lists.
 
 Composes three reused :class:`CheckableAxisList` widgets (models, strategies,
 countries — mirroring the legacy ``ExperimentSelector`` composition)
@@ -28,10 +28,20 @@ from population_synthetic.gui.widgets.checkable_axis_list import CheckableAxisLi
 # Axis keys in flow-YAML `selection:` order == cartesian-product significance
 # order (model-major, country fastest) — same ordering as the legacy
 # `ExperimentSelection.combinations()` (`gui/manifest_model.py`).
-_AXES: tuple[tuple[str, str], ...] = (
-    ("models", "Models"),
-    ("strategies", "Strategies"),
-    ("countries", "Countries"),
+#
+# The third field is the vertical stretch weight: how the column's height is
+# shared between the three lists. Models carries the most values and so the most
+# weight, but deliberately sub-proportionally — a strict 20:5:3 split starves the
+# strategy list. Qt allocates proportionally to these weights subject to each
+# list's floor (~3 rows) and its content ceiling (see
+# CheckableAxisList._apply_content_ceiling), so countries settles on its floor
+# and the models/strategies pair splits what remains ~11:8. These are
+# visual-balance numbers for this widget only; they are not data config and
+# nothing outside the layout reads them.
+_AXES: tuple[tuple[str, str, int], ...] = (
+    ("models", "Models", 11),
+    ("strategies", "Strategies", 8),
+    ("countries", "Countries", 2),
 )
 
 
@@ -68,14 +78,14 @@ class AxisSelector(QWidget):
 
         self._axis_lists: dict[str, CheckableAxisList] = {}
         self._known_ids: dict[str, set[str]] = {}
-        for axis, title in _AXES:
+        for axis, title, weight in _AXES:
             axis_list = CheckableAxisList(title, self)
             # discover_axis_values raises on a malformed axis file — fail-fast.
             items = discover_axis_values(axis)
             axis_list.populate(items)
             self._known_ids[axis] = {item["id"] for item in items}
             axis_list.selection_changed.connect(partial(self._on_axis_changed, axis))
-            layout.addWidget(axis_list)
+            layout.addWidget(axis_list, stretch=weight)  # see _AXES on the weights
             self._axis_lists[axis] = axis_list
 
         self._combos_label = QLabel()
@@ -86,7 +96,11 @@ class AxisSelector(QWidget):
         self._force_checkbox.toggled.connect(self._on_force_toggled)
         layout.addWidget(self._force_checkbox)
 
-        layout.addStretch()
+        # Stretch factor 0: this spacer claims nothing while any axis list can
+        # still grow, and only collects the leftover once every list has hit its
+        # content ceiling (a very tall window) — where the alternative is Qt
+        # spreading that leftover as gaps between the group boxes.
+        layout.addStretch(0)
 
         self._update_combos_label()
         self.setEnabled(False)
@@ -114,7 +128,7 @@ class AxisSelector(QWidget):
             return
 
         # Validate everything before mutating any widget state.
-        selection = {axis: model.get_selection(axis) for axis, _title in _AXES}
+        selection = {axis: model.get_selection(axis) for axis, _title, _weight in _AXES}
         for axis, ids in selection.items():
             unknown = [i for i in ids if i not in self._known_ids[axis]]
             if unknown:
