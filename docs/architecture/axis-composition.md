@@ -177,6 +177,35 @@ config-level concept leaking into every analysis process. What remains is an int
 (above): a mixed-version method axis interleaves complexity with version, so an ordered-trend
 statistic on it is a trend over that ladder. Selecting one version is done by selecting strategies.
 
+## Model retirement: `discarded`
+
+A model axis file marks itself retired from the sweep with a top-level `discarded: true`. **An
+absent key means active** — a documented default, which is why the 15 live model files carry no key
+at all rather than an explicit `discarded: false`. Only `true`/`false` are accepted; any other value
+raises (`axis_selector.model_status_facet_groups`), since a truthy string would silently retire a
+model. The flag is a *selection* concern only — nothing downstream of the axis lists reads it, and a
+discarded model stays fully runnable if you check it. Five Ollama models currently carry it; the flag
+replaces the old `"… (discarded for now)"` suffix that encoded the same fact inside the `label`
+string. It is unrelated to a mapping tier's `deprecated_attributes`.
+
+### GUI chip rows and their defaults
+
+The Flow Runner's Global tab (`gui/widgets/axis_selector.py::axis_facets`) gives two of the three
+axis lists a chip row — a view-only filter over the rows on screen:
+
+| Axis | Chips | Checked on open |
+|------|-------|-----------------|
+| Models | `Active` / `Discarded`, from the `discarded` key | `Active` |
+| Strategies | `v{n}`, from each strategy's `version` | the **highest** discovered version |
+| Countries | none (declares neither key) | — |
+
+Both defaults are read off the config values, never hardcoded: dropping a v3 strategy file into
+`config/synthetic/axes/strategies/` makes `v3` the checked chip and demotes `v2`, with no code
+change. Filtering is **retaining** — `visible = matches(active chips) OR isChecked()` — so a chip
+that starts unchecked can never hide a selected item: loading a flow that selects a v1 strategy shows
+that row, de-emphasised and marked `· v1 kept`. A chip toggle emits no signal and never dirties the
+flow YAML.
+
 ## Ollama model axes: per-host workers, no `base_url`
 
 `provider: ollama` model axis files differ from every other provider in two ways, because an

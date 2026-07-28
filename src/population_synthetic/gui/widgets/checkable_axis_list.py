@@ -8,7 +8,9 @@ with the checked item IDs.
 It also offers an optional **facet filter**: a row of chips partitioning the
 populated items into named groups (:meth:`set_facets`), narrowing which rows are
 on screen. The filter is deliberately *generic* — this widget backs all three
-axes, so the facet vocabulary (``v1``/``v2``, …) stays entirely in the caller.
+axes, so the facet vocabulary (``v1``/``v2``, ``Active``/``Discarded``, …) stays
+entirely in the caller, and so does the choice of which chips start checked
+(``set_facets(..., initially_checked=...)``).
 
 Filtering is a pure **view** operation and obeys one retaining rule::
 
@@ -134,19 +136,50 @@ class CheckableAxisList(QWidget):
     # Facet filter (generic — the facet vocabulary belongs to the caller)
     # ------------------------------------------------------------------
 
-    def set_facets(self, title: str, groups: list[tuple[str, list[str]]]) -> None:
+    def set_facets(
+        self,
+        title: str,
+        groups: list[tuple[str, list[str]]],
+        *,
+        initially_checked: set[str] | None = None,
+    ) -> None:
         """Show a chip row filtering the populated items by *groups*.
 
         *groups* is ``[(chip_label, [item_id, ...]), ...]`` and must be a strict
         **partition** of the populated ids: every populated id in exactly one
         group, no unknown ids. A missing, duplicated, or unknown id raises
         :class:`ValueError` — a silently ungrouped item would be permanently
-        filtered out of the list with no way to reach it.
+        filtered out of the list with no way to reach it. Chip labels must be
+        unique: a label is how a group is named in *initially_checked* and in
+        the retained-row marker.
 
-        Call after :meth:`populate`. All chips start checked, i.e. no filtering.
+        *initially_checked* names the chips that start checked; ``None`` (the
+        default) starts every chip checked, i.e. no filtering. A name that is
+        not a declared group label raises rather than being ignored — a typo
+        would otherwise hand the axis a filter nobody asked for. Starting a chip
+        unchecked is safe by construction: the retaining rule below hides only
+        *unchecked* rows, so a default filter can never hide part of what a
+        bound flow is about to run.
+
+        Call after :meth:`populate`.
         """
         populated = [item["id"] for item in self._items]
         populated_set = set(populated)
+
+        labels = [chip_label for chip_label, _members in groups]
+        duplicates = sorted({label for label in labels if labels.count(label) > 1})
+        if duplicates:
+            raise ValueError(
+                f"{self.__class__.__name__} facet groups for '{title}': duplicate chip labels "
+                f"{duplicates}; a label names a group, so it must be unique."
+            )
+        if initially_checked is not None:
+            unknown_chips = sorted(set(initially_checked) - set(labels))
+            if unknown_chips:
+                raise ValueError(
+                    f"{self.__class__.__name__} facet groups for '{title}': initially_checked names "
+                    f"unknown chips {unknown_chips} (declared: {labels})."
+                )
 
         facet_of: dict[str, str] = {}
         for chip_label, member_ids in groups:
@@ -175,7 +208,7 @@ class CheckableAxisList(QWidget):
         self._facet_label.setVisible(True)
         for chip_label, member_ids in groups:
             chip = QCheckBox(chip_label)
-            chip.setChecked(True)
+            chip.setChecked(initially_checked is None or chip_label in initially_checked)
             chip.toggled.connect(self._on_facet_toggled)
             self._facet_row.addWidget(chip)
             self._facet_boxes.append((chip, frozenset(member_ids)))

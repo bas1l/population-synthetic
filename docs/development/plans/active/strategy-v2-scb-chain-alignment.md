@@ -85,18 +85,27 @@ Three distinct defects, all currently latent:
 - [x] Five files `config/synthetic/axes/strategies/all_*_v2.yaml` exist, each with 14 categories,
       `family`, `version: 2`, and stem == `id`.
 - [x] `python -c "from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values; print([d['id'] for d in discover_axis_values('strategies')])"` lists all five v2 ids.
-- [ ] All five v2 ids appear as tickable entries in the GUI's strategy axis with no code change.
-- [ ] `_build_dag` returns a byte-identical order across 20 separate interpreter processes
-      (`PYTHONHASHSEED` unset) for every strategy file.
-- [ ] `expected_raw_keys("swedish")` returns 14 keys without `birth_location`;
+- [x] All five v2 ids appear as tickable entries in the GUI's strategy axis with no code change.
+      (Verified programmatically: the widget tests in `tests/test_axis_version_filter.py` construct a
+      real `CheckableAxisList` populated from `discover_axis_values('strategies')`. Visual check in a
+      running GUI still outstanding.)
+- [x] `_build_dag` returns a byte-identical order across 20 separate interpreter processes
+      (`PYTHONHASHSEED` unset) for every strategy file. (20 runs → 1 distinct md5; the same probe
+      against the pre-fix implementation produced 20 distinct outputs.)
+- [x] `expected_raw_keys("swedish")` returns 14 keys without `birth_location`;
       `expected_raw_keys("italian")` still returns 14 keys **with** `birth_location`.
 - [ ] A full end-to-end run of one v2 combo (`--n 5`) passes `validate_raw` at 100%, passes
-      `validate_mapped`, and yields 5 personas through `population_cap`.
-- [ ] Fidelity scoring of that combo emits all **14** scored axes, unchanged from v1.
-- [ ] `--country-id italian --strategy-id all_pick_dag_v2` raises before any LLM call.
+      `validate_mapped`, and yields 5 personas through `population_cap`. **NOT YET RUN** — requires a
+      live LLM run; this is the main outstanding acceptance gate.
+- [ ] Fidelity scoring of that combo emits all **14** scored axes, unchanged from v1. **NOT YET RUN**
+      — blocked on the end-to-end run above.
+- [x] `--country-id italian --strategy-id all_pick_dag_v2` raises before any LLM call.
 - [ ] The manuscript global-best-strategy tie-break resolves identically to today when only v1
-      strategies are present (regression: no published result moves).
-- [ ] `ruff check src/` clean; `pytest` green.
+      strategies are present (regression: no published result moves). **PARTIAL** — the ordering
+      regression is asserted by
+      `tests/test_strategy_ordering.py::test_v1_only_order_equals_the_legacy_sequence`, but the
+      manuscript table itself has not been regenerated and diffed.
+- [x] `ruff check src/` clean; `pytest` green. (1053 passed on the combined tree.)
 
 ## Definitions
 
@@ -326,9 +335,10 @@ dropped categories.
 - [x] 4.6 — Add the compatibility guard: raise when the strategy's category set does not cover the
       country's required raw keys, naming the missing attributes and both axis ids. Implemented at the
       orchestration edge rather than in `compose_manifest` — see the note below.
-- [~] 4.7 — **Skipped** by orchestrator decision: `config/gui/flows/generate_parallel.yaml` held
-      unrelated uncommitted state at implementation time. Pre-ticking is cosmetic (the v2 ids are
-      already selectable in the GUI without it); revisit separately.
+- [x] 4.7 — Initially **skipped** during Phase 4: `config/gui/flows/generate_parallel.yaml` held
+      unrelated uncommitted state at implementation time. **Completed later in Phase 6**, once that
+      state had been committed separately — `selection.strategies` is now the five v2 arms, and the
+      strategies axis additionally defaults its version filter to the highest declared version.
 
 **Implementation notes:**
 

@@ -1,5 +1,6 @@
 id: "ollama_lucie_7b"
-label: "Ollama Lucie 7B Instruct (discarded for now)"
+label: "Ollama Lucie 7B Instruct"
+discarded: true            # retired from the sweep; absent key == active
 model_config:
   provider: "ollama"
   model: "OpenLLM-France/Lucie-7B-Instruct:latest"

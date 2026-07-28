@@ -7,6 +7,11 @@ populated from
 cartesian-product count and a "Force reprocessing" checkbox shown only for
 flows whose YAML declares a top-level ``force:`` key (generate flows).
 
+Two of the three lists carry a chip row (:func:`axis_facets`): strategies by
+version, models by ``discarded:`` status, each opening on the narrower default
+(highest version / non-discarded). Filtering is view-only and retaining — a
+checked item is never hidden — so a default never changes what a flow runs.
+
 Persistence goes through the bound :class:`FlowConfigModel` — checks write
 ``selection:``/``force:`` via ``set_selection``/``set_force`` (marking the
 model dirty). This widget never reads or writes ``config/gui/state.json``;
@@ -46,10 +51,14 @@ _AXES: tuple[tuple[str, str, int], ...] = (
     ("countries", "Countries", 2),
 )
 
-# Which axes get a version chip row. Structural, not vocabulary: only strategy
-# axis files declare a `version:` key, so only that axis can be faceted by one.
-# The chip labels themselves are always derived from the config values.
-_VERSION_FACETED_AXES = frozenset({"strategies"})
+# The model axis metadata key partitioning the models list, plus its two chip
+# labels. A model axis file retires itself with a top-level `discarded: true`;
+# an **absent key means active** — a documented default (see
+# `model_status_facet_groups` and docs/architecture/axis-composition.md), which
+# is why the live model files carry no key rather than `discarded: false`.
+_DISCARDED_KEY = "discarded"
+_ACTIVE_CHIP = "Active"
+_DISCARDED_CHIP = "Discarded"
 
 
 def cartesian_combos(
@@ -80,6 +89,60 @@ def version_facet_groups(
         (f"v{version}", [i for i, v in versions.items() if v == version])
         for version in sorted(set(versions.values()))
     ]
+
+
+def model_status_facet_groups(items: list[dict]) -> list[tuple[str, list[str]]]:
+    """Partition *items* into ``[("Active", ids), ("Discarded", ids)]``.
+
+    Pure helper (no Qt). A model axis file retires itself with a top-level
+    ``discarded: true``; **an absent key means active**. That default is
+    documented rather than silent — it is why the live model axis files carry no
+    key at all instead of an explicit ``discarded: false``. Only ``true`` and
+    ``false`` are accepted: any other value raises, since a truthy string would
+    quietly retire a model from the sweep.
+
+    Both chips are always emitted, even when one side is empty, so the group
+    names stay a fixed vocabulary that ``initially_checked`` can always name.
+    """
+    active: list[str] = []
+    discarded: list[str] = []
+    for item in items:
+        flag = item.get(_DISCARDED_KEY, False)
+        if not isinstance(flag, bool):
+            raise ValueError(
+                f"Model axis {item['id']!r}: '{_DISCARDED_KEY}' must be a boolean, or absent "
+                f"(meaning active); got {flag!r}."
+            )
+        (discarded if flag else active).append(item["id"])
+    return [(_ACTIVE_CHIP, active), (_DISCARDED_CHIP, discarded)]
+
+
+def axis_facets(
+    axis: str, items: list[dict], *, strategies_dir: str | Path | None = None
+) -> tuple[str, list[tuple[str, list[str]]], set[str]] | None:
+    """Chip row for *axis* as ``(title, groups, initially_checked)``, else ``None``.
+
+    Pure helper (no Qt) so both the chip vocabulary and the defaults are
+    testable headlessly. Which axes are faceted is *structural*, not a taste
+    call: only strategy axis files declare a ``version:`` and only model axis
+    files a ``discarded:`` flag, so the countries axis has nothing to facet on
+    and stays unfiltered.
+
+    The defaults narrow each list to what a new run should normally use — the
+    **highest** strategy version, and the **non-discarded** models — and both are
+    read off the config values. No literal version appears here, so dropping a
+    v3 strategy file into the config directory makes v3 the checked chip and
+    demotes v2, with no code change. Neither default can hide a checked row (see
+    :meth:`CheckableAxisList.set_facets`).
+    """
+    if axis == "strategies":
+        groups = version_facet_groups(items, strategies_dir=strategies_dir)
+        # version_facet_groups yields ascending version, so the last chip is the
+        # highest one — the only one that starts checked.
+        return "Version", groups, {groups[-1][0]}
+    if axis == "models":
+        return "Status", model_status_facet_groups(items), {_ACTIVE_CHIP}
+    return None
 
 
 def mixed_version_notice(
@@ -129,9 +192,12 @@ class AxisSelector(QWidget):
             # discover_axis_values raises on a malformed axis file — fail-fast.
             items = discover_axis_values(axis)
             axis_list.populate(items)
-            if axis in _VERSION_FACETED_AXES:
-                # version_facet_groups raises on a strategy missing `version:`.
-                axis_list.set_facets("Version", version_facet_groups(items))
+            # axis_facets raises on a strategy missing `version:` or a model
+            # whose `discarded:` is not a boolean — fail-fast.
+            facets = axis_facets(axis, items)
+            if facets is not None:
+                facet_title, groups, initially_checked = facets
+                axis_list.set_facets(facet_title, groups, initially_checked=initially_checked)
             self._known_ids[axis] = {item["id"] for item in items}
             axis_list.selection_changed.connect(partial(self._on_axis_changed, axis))
             layout.addWidget(axis_list, stretch=weight)  # see _AXES on the weights

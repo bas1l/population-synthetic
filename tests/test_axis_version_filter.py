@@ -70,6 +70,17 @@ def _chip(axis_list: CheckableAxisList, label: str):
     raise AssertionError(f"no chip labelled {label!r} (have {[c.text() for c, _ in axis_list._facet_boxes]})")
 
 
+def _unfilter(axis_list: CheckableAxisList) -> None:
+    """Check every chip, i.e. show everything.
+
+    The axis opens on a *narrowed* default (highest version only — see
+    ``test_axis_facet_defaults.py``); tests below that reason about the
+    unfiltered list widen it explicitly first rather than relying on the default.
+    """
+    for chip, _members in axis_list._facet_boxes:
+        chip.setChecked(True)
+
+
 def _flow_copy(tmp_path, strategy_ids: list[str] | None = None) -> FlowConfigModel:
     """A clean FlowConfigModel over a temp copy of the generate flow YAML."""
     path = tmp_path / "flow.yaml"
@@ -98,20 +109,20 @@ def test_chip_labels_and_membership_match_config_versions(selector):
 
     assert actual == expected
     assert len(expected) > 1, "config should discover at least two strategy versions for this test to bite"
-    # Chips partition the populated ids and start unfiltered.
+    # Chips partition the populated ids; checking them all shows everything.
     assert set().union(*actual.values()) == set(versions)
-    assert all(chip.isChecked() for chip, _ in axis_list._facet_boxes)
+    _unfilter(axis_list)
     assert set(axis_list.visible_ids()) == set(versions)
 
 
-def test_only_the_strategy_axis_is_faceted(selector):
+def test_the_countries_axis_is_unfaceted(selector):
+    """Countries declare neither `version` nor `discarded`, so nothing to facet on."""
     assert _strategy_list(selector)._facet_boxes
-    for axis in ("models", "countries"):
-        assert selector._axis_lists[axis]._facet_boxes == []
-        # No facets == no filtering: every populated id stays visible.
-        assert selector._axis_lists[axis].visible_ids() == [
-            item["id"] for item in discover_axis_values(axis)
-        ]
+    assert selector._axis_lists["countries"]._facet_boxes == []
+    # No facets == no filtering: every populated id stays visible.
+    assert selector._axis_lists["countries"].visible_ids() == [
+        item["id"] for item in discover_axis_values("countries")
+    ]
 
 
 # ----------------------------------------------------------------------
@@ -124,6 +135,7 @@ def test_checked_items_are_never_hidden(selector):
     lowest = min(versions.values())
     axis_list = _strategy_list(selector)
     axis_list.set_selected(list(versions))
+    _unfilter(axis_list)
 
     before = axis_list.selected_ids()
     _chip(axis_list, f"v{lowest}").setChecked(False)
@@ -152,6 +164,7 @@ def test_unfiltered_rows_hide_when_unchecked(selector):
     lowest = min(versions.values())
     axis_list = _strategy_list(selector)
     axis_list.set_selected([])
+    _unfilter(axis_list)
 
     _chip(axis_list, f"v{lowest}").setChecked(False)
 
@@ -301,6 +314,7 @@ def test_retained_marker_does_not_accumulate(selector):
     lowest = min(versions.values())
     axis_list = _strategy_list(selector)
     axis_list.set_selected(list(versions))
+    _unfilter(axis_list)
     chip = _chip(axis_list, f"v{lowest}")
 
     retained_index = next(i for i, item in enumerate(axis_list._items) if versions[item["id"]] == lowest)
