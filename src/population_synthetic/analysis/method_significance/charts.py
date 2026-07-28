@@ -42,7 +42,6 @@ from population_synthetic.analysis.method_significance.builder import (
     significance_cutoff,
 )
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
-from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
 from population_synthetic.analysis.utils.figures import save_figure
 
 logger = logging.getLogger(__name__)
@@ -56,9 +55,6 @@ _COLOR_SERIES = (
     "#8172B2",
     "#64B5CD",
 )
-
-# Ordered method axis (simplest -> most complex); rank = index + 1.
-_METHOD_ORDER: list[str] = list(STRATEGY_COMPLEXITY_ORDER)
 
 
 def _tv_distance(record: ComboPerformance, attr: str) -> float | None:
@@ -79,21 +75,26 @@ def plot_method_trends(
     records: list[ComboPerformance],
     out_dir: str | Path,
 ) -> list[Path]:
-    """One TV(method) trend chart per attribute: x = 5 ordered methods, line per model.
+    """One TV(method) trend chart per attribute: x = the ordered methods, line per model.
 
     *records* supply the raw per-cell TV distances (the builder's serialisable
     output keeps only the derived slopes/tests, not the grid). Absent cells are
     left as gaps in the line, never imputed. The facet title reports the
     attribute's **BH-corrected** Page's-L p-value and flags significance from it.
+
+    The x-axis order is read from the builder's ``metadata.method_order`` -- the
+    renderer is a pure consumer of the resolved axis and never resolves an ordering
+    of its own, so a chart cannot disagree with the statistics drawn on it.
     """
     attributes: list[str] = result["metadata"]["attributes"]
     models: list[str] = result["metadata"]["models"]
+    method_order: list[str] = result["metadata"]["method_order"]
     alpha: float = result["metadata"]["alpha"]
     if not attributes or not models:
         return []
 
     by_cell = {(r.model, r.strategy): r for r in records}
-    x = np.arange(len(_METHOD_ORDER))
+    x = np.arange(len(method_order))
 
     import matplotlib
     matplotlib.use("Agg")
@@ -108,15 +109,15 @@ def plot_method_trends(
         # Skip an attribute with no plottable TV in any cell (genuinely empty).
         any_point = any(
             _tv_distance(by_cell[(m, s)], attr) is not None
-            for m in models for s in _METHOD_ORDER if (m, s) in by_cell
+            for m in models for s in method_order if (m, s) in by_cell
         )
         if not any_point:
             continue
 
-        fig, ax = plt.subplots(figsize=(max(7.0, len(_METHOD_ORDER) * 1.4 + 2.0), 5.0))
+        fig, ax = plt.subplots(figsize=(max(7.0, len(method_order) * 1.4 + 2.0), 5.0))
         for m_idx, model in enumerate(models):
             ys = []
-            for strategy in _METHOD_ORDER:
+            for strategy in method_order:
                 record = by_cell.get((model, strategy))
                 ys.append(np.nan if record is None else _tv_distance(record, attr))
             ys = [np.nan if v is None else v for v in ys]
@@ -126,7 +127,7 @@ def plot_method_trends(
             )
 
         ax.set_xticks(x)
-        ax.set_xticklabels(_METHOD_ORDER, rotation=25, ha="right", fontsize=8)
+        ax.set_xticklabels(method_order, rotation=25, ha="right", fontsize=8)
         ax.set_xlabel("generation method (simplest -> most complex)", fontsize=9)
         ax.set_ylabel("TV distance (lower = better fidelity)", fontsize=9)
         ax.grid(axis="y", linestyle=":", alpha=0.4)

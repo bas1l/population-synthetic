@@ -175,6 +175,28 @@ accumulated persona, unbounded by published cross-tabs — kept out of the empir
 claims). The "more cohesive individuals" wording cannot be backed by the current coherence
 numbers.
 
+*Update (2026-07-28) — a second arm exists: strategy **v2**.* Each of the five families now ships a
+v2 alongside its v1, so the strategy ladder is 5 families × 2 versions. A v2 strategy generates
+**14** categories instead of 17 (dropping `birth_location`, `ethnicity_broad_global_approx`,
+`current_environment_type`) and schedules `birth_country_detail` after `age` + `biological_sex`,
+mirroring the real SCB conditional chain. Three consequences for this pillar:
+
+- **v1 and v2 are separate arms.** They are also separate *strategy ids*, so the analysis pipeline
+  already treats them as distinct method levels — nothing pools them, and no version flag or filter
+  exists (versioning is a selection-side concept only). The caveat is interpretive: a method axis
+  holding both arms interleaves complexity with version, so an ordered-trend statistic over it is a
+  trend across that ten-level ladder rather than a pure complexity effect. The 1→2 context
+  comparison is *within* a version — restrict the run's `--strategy` selection to get that.
+- **Comparison across versions is valid only over the 14 scored axes.** No mapping or fidelity
+  config changed, so Sweden still scores the same 14 attributes for both arms. Anything denominated
+  in the *generated* category count (completeness rates, LLM calls, tokens, cost) is not comparable
+  across versions.
+- **Pre-fix v1 personas are an archived baseline.** `_build_dag` was non-deterministic (Kahn's queue
+  seeded from a `set`, hash-randomised per process), so under cumulative context a given category
+  saw a varying set of already-resolved attributes. It is deterministic now, which means re-running
+  v1 does not reproduce the existing v1 personas. Whether v1 is regenerated or cited as pre-fix is
+  an open authoring decision — and it bears directly on the 1→2 numbers quoted above.
+
 ---
 
 ## Pillar 7 — argmax kills minorities; only code sampling recovers them  ✅ data-verified
@@ -326,3 +348,4 @@ used; the richness-vs-boxes *reason* for the constraint is nowhere.
 | Date | Change |
 |------|--------|
 | 2026-07-20 | Created. Consolidated nine motivation pillars (report-only) from the dictation session; Pillar 7 data verified against `swedish_performance.csv` / `swedish_method_comparison.csv`. No manuscript edits made. |
+| 2026-07-28 | Pillar 6: recorded the strategy **v2** arm (5 families × 2 versions, 14 vs 17 generated categories, birth chain under age + sex), the never-pool rule, the 14-scored-axis comparability boundary, and the v1-reproducibility consequence of the `_build_dag` determinism fix. No manuscript edits made. |

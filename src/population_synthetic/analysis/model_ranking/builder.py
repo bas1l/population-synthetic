@@ -28,7 +28,7 @@ from typing import Any, Callable
 
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils import _stats
-from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.stats_tests import dunn_posthoc, kruskal_test, summarize
 
 _CAVEATS = (
@@ -45,10 +45,8 @@ def _mean(values: list[float]) -> float:
 
 
 def _ordered_strategies(strategies: list[str]) -> list[str]:
-    """Strategies in complexity order; any unknown strategy appended (sorted)."""
-    ordered = [s for s in STRATEGY_COMPLEXITY_ORDER if s in strategies]
-    ordered += sorted(s for s in strategies if s not in STRATEGY_COMPLEXITY_ORDER)
-    return ordered
+    """Strategies in config-derived complexity order (raises on an unknown id)."""
+    return strategy_complexity_order(strategies)
 
 
 def _methods_matrix(
@@ -61,8 +59,8 @@ def _methods_matrix(
     that strategy's models of the model's per-attribute TV-similarity (NaN/missing
     attributes excluded). The per-strategy ``overall`` is the mean of that
     strategy's per-attribute means (NaN attribute means excluded). Strategies are
-    ordered by :data:`STRATEGY_COMPLEXITY_ORDER` (simplest first; unknown
-    strategies appended sorted).
+    ordered by :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order`
+    (a total simplest-first order; an unknown strategy id raises).
     """
     by_strategy: dict[str, list[ComboPerformance]] = {}
     for r in records:

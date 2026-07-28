@@ -1,0 +1,31 @@
+# Strategy families -- the total, simplest-first order of the generation methods.
+#
+# A *family* is which generation method a strategy implements; two strategies share
+# a family iff they differ only by `version`. Ordering the analysis axis is therefore
+# a two-key sort: family rank (this file, list position = rank) then `version`
+# ascending. This file is the single source of truth for that first key -- no Python
+# module holds a strategy list.
+#
+# The leading underscore is load-bearing: `discover_axis_values("strategies")` skips
+# `_`-prefixed files, so this index is never mistaken for a selectable strategy.
+#
+# Order is by pipeline complexity, simplest first: no context -> DAG context ->
+# candidate enumeration -> candidate weighting -> weighted sampling. Reordering this
+# list changes the manuscript's global-best-strategy tie-break (ties prefer the
+# simpler strategy), so it is a deliberate research decision, not a cosmetic one.
+families:
+  - id: all_pick
+    label: "All Pick"
+    description: "One pick call per category, no prior-attribute context."
+  - id: all_pick_dag
+    label: "All Pick DAG"
+    description: "One pick call per category, prior resolved values passed as context."
+  - id: all_generate_pick
+    label: "All Generate Pick"
+    description: "Enumerate candidates, then pick one (2 calls per category)."
+  - id: all_generate_evaluate_pick
+    label: "All Generate Evaluate Pick"
+    description: "Enumerate, weight, then pick the highest-probability value (3 calls per category)."
+  - id: all_generate_evaluate_random_pick
+    label: "All Generate Evaluate Random Pick"
+    description: "Enumerate and weight, then sample in Python from the LLM-declared distribution."

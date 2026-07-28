@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import itertools
 from functools import partial
+from pathlib import Path
 
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QCheckBox, QLabel, QVBoxLayout, QWidget
 
+from population_synthetic.analysis.utils.axes import strategy_versions
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 from population_synthetic.gui.flow_config_model import FlowConfigModel
 from population_synthetic.gui.widgets.checkable_axis_list import CheckableAxisList
@@ -44,6 +46,11 @@ _AXES: tuple[tuple[str, str, int], ...] = (
     ("countries", "Countries", 2),
 )
 
+# Which axes get a version chip row. Structural, not vocabulary: only strategy
+# axis files declare a `version:` key, so only that axis can be faceted by one.
+# The chip labels themselves are always derived from the config values.
+_VERSION_FACETED_AXES = frozenset({"strategies"})
+
 
 def cartesian_combos(
     model_ids: list[str], strategy_ids: list[str], country_ids: list[str]
@@ -56,6 +63,45 @@ def cartesian_combos(
     the legacy launcher's ``ExperimentSelection.combinations()``.
     """
     return list(itertools.product(model_ids, strategy_ids, country_ids))
+
+
+def version_facet_groups(
+    items: list[dict], *, strategies_dir: str | Path | None = None
+) -> list[tuple[str, list[str]]]:
+    """Partition *items* into ``[("v{n}", [ids]), ...]``, ascending version.
+
+    Pure helper (no Qt). The chip labels come from the strategies' declared
+    ``version:`` values, never from a hardcoded ``["v1", "v2"]`` — a v3 axis file
+    appears as a chip the moment it is dropped into the config directory.
+    Raises (via :func:`strategy_versions`) when any id lacks a valid version.
+    """
+    versions = strategy_versions([item["id"] for item in items], strategies_dir=strategies_dir)
+    return [
+        (f"v{version}", [i for i, v in versions.items() if v == version])
+        for version in sorted(set(versions.values()))
+    ]
+
+
+def mixed_version_notice(
+    strategy_ids: list[str], *, strategies_dir: str | Path | None = None
+) -> str | None:
+    """Advisory text when *strategy_ids* span more than one version, else ``None``.
+
+    Pure helper (no Qt) so the wording is unit-testable headlessly. Strictly
+    **advisory**: versions of one family are separate experimental arms, and
+    generating both arms in a single run is legitimate — nothing here blocks or
+    vetoes the selection; it only makes the mix visible before Run.
+    """
+    if not strategy_ids:
+        return None
+    versions = sorted(set(strategy_versions(list(strategy_ids), strategies_dir=strategies_dir).values()))
+    if len(versions) < 2:
+        return None
+    listed = ", ".join(f"v{v}" for v in versions)
+    return (
+        f"Mixed strategy versions selected ({listed}). Versions are separate experimental "
+        "arms, not replicates — check this is intended."
+    )
 
 
 class AxisSelector(QWidget):
@@ -83,6 +129,9 @@ class AxisSelector(QWidget):
             # discover_axis_values raises on a malformed axis file — fail-fast.
             items = discover_axis_values(axis)
             axis_list.populate(items)
+            if axis in _VERSION_FACETED_AXES:
+                # version_facet_groups raises on a strategy missing `version:`.
+                axis_list.set_facets("Version", version_facet_groups(items))
             self._known_ids[axis] = {item["id"] for item in items}
             axis_list.selection_changed.connect(partial(self._on_axis_changed, axis))
             layout.addWidget(axis_list, stretch=weight)  # see _AXES on the weights
@@ -90,6 +139,13 @@ class AxisSelector(QWidget):
 
         self._combos_label = QLabel()
         layout.addWidget(self._combos_label)
+
+        # Advisory only — never a veto. A run mixing versions is legitimate;
+        # this label just makes the mix impossible to miss before Run.
+        self._version_warning = QLabel()
+        self._version_warning.setWordWrap(True)
+        self._version_warning.setVisible(False)
+        layout.addWidget(self._version_warning)
 
         self._force_checkbox = QCheckBox("Force reprocessing")
         self._force_checkbox.setVisible(False)  # generate flows only (YAML has a `force:` key)
@@ -177,3 +233,6 @@ class AxisSelector(QWidget):
 
     def _update_combos_label(self) -> None:
         self._combos_label.setText(f"Combos: {len(self.checked_combos())}")
+        notice = mixed_version_notice(self._axis_lists["strategies"].selected_ids())
+        self._version_warning.setText(notice or "")
+        self._version_warning.setVisible(notice is not None)

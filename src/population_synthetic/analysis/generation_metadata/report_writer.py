@@ -33,7 +33,7 @@ from population_synthetic.analysis.generation_metadata.combo_aggregator import (
     ComboSummary,
 )
 from population_synthetic.analysis.generation_metadata.comparison import FACTORS, group_label
-from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
 
 __all__ = ["write_reports"]
 
@@ -56,13 +56,23 @@ def _round(value: float | int | None) -> float | int | None:
     return round(value, _ROUND)
 
 
-def _sort_key(summary: ComboSummary) -> tuple[int, str, str]:
+def _strategy_ranks(summaries: list[ComboSummary]) -> dict[str, int]:
+    """Rank map over the strategies present, resolved once per report.
+
+    Resolved here (once) rather than per row, and **loudly**: an id with no axis
+    file, or with a family absent from the family index, raises out of
+    :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order`.
+    The previous behaviour -- "unknown strategies sort last" -- turned an
+    axis-naming drift into a plausible-looking report whose row order silently
+    stopped meaning pipeline complexity.
+    """
+    ordered = strategy_complexity_order(sorted({s.strategy for s in summaries}))
+    return {strategy: rank for rank, strategy in enumerate(ordered)}
+
+
+def _sort_key(summary: ComboSummary, ranks: dict[str, int]) -> tuple[int, str, str]:
     """Order combos by strategy pipeline complexity, then model id (stable)."""
-    try:
-        strat_rank = STRATEGY_COMPLEXITY_ORDER.index(summary.strategy)
-    except ValueError:
-        strat_rank = len(STRATEGY_COMPLEXITY_ORDER)  # unknown strategies sort last
-    return (strat_rank, summary.strategy, summary.model)
+    return (ranks[summary.strategy], summary.strategy, summary.model)
 
 
 def _factor_name(summary: ComboSummary, factor_label: str) -> str:
@@ -143,7 +153,8 @@ def write_reports(
         group-label cell empty and omits the JSON ``significance`` block.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    ordered = sorted(summaries, key=_sort_key)
+    ranks = _strategy_ranks(summaries)
+    ordered = sorted(summaries, key=lambda s: _sort_key(s, ranks))
 
     csv_path = output_dir / f"{country}_summary.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as fh:

@@ -27,11 +27,19 @@ from population_synthetic.analysis.method_significance.charts import (  # noqa: 
     plot_method_trends,
     plot_slope_heatmap,
 )
-from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER  # noqa: E402
+from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from tests._performance_fixtures import make_combo  # noqa: E402
 
 MODELS = ["model_a", "model_b", "model_c", "model_d"]
-STRATEGIES = list(STRATEGY_COMPLEXITY_ORDER)
+# The five v1 families, ordered by the config-derived accessor (the same order
+# every consumer resolves; asserted against the legacy sequence in test_axes.py).
+STRATEGIES = strategy_complexity_order([
+    "all_generate_evaluate_random_pick",
+    "all_generate_evaluate_pick",
+    "all_generate_pick",
+    "all_pick_dag",
+    "all_pick",
+])
 ATTRS = ["trend_attr", "null_attr"]
 CATEGORY_VALUES = {"trend_attr": ["a", "b", "c", "d"], "null_attr": ["p", "q", "r"]}
 _NULL_VALUES = [0.10, 0.20, 0.30, 0.40, 0.50]

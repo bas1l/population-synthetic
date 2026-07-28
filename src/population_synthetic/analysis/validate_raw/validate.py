@@ -9,10 +9,24 @@ appearing where a country belongs is out of scope here; that surfaces later as a
 the value is.
 
 The expected category set is config-driven, never hardcoded: it is the country's mapping
-``_index.json`` attribute list (the full set, *including* deprecated attributes, since
-those are still mapped and read from raw), with the single mapper alias applied --
-``age_group`` is read from the raw ``age`` key. The injected ``id`` key is not part of the
-raw file and is not required.
+``_index.json`` attribute list *minus* its ``deprecated_attributes``, with the single
+mapper alias applied -- ``age_group`` is read from the raw ``age`` key. The injected ``id``
+key is not part of the raw file and is not required.
+
+Deprecated attributes were previously kept in the expected set, on the reasoning that they
+are still mapped and read from raw. That reasoning conflated two questions: *is this axis
+still mapped* (yes) and *must a generator still produce it* (no -- a deprecated axis is
+excluded from every analysis, so requiring it fails personas over a value nothing scores).
+A generation strategy that legitimately stops emitting a deprecated attribute would be
+failed at 0% by this gate. The gate now asks only what the country genuinely requires, so
+it agrees with :func:`~population_synthetic.analysis.fidelity.scheme.load_scheme`, which
+reads the same two index keys. The mapper is unaffected -- it still reads a deprecated key
+from raw when present.
+
+Because the requirement is per country, completeness rates are not comparable across
+countries (or across index revisions) on their own: Sweden requires 14 keys, Italy 14
+including ``birth_location``. Every emitted rate therefore carries its expected-key count
+``n_expected_keys`` so a 14-key rate is never silently read as a 15-key one.
 
 The per-persona verdict is written to one CSV per combo, keyed on the ``persona_XXXXX``
 directory name, so ``population_cap`` can intersect it with the mapped verdict.
@@ -21,6 +35,7 @@ directory name, so ``population_cap`` can intersect it with the mapped verdict.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Sequence, TypedDict
 
@@ -32,10 +47,15 @@ from population_synthetic.analysis.utils.validity_csv import (
     write_validity_csv,
 )
 
+logger = logging.getLogger(__name__)
+
 # The mapper's one raw-key alias: the canonical ``age_group`` axis is read from the raw
 # ``age`` key (a structural constant of the mapping layer, not a tunable).
 _AGE_GROUP_ATTR = "age_group"
 _AGE_KEY = "age"
+
+# Optional ``_index.json`` key listing attributes excluded from analysis; absent => none.
+_DEPRECATED_INDEX_KEY = "deprecated_attributes"
 
 _IDENTITY_FILENAME = "identity.json"
 _PERSONA_GLOB = "persona_*"
@@ -43,11 +63,16 @@ _PERSONA_GLOB = "persona_*"
 # Detail columns appended after the shared persona_id/passed prefix.
 _HAS_IDENTITY_COLUMN = "has_identity_json"
 _MISSING_CATEGORIES_COLUMN = "missing_categories"
+# Denominator of the completeness verdict: how many keys this persona was required to
+# carry. Sits immediately before the missing list so numerator and denominator are read
+# together -- "2 missing" means nothing without the N it was drawn from.
+N_EXPECTED_KEYS_COLUMN = "n_expected_keys"
 
 _CSV_HEADER = (
     PERSONA_ID_COLUMN,
     PASSED_COLUMN,
     _HAS_IDENTITY_COLUMN,
+    N_EXPECTED_KEYS_COLUMN,
     _MISSING_CATEGORIES_COLUMN,
 )
 
@@ -73,17 +98,54 @@ class ValidateRawSummary(TypedDict):
     passed: int
     failed: int
     missing_identity: int
+    n_expected_keys: int
     csv_path: str
 
 
 def expected_raw_keys(country: str) -> list[str]:
     """Return the raw identity.json keys a complete persona must carry, for ``country``.
 
-    Config-driven: the country's mapping ``_index.json`` attribute list (full set,
-    including deprecated attributes) with the ``age_group`` -> ``age`` alias applied.
+    Config-driven: the country's mapping ``_index.json`` ``attributes``, minus its
+    ``deprecated_attributes``, with the ``age_group`` -> ``age`` alias applied. A
+    deprecated axis is excluded from every analysis, so requiring a generator to emit it
+    would fail personas over a value nothing scores; the requirement is therefore what the
+    *country* still analyses, and nothing else -- it does not depend on which strategy,
+    version, or category set produced the run.
+
+    This reads the same two index keys as
+    :func:`~population_synthetic.analysis.fidelity.scheme.load_scheme`'s
+    ``_scheme_from_index`` and mirrors its fail-loud contract, so the gate and the scored
+    axis set cannot drift apart.
+
+    Raises:
+        ValueError: If ``deprecated_attributes`` names an attribute absent from
+            ``attributes`` (a config error), or if deprecating leaves nothing required.
     """
-    index = load_index(mappings_for_country(country))
-    return [(_AGE_KEY if attr == _AGE_GROUP_ATTR else attr) for attr in index["attributes"]]
+    directory = mappings_for_country(country)
+    index = load_index(directory)  # validates deprecated_attributes is a list[str]
+
+    deprecated = list(index.get(_DEPRECATED_INDEX_KEY, []))
+    unknown = [name for name in deprecated if name not in index["attributes"]]
+    if unknown:
+        raise ValueError(
+            f"Mapping index {directory} {_DEPRECATED_INDEX_KEY!r} names attribute(s) "
+            f"{unknown} not present in 'attributes'"
+        )
+
+    required = [attr for attr in index["attributes"] if attr not in deprecated]
+    if not required:
+        raise ValueError(
+            f"Mapping index {directory} has no non-deprecated attributes left: country "
+            f"{country!r} would require nothing, making the raw completeness gate vacuous"
+        )
+    if deprecated:
+        logger.info(
+            "validate_raw: country %r requires %d raw key(s); excluded as deprecated: %s",
+            country,
+            len(required),
+            ", ".join(deprecated),
+        )
+    return [(_AGE_KEY if attr == _AGE_GROUP_ATTR else attr) for attr in required]
 
 
 def _is_empty(value: Any) -> bool:
@@ -144,8 +206,19 @@ def validate_raw_combo(
         csv_path: Destination CSV (``validate_raw/{slug}.csv``).
 
     Returns:
-        A :class:`ValidateRawSummary`.
+        A :class:`ValidateRawSummary`, carrying ``n_expected_keys`` so the pass rate is
+        never read without the requirement it was measured against.
+
+    Raises:
+        ValueError: If ``expected_keys`` is empty -- every persona would trivially pass,
+            which is a silently vacuous gate rather than a 100% result.
     """
+    n_expected_keys = len(expected_keys)
+    if not n_expected_keys:
+        raise ValueError(
+            f"validate_raw for {slug!r} was given an empty expected-key set; every persona "
+            f"would pass vacuously. Check the country's mapping index."
+        )
     rows = [_evaluate_persona(p, expected_keys) for p in _sorted_persona_dirs(raw_slug_dir)]
     write_validity_csv(
         csv_path,
@@ -155,6 +228,7 @@ def validate_raw_combo(
                 r["persona_id"],
                 r["passed"],
                 r["has_identity_json"],
+                n_expected_keys,
                 ";".join(r["missing_categories"]),
             )
             for r in rows
@@ -167,12 +241,17 @@ def validate_raw_combo(
         passed=n_passed,
         failed=len(rows) - n_passed,
         missing_identity=sum(1 for r in rows if not r["has_identity_json"]),
+        n_expected_keys=n_expected_keys,
         csv_path=str(csv_path),
     )
 
 
 # Folder-level roll-up: one row per combo in ``validate_raw/_summary.csv``. ``has_issues``
 # sits right after the slug for an at-a-glance scan of which combos need attention.
+# ``n_expected_keys`` immediately precedes ``pass_rate_pct``: a pass rate measured against
+# 14 required keys is a different quantity from one measured against 15, and the summary
+# mixes countries and index revisions in one file, so the rate travels with its
+# requirement rather than being comparable only by assumption.
 SUMMARY_HEADER = (
     "slug",
     "has_issues",
@@ -180,6 +259,7 @@ SUMMARY_HEADER = (
     "passed",
     "failed",
     "missing_identity",
+    N_EXPECTED_KEYS_COLUMN,
     "pass_rate_pct",
 )
 
@@ -195,5 +275,6 @@ def summary_row(summary: ValidateRawSummary) -> tuple:
         summary["passed"],
         summary["failed"],
         summary["missing_identity"],
+        summary["n_expected_keys"],
         pass_rate_pct,
     )

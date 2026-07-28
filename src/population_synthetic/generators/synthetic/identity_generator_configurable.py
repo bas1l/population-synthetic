@@ -56,7 +56,8 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             except json.JSONDecodeError as e:
                 raise ValueError(f"Invalid JSON in flat schema file: {e}")
 
-    def _load_strategy(self, filepath: str) -> tuple[dict, str]:
+    @staticmethod
+    def _load_strategy(filepath: str) -> tuple[dict, str]:
         """Parse + validate a strategy YAML.
 
         Returns ``(categories, context_mode)`` where ``context_mode`` is the
@@ -64,6 +65,19 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         ``"cumulative"`` serialises the full accumulated persona into every
         prompt (today's behavior); ``"none"`` passes no prior-attribute context
         at all (the context-free baseline). Any other value fails loudly.
+
+        The ``family`` / ``version`` axis metadata is validated here too -- the same
+        single seam as ``context`` -- so a malformed versioning key is caught at
+        load rather than at chart time. It is not returned: nothing in generation
+        reads it (the analysis ordering accessor reads the YAML itself), and
+        widening the return tuple would ripple through every caller for no gain.
+
+        Presence is required only for **selectable** axis strategies. A
+        ``_``-prefixed stem is the project-wide marker for a co-located definition
+        that is not an axis option (``discover_axis_values`` skips exactly those):
+        the frozen ``_compared_only_*`` record and ``_debug_minimal`` never enter a
+        strategy-ordered chart, so demanding a family rank of them would be
+        ceremony. Whenever the keys *are* present, they are validated regardless.
         """
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Strategy file not found: {filepath}")
@@ -81,23 +95,77 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                 f"Strategy file has invalid 'context' value {context_mode!r} "
                 f"(expected 'cumulative' or 'none'): {filepath}"
             )
+        IdentityGeneratorConfigurable._validate_axis_metadata(data, filepath)
         return categories, context_mode
 
-    def _build_dag(self, category_config: dict) -> list[str]:
+    @staticmethod
+    def _validate_axis_metadata(data: dict, filepath: str) -> None:
+        """Fail loudly on a missing/malformed ``family`` or ``version`` key.
+
+        ``family`` names which of the declared generation methods the strategy
+        implements (the ranks live in ``strategies/_families.yaml``); ``version`` is
+        the integer revision of that family's category set and dependency wiring.
+        Together they are what lets two strategies coexist as distinct experimental
+        arms, so neither may be silently defaulted.
+        """
+        selectable = not os.path.basename(filepath).startswith("_")
+
+        family = data.get("family")
+        if family is None:
+            if selectable:
+                raise ValueError(
+                    f"Strategy file is missing the required 'family' key: {filepath}. "
+                    "It must name one of the families declared in "
+                    "config/synthetic/axes/strategies/_families.yaml."
+                )
+        elif not isinstance(family, str) or not family:
+            raise ValueError(
+                f"Strategy file has invalid 'family' value {family!r} "
+                f"(expected a non-empty string): {filepath}"
+            )
+
+        version = data.get("version")
+        if version is None:
+            if selectable:
+                raise ValueError(
+                    f"Strategy file is missing the required 'version' key: {filepath}. "
+                    "It must be an integer >= 1 identifying this revision of the family."
+                )
+        elif not isinstance(version, int) or isinstance(version, bool) or version < 1:
+            raise ValueError(
+                f"Strategy file has invalid 'version' value {version!r} "
+                f"(expected an integer >= 1): {filepath}"
+            )
+
+    @staticmethod
+    def _build_dag(category_config: dict) -> list[str]:
         """
         Validates the dependency graph and returns categories in topological order
         using Kahn's algorithm. Raises ValueError on undeclared references or cycles.
+
+        The result is a pure function of ``category_config``. Kahn's algorithm leaves
+        ties unconstrained -- several categories can hold in-degree 0 at once -- and
+        the tie-break here is explicit: **ties resolve in ``category_config``
+        declaration order, i.e. the order the categories appear in the strategy
+        YAML**. Every structure below is therefore keyed/seeded from that order and
+        never from a set, whose iteration order CPython varies per process via hash
+        randomisation. That matters because ``depends_on`` schedules only: the prompt
+        context block serialises every attribute resolved so far, so a hash-dependent
+        tie-break silently changes prompt content between two runs of the same config.
         """
-        declared = set(category_config.keys())
+        declared = list(category_config)  # YAML declaration order; the tie-break key
 
         for cat, cfg in category_config.items():
             for dep in cfg.get("depends_on", []):
-                if dep not in declared:
+                if dep not in category_config:
                     raise ValueError(
                         f"Category '{cat}' declares dependency on '{dep}', "
                         f"which is not declared in category_config."
                     )
 
+        # Both dicts are insertion-ordered by ``declared``, and each ``dependents``
+        # list is appended to in declaration order, so the release order of a node's
+        # dependents is stable too -- not only the seeding of the queue.
         in_degree: dict[str, int] = {cat: 0 for cat in declared}
         dependents: dict[str, list[str]] = {cat: [] for cat in declared}
 
@@ -118,7 +186,8 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                     queue.append(dependent)
 
         if len(ordered) != len(declared):
-            participants = [cat for cat in declared if cat not in ordered]
+            resolved = set(ordered)
+            participants = [cat for cat in declared if cat not in resolved]
             raise ValueError(
                 f"Cycle detected in category_config dependency graph. "
                 f"Participants: {participants}"
@@ -751,3 +820,16 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                 return data, {}
             except json.JSONDecodeError as e:
                 raise ValueError(f"Invalid JSON in identity file: {e}")
+
+
+def resolve_category_order(strategy_file: str) -> list[str]:
+    """Return the category order a run of ``strategy_file`` will resolve in.
+
+    The provenance accessor for callers that need the order without generating a
+    persona (the parallel runner records it in ``run_metadata.json``). It reuses the
+    generator's own loader and DAG builder, so the recorded order is the executed
+    one by construction rather than by a second, drifting implementation. Raises the
+    same ``ValueError``s as generation would, before any LLM call is made.
+    """
+    category_config, _ = IdentityGeneratorConfigurable._load_strategy(strategy_file)
+    return IdentityGeneratorConfigurable._build_dag(category_config)

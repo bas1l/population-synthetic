@@ -22,9 +22,12 @@ is a **validation gate**: `validate_raw` (root) -> `mapping` -> `validate_mapped
 **Stage 0 (validate raw)** -- `validate_raw`, the analysis-DAG root, runs before mapping. It
 atomistically checks each combo's `01_Raw/{slug}/persona_*` and writes one CSV per combo
 (`{output_base}/03_Analysis/validate_raw/{slug}.csv`, columns
-`persona_id,passed,has_identity_json,missing_categories`): a persona passes only if it has an
-`identity.json` and every config-derived category is populated (expected keys = the country mapping
-`_index.json` attributes, with the `age_group`->`age` alias). It is non-destructive — it copies and
+`persona_id,passed,has_identity_json,n_expected_keys,missing_categories`): a persona passes only if
+it has an `identity.json` and every config-derived category is populated (expected keys = the country
+mapping `_index.json` attributes **minus** its `deprecated_attributes`, with the `age_group`->`age`
+alias; a deprecated axis is scored nowhere, so requiring it would fail personas over an unscored
+value). `n_expected_keys` carries that requirement alongside every rate, in the per-combo CSV and in
+`_summary.csv`, so a 14-key rate is never read as a 15-key one. It is non-destructive — it copies and
 mutates nothing.
 
 **Stage 1 (map)** -- `scripts/analyze/map_populations.py` reads the explicit completeness list
@@ -147,7 +150,21 @@ multivariate/C2ST, model-ranking, method-significance, consistency) ever sees th
 if a listed name is not in `attributes` or if filtering would empty the axis; `load_index`
 additionally rejects a `deprecated_attributes` that is not a list of strings. Sweden deprecates
 `birth_location` (retained in data, out of analysis; see
-`docs/development/plans/*/deprecate-birth-location-analysis-axis.md`). The cross-attribute statistics (`joint_pairs`/`coherence_attributes`/
+`docs/development/plans/*/deprecate-birth-location-analysis-axis.md`).
+
+**The scored axis set is invariant across strategy versions.** The v2 strategy arm
+([Axis composition](axis-composition.md)) generates 14 categories instead of 17, but it changed no
+mapping config: `load_scheme("swedish").attributes` still returns the same **14** attributes it did
+before (Italy likewise 14, `birth_location` included). That invariance is precisely what makes v1↔v2
+fidelity comparison valid -- both arms are scored on the identical axis list, with identical
+`values`, `joint_pairs` and coherence configs. What is *not* comparable across versions is anything
+denominated in the **generated** category count (17 vs 14): raw completeness rates, per-persona LLM
+calls, tokens and cost. The per-combo validity CSVs carry `n_expected_keys` alongside every rate for
+exactly that reason. Note also that of the three categories v2 drops, only `birth_location` is a
+deprecated *analysis* axis; `ethnicity_broad_global_approx` and `current_environment_type` appear in
+no `_index.json` at all and were therefore never mapped or scored.
+
+The cross-attribute statistics (`joint_pairs`/`coherence_attributes`/
 `coherence_threshold`, plus the multivariate tuning `grounded_joint_pairs`/`combination_checks`/`c2st`)
 are evaluator tuning, not mapping, and live in a separate
 comparison-analysis config `config/analysis/fidelity/{scb,istat}.json` (one file per country)

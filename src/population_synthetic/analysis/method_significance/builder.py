@@ -46,7 +46,7 @@ from scipy import stats
 
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
-from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.stats_tests import (
     benjamini_hochberg,
     friedman_test,
@@ -65,15 +65,22 @@ DEFAULT_COMPARISON_CONFIG_PATH = (
 # Separator for a method-pair key in the serialised pairwise-p / bracket maps.
 _PAIR_SEP = "|"
 
-# The 5 canonical ordered strategies define the method axis; rank = index + 1
-# (1 = simplest). Combos on any other strategy are dropped (recorded).
-_METHOD_ORDER: list[str] = list(STRATEGY_COMPLEXITY_ORDER)
-_METHOD_RANK: dict[str, int] = {s: i + 1 for i, s in enumerate(_METHOD_ORDER)}
+def _orthogonal_contrasts(k: int) -> tuple[np.ndarray, np.ndarray]:
+    """Linear and quadratic orthogonal polynomial contrasts for *k* ordered levels.
 
-# Orthogonal polynomial contrast coefficients for 5 equally-spaced ordered
-# levels (methods 1..5). Used to test, not assume, monotonicity.
-_LINEAR_CONTRAST = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
-_QUADRATIC_CONTRAST = np.array([2.0, -1.0, -2.0, -1.0, 2.0])
+    The method axis is equally spaced by construction (rank 1..k), so the classical
+    coefficients are just the centred level index and its centred square. For the
+    canonical ``k = 5`` axis this reproduces the textbook vectors exactly --
+    ``[-2, -1, 0, 1, 2]`` and ``[2, -1, -2, -1, 2]`` -- so no published contrast
+    estimate moves; for other *k* the coefficients are proportional to the classical
+    table, which leaves the t/p and the slope sign unchanged.
+
+    Used to *test*, not assume, monotonicity.
+    """
+    index = np.arange(k, dtype=float)
+    linear = index - index.mean()
+    squared = linear ** 2
+    return linear, squared - squared.mean()
 
 _CAVEATS = (
     "n = 1 per (model, method, category) cell -- LLM generation has no seed, so "
@@ -286,19 +293,21 @@ def _attribute_grid(
     by_ms: dict[tuple[str, str], ComboPerformance],
     models: list[str],
     attr: str,
+    method_order: list[str],
 ) -> dict[str, Any]:
     """Build one attribute's model x method cell grid and its complete sub-grid.
 
+    *method_order* is the resolved method axis (complexity order); rank = index + 1.
     Returns the raw ``cells`` (``model -> {rank -> tv|None}``, the absent marker
-    preserved), the ``complete_models`` (present and non-absent for all 5
-    methods), the ``models x 5`` complete matrix, and the count of absent cells.
+    preserved), the ``complete_models`` (present and non-absent under every method),
+    the ``models x k`` complete matrix, and the count of absent cells.
     """
+    k = len(method_order)
     cells: dict[str, dict[int, float | None]] = {}
     absent = 0
     for model in models:
         row: dict[int, float | None] = {}
-        for strategy in _METHOD_ORDER:
-            rank = _METHOD_RANK[strategy]
+        for rank, strategy in enumerate(method_order, start=1):
             record = by_ms.get((model, strategy))
             value = _tv(record, attr) if record is not None else None
             row[rank] = value
@@ -306,24 +315,29 @@ def _attribute_grid(
                 absent += 1
         cells[model] = row
 
-    complete_models = [m for m in models if all(cells[m][r] is not None for r in range(1, 6))]
+    complete_models = [m for m in models if all(cells[m][r] is not None for r in range(1, k + 1))]
     matrix = np.array(
-        [[float(cells[m][r]) for r in range(1, 6)] for m in complete_models],
+        [[float(cells[m][r]) for r in range(1, k + 1)] for m in complete_models],
         dtype=float,
-    ) if complete_models else np.empty((0, 5))
+    ) if complete_models else np.empty((0, k))
     return {"cells": cells, "complete_models": complete_models,
             "matrix": matrix, "absent_cells": absent}
 
 
-def _per_attribute_tests(matrix: np.ndarray, complete_models: list[str], all_models: list[str]) -> dict[str, Any]:
+def _per_attribute_tests(
+    matrix: np.ndarray,
+    complete_models: list[str],
+    all_models: list[str],
+    k: int,
+) -> dict[str, Any]:
     """Per-attribute method trend (Page's L + contrasts) and model omnibus (Friedman).
 
-    *matrix* is ``complete_models x 5`` (methods in complexity order). Fewer than
+    *matrix* is ``complete_models x k`` (methods in complexity order). Fewer than
     2 complete models makes both tests degenerate -> a recorded skip note.
     """
     dropped = [m for m in all_models if m not in complete_models]
     if matrix.shape[0] < 2:
-        note = f"need >=2 models complete across all 5 methods, got {matrix.shape[0]}"
+        note = f"need >=2 models complete across all {k} methods, got {matrix.shape[0]}"
         return {
             "n_models_complete": int(matrix.shape[0]),
             "dropped_models": dropped,
@@ -332,18 +346,19 @@ def _per_attribute_tests(matrix: np.ndarray, complete_models: list[str], all_mod
             "model_omnibus": {"friedman": None, "p_raw": None, "note": note},
         }
 
-    # Page's L: blocks = complete models (rows), treatments = 5 ordered methods.
-    order = list(range(5))
+    # Page's L: blocks = complete models (rows), treatments = the k ordered methods.
+    order = list(range(k))
     page = page_trend_test(matrix, order)
     p_one = page.get("p")
     # Either-direction trend: two-sided p from the one-sided ordered p.
     p_two = None if p_one is None else float(2.0 * min(p_one, 1.0 - p_one))
     page["p_two_sided"] = p_two
 
-    linear = _polynomial_contrast(matrix, _LINEAR_CONTRAST)
-    quadratic = _polynomial_contrast(matrix, _QUADRATIC_CONTRAST)
+    linear_coeffs, quadratic_coeffs = _orthogonal_contrasts(k)
+    linear = _polynomial_contrast(matrix, linear_coeffs)
+    quadratic = _polynomial_contrast(matrix, quadratic_coeffs)
 
-    # Friedman over models: blocks = the 5 methods (rows), treatments = models.
+    # Friedman over models: blocks = the k methods (rows), treatments = models.
     friedman = friedman_test(matrix.T)
 
     return {
@@ -355,15 +370,17 @@ def _per_attribute_tests(matrix: np.ndarray, complete_models: list[str], all_mod
     }
 
 
-def _per_attribute_model_trends(cells: dict[str, dict[int, float | None]]) -> dict[str, Any]:
+def _per_attribute_model_trends(cells: dict[str, dict[int, float | None]], k: int) -> dict[str, Any]:
     """Descriptive TV(method) trend per model (OLS slope, Spearman rho, Delta).
 
-    Flagged ``n = 5`` descriptive -- **no p-value is claimed at this grain**
-    (per-category interaction is not estimable at n = 1).
+    Flagged ``n = k`` descriptive -- **no p-value is claimed at this grain**
+    (per-category interaction is not estimable at n = 1). ``delta_m5_m1`` keeps its
+    name for output-schema stability (the canonical axis has five methods); it is
+    always the *last minus first* method on the resolved axis.
     """
     out: dict[str, Any] = {}
     for model, row in cells.items():
-        ranks = [r for r in range(1, 6) if row[r] is not None]
+        ranks = [r for r in range(1, k + 1) if row[r] is not None]
         values = [float(row[r]) for r in ranks]
         n = len(values)
         slope: float | None = None
@@ -373,8 +390,8 @@ def _per_attribute_model_trends(cells: dict[str, dict[int, float | None]]) -> di
             slope = float(np.polyfit(ranks, values, 1)[0])
         if n >= 3 and len(set(values)) > 1:
             rho = float(stats.spearmanr(ranks, values).statistic)
-        if row[1] is not None and row[5] is not None:
-            delta = float(row[5]) - float(row[1])
+        if row[1] is not None and row[k] is not None:
+            delta = float(row[k]) - float(row[1])
         out[model] = {
             "n_methods": n,
             "ols_slope": slope,
@@ -390,6 +407,7 @@ def _overall_model_comparison(
     by_ms: dict[tuple[str, str], ComboPerformance],
     models: list[str],
     attributes: list[str],
+    method_order: list[str],
 ) -> dict[str, Any]:
     """Demšar model comparison: Friedman across models over category x method blocks.
 
@@ -399,7 +417,7 @@ def _overall_model_comparison(
     """
     block_rows: list[list[float]] = []
     for attr in attributes:
-        for strategy in _METHOD_ORDER:
+        for strategy in method_order:
             values = [_tv(by_ms.get((m, strategy)), attr) if by_ms.get((m, strategy)) is not None else None
                       for m in models]
             if all(v is not None for v in values):
@@ -425,13 +443,14 @@ def _overall_method_trend(
     by_ms: dict[tuple[str, str], ComboPerformance],
     models: list[str],
     attributes: list[str],
+    method_order: list[str],
 ) -> dict[str, Any]:
-    """Overall Page's L method trend: blocks = category x model, treatments = 5 methods."""
+    """Overall Page's L method trend: blocks = category x model, treatments = k methods."""
     block_rows: list[list[float]] = []
     for attr in attributes:
         for model in models:
             values = [_tv(by_ms.get((model, s)), attr) if by_ms.get((model, s)) is not None else None
-                      for s in _METHOD_ORDER]
+                      for s in method_order]
             if all(v is not None for v in values):
                 block_rows.append([float(v) for v in values])
     n_blocks = len(block_rows)
@@ -439,7 +458,7 @@ def _overall_method_trend(
         return {"page": None, "n_blocks": n_blocks,
                 "note": f"need >=2 complete (category x model) blocks, got {n_blocks}"}
     matrix = np.array(block_rows, dtype=float)
-    page = page_trend_test(matrix, list(range(5)))
+    page = page_trend_test(matrix, list(range(len(method_order))))
     p_one = page.get("p")
     page["p_two_sided"] = None if p_one is None else float(2.0 * min(p_one, 1.0 - p_one))
     return {"page": page, "n_blocks": n_blocks}
@@ -448,6 +467,7 @@ def _overall_method_trend(
 def _overall_interaction(
     by_ms: dict[tuple[str, str], ComboPerformance],
     attributes: list[str],
+    method_rank: dict[str, int],
 ) -> dict[str, Any]:
     """Long-format ``logit(TV) ~ model*method_rank + (1|category)`` mixed fit."""
     import pandas as pd
@@ -458,7 +478,7 @@ def _overall_interaction(
             value = _tv(record, attr)
             if value is not None:
                 rows.append({"tv": value, "model": model,
-                             "method_rank": _METHOD_RANK[strategy], "category": attr})
+                             "method_rank": method_rank[strategy], "category": attr})
     frame = pd.DataFrame(rows)
     if frame.empty or frame["model"].nunique() < 2 or frame["category"].nunique() < 2:
         return {"interaction": None, "eta_sq": None, "converged": False,
@@ -716,11 +736,20 @@ def build_method_significance(
     declared category ``values`` list (the scheme's config-sourced levels); the
     method-comparison panels record each attribute's level count from it (fail-fast
     when an analysed attribute is missing or empty). *skipped* (``(slug, reason)``
-    from the loader) is recorded in the metadata. Records on a strategy outside the 5
-    canonical ordered strategies are dropped and recorded.
+    from the loader) is recorded in the metadata.
 
-    Raises when there are no usable records or the records span multiple
-    countries (malformed input). A country with < 2 models, or an attribute with
+    The ordered **method axis** is the set of strategies present in *records*, put in
+    config-derived complexity order by
+    :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order`.
+    Method levels are keyed on the **strategy id**, so a versioned id (``all_pick_v2``)
+    is its own level next to its v1 sibling: versions are never pooled, and the ``n = 1``
+    per (model, method, category) design holds whichever mix of versions is handed over.
+    The interpretive caveat is that on a mixed-version axis the ordered-trend test
+    (Page's L) runs along an ordering that interleaves method complexity with version.
+
+    Raises when there are no usable records, when the records span multiple
+    countries (malformed input), or when a record carries a strategy id the axis
+    config does not know. A country with < 2 models, or an attribute with
     a degenerate grid, does **not** raise: the affected test records a skip note
     (matching the primitives' ``None`` + ``note`` convention) rather than
     emitting a bogus statistic.
@@ -734,42 +763,33 @@ def build_method_significance(
         )
     country = next(iter(countries))
 
-    # Filter to the 5 canonical ordered strategies (record the drops).
-    kept: list[ComboPerformance] = []
-    dropped_combos: list[dict[str, str]] = []
-    for r in records:
-        if r.strategy in _METHOD_RANK:
-            kept.append(r)
-        else:
-            dropped_combos.append(
-                {"slug": r.slug, "reason": f"strategy {r.strategy!r} is not one of the 5 ordered methods"}
-            )
-    if not kept:
-        raise ValueError(
-            "No records remain after filtering to the 5 ordered strategies "
-            f"({_METHOD_ORDER}); nothing to analyse."
-        )
+    # The ordered method axis, resolved once from the strategies actually present.
+    # An id the strategy-axis config does not know raises here rather than being
+    # quietly dropped: a chart whose x-axis lost a method is indistinguishable from
+    # one whose run lost a method.
+    method_order = strategy_complexity_order(sorted({r.strategy for r in records}))
+    method_rank = {strategy: rank for rank, strategy in enumerate(method_order, start=1)}
+    k_methods = len(method_order)
 
     by_ms: dict[tuple[str, str], ComboPerformance] = {}
-    for r in kept:
+    for r in records:
         key = (r.model, r.strategy)
         if key in by_ms:
             raise ValueError(f"Duplicate (model, strategy) combo for country {country!r}: {key}")
         by_ms[key] = r
-    models = sorted({r.model for r in kept})
-    strategies_present = [s for s in _METHOD_ORDER if any((m, s) in by_ms for m in models)]
+    models = sorted({r.model for r in records})
 
     # ---- Per attribute -------------------------------------------------- #
     per_attribute: dict[str, Any] = {}
     per_attribute_model: dict[str, Any] = {}
     total_absent = 0
     for attr in attributes:
-        grid = _attribute_grid(by_ms, models, attr)
+        grid = _attribute_grid(by_ms, models, attr, method_order)
         total_absent += grid["absent_cells"]
-        tests = _per_attribute_tests(grid["matrix"], grid["complete_models"], models)
+        tests = _per_attribute_tests(grid["matrix"], grid["complete_models"], models, k_methods)
         tests["absent_cells"] = grid["absent_cells"]
         per_attribute[attr] = tests
-        per_attribute_model[attr] = _per_attribute_model_trends(grid["cells"])
+        per_attribute_model[attr] = _per_attribute_model_trends(grid["cells"], k_methods)
 
     # ---- BH-FDR across attributes (per family) -------------------------- #
     _apply_bh(per_attribute, attributes, family="method_trend")
@@ -783,9 +803,9 @@ def build_method_significance(
         )
 
     # ---- Overall (categories as blocks) --------------------------------- #
-    model_comparison = _overall_model_comparison(by_ms, models, attributes)
-    method_trend = _overall_method_trend(by_ms, models, attributes)
-    interaction = _overall_interaction(by_ms, attributes)
+    model_comparison = _overall_model_comparison(by_ms, models, attributes, method_order)
+    method_trend = _overall_method_trend(by_ms, models, attributes, method_order)
+    interaction = _overall_interaction(by_ms, attributes, method_rank)
     overall = {
         "model_comparison": model_comparison,
         "method_trend": method_trend,
@@ -799,7 +819,7 @@ def build_method_significance(
     # load it here (fail-fast) unless the caller injected one (tests).
     cmp_config = comparison_config if comparison_config is not None else load_comparison_config()
     method_comparison = _method_comparison(
-        by_ms, models, list(attributes), strategies_present, cmp_config, category_values
+        by_ms, models, list(attributes), method_order, cmp_config, category_values
     )
 
     return {
@@ -807,17 +827,20 @@ def build_method_significance(
             "country": country,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "alpha": alpha,
-            "n_combos": len(kept),
+            "n_combos": len(records),
             "models": models,
-            "strategies": strategies_present,
-            "method_order": _METHOD_ORDER,
-            "method_ranks": _METHOD_RANK,
+            "strategies": method_order,
+            "method_order": method_order,
+            "method_ranks": method_rank,
             "attributes": list(attributes),
             "multiplicity_correction": "benjamini_hochberg_fdr",
             "absent_cells_total": total_absent,
             "library_versions": _library_versions(),
             "skipped": [{"slug": slug, "reason": reason} for slug, reason in (skipped or [])],
-            "dropped_combos": dropped_combos,
+            # Retained for output-schema stability, and now always empty: a record on a
+            # strategy the axis config does not declare raises at method-axis resolution
+            # instead of being silently dropped into this list.
+            "dropped_combos": [],
         },
         "per_attribute": per_attribute,
         "per_attribute_model": per_attribute_model,
