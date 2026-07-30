@@ -40,10 +40,11 @@ def test_raw_summary_row_flags_issues_and_rate():
         passed=80,
         failed=20,
         missing_identity=5,
+        n_expected_keys=14,
         csv_path="x",
     )
     row = raw_summary_row(summary)
-    assert row == ("swedish_all_pick_claude_haiku", True, 100, 80, 20, 5, 80.0)
+    assert row == ("swedish_all_pick_claude_haiku", True, 100, 80, 20, 5, 14, 80.0)
     assert RAW_HEADER == (
         "slug",
         "has_issues",
@@ -51,24 +52,55 @@ def test_raw_summary_row_flags_issues_and_rate():
         "passed",
         "failed",
         "missing_identity",
+        "n_expected_keys",
         "pass_rate_pct",
     )
 
 
+def test_raw_summary_row_carries_denominator_next_to_rate():
+    """A pass rate over 14 required keys is not the same quantity as one over 15.
+
+    The summary mixes countries (and index revisions) in one file, so ``n_expected_keys``
+    must sit alongside the rate rather than being inferred from the slug.
+    """
+    sweden = raw_summary_row(
+        ValidateRawSummary(
+            slug="swedish_x", n=10, passed=10, failed=0, missing_identity=0,
+            n_expected_keys=14, csv_path="x",
+        )
+    )
+    italy = raw_summary_row(
+        ValidateRawSummary(
+            slug="italian_x", n=10, passed=10, failed=0, missing_identity=0,
+            n_expected_keys=15, csv_path="x",
+        )
+    )
+    rate_idx = RAW_HEADER.index("pass_rate_pct")
+    n_idx = RAW_HEADER.index("n_expected_keys")
+    assert sweden[rate_idx] == italy[rate_idx] == 100.0  # identical rates ...
+    assert (sweden[n_idx], italy[n_idx]) == (14, 15)  # ... over different requirements
+
+
 def test_raw_summary_row_clean_combo_has_no_issues():
     row = raw_summary_row(
-        ValidateRawSummary(slug="s", n=50, passed=50, failed=0, missing_identity=0, csv_path="x")
+        ValidateRawSummary(
+            slug="s", n=50, passed=50, failed=0, missing_identity=0, n_expected_keys=14,
+            csv_path="x",
+        )
     )
     assert row[1] is False
-    assert row[6] == 100.0
+    assert row[RAW_HEADER.index("pass_rate_pct")] == 100.0
 
 
 def test_raw_summary_row_empty_combo_is_flagged():
     row = raw_summary_row(
-        ValidateRawSummary(slug="s", n=0, passed=0, failed=0, missing_identity=0, csv_path="x")
+        ValidateRawSummary(
+            slug="s", n=0, passed=0, failed=0, missing_identity=0, n_expected_keys=14,
+            csv_path="x",
+        )
     )
     assert row[1] is True  # n == 0 counts as an issue (nothing generated)
-    assert row[6] == 0.0
+    assert row[RAW_HEADER.index("pass_rate_pct")] == 0.0
 
 
 def test_mapped_summary_row():

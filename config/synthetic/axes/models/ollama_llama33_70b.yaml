@@ -1,5 +1,6 @@
 id: "ollama_llama33_70b"
-label: "Ollama Llama3.3 70B (discarded for now)"
+label: "Ollama Llama3.3 70B"
+discarded: true            # retired from the sweep; absent key == active
 model_config:
   provider: "ollama"
   model: "llama3.3:70b-instruct-q4_K_M"

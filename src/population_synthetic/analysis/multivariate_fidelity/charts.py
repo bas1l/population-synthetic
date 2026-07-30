@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from population_synthetic.analysis.fidelity.charts import plot_association_heatmap
-from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
 
 _COLOR_SERIES = (
     "#4878CF",
@@ -32,10 +32,8 @@ _COLOR_SERIES = (
 
 
 def _ordered_strategies(strategies: list[str]) -> list[str]:
-    """Strategies in complexity order; any unknown strategy appended (sorted)."""
-    ordered = [s for s in STRATEGY_COMPLEXITY_ORDER if s in strategies]
-    ordered += sorted(s for s in strategies if s not in STRATEGY_COMPLEXITY_ORDER)
-    return ordered
+    """Strategies in config-derived complexity order (raises on an unknown id)."""
+    return strategy_complexity_order(strategies)
 
 
 def plot_joint_association_heatmap(

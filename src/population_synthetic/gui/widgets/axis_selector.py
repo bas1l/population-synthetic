@@ -7,6 +7,11 @@ populated from
 cartesian-product count and a "Force reprocessing" checkbox shown only for
 flows whose YAML declares a top-level ``force:`` key (generate flows).
 
+Two of the three lists carry a chip row (:func:`axis_facets`): strategies by
+version, models by ``discarded:`` status, each opening on the narrower default
+(highest version / non-discarded). Filtering is view-only and retaining — a
+checked item is never hidden — so a default never changes what a flow runs.
+
 Persistence goes through the bound :class:`FlowConfigModel` — checks write
 ``selection:``/``force:`` via ``set_selection``/``set_force`` (marking the
 model dirty). This widget never reads or writes ``config/gui/state.json``;
@@ -17,10 +22,12 @@ from __future__ import annotations
 
 import itertools
 from functools import partial
+from pathlib import Path
 
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QCheckBox, QLabel, QVBoxLayout, QWidget
 
+from population_synthetic.analysis.utils.axes import strategy_versions
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 from population_synthetic.gui.flow_config_model import FlowConfigModel
 from population_synthetic.gui.widgets.checkable_axis_list import CheckableAxisList
@@ -44,6 +51,15 @@ _AXES: tuple[tuple[str, str, int], ...] = (
     ("countries", "Countries", 2),
 )
 
+# The model axis metadata key partitioning the models list, plus its two chip
+# labels. A model axis file retires itself with a top-level `discarded: true`;
+# an **absent key means active** — a documented default (see
+# `model_status_facet_groups` and docs/architecture/axis-composition.md), which
+# is why the live model files carry no key rather than `discarded: false`.
+_DISCARDED_KEY = "discarded"
+_ACTIVE_CHIP = "Active"
+_DISCARDED_CHIP = "Discarded"
+
 
 def cartesian_combos(
     model_ids: list[str], strategy_ids: list[str], country_ids: list[str]
@@ -56,6 +72,99 @@ def cartesian_combos(
     the legacy launcher's ``ExperimentSelection.combinations()``.
     """
     return list(itertools.product(model_ids, strategy_ids, country_ids))
+
+
+def version_facet_groups(
+    items: list[dict], *, strategies_dir: str | Path | None = None
+) -> list[tuple[str, list[str]]]:
+    """Partition *items* into ``[("v{n}", [ids]), ...]``, ascending version.
+
+    Pure helper (no Qt). The chip labels come from the strategies' declared
+    ``version:`` values, never from a hardcoded ``["v1", "v2"]`` — a v3 axis file
+    appears as a chip the moment it is dropped into the config directory.
+    Raises (via :func:`strategy_versions`) when any id lacks a valid version.
+    """
+    versions = strategy_versions([item["id"] for item in items], strategies_dir=strategies_dir)
+    return [
+        (f"v{version}", [i for i, v in versions.items() if v == version])
+        for version in sorted(set(versions.values()))
+    ]
+
+
+def model_status_facet_groups(items: list[dict]) -> list[tuple[str, list[str]]]:
+    """Partition *items* into ``[("Active", ids), ("Discarded", ids)]``.
+
+    Pure helper (no Qt). A model axis file retires itself with a top-level
+    ``discarded: true``; **an absent key means active**. That default is
+    documented rather than silent — it is why the live model axis files carry no
+    key at all instead of an explicit ``discarded: false``. Only ``true`` and
+    ``false`` are accepted: any other value raises, since a truthy string would
+    quietly retire a model from the sweep.
+
+    Both chips are always emitted, even when one side is empty, so the group
+    names stay a fixed vocabulary that ``initially_checked`` can always name.
+    """
+    active: list[str] = []
+    discarded: list[str] = []
+    for item in items:
+        flag = item.get(_DISCARDED_KEY, False)
+        if not isinstance(flag, bool):
+            raise ValueError(
+                f"Model axis {item['id']!r}: '{_DISCARDED_KEY}' must be a boolean, or absent "
+                f"(meaning active); got {flag!r}."
+            )
+        (discarded if flag else active).append(item["id"])
+    return [(_ACTIVE_CHIP, active), (_DISCARDED_CHIP, discarded)]
+
+
+def axis_facets(
+    axis: str, items: list[dict], *, strategies_dir: str | Path | None = None
+) -> tuple[str, list[tuple[str, list[str]]], set[str]] | None:
+    """Chip row for *axis* as ``(title, groups, initially_checked)``, else ``None``.
+
+    Pure helper (no Qt) so both the chip vocabulary and the defaults are
+    testable headlessly. Which axes are faceted is *structural*, not a taste
+    call: only strategy axis files declare a ``version:`` and only model axis
+    files a ``discarded:`` flag, so the countries axis has nothing to facet on
+    and stays unfiltered.
+
+    The defaults narrow each list to what a new run should normally use — the
+    **highest** strategy version, and the **non-discarded** models — and both are
+    read off the config values. No literal version appears here, so dropping a
+    v3 strategy file into the config directory makes v3 the checked chip and
+    demotes v2, with no code change. Neither default can hide a checked row (see
+    :meth:`CheckableAxisList.set_facets`).
+    """
+    if axis == "strategies":
+        groups = version_facet_groups(items, strategies_dir=strategies_dir)
+        # version_facet_groups yields ascending version, so the last chip is the
+        # highest one — the only one that starts checked.
+        return "Version", groups, {groups[-1][0]}
+    if axis == "models":
+        return "Status", model_status_facet_groups(items), {_ACTIVE_CHIP}
+    return None
+
+
+def mixed_version_notice(
+    strategy_ids: list[str], *, strategies_dir: str | Path | None = None
+) -> str | None:
+    """Advisory text when *strategy_ids* span more than one version, else ``None``.
+
+    Pure helper (no Qt) so the wording is unit-testable headlessly. Strictly
+    **advisory**: versions of one family are separate experimental arms, and
+    generating both arms in a single run is legitimate — nothing here blocks or
+    vetoes the selection; it only makes the mix visible before Run.
+    """
+    if not strategy_ids:
+        return None
+    versions = sorted(set(strategy_versions(list(strategy_ids), strategies_dir=strategies_dir).values()))
+    if len(versions) < 2:
+        return None
+    listed = ", ".join(f"v{v}" for v in versions)
+    return (
+        f"Mixed strategy versions selected ({listed}). Versions are separate experimental "
+        "arms, not replicates — check this is intended."
+    )
 
 
 class AxisSelector(QWidget):
@@ -83,6 +192,12 @@ class AxisSelector(QWidget):
             # discover_axis_values raises on a malformed axis file — fail-fast.
             items = discover_axis_values(axis)
             axis_list.populate(items)
+            # axis_facets raises on a strategy missing `version:` or a model
+            # whose `discarded:` is not a boolean — fail-fast.
+            facets = axis_facets(axis, items)
+            if facets is not None:
+                facet_title, groups, initially_checked = facets
+                axis_list.set_facets(facet_title, groups, initially_checked=initially_checked)
             self._known_ids[axis] = {item["id"] for item in items}
             axis_list.selection_changed.connect(partial(self._on_axis_changed, axis))
             layout.addWidget(axis_list, stretch=weight)  # see _AXES on the weights
@@ -90,6 +205,13 @@ class AxisSelector(QWidget):
 
         self._combos_label = QLabel()
         layout.addWidget(self._combos_label)
+
+        # Advisory only — never a veto. A run mixing versions is legitimate;
+        # this label just makes the mix impossible to miss before Run.
+        self._version_warning = QLabel()
+        self._version_warning.setWordWrap(True)
+        self._version_warning.setVisible(False)
+        layout.addWidget(self._version_warning)
 
         self._force_checkbox = QCheckBox("Force reprocessing")
         self._force_checkbox.setVisible(False)  # generate flows only (YAML has a `force:` key)
@@ -177,3 +299,6 @@ class AxisSelector(QWidget):
 
     def _update_combos_label(self) -> None:
         self._combos_label.setText(f"Combos: {len(self.checked_combos())}")
+        notice = mixed_version_notice(self._axis_lists["strategies"].selected_ids())
+        self._version_warning.setText(notice or "")
+        self._version_warning.setVisible(notice is not None)

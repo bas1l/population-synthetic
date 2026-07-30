@@ -30,11 +30,19 @@ from population_synthetic.analysis.method_significance.builder import (  # noqa:
     write_method_significance_csv,
     write_method_significance_json,
 )
-from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER  # noqa: E402
+from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from tests._performance_fixtures import make_combo  # noqa: E402
 
 MODELS = ["model_a", "model_b", "model_c", "model_d", "model_e"]
-STRATEGIES = list(STRATEGY_COMPLEXITY_ORDER)
+# The five v1 families, ordered by the config-derived accessor (the same order
+# every consumer resolves; asserted against the legacy sequence in test_axes.py).
+STRATEGIES = strategy_complexity_order([
+    "all_generate_evaluate_random_pick",
+    "all_generate_evaluate_pick",
+    "all_generate_pick",
+    "all_pick_dag",
+    "all_pick",
+])
 ATTRS = ["trend_attr", "null_attr"]
 # Config-sourced category levels per attribute (drives the method-comparison panel
 # level counts); required by build_method_significance.
@@ -255,10 +263,11 @@ def test_multiple_countries_raises():
         build_method_significance([a, b], ATTRS, category_values=CATEGORY_VALUES)
 
 
-def test_no_ordered_strategy_records_raises():
+def test_unknown_strategy_records_raise():
+    """An off-axis strategy raises at method-axis resolution (never a silent drop)."""
     off = make_combo(slug="swedish_seed_model_a", strategy="seed", model="model_a",
                      tv_by_attr={"trend_attr": 0.1, "null_attr": 0.2})
-    with pytest.raises(ValueError, match="5 ordered strategies"):
+    with pytest.raises(ValueError, match="Unknown strategy id"):
         build_method_significance([off], ATTRS, category_values=CATEGORY_VALUES)
 
 

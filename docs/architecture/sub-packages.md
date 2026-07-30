@@ -38,9 +38,11 @@ consumers + `generation_metadata`:
 - **`validate_raw/`** -- The analysis-DAG **root**, a non-destructive validation gate. It
   atomistically checks each combo's `01_Raw/{slug}/persona_*` and writes one CSV per combo
   (`{output_base}/03_Analysis/validate_raw/{slug}.csv`, columns
-  `persona_id,passed,has_identity_json,missing_categories`): a persona passes only if it has an
-  `identity.json` and every config-derived category is populated (expected keys = the country mapping
-  `_index.json` attributes, with the `age_group`->`age` alias). It copies/mutates nothing.
+  `persona_id,passed,has_identity_json,n_expected_keys,missing_categories`): a persona passes only if
+  it has an `identity.json` and every config-derived category is populated (expected keys = the
+  country mapping `_index.json` attributes **minus** its `deprecated_attributes`, with the
+  `age_group`->`age` alias). `n_expected_keys` accompanies every rate so completeness is never
+  compared across different requirements. It copies/mutates nothing.
 - **`mapping/`** -- Transforms raw population data (national-statistics records *or* LLM-pipeline
   identities) into the canonical comparable schema. Reads the **full `01_Raw` pool** (not the capped
   mirror) and maps every valid persona to `{output_base}/03_Analysis/mapping/{slug}.json` (plus
@@ -134,8 +136,17 @@ consumers + `generation_metadata`:
     `"03_Analysis"` literal in code). Consumed by both the analysis scripts and the GUI workflow model.
   - `country_config.py` -- the shared country resolver (`real_for_country`, `mappings_for_country`,
     `known_country_ids`, `infer_country`) consumed by both the map stage and the comparison consumers
-  - `axes.py` -- axis-vocabulary helpers: `decompose_slug` / `diagnose_slug` (slug -> axis IDs) and
-    `STRATEGY_COMPLEXITY_ORDER` (strategy chart ordering)
+  - `axes.py` -- axis-vocabulary helpers: `decompose_slug` / `diagnose_slug` (slug -> axis IDs) plus
+    the strategy-axis ordering accessors. Ordering is **config-derived and exposed as functions**, not
+    as a module constant (the former `STRATEGY_COMPLEXITY_ORDER` list is gone), so nothing is read at
+    import time and every caller resolves the order for the ids it actually has:
+    `load_family_order()` reads the simplest-first family ranks from
+    `config/synthetic/axes/strategies/_families.yaml`; `strategy_versions(ids)` maps each id to its
+    declared integer `version` (**ordering metadata only** -- no analysis process branches on it, a
+    versioned id is simply its own strategy); `strategy_complexity_order(ids)` returns them sorted by
+    the total key `(family_rank, version, id)`, which is what keeps each v2 immediately after its v1
+    sibling. All three fail loudly -- unknown id, missing/malformed
+    `family`/`version`, or an undeclared family raises; nothing "sorts unknown last"
   - `_stats.py` -- stdlib numeric primitives (median, percentile, Shannon entropy); no external dep
   - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected) for generation_metadata /
     model_ranking, plus the repeated-measures family for `method_significance` (Friedman +

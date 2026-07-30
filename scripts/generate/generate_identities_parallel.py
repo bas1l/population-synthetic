@@ -57,10 +57,12 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from population_synthetic.analysis.validate_raw.validate import expected_raw_keys
 from population_synthetic.clients.ollama_control_client import OllamaControlClient
 from population_synthetic.clients.retry_policy import MAX_RETRY_ATTEMPTS
 from population_synthetic.generators.synthetic import ollama_concurrency, ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
+from population_synthetic.generators.synthetic.identity_generator_configurable import resolve_category_order
 from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
 from population_synthetic.generators.synthetic.manifest_loader import (
     compose_manifest,
@@ -350,6 +352,41 @@ def _server_parallelism_is_tuned(preflight_record: dict[str, Any]) -> bool:
     return reconfigure is not None and reconfigure["outcome"] in _TUNED_OUTCOMES
 
 
+def _assert_strategy_covers_country(strategy_path: Path, strategy_id: str, country_id: str) -> None:
+    """Reject an axis combo whose strategy cannot produce what the country requires.
+
+    A strategy declares a category set; a country declares (via its mapping index,
+    minus its deprecated attributes) the raw keys a persona must carry to pass the
+    validation gate. Those two are versioned independently -- a v2 strategy drops
+    ``birth_location``, which Sweden deprecated but Italy still analyses -- so the
+    pairing is only valid when the categories cover the requirement. Without this
+    check the mismatch surfaces far downstream as a 0% ``validate_raw`` pass rate
+    and zero capped personas, after a full sweep has already been paid for.
+
+    This lives at the orchestration edge rather than in ``compose_manifest``: the
+    requirement is an analysis-layer fact (the mapping ``_index.json``, read through
+    :func:`expected_raw_keys`), and ``generators/`` importing it would both invert the
+    layer dependency and close an import cycle -- ``analysis.utils.country_config``
+    already imports ``manifest_loader``. This script legitimately sees both layers.
+    The category set is read with the generator's own
+    :func:`resolve_category_order`, so the guard tests the categories a run would
+    actually resolve rather than a second parse of the YAML.
+
+    Raises:
+        ValueError: If any required raw key is absent from the strategy's categories.
+    """
+    required = expected_raw_keys(country_id)
+    generated = set(resolve_category_order(str(strategy_path)))
+    missing = [key for key in required if key not in generated]
+    if missing:
+        raise ValueError(
+            f"Incompatible axis combination: strategy {strategy_id!r} does not generate "
+            f"{len(missing)} raw key(s) that country {country_id!r} requires: {missing}. "
+            f"The requirement is the country's mapping index attributes minus its deprecated "
+            f"attributes; pair {country_id!r} with a strategy whose categories cover them."
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate N persona identities in parallel")
     parser.add_argument("--manifest", default=None, help="Path to a YAML manifest file (replaces all other arguments)")
@@ -502,6 +539,11 @@ def main() -> None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
         m = compose_manifest(args.model_id, args.strategy_id, args.country_id, args.ollama_host)
+        # Before any client is constructed and any persona directory is created: a
+        # strategy that omits a key the country still requires would generate a full
+        # sweep that the validation gate then fails at 0%.
+        if m.strategy_path is not None:
+            _assert_strategy_covers_country(m.strategy_path, args.strategy_id, args.country_id)
         _composed_manifest = m
         logger.info("Composed manifest: %s", m.name)
         if args.provider is None:
@@ -693,6 +735,14 @@ def main() -> None:
     if args.strategy:
         kwargs["strategy_file"] = str(Path(args.strategy))
 
+    # Resolved once, up front, for two reasons: a malformed strategy graph (cycle or
+    # undeclared dependency) then fails before the first LLM call rather than N times
+    # inside the workers, and the order every persona was generated in becomes part of
+    # the run's provenance. It is a property of the strategy file alone -- identical
+    # for every persona and every worker -- so recording it per run is exact, not a
+    # sample. Only 'configurable' mode has a category DAG; other modes record null.
+    resolved_category_order = resolve_category_order(kwargs["strategy_file"]) if args.strategy else None
+
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     run_metadata = {
         "name": m.name if m is not None else None,
@@ -736,6 +786,11 @@ def main() -> None:
             "retry_until_success": args.retry_until_success,
             "structured_output": args.structured_output,
         },
+        # Derived, not requested: the topological order the strategy DAG resolves to.
+        # Recorded because 'depends_on' schedules only -- the prompt context block
+        # serialises every attribute resolved so far -- so this sequence, not the
+        # strategy's edge list, is what each persona's prompts actually saw.
+        "resolved_category_order": resolved_category_order,
         "started_at": started_at,
     }
     if _composed_manifest is not None:

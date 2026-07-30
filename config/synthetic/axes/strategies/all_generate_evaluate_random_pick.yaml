@@ -1,4 +1,6 @@
 id: "all_generate_evaluate_random_pick"
+family: "all_generate_evaluate_random_pick"
+version: 1
 label: "All Generate Evaluate Random Pick"
 description: "All fields use generate_evaluate_random_pick method. LLM enumerates candidates and assigns probability weights, then Python random.choices() samples the final value (categorical) or Python samples from an LLM-specified distribution (numeric). 2 LLM calls + Python sampling per category. Uses dependency DAG so prior resolved values are passed as context."
 categories:

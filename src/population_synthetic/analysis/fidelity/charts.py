@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 
 from population_synthetic.analysis.fidelity.evaluator import attr_value
-from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.figures import save_figure
 from population_synthetic.analysis.utils.marginals import compute_proportions
 
@@ -563,11 +563,12 @@ def plot_radar_grid(
     if not results:
         return None
 
-    if strategy_order is None:
-        strategy_order = STRATEGY_COMPLEXITY_ORDER
-
     all_models = sorted({m for m, _ in results})
     all_strategies = sorted({s for _, s in results})
+    # No caller-supplied order -> resolve the config-derived complexity order over
+    # exactly the strategies present (an unknown id raises rather than sorting last).
+    if strategy_order is None:
+        strategy_order = strategy_complexity_order(all_strategies)
     strategies = [s for s in strategy_order if s in all_strategies]
     if not strategies:
         return None

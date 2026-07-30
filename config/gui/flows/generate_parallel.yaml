@@ -26,7 +26,8 @@ options:
                              #   occurrence rather than consuming the budget.
 selection:
   models: [ollama_mistral_nemo_12b]
-  strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick, 
-      all_generate_pick, all_pick, all_pick_dag]
+  strategies: [all_generate_evaluate_pick_v2, 
+      all_generate_evaluate_random_pick_v2, all_generate_pick_v2, 
+      all_pick_dag_v2, all_pick_v2]
   countries: [swedish_02]   # config_006 guided-prompt A/B run; baseline uses [swedish] (config_004)
 force: false                 # generate flows only

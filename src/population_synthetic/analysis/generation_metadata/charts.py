@@ -28,7 +28,7 @@ from typing import Any
 from population_synthetic.analysis.generation_metadata.combo_aggregator import METRIC_NAMES, ComboSummary
 from population_synthetic.analysis.utils._stats import median as _median
 from population_synthetic.analysis.utils._stats import percentile as _percentile
-from population_synthetic.analysis.utils.axes import STRATEGY_COMPLEXITY_ORDER
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.figures import save_figure
 
 __all__ = ["render_metric_heatmaps", "plot_run_charts", "plot_run_comparison"]
@@ -62,10 +62,8 @@ _METRIC_LABELS: dict[str, str] = {
 
 
 def _ordered_methods(strategies: set[str]) -> list[str]:
-    """Methods in pipeline-complexity order; any unknown strategy appended (sorted)."""
-    ordered = [s for s in STRATEGY_COMPLEXITY_ORDER if s in strategies]
-    ordered += sorted(s for s in strategies if s not in STRATEGY_COMPLEXITY_ORDER)
-    return ordered
+    """Methods in config-derived pipeline-complexity order (raises on an unknown id)."""
+    return strategy_complexity_order(sorted(strategies))
 
 
 def _fmt_mean(value: float) -> str:

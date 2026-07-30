@@ -34,9 +34,9 @@ from population_synthetic.analysis.fidelity.charts import _HIGH_CARDINALITY_FIEL
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 from population_synthetic.analysis.method_significance.charts import _COLOR_SERIES
 from population_synthetic.analysis.utils.axes import (
-    STRATEGY_COMPLEXITY_ORDER,
     decompose_slug,
     diagnose_slug,
+    strategy_complexity_order,
 )
 from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.figures import save_figure
@@ -91,7 +91,7 @@ def load_marginal_series(
     where the **first** entry is always the real baseline
     (``label == REAL_SERIES_LABEL``) and the remaining entries are the generation
     methods present for that model, ordered by
-    :data:`~population_synthetic.analysis.utils.axes.STRATEGY_COMPLEXITY_ORDER`
+    :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order`
     (simplest -> most complex). ``proportions`` maps **every** category on the
     attribute's scheme axis to its proportion (an absent category is an explicit
     ``0.0`` bar). A method with no mapped population for a ``(country, model)`` is
@@ -185,11 +185,19 @@ def load_marginal_series(
         for attr in attributes
     }
 
+    # The method axis is the union of the strategies actually mapped for this
+    # country, resolved once in complexity order. Per-model "missing" is reported
+    # against that union, so the log names methods a *sibling* model has and this
+    # one lacks -- not every id the registry happens to declare.
+    method_axis = strategy_complexity_order(
+        sorted({strategy for by_strategy in combos_by_model.values() for strategy in by_strategy})
+    )
+
     prepared: PreparedSeries = {}
     for model in sorted(combos_by_model):
         by_strategy = combos_by_model[model]
-        present = [s for s in STRATEGY_COMPLEXITY_ORDER if s in by_strategy]
-        missing = [s for s in STRATEGY_COMPLEXITY_ORDER if s not in by_strategy]
+        present = [s for s in method_axis if s in by_strategy]
+        missing = [s for s in method_axis if s not in by_strategy]
         if missing:
             logger.info(
                 "marginal_charts: model %r (country %r) has no mapped population for "

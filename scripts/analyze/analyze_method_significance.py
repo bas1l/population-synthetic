@@ -17,6 +17,12 @@ diagram), a Page's L method trend, and a logit-linked mixed model whose model x 
 interaction term is estimable. The per-category interaction is emitted DESCRIPTIVELY only
 (a slope heatmap) -- no p-value is claimed at that grain.
 
+The method axis is the set of **strategy ids** present in the selected combos, put in
+config-derived complexity order. A strategy version is part of its id, so `all_pick` and
+`all_pick_v2` are two distinct method levels -- nothing pools them, and a run may freely mix
+versions. Note the interpretation that follows: on a mixed-version axis Page's L tests a trend
+along an ordering that interleaves method complexity with strategy version.
+
 This script recomputes nothing from populations -- run map_populations.py and
 score_fidelity_all.py first. It needs the optional analysis extra (statsmodels +
 scikit-posthocs): pip install -e .[analysis].

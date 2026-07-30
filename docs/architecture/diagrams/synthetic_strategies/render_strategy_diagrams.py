@@ -1,18 +1,23 @@
 """Render workflow/DAG diagrams for each configurable generation strategy.
 
-For every strategy yaml under
-``config/synthetic/axes/strategies/`` this script emits a
-two-panel figure as both SVG (vector) and PNG (raster):
+For every **selectable** strategy yaml under ``config/synthetic/axes/strategies/``
+this script emits a two-panel figure as both SVG (vector) and PNG (raster):
 
-* Left panel  -- the category dependency DAG. Nodes are placed at the
-  canonical coordinates stored in the matching ``*.layout.json`` file;
-  edges are the ``depends_on`` relations (parent -> child). ``depends_on``
-  fixes the topological *resolution order* (Kahn's algorithm in
-  ``IdentityGeneratorConfigurable._build_dag``); the prompt context is
-  cumulative (every already-resolved value is passed along), so the DAG
-  shows which parents are *guaranteed* present when a child is filled.
+* Left panel  -- the category dependency DAG. Nodes are placed at the coordinates
+  stored in the matching ``{strategy_id}.layout.json`` sidecar when the GUI has
+  written one (that sidecar is git-ignored and per-user), and at automatic layered
+  coordinates derived from the DAG otherwise; edges are the ``depends_on``
+  relations (parent -> child). ``depends_on`` fixes the topological *resolution
+  order* (Kahn's algorithm in ``IdentityGeneratorConfigurable._build_dag``); the
+  prompt context is cumulative (every already-resolved value is passed along), so
+  the DAG shows which parents are *guaranteed* present when a child is filled.
 * Right panel -- the per-category *method* pipeline (the inner sequence of
   LLM calls / Python sampling that fills one field), plus a stats box.
+
+The strategy list is **discovered**, never hardcoded: ``discover_axis_values`` is
+the same accessor the GUI and the CLI use, so a new strategy (or a new version of
+an existing family) gets a diagram with no edit here. Output order is the canonical
+simplest-first strategy order.
 
 Run from the repo root:
 ``python docs/architecture/diagrams/synthetic_strategies/render_strategy_diagrams.py``
@@ -33,20 +38,18 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
+from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
+
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 STRATEGY_DIR = PROJECT_ROOT / "config/synthetic/axes/strategies"
-LAYOUT_DIR = PROJECT_ROOT / "config/gui/layouts"
 SIM_CONFIG = PROJECT_ROOT / "config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json"
 OUT_DIR = Path(__file__).resolve().parent
 
-# The five strategies the analysis targets (stem of the strategy JSON).
-STRATEGIES = [
-    "all_pick",
-    "all_pick_dag",
-    "all_generate_pick",
-    "all_generate_evaluate_pick",
-    "all_generate_evaluate_random_pick",
-]
+# Automatic-layout geometry, in the same units as a hand-dragged ``.layout.json``
+# (node half-extents below are 58 x 34, so these leave a comfortable gutter).
+AUTO_LAYOUT_X_STEP = 150
+AUTO_LAYOUT_Y_STEP = 110
 
 # One colour per per-category method. A strategy is single-method, so the DAG
 # is drawn in that method's colour; the legend stays comparable across files.
@@ -127,6 +130,54 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(f)
 
 
+def selectable_strategies() -> list[str]:
+    """Discover the selectable strategy ids, in canonical simplest-first order.
+
+    ``discover_axis_values`` skips ``_``-prefixed files, so the frozen
+    ``_compared_only_*`` record, ``_debug_minimal`` and the ``_families.yaml``
+    index are excluded exactly as they are in the GUI and the CLI.
+    """
+    ids = [entry["id"] for entry in discover_axis_values("strategies")]
+    return strategy_complexity_order(ids)
+
+
+def auto_layout(categories: dict) -> dict:
+    """Deterministic layered coordinates for a strategy with no ``.layout.json``.
+
+    Layer = longest dependency path from a root, so every ``depends_on`` edge
+    points strictly downward; within a layer, nodes keep YAML declaration order --
+    the same tie-break ``_build_dag`` uses, so the picture matches the resolution
+    order. Layout sidecars are git-ignored per-user files, so this is the path
+    taken on a clean checkout.
+    """
+    depth: dict[str, int] = {}
+    # Declaration order is a valid processing order only once parents are known,
+    # so iterate to a fixed point (cheap: the DAG is a handful of nodes deep).
+    for _ in range(len(categories) + 1):
+        changed = False
+        for cat, cfg in categories.items():
+            parents = [d for d in cfg.get("depends_on", []) if d in categories]
+            level = max((depth.get(p, 0) + 1 for p in parents), default=0)
+            if depth.get(cat) != level:
+                depth[cat] = level
+                changed = True
+        if not changed:
+            break
+
+    rows: dict[int, list[str]] = {}
+    for cat in categories:
+        rows.setdefault(depth[cat], []).append(cat)
+
+    widest = max(len(row) for row in rows.values())
+    pos: dict[str, list[int]] = {}
+    for level, names in sorted(rows.items()):
+        # Centre each row against the widest one so the figure reads symmetrically.
+        offset = (widest - len(names)) / 2.0
+        for i, name in enumerate(names):
+            pos[name] = [int(round((i + offset) * AUTO_LAYOUT_X_STEP)), level * AUTO_LAYOUT_Y_STEP]
+    return pos
+
+
 def numeric_categories() -> set[str]:
     cats = load_json(SIM_CONFIG).get("categories", {})
     return {k for k, v in cats.items() if isinstance(v, dict) and "min" in v and "max" in v}
@@ -191,8 +242,8 @@ def draw_dag(ax, categories: dict, layout: dict, method: str, numeric: set[str])
     ax.axis("off")
 
     root_note = (
-        "No declared dependencies: all 17 fields are roots.\n"
-        "Kahn order is arbitrary; context still accumulates\nevery resolved value as it is filled."
+        f"No declared dependencies: all {len(categories)} fields are roots,\n"
+        "resolved in YAML declaration order."
         if n_edges == 0
         else "Arrows = depends_on (parent resolved before child).\n"
              "Sets the topological order; prompt context is\ncumulative over all resolved fields."
@@ -249,8 +300,9 @@ def draw_pipeline(ax, method: str) -> None:
 
 def render(strategy: str, numeric: set[str]) -> None:
     data = load_yaml(STRATEGY_DIR / f"{strategy}.yaml")
-    layout = load_json(LAYOUT_DIR / f"{strategy}.layout.json")
     categories = data["categories"]
+    layout_path = STRATEGY_DIR / f"{strategy}.layout.json"
+    layout = load_json(layout_path) if layout_path.is_file() else auto_layout(categories)
     description = data.get("description", "")
     method = next(iter(categories.values()))["method"]
 
@@ -305,8 +357,9 @@ def render(strategy: str, numeric: set[str]) -> None:
 
 def main() -> None:
     numeric = numeric_categories()
-    print(f"Rendering {len(STRATEGIES)} strategy diagrams to {OUT_DIR} ...")
-    for strategy in STRATEGIES:
+    strategies = selectable_strategies()
+    print(f"Rendering {len(strategies)} strategy diagrams to {OUT_DIR} ...")
+    for strategy in strategies:
         render(strategy, numeric)
     print("done.")
 

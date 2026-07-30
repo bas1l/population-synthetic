@@ -1,4 +1,6 @@
 id: "all_pick"
+family: "all_pick"
+version: 1
 label: "All Pick"
 description: "All fields use pick method. LLM picks each value with NO persona context (true context-free baseline): no previously-resolved attribute is passed into any prompt. 1 LLM call per category."
 context: none
