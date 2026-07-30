@@ -2,9 +2,11 @@
 
 **Date:** 2026-07-28
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-07-30 08:17
 **Base Branch:** `dev`
 **Branch:** `feature/strategy-v2-scb-chain-alignment`
+**Merged:** PR [#3](https://github.com/bas1l/population-synthetic/pull/3) → `dev` (merge commit `21c00bc`)
 
 ---
 
@@ -95,17 +97,36 @@ Three distinct defects, all currently latent:
 - [x] `expected_raw_keys("swedish")` returns 14 keys without `birth_location`;
       `expected_raw_keys("italian")` still returns 14 keys **with** `birth_location`.
 - [ ] A full end-to-end run of one v2 combo (`--n 5`) passes `validate_raw` at 100%, passes
-      `validate_mapped`, and yields 5 personas through `population_cap`. **NOT YET RUN** — requires a
-      live LLM run; this is the main outstanding acceptance gate.
-- [ ] Fidelity scoring of that combo emits all **14** scored axes, unchanged from v1. **NOT YET RUN**
-      — blocked on the end-to-end run above.
+      `validate_mapped`, and yields 5 personas through `population_cap`. **DEFERRED** — requires a
+      live LLM run; this is the main outstanding acceptance gate. See *Deferred at completion* below.
+- [ ] Fidelity scoring of that combo emits all **14** scored axes, unchanged from v1. **DEFERRED** —
+      blocked on the end-to-end run above.
 - [x] `--country-id italian --strategy-id all_pick_dag_v2` raises before any LLM call.
 - [ ] The manuscript global-best-strategy tie-break resolves identically to today when only v1
-      strategies are present (regression: no published result moves). **PARTIAL** — the ordering
-      regression is asserted by
+      strategies are present (regression: no published result moves). **DEFERRED (partial)** — the
+      ordering regression is asserted by
       `tests/test_strategy_ordering.py::test_v1_only_order_equals_the_legacy_sequence`, but the
       manuscript table itself has not been regenerated and diffed.
-- [x] `ruff check src/` clean; `pytest` green. (1053 passed on the combined tree.)
+- [x] `ruff check src/` clean; `pytest` green. Verified on merged `dev` (`21c00bc`) with a clean tree:
+      `All checks passed!` and **1070 passed**, 9 warnings, 242.57s. (The 1053 recorded mid-plan
+      predates `tests/test_axis_facet_defaults.py`, added in Phase 6.)
+
+### Deferred at completion
+
+This plan was closed with three criteria unmet. They are **not** drift — each needs work the branch
+could not perform, and none is a defect in the merged code. They are recorded here so the gap remains
+visible from `completed/`:
+
+| Deferred item | Why it could not be closed | What closes it |
+|---------------|---------------------------|----------------|
+| End-to-end `--n 5` v2 run through `validate_raw → mapping → validate_mapped → population_cap` | Needs a live LLM run. **Nothing in this branch has been exercised against a live LLM.** | One real v2 combo generated, then the analysis DAG run over it |
+| Fidelity emits exactly the 14 scored axes for a v2 combo | Blocked on the run above — fidelity consumes `population_cap/_mapped/` | Follows immediately from the run above |
+| Manuscript global-best-strategy table regenerated and diffed against the current table | The manuscript lives outside this repo (OneDrive `40_llm-population-fidelity-benchmark/`); regeneration is an authorial step | Regenerate with v1-only inputs; the diff must be empty |
+
+The **open empirical risk** stated in Risks and Mitigations also survives completion: dropping the
+`birth_location` gate may degrade `birth_country_detail` fidelity, since the real chain enforces the
+~76% Sweden mass through an explicit two-step draw. The documented fallback — reinstating
+`birth_location` as an unscored gate — is unexercised. The first v2 fidelity run is the read on this.
 
 ## Definitions
 
@@ -475,14 +496,23 @@ option — that was the rejected alternative, superseded by removing the guard e
 ## Testing Plan
 
 ### Unit Tests
-- [ ] `_build_dag` returns a byte-identical order across ≥20 subprocesses with `PYTHONHASHSEED`
+- [x] `_build_dag` returns a byte-identical order across ≥20 subprocesses with `PYTHONHASHSEED`
       unset, for every strategy YAML — the regression test that would have caught the original bug.
-- [ ] `_build_dag` respects declaration order among in-degree-0 categories.
-- [ ] Existing cycle and undeclared-dependency `ValueError`s still raise.
-- [ ] `expected_raw_keys("swedish")` excludes `birth_location`; `expected_raw_keys("italian")`
-      includes it.
-- [ ] `expected_raw_keys` raises when a deprecated name is absent from `attributes`, and when the
+      (`test_identity_generator_configurable.py::test_build_dag_order_is_identical_across_processes`)
+- [x] `_build_dag` respects declaration order among in-degree-0 categories.
+      (`test_build_dag_breaks_ties_in_declaration_order` plus
+      `test_build_dag_releases_dependents_in_declaration_order`, which pins the same rule for
+      categories released later in the walk, not only the roots.)
+- [x] Existing cycle and undeclared-dependency `ValueError`s still raise.
+      (`test_build_dag_raises_on_undeclared_dependency`, `test_build_dag_raises_on_cycle`)
+- [x] `expected_raw_keys("swedish")` excludes `birth_location`; `expected_raw_keys("italian")`
+      includes it. (`test_validate_raw.py::test_expected_raw_keys_excludes_deprecated` on a fixture
+      country, and `::test_expected_raw_keys_live_config_is_country_specific` against live config.)
+- [x] `expected_raw_keys` raises when a deprecated name is absent from `attributes`, and when the
       filtered list is empty — mirroring `tests/test_scheme_index.py`.
+      (`::test_expected_raw_keys_unknown_deprecated_name_raises`,
+      `::test_expected_raw_keys_deprecating_everything_raises`, and
+      `::test_validate_raw_combo_empty_expected_keys_raises` for the caller.)
 - [x] Each v2 YAML: stem == `id`, no `_` prefix, `family` present in `_families.yaml`, `version: 2`,
       categories ⊆ the country simulation-config schema, exactly the 14 defined in Definitions.
       (`tests/test_strategy_v2.py`, which also pins v2 == v1 minus the three drops: same `method`,
@@ -491,38 +521,71 @@ option — that was the rejected alternative, superseded by removing the guard e
       present it returns exactly the legacy `STRATEGY_COMPLEXITY_ORDER` sequence.
       (`tests/test_strategy_ordering.py`)
 - [ ] `decompose_slug` round-trips `swedish_all_pick_v2_claude_opus` and `swedish_all_pick_claude_opus`
-      to distinct, correct triples.
+      to distinct, correct triples. **NOT COVERED** — `tests/test_run_comparison.py` exercises
+      `decompose_slug` (including the greedy longest-model tie-break) but no test asserts it on a
+      `_v2_` slug. The greedy matcher is fed the discovered strategy list, so a v2 id resolves by the
+      same path as any other; this is an untested-but-expected case, not a known failure.
 
 ### Integration Tests
-- [ ] Generate 5 personas with `all_pick_dag_v2` × `swedish_02` against a stubbed client; assert
+- [x] Generate 5 personas with `all_pick_dag_v2` × `swedish_02` against a stubbed client; assert
       identity keys are exactly the 14, and that `age` and `biological_sex` precede
-      `birth_country_detail` in the captured prompt sequence.
+      `birth_country_detail` in the captured prompt sequence. **Covered by composition, not by a
+      single v2 stub run:** `test_strategy_v2.py::test_v2_category_set_is_exactly_the_fourteen` pins
+      the 14, `::test_resolved_order_puts_age_and_sex_before_birth_country` pins the order for every
+      v2 arm, and `test_identity_generator_configurable.py::test_resolved_order_matches_generation_order`
+      pins that the resolved order *is* the sequence the generator walks against a stub. No test
+      generates 5 v2 personas end-to-end against a stub.
 - [ ] Run `validate_raw` → `mapping` → `validate_mapped` → `population_cap` on that output: 100% raw
-      pass, no `__UNMAPPED__` beyond baseline, 5 personas capped.
-- [ ] Assert the mapper reconstructs `birth_location` from `birth_country_detail` when the raw key is
+      pass, no `__UNMAPPED__` beyond baseline, 5 personas capped. **DEFERRED** — needs a live run.
+- [x] Assert the mapper reconstructs `birth_location` from `birth_country_detail` when the raw key is
       absent (`Syria` → `Outside Europe`, `Poland` → `Europe (Other)`, `Sweden` → `Sweden`).
+      **Mechanism covered, Swedish label triples not pinned:** `tests/test_mapper_delegation.py`
+      asserts the `refine_from` path (primary miss → refined from detail) and
+      `tests/test_real_mapper_base.py` the same for the real mapper, both on Norway fixtures. The
+      three specific Sweden → label expectations above are not separately asserted.
 - [ ] Fidelity scoring of a v2 combo emits exactly the 14 scored axes, identical to v1's axis list.
-- [x] `analyze_method_significance` raises on a mixed-version combo set without an explicit version.
-      (`tests/test_method_significance_version_selector.py`)
+      **DEFERRED** — blocked on the run above.
+- [x] ~~`analyze_method_significance` raises on a mixed-version combo set without an explicit
+      version.~~ **Requirement withdrawn in Phase 6, not satisfied.** The `--version` guard added in
+      Phase 3.7 was removed after verifying that `method_significance/builder.py` resolves method
+      levels from **strategy ids** (`strategy_complexity_order(sorted({r.strategy for r in records}))`,
+      cells keyed `(model, strategy)` and raising on duplicates) and that nothing groups by `family`.
+      v1 and v2 are therefore already distinct levels at `n = 1`, so the guard defended against a
+      pooling collapse that cannot occur. `tests/test_method_significance_version_selector.py` was
+      deleted with it — **it does not exist in the repo** — and its surviving assertions live in
+      `test_strategy_v2.py` and `test_strategy_ordering.py`.
 
 ### Manual Verification
 - [ ] Launch the GUI; confirm all five v2 ids appear in the strategy axis and that the DAG preview
       renders the rewired birth chain via Sugiyama auto-layout (no `.layout.json` needed).
-- [ ] Run one real v2 combo at `--n 5` end-to-end through the analysis workflow.
+      **NOT DONE VISUALLY.** The programmatic equivalent passes — `tests/test_axis_version_filter.py`
+      and `tests/test_axis_facet_defaults.py` build a real `CheckableAxisList` from
+      `discover_axis_values('strategies')` under an offscreen `QApplication`, and all 10 strategies
+      were rendered to a scratch directory via `render_strategy_diagrams.py`. No human has looked at
+      the running GUI.
+- [ ] Run one real v2 combo at `--n 5` end-to-end through the analysis workflow. **DEFERRED.**
 - [ ] Regenerate the manuscript fidelity table with v1-only inputs; diff against the current table —
-      must be identical.
+      must be identical. **DEFERRED.**
 
 ### Edge Cases
 - [x] `--country-id italian --strategy-id all_pick_dag_v2` raises before any LLM call, naming
       `birth_location`. (`tests/test_strategy_v2.py`; the converse — every v2 on `swedish`/`swedish_02`
       and every v1 on all three countries — passes.)
-- [ ] A country with no `deprecated_attributes` (Italy) is unaffected by the Phase 2 change.
+- [x] A country with no `deprecated_attributes` (Italy) is unaffected by the Phase 2 change.
+      (`test_validate_raw.py::test_expected_raw_keys_live_config_is_country_specific` — Italy still
+      returns 14 keys **with** `birth_location`; `test_strategy_v2.py::test_guard_leaves_v1_combos_untouched`
+      confirms no v1 × country pair changed behaviour.)
 - [x] A strategy YAML missing `family` or `version` fails loudly at load, not silently defaulted
       (selectable strategies; `_`-prefixed co-located definitions are exempt by convention).
 - [x] `_families.yaml` accidentally renamed without the `_` prefix is caught by a test
       (`test_family_index_is_not_a_discoverable_strategy`).
 - [ ] Mixed v1/v2 combos present in an output directory do not silently collapse into one chart
-      series.
+      series. **NOT DIRECTLY TESTED.** The mechanism that prevents collapse is verified —
+      `method_significance/builder.py` keys cells on `(model, strategy)` and raises on duplicates, and
+      `test_strategy_v2.py::test_each_v2_sorts_immediately_after_its_v1_sibling` plus
+      `test_strategy_ordering.py::test_order_is_total_over_the_declared_axis` pin v1 and v2 as distinct,
+      totally-ordered levels. No test builds a mixed-version output directory and inspects the emitted
+      chart series.
 
 ---
 
