@@ -6,7 +6,7 @@ matcher tier, directive, and precedence rule can be exercised in isolation --
 before any production config is rewritten.
 """
 
-from population_synthetic.analysis.mapping.mapping_engine import normalize, resolve
+from population_synthetic.analysis.mapping.mapping_engine import normalize, resolve, resolve_detailed
 from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED, is_unmapped
 
 # --- equals / contains precedence and first-match-by-order -----------------
@@ -58,6 +58,25 @@ def test_case_and_underscore_and_hyphen_normalization():
 def test_double_encoded_utf8_repaired():
     block = {"Female": {"equals": ["män"]}}  # Swedish men/male token, but as an example label
     assert resolve("M√§n", block, ["Female"]) == "Female"
+
+
+def test_typographic_punctuation_folds_to_ascii():
+    # LLM output uses U+2011 / en dash / typographic apostrophe interchangeably with
+    # their ASCII forms; a config token written with a plain hyphen must still match.
+    block = {"ICT": {"equals": ["it-tjänster"]}}
+    assert resolve("IT‑tjänster", block, ["ICT"]) == "ICT"   # non-breaking hyphen
+    assert resolve("IT–tjänster", block, ["ICT"]) == "ICT"   # en dash
+    assert resolve("IT-tjänster", block, ["ICT"]) == "ICT"        # ASCII, unchanged
+    # The fold is symmetric: a fancy-punctuation *token* matches an ASCII raw.
+    block2 = {"MSc": {"equals": ["master’s degree"]}}
+    assert resolve("Master's degree", block2, ["MSc"]) == "MSc"
+
+
+def test_punctuation_fold_runs_after_utf8_repair():
+    # The cp1252 mojibake keys ("Ã–", "Ã…") embed U+2013 / U+2026. Folding punctuation
+    # first would rewrite them out of existence and break the repair, so order matters.
+    block = {"Oe": {"equals": ["över"]}}
+    assert resolve("Ã–ver", block, ["Oe"]) == "Oe"
 
 
 # --- all_of / none_of ------------------------------------------------------
@@ -169,6 +188,28 @@ def test_on_miss_default_unmapped_vs_literal():
     # A declared literal on_miss is unaffected.
     block_default = {"on_miss": "Wage / Business", **matchers}
     assert resolve("lottery winnings", block_default, values) == "Wage / Business"
+
+
+def test_resolve_detailed_reports_miss_even_when_on_miss_masks_it():
+    values = ["Wage / Business", "Pension"]
+    matchers = {
+        "Wage / Business": {"contains": ["salary"]},
+        "Pension": {"contains": ["pension"]},
+    }
+    # A hit is never a miss.
+    assert resolve_detailed("monthly salary", matchers, values) == ("Wage / Business", False)
+    # A total miss without on_miss: sentinel + missed.
+    assert resolve_detailed("lottery winnings", matchers, values) == (UNMAPPED, True)
+    # A total miss *with* on_miss returns a real category -- indistinguishable from a
+    # genuine hit by value alone, which is exactly why the flag exists.
+    block_default = {"on_miss": "Wage / Business", **matchers}
+    assert resolve_detailed("lottery winnings", block_default, values) == ("Wage / Business", True)
+
+
+def test_resolve_detailed_absent_literal_is_not_a_miss():
+    values = ["Employed"]
+    block = {"absent": "Not Applicable", "Employed": {"contains": ["employ"]}}
+    assert resolve_detailed(None, block, values) == ("Not Applicable", False)
 
 
 def test_unmatched_raw_returns_unmapped_without_fuzzy_fallback():

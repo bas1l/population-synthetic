@@ -24,6 +24,9 @@ from population_synthetic.generators.synthetic.manifest_loader import discover_a
 
 _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 
+# Optional ``_index.json`` key listing attributes excluded from analysis; absent => none.
+_DEPRECATED_INDEX_KEY = "deprecated_attributes"
+
 
 def _load_country_axes() -> dict[str, dict[str, Path]]:
     """Read the country axis YAMLs into ``{id: {"real": Path, "mappings": Path}}``.
@@ -83,6 +86,47 @@ def mappings_for_country(country_id: str) -> Path:
             f"'parameters.mappings' path."
         )
     return mappings
+
+
+def deprecated_attributes(index: dict, source: Path | str) -> list[str]:
+    """Return the analysis-deprecated attributes declared by a mapping ``_index`` dict.
+
+    Pure: the caller supplies the already-loaded index, so a consumer that needs the
+    ``attributes`` order too (``validate_raw``) reads the file once. ``source`` is only
+    used to name the offending directory in the error message.
+
+    A deprecated axis is still mapped and emitted into population data but is excluded
+    from every analysis, so no validity gate may fail a persona over its value. Both
+    gates route through this one rule, keeping them from drifting apart from each other
+    or from the scored axis set.
+
+    Raises:
+        ValueError: If ``deprecated_attributes`` names an attribute absent from the
+            index's ``attributes`` map (a config error).
+    """
+    deprecated = list(index.get(_DEPRECATED_INDEX_KEY, []))
+    unknown = [name for name in deprecated if name not in index["attributes"]]
+    if unknown:
+        raise ValueError(
+            f"Mapping index {source} {_DEPRECATED_INDEX_KEY!r} names attribute(s) "
+            f"{unknown} not present in 'attributes'"
+        )
+    return deprecated
+
+
+def deprecated_attributes_for_country(country_id: str) -> list[str]:
+    """Read ``country_id``'s mapping index and return its deprecated attributes.
+
+    IO wrapper over :func:`deprecated_attributes` for consumers that need nothing else
+    from the index.
+    """
+    # Lazy import: keep this shared helper free of a load-time dependency on the
+    # mapper subpackages (matching ``assert_mapping_dir_consistency`` below).
+    from population_synthetic.analysis.mapping.real_mapper.mappings import load_index
+
+    directory = mappings_for_country(country_id)
+    index = load_index(directory)  # validates deprecated_attributes is a list[str]
+    return deprecated_attributes(index, directory)
 
 
 def assert_mapping_dir_consistency(country_id: str) -> Path:

@@ -28,7 +28,13 @@
         "man",
         "xy",
         "m",
-        "män"
+        "män",
+        "han",
+        "hane",
+        "hanne",
+        "Mann",
+        "Född man",
+        "maskulin"
       ],
       "contains": [
         "male",
@@ -43,7 +49,10 @@
         "Female",
         "xx",
         "hon",
-        "f"
+        "f",
+        "feminin",
+        "Frau",
+        "Född kvinna"
       ],
       "contains": [
         "female",

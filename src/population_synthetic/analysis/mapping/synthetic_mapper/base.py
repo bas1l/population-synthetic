@@ -29,6 +29,11 @@ Three responsibilities remain in the mapper itself:
   persona; otherwise the raw integer ``age`` is emitted under the ``age`` key (the
   ``age_group`` comparison attribute is *derived* from it by
   ``evaluator.attr_value`` at scoring time). ``id`` is the injected persona id.
+- **Miss recording** -- every total miss is appended to ``self.misses`` with the raw
+  string that caused it, including the misses an attribute-level ``on_miss`` literal
+  absorbs into a real category. The mapped record alone cannot express this (the
+  engine returns the sentinel or the literal and nothing else), so diagnosing *which
+  LLM value* failed to map is only possible from this log.
 """
 
 from __future__ import annotations
@@ -41,6 +46,7 @@ from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.mapping import mapping_engine
 from population_synthetic.analysis.mapping.real_mapper.mappings import load_mappings
 from population_synthetic.analysis.mapping.synthetic_mapper._text_helpers import _repair_utf8_double_encoding
+from population_synthetic.analysis.utils.mapping_sentinel import is_unmapped
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +115,13 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
             raise ValueError("synthetic mapper requires an '_index' block declaring 'attributes'")
         #: Ordered ``attribute -> config filename`` map (key order = axis order).
         self._attributes: dict[str, str] = index["attributes"]
+        #: Total-miss log, appended to across every ``map_individual`` call on this
+        #: instance (one instance maps one population). Each record is
+        #: ``{persona_id, attribute, raw_value, mapped_to, masked_by_on_miss}``.
+        #: ``masked_by_on_miss`` marks the misses an ``on_miss`` literal absorbs into
+        #: a real category -- invisible to ``validate_mapped``, which only ever sees
+        #: the sentinel. Callers own the reset (or build a fresh mapper per run).
+        self.misses: list[dict[str, Any]] = []
 
     # -- config access ------------------------------------------------------
 
@@ -123,12 +136,15 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
 
     # -- resolution ---------------------------------------------------------
 
-    def _resolve_attr(self, attr: str, identity: dict, resolved: dict[str, Any]) -> Any:
+    def _resolve_attr(self, attr: str, identity: dict, resolved: dict[str, Any], persona_id: str) -> Any:
         """Resolve one attribute against *identity*, memoising into *resolved*.
 
-        Delegates to :func:`mapping_engine.resolve` with the attribute's
+        Delegates to :func:`mapping_engine.resolve_detailed` with the attribute's
         ``synthetic`` block, resolving a ``refine_from`` sibling first when declared
-        (e.g. ``birth_location`` refined from ``birth_country_detail``).
+        (e.g. ``birth_location`` refined from ``birth_country_detail``). A total miss
+        is appended to :attr:`misses` with the raw string that caused it. Memoisation
+        also de-duplicates the record: an attribute pulled in early as a
+        ``refine_from`` sibling is resolved -- and therefore recorded -- exactly once.
         """
         if attr in resolved:
             return resolved[attr]
@@ -140,9 +156,17 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
         refine_value: str | None = None
         refine_from = rules_block.get("refine_from")
         if refine_from is not None:
-            refine_value = self._resolve_attr(refine_from, identity, resolved)
+            refine_value = self._resolve_attr(refine_from, identity, resolved, persona_id)
 
-        value = mapping_engine.resolve(raw, rules_block, values, refine_value=refine_value)
+        value, missed = mapping_engine.resolve_detailed(raw, rules_block, values, refine_value=refine_value)
+        if missed:
+            self.misses.append({
+                "persona_id": persona_id,
+                "attribute": attr,
+                "raw_value": "" if raw is None else str(raw),
+                "mapped_to": value,
+                "masked_by_on_miss": not is_unmapped(value),
+            })
         resolved[attr] = value
         return value
 
@@ -178,5 +202,5 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
                 result[_AGE_KEY] = age_int
                 resolved[attr] = age_int
                 continue
-            result[attr] = self._resolve_attr(attr, identity, resolved)
+            result[attr] = self._resolve_attr(attr, identity, resolved, persona_id)
         return result

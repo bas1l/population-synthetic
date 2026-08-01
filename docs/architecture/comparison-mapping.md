@@ -132,13 +132,15 @@ JSON file per comparison attribute + an `_index.json` master) and one shared res
 rules block and a `synthetic` rules block, both keyed by unified value -> matcher. The resolver
 matches with a **global tiered sweep**: each matcher tier is tried across *all* values before the
 next tier, and `values` declared order breaks ties within a tier (so a later value's `equals`
-beats an earlier value's `contains`); a total miss yields `None`. Matcher vocabulary:
+beats an earlier value's `contains`); a total miss yields the explicit `__UNMAPPED__` sentinel
+(`analysis/utils/mapping_sentinel.py`; always test with `is_unmapped`, never `== "__UNMAPPED__"`,
+since legacy artefacts carry a bare `None`). Matcher vocabulary:
 `equals`/`contains`/`all_of`/`none_of`/`int`/`int_gte` + a composite sub-field matcher (for
 `employment_type`'s attachment x hours). Tier order is `equals` -> `all_of` -> `contains` ->
 numeric (composite in a final pass), with `none_of` a veto (not a tier) that rejects its value in
 every tier. Attribute-level directives: `absent` (missing-input literal), `refine_from` (re-walk a
 sibling's resolved value, e.g. `birth_location` from `birth_country_detail`), `on_miss` (default
-when all miss). The `_index.json` master lists the in-scope attributes (`attribute -> filename`,
+when all miss -- **forbidden on both Swedish tiers**, see below). The `_index.json` master lists the in-scope attributes (`attribute -> filename`,
 key order = axis order) -- pure mapping scope; country scope is data-driven (Italy's master omits
 `income_source`). An optional sibling `deprecated_attributes` list (of attribute names already in
 `attributes`) marks **analysis-deprecated axes**: the attribute is still mapped and emitted into the
@@ -151,6 +153,29 @@ if a listed name is not in `attributes` or if filtering would empty the axis; `l
 additionally rejects a `deprecated_attributes` that is not a list of strings. Sweden deprecates
 `birth_location` (retained in data, out of analysis; see
 `docs/development/plans/*/deprecate-birth-location-analysis-axis.md`).
+
+### No `on_miss` sinks on a scored axis, and the miss sidecar
+
+`on_miss` returns a real-looking category on a *total* miss, which makes the failure invisible
+twice over: `validate_mapped` only ever sees the `__UNMAPPED__` sentinel, so the persona passes
+the gate; and the absorbed mass lands in that category's marginal -- the quantity the TV fidelity
+score measures. Sweden's two sinks (`industry_sector -> "Other"`, `income_source ->
+"Wage / Business"`) were removed for that reason, on **both** tiers, and
+`tests/test_mapping_config_no_on_miss.py` asserts neither returns. The same test rejects a
+declared value no matcher can produce, since dropping a sink can orphan the value it pointed at
+(it did: `scb_native`'s `industry_sector` `Other`, which SCB's 12-sector SNI aggregation never
+emits). Italy still declares `on_miss` on two attributes -- a separate change, because removing
+it invalidates every Italian mapped artefact.
+
+Because a sink makes "missed" unrecoverable from the mapped value alone, the engine reports the
+two separately: `resolve_detailed()` returns `(value, missed)` and `resolve()` is the value-only
+shorthand over it. `BaseSyntheticMapper` appends every total miss to `self.misses` -- `{persona_id,
+attribute, raw_value, mapped_to, masked_by_on_miss}` -- carrying the **raw LLM string** that failed,
+which the mapped population file cannot express. `map_populations.py` writes that log beside each
+mapped file as `03_Analysis/mapping/{slug}.misses.csv`, always (an empty file distinguishes "no
+misses" from "not run"). It is the only artefact that can answer *which value* failed to map, and
+it is refreshed only on the re-map branch -- so a stale `{slug}.json` implies a stale sidecar, and
+`--force` is required after any mapping-config edit.
 
 **The scored axis set is invariant across strategy versions.** The v2 strategy arm
 ([Axis composition](axis-composition.md)) generates 14 categories instead of 17, but it changed no

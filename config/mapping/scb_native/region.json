@@ -204,6 +204,7 @@
       ],
       "contains": [
         "skåne",
+        "skåns",
         "scania",
         "malmö",
         "malmöhus",
@@ -272,7 +273,8 @@
       ],
       "contains": [
         "gävleborg",
-        "gävle"
+        "gävle",
+        "gästrikland"
       ]
     },
     "Södermanland": {
@@ -343,7 +345,8 @@
         "Kalmar län"
       ],
       "contains": [
-        "kalmar"
+        "kalmar",
+        "öland"
       ]
     },
     "Västernorrland": {
@@ -367,6 +370,8 @@
       ],
       "contains": [
         "västmanland",
+        "västmannland",
+        "västmännland",
         "västerås"
       ]
     },
@@ -388,6 +393,7 @@
       ],
       "contains": [
         "jämtland",
+        "jamtland",
         "härjedal",
         "östersund"
       ]

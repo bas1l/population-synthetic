@@ -12,7 +12,6 @@
     "Education",
     "Healthcare & Social Work",
     "Personal & Cultural Services",
-    "Other",
     "Not Applicable"
   ],
   "real": {
@@ -184,7 +183,8 @@
         "Handel",
         "Detaljhandel",
         "Partihandel",
-        "Handel (parti- och detaljhandel)"
+        "Handel (parti- och detaljhandel)",
+        "E-commerce"
       ],
       "contains": [
         "detaljhandel",
@@ -250,7 +250,8 @@
         "IT och telekom",
         "Informationsteknik",
         "Telekom",
-        "IT/Technology"
+        "IT/Technology",
+        "Data och IT"
       ],
       "contains": [
         "teknik",
@@ -288,7 +289,9 @@
         "Bank och försäkring",
         "Ekonomi- och finanstjänster",
         "Företagstjänster",
-        "Fastighetsverksamhet"
+        "Fastighetsverksamhet",
+        "Professionella tjänster",
+        "Professionell, vetenskaplig och teknisk verksamhet"
       ],
       "contains": [
         "finansiell",
@@ -307,6 +310,10 @@
         "law firm",
         "advokat",
         "juridik",
+        "marknadsföring",
+        "reklam",
+        "marketing",
+        "advertising",
         "legal service",
         "accounting",
         "revision",
@@ -349,11 +356,13 @@
       "equals": [
         "Education",
         "Utbildning",
-        "Forskning"
+        "Forskning",
+        "Undervisning"
       ],
       "contains": [
         "utbildning",
         "forskning",
+        "undervisning",
         "education",
         "academ",
         "universit",
@@ -377,6 +386,9 @@
         "Hälso- och sjukvård",
         "Sjukvård",
         "Socialtjänst",
+        "Socialt arbete",
+        "Hemtjänst",
+        "Äldreomsorg",
         "Healthcare/Social Work"
       ],
       "contains": [
@@ -448,9 +460,15 @@
         "retired",
         "pensionär",
         "unemployed",
-        "arbetslös"
+        "arbetslös",
+        "arbetssökande",
+        "student",
+        "studerande",
+        "studerar",
+        "studier",
+        "Ej i arbete",
+        "Ej anställd"
       ]
-    },
-    "on_miss": "Other"
+    }
   }
 }

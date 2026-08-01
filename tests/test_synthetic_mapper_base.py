@@ -98,6 +98,39 @@ def test_none_of_veto_blocks_employment_type():
     assert out["employment_type"] == "Not Applicable"
 
 
+# --- miss log ---------------------------------------------------------------
+
+def test_misses_record_raw_value_and_flag_on_miss_masking():
+    mapper = _synth_mapper()
+    mapper.map_individual(
+        {"age": 30, "biological_sex": "kvinna", "industry_sector": "software developer"}, "persona_1")
+
+    by_attr = {m["attribute"]: m for m in mapper.misses}
+    # ``industry_sector`` misses but its ``on_miss`` literal hides that in the mapped
+    # record -- the log is the only place the offending raw string survives.
+    assert by_attr["industry_sector"]["raw_value"] == "software developer"
+    assert by_attr["industry_sector"]["mapped_to"] == "Other"
+    assert by_attr["industry_sector"]["masked_by_on_miss"] is True
+    # A plain sentinel miss (absent raw, no ``on_miss``) is logged as unmasked.
+    assert by_attr["socioeconomic_class"]["masked_by_on_miss"] is False
+    # A resolved attribute is never logged.
+    assert "biological_sex" not in by_attr
+    assert all(m["persona_id"] == "persona_1" for m in mapper.misses)
+
+
+def test_misses_accumulate_across_personas_and_skip_refine_duplicates():
+    mapper = _synth_mapper()
+    assert mapper.misses == []
+    for i in range(3):
+        mapper.map_individual({"age": 30, "biological_sex": "kvinna"}, f"persona_{i}")
+    assert len({m["persona_id"] for m in mapper.misses}) == 3
+    # ``birth_location`` declares ``refine_from: birth_country_detail``, which pulls the
+    # sibling in early. Memoisation must keep that from logging the sibling twice.
+    per_persona = [m for m in mapper.misses if m["persona_id"] == "persona_0"]
+    attrs = [m["attribute"] for m in per_persona]
+    assert len(attrs) == len(set(attrs))
+
+
 # --- real-config integration: the Sweden Nordic-fold reconciliation ---------
 
 def test_swedish_nordic_born_folds_into_europe_other():

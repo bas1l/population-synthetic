@@ -98,7 +98,13 @@
         "Employed full-time",
         "Employed Full-time",
         "Employed Full-Time",
-        "anställda"
+        "anställda",
+        "Fulltidsarbete",
+        "Fulltidsanställd",
+        "Aktivt arbetande",
+        "Tidsbegränsad anställning",
+        "Arbetande i fast anställning",
+        "Doktorand"
       ],
       "contains": [
         "parental leave",
@@ -141,6 +147,17 @@
       ]
     },
     "Unemployed": {
+      "none_of": [
+        "sjukskriv",
+        "sjukpenning",
+        "sjuklön",
+        "sjukfrånvaro",
+        "sick leave",
+        "sick_leave",
+        "on sick",
+        "long-term sick",
+        "long term sick"
+      ],
       "equals": [
         "Unemployed",
         "Arbetslös",
@@ -148,7 +165,13 @@
         "I arbetsmarknadsåtgärd",
         "Sjukskriven",
         "Arbetstränade",
-        "Arbetsträning"
+        "Arbetsträning",
+        "Hemma med barn",
+        "hemma",
+        "Husmor",
+        "Hushållsansvarig",
+        "Hemmafrånvaro",
+        "Hemmafrånvarande (av val)"
       ],
       "contains": [
         "sick leave",
@@ -168,6 +191,9 @@
         "a-kassa",
         "försörjning",
         "hemmafru",
+        "homemaker",
+        "hemmaman",
+        "hemarbetande",
         "hemvårdare"
       ]
     },
@@ -181,6 +207,8 @@
       "contains": [
         "student",
         "studerande",
+        "studerar",
+        "studier",
         "studying",
         "studies",
         "pupil"
@@ -198,6 +226,39 @@
         "retired",
         "pension",
         "retire"
+      ]
+    },
+    "Sick Leave": {
+      "equals": [
+        "Sick Leave",
+        "Sjukskriven",
+        "Sjukskrivning",
+        "Sjukpenning",
+        "Sjuklön",
+        "Sjukfrånvaro",
+        "Långtidssjukskriven",
+        "On sick leave"
+      ],
+      "contains": [
+        "sick leave",
+        "sick_leave",
+        "on sick",
+        "long-term sick",
+        "long term sick",
+        "sjukskriv",
+        "sjukpenning",
+        "sjuklön",
+        "sjukfrånvaro",
+        "långtidssjuk"
+      ]
+    },
+    "Other": {
+      "contains": [
+        "frivillig",
+        "volontär",
+        "volunteer",
+        "ideell",
+        "föreningsverksamhet"
       ]
     }
   }

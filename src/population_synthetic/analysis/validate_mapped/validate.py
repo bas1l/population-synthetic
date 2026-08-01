@@ -12,21 +12,34 @@ intersect it with the raw-completeness verdict.
 The module is schema-agnostic beyond two structural facts about a mapped individual: the
 ``id`` key is the record identifier (never an attribute), and ``age`` is a numeric
 passthrough behind the mapper's skip gate rather than a resolved attribute. Every other
-key is a resolved comparison attribute subject to the sentinel check.
+key is a resolved comparison attribute subject to the sentinel check -- **except** the
+country's analysis-deprecated attributes, which are exempt for the same reason
+``validate_raw`` does not require them: a deprecated axis is emitted into population data
+but excluded from every analysis, so failing a persona over its value would discard a
+persona nothing scores. Sweden deprecates ``birth_location``, whose synthetic rules
+``refine_from`` ``birth_country_detail`` -- and the SCB categories ``Other`` and
+``Yugoslavia`` carry no Sweden/Europe/Outside-Europe answer, so a persona born in a
+country outside SCB's named top-21 is *unresolvable by construction* on that axis.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Iterable, TypedDict
 
+from population_synthetic.analysis.utils.country_config import (
+    deprecated_attributes_for_country,
+)
 from population_synthetic.analysis.utils.mapping_sentinel import is_unmapped
 from population_synthetic.analysis.utils.validity_csv import (
     PASSED_COLUMN,
     PERSONA_ID_COLUMN,
     write_validity_csv,
 )
+
+logger = logging.getLogger(__name__)
 
 # Keys on a mapped individual that are NOT resolved attributes and so are exempt from the
 # unmapped-value check: the injected record id, and the numeric age passthrough (emitted
@@ -57,20 +70,34 @@ class ValidateMappedSummary(TypedDict):
     csv_path: str
 
 
-def unmapped_fields(individual: dict[str, Any]) -> list[str]:
-    """Return the resolved-attribute keys of ``individual`` left unmapped, in record order."""
+def unmapped_fields(
+    individual: dict[str, Any],
+    exempt: Iterable[str] = (),
+) -> list[str]:
+    """Return the resolved-attribute keys of ``individual`` left unmapped, in record order.
+
+    Args:
+        individual: One mapped individual record.
+        exempt: Attribute names excluded from the check (the country's
+            ``deprecated_attributes``); an unmapped value on these is not a defect.
+    """
+    exempt_keys = frozenset(exempt)
     return [
         key
         for key, value in individual.items()
-        if key not in _NON_ATTRIBUTE_KEYS and is_unmapped(value)
+        if key not in _NON_ATTRIBUTE_KEYS and key not in exempt_keys and is_unmapped(value)
     ]
 
 
-def evaluate_individuals(individuals: list[dict[str, Any]]) -> list[MappedPersonaRow]:
+def evaluate_individuals(
+    individuals: list[dict[str, Any]],
+    exempt: Iterable[str] = (),
+) -> list[MappedPersonaRow]:
     """Compute the per-persona unmapped-value verdict for a list of mapped individuals."""
+    exempt_keys = frozenset(exempt)
     rows: list[MappedPersonaRow] = []
     for indiv in individuals:
-        missing = unmapped_fields(indiv)
+        missing = unmapped_fields(indiv, exempt_keys)
         rows.append(
             MappedPersonaRow(
                 persona_id=str(indiv.get("id", "?")),
@@ -98,6 +125,7 @@ def validate_mapped_combo(
     slug: str,
     mapped_file: Path,
     csv_path: Path,
+    country: str,
 ) -> ValidateMappedSummary:
     """Validate one combo's mapped personas and write the per-persona CSV.
 
@@ -110,6 +138,8 @@ def validate_mapped_combo(
         slug: The combo slug (``{country}_{strategy}_{model}``).
         mapped_file: The combo's mapped population file (``mapping/{slug}.json``).
         csv_path: Destination CSV (``validate_mapped/{slug}.csv``).
+        country: Country axis id, resolving which attributes are analysis-deprecated
+            and therefore exempt from the sentinel check.
 
     Returns:
         A :class:`ValidateMappedSummary`.
@@ -120,7 +150,16 @@ def validate_mapped_combo(
             slug=slug, n=0, passed=0, failed=0, csv_path=str(csv_path)
         )
 
-    rows = evaluate_individuals(_load_individuals(mapped_file))
+    exempt = deprecated_attributes_for_country(country)
+    if exempt:
+        logger.info(
+            "validate_mapped: country %r exempts deprecated attribute(s) from the "
+            "unmapped-value check: %s",
+            country,
+            ", ".join(exempt),
+        )
+
+    rows = evaluate_individuals(_load_individuals(mapped_file), exempt)
     write_validity_csv(
         csv_path,
         _CSV_HEADER,

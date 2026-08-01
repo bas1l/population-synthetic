@@ -133,6 +133,7 @@
         "kort deltid",
         "visstid",
         "vikariat",
+        "vikarie",
         "projektanställ",
         "provanställ",
         "säsong",
@@ -141,6 +142,14 @@
         "temporary",
         "fixed-term",
         "seasonal",
+        "tidsbegränsad",
+        "villkorlig",
+        "villkorad",
+        "tillfällig",
+        "internship",
+        "praktik",
+        "trainee",
+        "konsultanställ",
         "self-employ",
         "self employ",
         "egenföretag",
@@ -199,6 +208,7 @@
         "volltid",
         "tillvidare",
         "anstellning",
+        "anställning",
         "obestämd",
         "indefinite",
         "indeterminate",
@@ -281,9 +291,16 @@
           "temporary",
           "visstid",
           "vikariat",
+          "vikarie",
           "projektanställ",
           "provanställ",
-          "säsong"
+          "säsong",
+          "tidsbegränsad",
+          "villkorlig",
+          "villkorad",
+          "internship",
+          "praktik",
+          "trainee"
         ],
         [
           "full",
@@ -300,13 +317,21 @@
         "projektanställning",
         "provanställning",
         "vikariat",
+        "vikarie",
         "temporary",
         "visstid",
         "fixed-term",
         "seasonal",
         "säsong",
         "tillfällig",
-        "påkallad"
+        "påkallad",
+        "tidsbegränsad",
+        "villkorlig",
+        "villkorad",
+        "internship",
+        "praktik",
+        "traineeship",
+        "trainee"
       ]
     },
     "Temporary Part-time": {
@@ -315,10 +340,21 @@
           "temporary",
           "visstid",
           "vikariat",
+          "vikarie",
           "projektanställ",
           "provanställ",
           "säsong",
-          "timanställ"
+          "timanställ",
+          "tidsbegränsad",
+          "villkorlig",
+          "villkorad",
+          "studentjobb",
+          "student job",
+          "student jobb",
+          "student assistant",
+          "studentassistent",
+          "student worker",
+          "studiassistans"
         ],
         [
           "part",
@@ -334,7 +370,15 @@
       ],
       "contains": [
         "timanställ",
-        "behovsanställ"
+        "behovsanställ",
+        "studentjobb",
+        "student job",
+        "student jobb",
+        "student assistant",
+        "studentassistent",
+        "student worker",
+        "studiassistans",
+        "amanuens"
       ]
     },
     "Temporary Short Part-time": {
@@ -343,9 +387,14 @@
           "temporary",
           "visstid",
           "vikariat",
+          "vikarie",
           "projektanställ",
           "provanställ",
-          "timanställ"
+          "timanställ",
+          "tidsbegränsad",
+          "studentjobb",
+          "student job",
+          "student jobb"
         ],
         [
           "1-19",
@@ -472,6 +521,8 @@
         "volontär",
         "arbetsträning",
         "student",
+        "studer",
+        "studie",
         "pension",
         "pensionär",
         "pensioner"
