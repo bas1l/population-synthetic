@@ -283,7 +283,7 @@ def test_axis_file_declaring_only_unregistered_hosts_raises_at_composition(
 
 @pytest.mark.parametrize(
     "model_id",
-    ["claude_sonnet", "gemini_flash", "openrouter_gpt55"],
+    ["claude_sonnet", "gemini_flash", "openrouter_deepseek_v4"],
 )
 def test_ollama_host_is_inert_for_other_providers(model_id: str) -> None:
     """Host resolution happens only inside the ``ollama`` branch.

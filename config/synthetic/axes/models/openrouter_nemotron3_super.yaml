@@ -1,0 +1,13 @@
+id: "openrouter_nemotron3_super"
+label: "OpenRouter Nemotron 3 Super 120B"
+model_config:
+  provider: "openrouter"
+  model: "nvidia/nemotron-3-super-120b-a12b"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+parameters:
+  parallel:
+    workers: 4
