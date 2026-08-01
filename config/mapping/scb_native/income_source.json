@@ -50,7 +50,30 @@
       "none_of": [
         "unemploy",
         "arbetslös",
-        "arbetssökande"
+        "arbetssökande",
+        "job seeker",
+        "jobseeker",
+        "job-seeker",
+        "jobbsök",
+        "bidrag",
+        "pension",
+        "parental support",
+        "parental financial support",
+        "parents financial support",
+        "parents support",
+        "parent support",
+        "child support",
+        "family support",
+        "föräldrastöd",
+        "föräldraunderstöd",
+        "föräldraskapspenning",
+        "studentlån",
+        "studielån",
+        "studentfinansier",
+        "studiefinansier",
+        "studiemedel",
+        "studiebidrag",
+        "barnbidrag"
       ],
       "equals": [
         "Wage / Business",
@@ -61,7 +84,8 @@
         "Inkomst från eget företag",
         "Företagsinkomst",
         "Näringsverksamhet",
-        "Frilansinkomst"
+        "Frilansinkomst",
+        "Inkomst av tjänst"
       ],
       "contains": [
         "wage",
@@ -73,7 +97,24 @@
         "egenföretagare",
         "freelan",
         "frilans",
-        "work"
+        "work",
+        "salary",
+        "salär",
+        "salaried",
+        "salaries",
+        "anställ",
+        "arbetsgivare",
+        "arbetsinkomst",
+        "förvärvsinkomst",
+        "job",
+        "jobb",
+        "employee",
+        "employed",
+        "arbete",
+        "sysselsättning",
+        "deltidsarbete",
+        "konsultverksamhet",
+        "firma"
       ]
     },
     "Capital": {
@@ -128,7 +169,23 @@
         "Sjukpenning",
         "Studiemedel",
         "Studiebidrag",
-        "Bostadsbidrag"
+        "Bostadsbidrag",
+        "Parental Support",
+        "Parental financial support",
+        "Parents financial support",
+        "Parents support",
+        "Parent support",
+        "Parents",
+        "Parents/Guardians",
+        "Föräldrar",
+        "Föräldraunderstöd",
+        "Föräldraskapspenning",
+        "Studentlån",
+        "Studentfinansiering",
+        "Child support",
+        "Barnbidrag",
+        "Bistånd",
+        "Ekonomiskt stöd från föräldrar"
       ],
       "contains": [
         "insurance",
@@ -158,7 +215,23 @@
         "dagpenning",
         "bidrag",
         "unemploy",
-        "arbetslöshet"
+        "arbetslöshet",
+        "arbetslös",
+        "arbetssökande",
+        "parental support",
+        "parental financial support",
+        "parents financial support",
+        "parents support",
+        "parent support",
+        "child support",
+        "family support",
+        "föräldrastöd",
+        "föräldraunderstöd",
+        "föräldraskapspenning",
+        "studentlån",
+        "studielån",
+        "studentfinansier",
+        "studiefinansier"
       ]
     },
     "Social Assistance": {
@@ -187,7 +260,6 @@
         "sjukersättning",
         "aktivitetsersättning"
       ]
-    },
-    "on_miss": "Wage / Business"
+    }
   }
 }

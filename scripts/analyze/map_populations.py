@@ -29,6 +29,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from pathlib import Path
@@ -158,6 +159,26 @@ def _write_json(path: Path, data: Any) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+#: Column order of the per-slug miss sidecar written next to the mapped file.
+_MISS_COLUMNS = ("persona_id", "attribute", "raw_value", "mapped_to", "masked_by_on_miss")
+
+
+def _write_misses(path: Path, misses: list[dict[str, Any]]) -> None:
+    """Write the per-slug total-miss log as CSV (always, even when empty).
+
+    One row per (persona, attribute) that resolved to nothing. ``raw_value`` is the
+    LLM string that failed to match -- the piece the mapped population file cannot
+    carry -- and ``masked_by_on_miss`` flags the rows an attribute-level ``on_miss``
+    literal absorbed into a real category, which ``validate_mapped`` cannot see.
+    An empty file is still written so "no misses" is distinguishable from "not run".
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_MISS_COLUMNS)
+        writer.writeheader()
+        writer.writerows(misses)
+
+
 def _skipped_entry(slug: str, country: str) -> dict[str, Any]:
     """The _index.json entry for a target whose synthetic run is not (yet) mappable."""
     return {
@@ -213,11 +234,19 @@ def _map_one_target(
             print(f"  SKIP: {exc}")
             return _skipped_entry(slug, country)
 
-        synthetic_pop = map_synthetic(raw_synthetic, country=country)
+        misses: list[dict[str, Any]] = []
+        synthetic_pop = map_synthetic(raw_synthetic, country=country, misses_out=misses)
         _write_json(synthetic_file, synthetic_pop)
+        _write_misses(mapped_dir / f"{slug}.misses.csv", misses)
         n_mapped = synthetic_pop["metadata"]["n"]
         n_skipped = synthetic_pop["metadata"].get("skipped", 0)
         print(f"  Mapped synthetic -> {synthetic_file} (n={n_mapped}, skipped={n_skipped})")
+        if misses:
+            masked = sum(1 for m in misses if m["masked_by_on_miss"])
+            print(
+                f"  Unmapped values -> {slug}.misses.csv "
+                f"({len(misses)} total, {masked} masked by an on_miss literal)"
+            )
 
     # --- Real side: map once per country, reuse thereafter.
     real_file = mapped_dir / f"real_{country}.json"

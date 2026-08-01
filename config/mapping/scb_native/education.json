@@ -76,7 +76,9 @@
         "Folkskola",
         "Ingen formell utbildning",
         "Förgymnasial utbildning kortare än 9 år",
-        "Förskoleutbildning"
+        "Förskoleutbildning",
+        "Mellanstadiet",
+        "Middle School"
       ],
       "contains": [
         "pre-secondary <",
@@ -94,11 +96,14 @@
         "Pre-Secondary 9-10 yrs (ISCED 2)",
         "Grundskola",
         "Realskola",
+        "Realskole",
         "Flickskola",
         "Realskola eller flickskola",
         "Avslutad realskola eller flickskola",
         "Realskoleexamen",
-        "Förgymnasial utbildning, 9 (10) år"
+        "Förgymnasial utbildning, 9 (10) år",
+        "Grundskoleutbildning",
+        "Grundskoleexamen"
       ],
       "contains": [
         "lower secondary",
@@ -138,8 +143,12 @@
         "Slutbetyg från gymnasieskola",
         "Gymnasial utbildning, 3 år",
         "Gymnasieskolan",
+        "Studentexamen",
         "High School Diploma",
-        "secondary"
+        "secondary",
+        "Komvux",
+        "Folkhögskola",
+        "Kommunal vuxenutbildning"
       ],
       "contains": [
         "upper secondary 3",
@@ -153,7 +162,12 @@
         "gymnasial",
         "secondary education",
         "secondary school",
-        "higher secondary"
+        "higher secondary",
+        "komvux",
+        "kommunal vuxenutbildning",
+        "vuxenutbildning",
+        "folkhögskola",
+        "folkhogskola"
       ]
     },
     "Post-Secondary < 3 yrs (ISCED 4+5B)": {
@@ -192,6 +206,13 @@
         "Högskoleutbildning, magister-/masterexamen",
         "Civilingenjör",
         "Civilekonom",
+        "Civilingenjörsexamen",
+        "Ingenjörsexamen",
+        "Sjuksköterskeutbildning",
+        "Sjuksköterskeexamen",
+        "Lärarexamen",
+        "Ekonomexamen",
+        "Hogskoleexamen",
         "Högskola/universitet, 3 år eller mer",
         "Högskoleutbildning, 3 år eller mer",
         "Universitetsutbildning",
@@ -206,6 +227,8 @@
         "Högskoleingenjör",
         "Master's degree",
         "Bachelor's degree",
+        "MSc",
+        "BSc",
         "University degree",
         "Universitetsutbildad",
         "Högskoleutbildad",
@@ -228,10 +251,13 @@
         "hogskola",
         "akademisk",
         "universitet",
+        "universität",
         "tertiary",
         "undergraduate",
         "baccalaure",
         "first cycle",
+        "grundnivå",
+        "grundniva",
         "higher education"
       ]
     },

@@ -26,6 +26,18 @@
   },
   "synthetic": {
     "Owner-occupied (villa/house)": {
+      "none_of": [
+        "ej ägt",
+        "ej ägd",
+        "ej äger",
+        "ej egen",
+        "ej-ägt",
+        "ej-ägd",
+        "ej-äger",
+        "icke ägd",
+        "inte ägd",
+        "hemförsäkring"
+      ],
       "equals": [
         "Owner-occupied (villa/house)",
         "Äganderätt",
@@ -47,6 +59,10 @@
         "Eget hus",
         "Egen bostad",
         "Egenhem",
+        "Egnahem",
+        "Småhus",
+        "Eget småhus",
+        "Egen ägodel",
         "Egen ägande",
         "Egenägd bostad",
         "Egenhemman",
@@ -78,8 +94,12 @@
         "freehold",
         "äger",
         "ägd",
+        "ägt",
         "ägar",
-        "owns"
+        "owns",
+        "eigen",
+        "eigendom",
+        "eigenbolig"
       ]
     },
     "Tenant-owned apartment (bostadsrätt)": {
@@ -130,12 +150,23 @@
         "Ej ägd egenhem",
         "Ej ägd egenbostad (rented or leased)",
         "Ej ägt eget hus",
+        "Ej ägt bostad",
+        "Ej ägt hem",
+        "Ej ägt egen bostad",
         "Hyrbostad",
         "student_housing"
       ],
       "contains": [
         "rental",
         "rent",
+        "ej ägt",
+        "ej ägd",
+        "ej äger",
+        "ej-ägt",
+        "ej-ägd",
+        "ej-äger",
+        "icke ägd",
+        "inte ägd",
         "hyresrätt",
         "hyres",
         "hyra",
@@ -144,6 +175,12 @@
         "student",
         "shared apartment",
         "shared student",
+        "shared accommodation",
+        "shared housing",
+        "sharing apartment",
+        "sharing a flat",
+        "dormitory",
+        "residence hall",
         "social housing",
         "förstahand"
       ]

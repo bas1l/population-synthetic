@@ -166,7 +166,32 @@
       ],
       "contains": [
         "sverige",
-        "sweden"
+        "sweden",
+        "svensk född",
+        "född i sverige",
+        "stockholm",
+        "västra götaland",
+        "skåne",
+        "östergötland",
+        "uppsala",
+        "halland",
+        "örebro",
+        "jönköping",
+        "gävleborg",
+        "södermanland",
+        "värmland",
+        "dalarna",
+        "västerbotten",
+        "norrbotten",
+        "kalmar",
+        "västernorrland",
+        "västmanland",
+        "kronoberg",
+        "jämtland",
+        "blekinge",
+        "gotland",
+        "härjedalen",
+        "småland"
       ]
     },
     "Syria": {
@@ -177,7 +202,11 @@
     },
     "Finland": {
       "equals": [
-        "Finland"
+        "Finland",
+        "Suomi",
+        "Åland",
+        "Åland Islands",
+        "Åland (Finland)"
       ]
     },
     "Iraq": {
@@ -240,7 +269,10 @@
     "Yugoslavia": {
       "equals": [
         "Yugoslavia",
-        "Jugoslavien"
+        "Jugoslavien",
+        "Former Yugoslavia",
+        "Forna Jugoslavien",
+        "Ex-Yugoslavia"
       ]
     },
     "India": {

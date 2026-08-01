@@ -40,7 +40,10 @@ from pathlib import Path
 from typing import Any, Sequence, TypedDict
 
 from population_synthetic.analysis.mapping.real_mapper.mappings import load_index
-from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.utils.country_config import (
+    deprecated_attributes,
+    mappings_for_country,
+)
 from population_synthetic.analysis.utils.validity_csv import (
     PASSED_COLUMN,
     PERSONA_ID_COLUMN,
@@ -53,9 +56,6 @@ logger = logging.getLogger(__name__)
 # ``age`` key (a structural constant of the mapping layer, not a tunable).
 _AGE_GROUP_ATTR = "age_group"
 _AGE_KEY = "age"
-
-# Optional ``_index.json`` key listing attributes excluded from analysis; absent => none.
-_DEPRECATED_INDEX_KEY = "deprecated_attributes"
 
 _IDENTITY_FILENAME = "identity.json"
 _PERSONA_GLOB = "persona_*"
@@ -115,23 +115,18 @@ def expected_raw_keys(country: str) -> list[str]:
     This reads the same two index keys as
     :func:`~population_synthetic.analysis.fidelity.scheme.load_scheme`'s
     ``_scheme_from_index`` and mirrors its fail-loud contract, so the gate and the scored
-    axis set cannot drift apart.
+    axis set cannot drift apart. The deprecation set itself comes from
+    :func:`~population_synthetic.analysis.utils.country_config.deprecated_attributes`,
+    shared with the mapped-value gate.
 
     Raises:
         ValueError: If ``deprecated_attributes`` names an attribute absent from
             ``attributes`` (a config error), or if deprecating leaves nothing required.
     """
     directory = mappings_for_country(country)
-    index = load_index(directory)  # validates deprecated_attributes is a list[str]
+    index = load_index(directory)
 
-    deprecated = list(index.get(_DEPRECATED_INDEX_KEY, []))
-    unknown = [name for name in deprecated if name not in index["attributes"]]
-    if unknown:
-        raise ValueError(
-            f"Mapping index {directory} {_DEPRECATED_INDEX_KEY!r} names attribute(s) "
-            f"{unknown} not present in 'attributes'"
-        )
-
+    deprecated = deprecated_attributes(index, directory)
     required = [attr for attr in index["attributes"] if attr not in deprecated]
     if not required:
         raise ValueError(

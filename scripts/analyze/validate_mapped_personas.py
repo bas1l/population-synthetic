@@ -6,6 +6,9 @@ canonical field is left as the ``__UNMAPPED__`` sentinel, writing one CSV per co
 (``03_Analysis/validate_mapped/{slug}.csv``). Non-destructive. ``population_cap`` later
 intersects this verdict with ``validate_raw``'s to select N clean personas.
 
+``--country-id`` also resolves which attributes are analysis-deprecated for the country;
+those are exempt from the sentinel check, matching ``validate_raw``'s required-key set.
+
 Usage:
     python scripts/analyze/validate_mapped_personas.py \
         --model-id claude_haiku --strategy-id all_pick --country-id swedish
@@ -93,7 +96,7 @@ def main() -> None:
             mapped_file,
         )
 
-    summary = validate_mapped_combo(slug, mapped_file, out_csv)
+    summary = validate_mapped_combo(slug, mapped_file, out_csv, args.country_id)
 
     summary_path = analysis_output_dir(_PROCESS_ID, output_base) / _SUMMARY_FILENAME
     upsert_summary_row(summary_path, SUMMARY_HEADER, summary_row(summary))

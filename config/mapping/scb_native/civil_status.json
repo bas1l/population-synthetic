@@ -69,6 +69,10 @@
         "Äktenskap",
         "Sammboende",
         "Samlevande",
+        "Samlevare",
+        "Samlever",
+        "Samlivsboende",
+        "Samboförhållande",
         "Sammanboende med partner",
         "Gifta",
         "Civilstånd: Gift",
@@ -87,7 +91,8 @@
         "partner",
         "relation",
         "förhållande",
-        "registrerad partner"
+        "registrerad partner",
+        "äktenskap"
       ]
     },
     "Divorced": {
@@ -102,7 +107,8 @@
         "skild",
         "frånskild",
         "separated",
-        "divorced"
+        "divorced",
+        "skilsmäss"
       ]
     },
     "Widowed": {
@@ -111,7 +117,9 @@
         "Änka",
         "Änkling",
         "Änklig",
-        "Änkeman"
+        "Änkeman",
+        "Änkja",
+        "Änkla"
       ],
       "contains": [
         "änka",

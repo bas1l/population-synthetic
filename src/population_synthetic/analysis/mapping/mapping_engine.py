@@ -68,6 +68,7 @@ import re
 from typing import Any
 
 from population_synthetic.analysis.mapping.synthetic_mapper._text_helpers import (
+    _fold_unicode_punctuation,
     _repair_utf8_double_encoding,
 )
 from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED, is_unmapped
@@ -101,15 +102,21 @@ def normalize(value: Any) -> str:
     """Normalize a raw value to the canonical matching form.
 
     Repairs double-encoded UTF-8 (mirroring the synthetic mapper's record-level
-    repair), lowercases, and collapses underscores to spaces. Hyphens are
-    **preserved** and the result is **not** stripped -- matching the behaviour of
-    the retired ``_kw_norm`` keyword-rule normaliser, so order-sensitive
-    distinctions (``upper-secondary`` vs ``upper secondary``) and leading-space
-    tokens (``" city"``) survive substring tests. ``equals`` comparisons strip
-    both sides separately (see :func:`_match_scalar`).
+    repair), folds typographic punctuation to ASCII, lowercases, and collapses
+    underscores to spaces. Hyphens are **preserved** and the result is **not**
+    stripped -- matching the behaviour of the retired ``_kw_norm`` keyword-rule
+    normaliser, so order-sensitive distinctions (``upper-secondary`` vs
+    ``upper secondary``) and leading-space tokens (``" city"``) survive substring
+    tests. ``equals`` comparisons strip both sides separately (see
+    :func:`_match_scalar`).
+
+    Both the raw value and every config token pass through here, so the punctuation
+    fold is symmetric: a token written with an ASCII hyphen matches raw output using
+    a non-breaking hyphen (U+2011) or an en dash, and vice versa. The fold runs
+    *after* the UTF-8 repair by construction -- see ``_UNICODE_PUNCTUATION_FOLDS``.
     """
     text = "" if value is None else str(value)
-    text = _repair_utf8_double_encoding(text)
+    text = _fold_unicode_punctuation(_repair_utf8_double_encoding(text))
     return _UNDERSCORE_RE.sub(" ", text.lower())
 
 
@@ -285,6 +292,8 @@ def resolve(
 ) -> str | None:
     """Resolve one raw input to a unified value using *rules_block*.
 
+    Thin wrapper over :func:`resolve_detailed` that discards the miss flag.
+
     Parameters
     ----------
     raw_value:
@@ -310,6 +319,32 @@ def resolve(
     total-miss default: the attribute's ``on_miss`` literal when declared, else the
     ``UNMAPPED`` sentinel (``"__UNMAPPED__"``).
     """
+    return resolve_detailed(raw_value, rules_block, values, refine_value=refine_value)[0]
+
+
+def resolve_detailed(
+    raw_value: Any,
+    rules_block: dict,
+    values: list[str],
+    *,
+    refine_value: str | None = None,
+) -> tuple[str | None, bool]:
+    """Resolve as :func:`resolve` does, and report whether it was a total miss.
+
+    Returns ``(value, missed)``. ``missed`` is True exactly when the primary walk
+    and the optional ``refine_from`` walk both failed -- i.e. when the returned
+    value is the total-miss default rather than a matched one.
+
+    The flag exists because ``missed`` is **not** recoverable from the value alone:
+    an attribute declaring ``on_miss`` (``income_source`` -> ``"Wage / Business"``,
+    ``industry_sector`` -> ``"Other"``) returns a legitimate-looking category on a
+    total miss, so miss-mass would otherwise be silently folded into that category
+    and be invisible to ``validate_mapped``. Callers that record misses must use
+    this entry point; :func:`resolve` is the value-only shorthand.
+
+    A raw value satisfying a declared ``absent`` directive is a declared outcome,
+    not a miss, and reports ``False``.
+    """
     absent = rules_block.get("absent")
     # Default a total miss to the explicit UNMAPPED sentinel (not a bare None), so a
     # "mapped, but nothing matched" outcome is legible downstream. Attributes that
@@ -321,12 +356,12 @@ def resolve(
     # ``absent`` is declared, an empty primary still falls through so a
     # ``refine_from`` attribute can resolve from its sibling field.
     if _is_absent(raw_value) and absent is not None:
-        return absent
+        return absent, False
 
     # 1. Primary ordered value-walk against the raw input.
     hit = _walk(raw_value, rules_block, values)
     if hit is not None:
-        return hit
+        return hit, False
 
     # 2. refine_from: re-run the same walk against the sibling's resolved value.
     #    An unmapped sibling (UNMAPPED sentinel or legacy None) carries no canonical
@@ -334,7 +369,7 @@ def resolve(
     if refine_from and not is_unmapped(refine_value) and not _is_absent(refine_value):
         hit = _walk(refine_value, rules_block, values)
         if hit is not None:
-            return hit
+            return hit, False
 
     # 3. Total miss -> the on_miss literal (default: the UNMAPPED sentinel).
-    return on_miss
+    return on_miss, True

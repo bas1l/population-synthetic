@@ -187,7 +187,6 @@
         "sjukersättning",
         "aktivitetsersättning"
       ]
-    },
-    "on_miss": "Wage / Business"
+    }
   }
 }

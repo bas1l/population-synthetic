@@ -48,11 +48,56 @@
   },
   "synthetic": {
     "1 person": {
+      "equals": [
+        "1 person",
+        "Alone",
+        "Living alone",
+        "Lives alone",
+        "Ensamstående",
+        "Ensamboende",
+        "Single-person household",
+        "Enpersonshushåll"
+      ],
+      "contains": [
+        "living alone",
+        "lives alone",
+        "live alone",
+        "alone",
+        "ensamstående",
+        "ensamboende",
+        "enpersonshushåll",
+        "single-person household",
+        "single person household"
+      ],
       "int": [
         1
       ]
     },
     "2 persons": {
+      "all_of": [
+        [
+          "ensamstående",
+          "ensamboende",
+          "single parent",
+          "single mother",
+          "single father",
+          "with parents"
+        ],
+        [
+          "ett barn",
+          "1 barn",
+          "one child",
+          "(2)"
+        ]
+      ],
+      "equals": [
+        "2 persons",
+        "With parents (2)"
+      ],
+      "contains": [
+        "with parents (2)",
+        "med föräldrar (2)"
+      ],
       "int": [
         2
       ]

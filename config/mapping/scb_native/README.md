@@ -64,10 +64,10 @@ For these 3 attributes the `real` block is a **clean 1:1 relabel** (Option A): e
 raw SCB label becomes its own native value under a readable English canonical name — no
 merging, no collapse. Category boundaries are preserved exactly; only the display string is
 canonicalised. The `synthetic` blocks carry finer keyword cascades so the LLM free-text can be
-routed to the finer native categories (`industry_sector` retains its `on_miss → Other` sink;
-`employment_type` and `parental_structure` route unmatched text to `None`, matching the coarse
-tier). `age_group` is left at the coarse 7-bin scheme this pass (single-year bins are deferred —
-see the plan's Out of Scope).
+routed to the finer native categories; **no attribute in this tier declares `on_miss`**, so text
+that matches nothing resolves to the explicit `__UNMAPPED__` sentinel and the persona fails
+`validate_mapped` — see [No `on_miss` sinks](#no-on_miss-sinks) below. `age_group` is left at the
+coarse 7-bin scheme this pass (single-year bins are deferred — see the plan's Out of Scope).
 
 ## Classification note: same-sex-couple families → `Natural Parents`
 
@@ -109,5 +109,35 @@ MFoF / Government.se on the 2022 parenthood presumption.
 The success-criteria shorthand "12 / 9 / 6 native values" counts the real-producible
 categories: 12 SNI industry groups, the 9-cell attachment × hours grid, and the 6 family
 types. The `industry_sector` and `employment_type` files additionally declare the
-sentinel values (`Not Applicable` for the `absent` directive, and `Other` for the
-`industry_sector` synthetic `on_miss`), exactly as the coarse tier does.
+`Not Applicable` sentinel for the `absent` directive.
+
+`industry_sector` previously carried a 14th value, `Other`, reachable *only* through its
+synthetic `on_miss`. When that sink was removed the value became unreachable in both blocks —
+SCB's register aggregates the fine SNI2007 codes into exactly the 12 sectors, with no residual
+group — so it was dropped rather than left as a zero-mass phantom category on the comparison
+axis.
+
+## No `on_miss` sinks
+
+No attribute in this tier declares `on_miss`. The directive names a literal to return when the
+whole value-walk misses, and both former uses here (`industry_sector → Other`,
+`income_source → Wage / Business`) were **silent failures**: the mapped record carried a
+real-looking category, so `validate_mapped` — which only ever sees the `__UNMAPPED__` sentinel
+— could not tell the miss from a genuine hit, and the miss mass was folded into that category's
+marginal, the very quantity the fidelity score measures.
+
+Consequences of the removal, all intended:
+
+- A raw value matching nothing now resolves to `__UNMAPPED__` and the persona **fails**
+  `validate_mapped`, so it is excluded from the capped population instead of quietly inflating
+  a real category.
+- The mass those sinks absorbed does not disappear; it becomes visible attrition. The honest
+  remedy is a matcher token for a variant the config already commits to — never a new sink.
+- Every miss, masked or not, is recorded to `03_Analysis/mapping/{slug}.misses.csv` with the
+  raw string that caused it (`mapping_engine.resolve_detailed` reports the miss flag
+  separately from the value, because a sink makes it unrecoverable from the value alone).
+
+Re-introducing `on_miss` on any attribute in this tier is a regression and is asserted against
+in `tests/test_mapping_config_no_on_miss.py`. Italy (`config/mapping/istat/`) still declares it
+on two attributes; that is a separate change, since removing it there invalidates every Italian
+mapped artefact.
