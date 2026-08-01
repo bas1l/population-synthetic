@@ -2,7 +2,7 @@ id: "all_generate_evaluate_pick"
 family: "all_generate_evaluate_pick"
 version: 1
 label: "All Generate Evaluate Pick"
-description: "All fields use generate_evaluate_pick method. LLM enumerates candidates, assigns probability weights, then picks the highest-probability value. 3 LLM calls per category (enumerate + evaluate + select). Uses dependency DAG so prior resolved values are passed as context."
+description: "All fields use generate_evaluate_pick method. LLM enumerates candidates, assigns probability weights, then picks one value from the candidates presented as value:probability pairs. 3 LLM calls per category (enumerate + evaluate + select); the select call sees each candidate with its weight, so the evaluate step informs the choice. Uses dependency DAG so prior resolved values are passed as context."
 categories:
   age:                           { method: generate_evaluate_pick, depends_on: [] }
   biological_sex:                { method: generate_evaluate_pick, depends_on: [] }

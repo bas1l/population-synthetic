@@ -116,7 +116,7 @@ appear in the ranking. Ollama models run on a secondary local server.)*
 | `all_pick` | Directly picks one value given context | 1 |
 | `all_pick_dag` | Same, but earlier resolved fields are fed in as context (dependency DAG) | 1 |
 | `all_generate_pick` | Enumerates candidate values, then selects one | 2 |
-| `all_generate_evaluate_pick` | Enumerates candidates, weights them, picks the highest-probability | 3 |
+| `all_generate_evaluate_pick` | Enumerates candidates, weights them, then selects from the candidates presented as `value: probability` pairs | 3 |
 | `all_generate_evaluate_random_pick` | Enumerates + weights candidates, then **Python samples** from those weights | 2 + sampling |
 
 The last strategy — letting the model propose a *distribution* and having code sample from it — is

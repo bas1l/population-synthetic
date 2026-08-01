@@ -54,6 +54,7 @@ class RecordingGenerator(IdentityGeneratorConfigurable):
     def __init__(self, client: Any):
         super().__init__(client)
         self.calls: list[tuple[str, str]] = []  # (category, prompt)
+        self.steps: list[tuple[str, str, str, str]] = []  # (category, method, step, prompt)
 
     def _call_llm_json(
         self,
@@ -67,6 +68,7 @@ class RecordingGenerator(IdentityGeneratorConfigurable):
         log_step: str = "",
     ) -> Any:
         self.calls.append((log_category, prompt))
+        self.steps.append((log_category, log_method, log_step, prompt))
         if expected_key == "value":
             return f"{log_category}{_VALUE_MARKER}"
         if expected_key == "candidates":
@@ -75,6 +77,10 @@ class RecordingGenerator(IdentityGeneratorConfigurable):
             return [1.0]
         # distribution / free-form (expected_key is None)
         return {"distribution": "uniform"}
+
+    def select_prompts(self) -> list[str]:
+        """Every select-step prompt recorded, in call order."""
+        return [prompt for _, _, step, prompt in self.steps if step == "select"]
 
 
 def _schema_from_strategy(strategy_path: Path) -> dict:
@@ -373,3 +379,90 @@ def test_resolved_order_matches_generation_order(tmp_path):
     # generator actually walks must be the same sequence, not two implementations.
     gen = _run(tmp_path, _ALL_PICK_DAG)
     assert [category for category, _ in gen.calls] == resolve_category_order(str(_ALL_PICK_DAG))
+
+
+# ---------------------------------------------------------------------------
+# select-step prompt: generate_evaluate_pick shows weights, generate_pick does not
+# ---------------------------------------------------------------------------
+
+_ALL_GENERATE_PICK = _STRATEGY_DIR / "all_generate_pick.yaml"
+_ALL_GENERATE_EVALUATE_PICK = _STRATEGY_DIR / "all_generate_evaluate_pick.yaml"
+
+
+class WeightedRecordingGenerator(RecordingGenerator):
+    """Recorder returning a multi-candidate list with uneven weights.
+
+    The base recorder returns a single candidate weighted 1.0, which cannot
+    distinguish a select prompt that renders probabilities from one that does not.
+    """
+
+    CANDIDATES = ["alpha", "beta", "gamma"]
+    WEIGHTS = [0.6, 0.3, 0.1]
+
+    def _call_llm_json(self, prompt, system_instruction, *, expected_key=None, **kwargs) -> Any:
+        if expected_key == "candidates":
+            super()._call_llm_json(
+                prompt, system_instruction, expected_key="__record_only__", **kwargs
+            )
+            return list(self.CANDIDATES)
+        if expected_key == "weights":
+            super()._call_llm_json(
+                prompt, system_instruction, expected_key="__record_only__", **kwargs
+            )
+            return list(self.WEIGHTS)
+        return super()._call_llm_json(
+            prompt, system_instruction, expected_key=expected_key, **kwargs
+        )
+
+
+def _run_weighted(tmp_path: Path, strategy_path: Path) -> WeightedRecordingGenerator:
+    gen = WeightedRecordingGenerator(client=object())
+    schema_file = _write_schema(tmp_path, strategy_path)
+    gen.generate_identity(schema_file, strategy_file=str(strategy_path))
+    return gen
+
+
+def test_generate_evaluate_pick_select_prompt_pairs_candidates_with_probabilities(tmp_path):
+    """The evaluate step's weights must reach the select call, not be discarded.
+
+    Regression guard for the defect this method carried: weights were computed,
+    normalised and count-reconciled, then never read -- making the 3-call method
+    procedurally identical to the 2-call ``generate_pick``.
+    """
+    gen = _run_weighted(tmp_path, _ALL_GENERATE_EVALUATE_PICK)
+    selects = gen.select_prompts()
+    assert selects, "no select-step prompt was recorded"
+
+    for prompt in selects:
+        # Each candidate appears paired with its probability, as JSON value: probability.
+        assert '"alpha": 0.6' in prompt
+        assert '"beta": 0.3' in prompt
+        assert '"gamma": 0.1' in prompt
+        # ...and the prompt says so, rather than offering a bare list.
+        assert "paired with the probability" in prompt
+
+
+def test_generate_pick_select_prompt_has_no_probabilities(tmp_path):
+    """``generate_pick`` computes no weights, so its select prompt is unchanged."""
+    gen = _run_weighted(tmp_path, _ALL_GENERATE_PICK)
+    selects = gen.select_prompts()
+    assert selects, "no select-step prompt was recorded"
+
+    for prompt in selects:
+        assert "paired with the probability" not in prompt
+        assert "0.6" not in prompt
+        # The bare candidate list is still offered.
+        assert "alpha" in prompt
+
+
+def test_candidate_probabilities_sums_duplicate_candidates():
+    # A repeated candidate must not lose its mass to dict-key collision.
+    gen = RecordingGenerator(client=object())
+    paired = gen._candidate_probabilities(["a", "b", "a"], [0.5, 0.2, 0.3], "some_category")
+    assert paired == {"a": 0.8, "b": 0.2}
+
+
+def test_candidate_probabilities_rounds_for_legibility():
+    gen = RecordingGenerator(client=object())
+    paired = gen._candidate_probabilities(["a", "b"], [1 / 3, 2 / 3], "some_category")
+    assert paired == {"a": 0.3333, "b": 0.6667}
