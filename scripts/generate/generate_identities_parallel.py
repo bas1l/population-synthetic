@@ -47,7 +47,6 @@ Usage:
 
 import argparse
 import atexit
-import json
 import logging
 import sys
 import threading
@@ -63,12 +62,14 @@ from population_synthetic.clients.retry_policy import MAX_RETRY_ATTEMPTS
 from population_synthetic.generators.synthetic import ollama_concurrency, ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
 from population_synthetic.generators.synthetic.identity_generator_configurable import resolve_category_order
-from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
 from population_synthetic.generators.synthetic.manifest_loader import (
     compose_manifest,
     load_manifest,
     serialize_manifest,
 )
+from population_synthetic.generators.synthetic.persona_writer import PersonaWriter
+from population_synthetic.generators.synthetic.run_fingerprint import build_run_fingerprint
+from population_synthetic.utils.atomic_io import atomic_write_json
 
 _SCRIPT_START_TIME = time.time()
 
@@ -135,19 +136,41 @@ def _generate_one(
     base_url: str | None = None,
     api_key_env_var: str | None = None,
     generation_config: dict | None = None,
-    force: bool = False,
+    bypass_identity_skip: bool = False,
+    discard_checkpoint: bool = False,
     retry_until_success: bool = False,
     structured_output: bool = False,
+    fingerprint: dict | None = None,
+    required_categories: list[str] | None = None,
 ) -> tuple[int, bool, str]:
+    """Generate one persona into ``output_dir/persona_XXXXX/``.
+
+    The two skip levers are deliberately separate rather than one ``force``. A
+    retry round must re-enter a persona that has no finished ``identity.json``
+    (``bypass_identity_skip``) while *keeping* the categories the failed attempt
+    already paid for; only ``--force`` means "pretend this persona never existed"
+    (``discard_checkpoint``). Fusing them, as the previous ``force`` flag did,
+    made every retry round throw away the work it was retrying.
+    """
     global _completed, _failed
 
-    persona_dir = output_dir / f"persona_{index:05d}"
-    out_file = persona_dir / "identity.json"
+    if fingerprint is None or not required_categories:
+        raise ValueError(
+            "_generate_one requires the run's fingerprint and resolved category order: "
+            "without them a checkpoint cannot be validated and a persona cannot be "
+            "checked for completeness."
+        )
 
-    if not force and out_file.exists():
+    persona_dir = output_dir / f"persona_{index:05d}"
+    writer = PersonaWriter(persona_dir, fingerprint, discard=discard_checkpoint)
+
+    if not bypass_identity_skip and writer.has_complete_identity(required_categories):
+        # A kill between finalize()'s identity write and its checkpoint unlink leaves
+        # both files. This is the only place that orphan is ever collected.
+        writer.discard_stale_checkpoint()
         with _progress_lock:
             _completed += 1
-        return index, True, "skipped (exists)"
+        return index, True, "skipped (complete)"
 
     cfg = generation_config or {}
 
@@ -210,16 +233,16 @@ def _generate_one(
         # Correlation key for exact log<->JSONL joining; matches persona_dir name.
         if hasattr(generator, "persona_id"):
             generator.persona_id = f"persona_{index:05d}"
+        # The writer owns every file of this persona and the lifecycle binding them:
+        # asking it for the telemetry collector is what ties "the JSONL appends" to
+        # "the checkpoint was resumed", so the two can never disagree.
+        generator.writer = writer
         if log_llm:
-            generator.interaction_collector = LLMInteractionCollector(
-                persona_dir / "llm_interactions.jsonl"
-            )
+            generator.interaction_collector = writer.telemetry
 
         identity_data, _ = generator.generate_identity(config_path, **kwargs)
 
-        persona_dir.mkdir(parents=True, exist_ok=True)
-        with open(out_file, "w", encoding="utf-8") as f:
-            json.dump(identity_data, f, indent=2, ensure_ascii=False)
+        writer.finalize(identity_data)
 
         with _progress_lock:
             _completed += 1
@@ -235,8 +258,10 @@ def _generate_one(
         return index, False, str(e)
 
     finally:
-        if generator is not None and generator.interaction_collector:
-            generator.interaction_collector.close()
+        # The writer owns the telemetry handle, so closing it closes the collector
+        # the generator was handed; closing both would be harmless but would split
+        # ownership of one file across two objects again.
+        writer.close()
         if client is not None and hasattr(client, "close"):
             client.close()
             with _active_clients_lock:
@@ -442,7 +467,9 @@ def main() -> None:
         "--force",
         action="store_true",
         default=False,
-        help="Overwrite existing personas instead of skipping",
+        help="Regenerate every persona from scratch: bypass the completeness skip AND "
+             "discard any checkpoint an aborted run left behind. Without it, a complete "
+             "persona is skipped and an incomplete one resumes from its checkpoint.",
     )
     parser.add_argument(
         "--retry-until-success",
@@ -743,6 +770,19 @@ def main() -> None:
     # sample. Only 'configurable' mode has a category DAG; other modes record null.
     resolved_category_order = resolve_category_order(kwargs["strategy_file"]) if args.strategy else None
 
+    # The generation regime every persona of this run is produced under. Computed
+    # once, here, where the strategy/schema paths and the resolved model are all
+    # final -- each worker only compares it for equality against what a checkpoint
+    # claims, so a strategy edited between two runs of the same slug discards the
+    # stale checkpoints instead of splicing two regimes into one persona.
+    fingerprint = build_run_fingerprint(
+        strategy_path=Path(args.strategy) if args.strategy else None,
+        schema_path=config_path,
+        provider=args.provider,
+        model=model,
+        category_order=resolved_category_order,
+    )
+
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     run_metadata = {
         "name": m.name if m is not None else None,
@@ -800,8 +840,9 @@ def main() -> None:
             "country_id": args.country_id,
         }
     metadata_path = output_dir / "run_metadata.json"
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+    # Atomic: this file is the run's provenance record, and a kill mid-write would
+    # leave the combo describing itself with truncated JSON that no analysis reads.
+    atomic_write_json(metadata_path, run_metadata)
     logger.info("Run metadata written to %s", metadata_path)
 
     logger.info("Provider: %s | Mode: %s | Config: %s | Strategy: %s", args.provider, args.mode, args.config, args.strategy)
@@ -837,9 +878,16 @@ def main() -> None:
                     base_url=args.base_url,
                     api_key_env_var=args.api_key_env,
                     generation_config=generation_config,
-                    force=True if is_retry else args.force,
+                    # A retry round must re-enter the slot it is retrying, but it
+                    # keeps that attempt's checkpoint -- the categories already
+                    # resolved were paid for and are still valid under the same
+                    # fingerprint. Only --force discards them.
+                    bypass_identity_skip=is_retry or args.force,
+                    discard_checkpoint=args.force,
                     retry_until_success=args.retry_until_success,
                     structured_output=args.structured_output,
+                    fingerprint=fingerprint,
+                    required_categories=resolved_category_order,
                 )
                 round_futures.append(fut)
 
@@ -877,8 +925,7 @@ def main() -> None:
         "rounds": round_num,
         "max_rounds": MAX_RETRY_ATTEMPTS if args.retry_until_success else 1,
     }
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+    atomic_write_json(metadata_path, run_metadata)
 
     logger.info("Done in %.1fs. Success: %d, Failed: %d, Output: %s", elapsed, ok_count, fail_count, output_dir)
 

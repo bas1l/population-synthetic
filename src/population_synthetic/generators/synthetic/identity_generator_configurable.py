@@ -783,6 +783,11 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         Loads the flat schema and strategy file, resolves the DAG, and processes
         each category in topological order according to its declared method.
         Returns a flat dict.
+
+        When a ``PersonaWriter`` is injected, the walk is resumable: it starts from
+        the categories the writer's checkpoint already covers and re-checkpoints
+        after every category, so an aborted run re-pays for at most one category
+        rather than all of them.
         """
         strategy_file: str = kwargs.get("strategy_file")
         if not strategy_file:
@@ -814,8 +819,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
         ordered_categories = self._build_dag(category_config)
 
-        resolved: dict = {}
-        for category_name in ordered_categories:
+        resolved = self._resume_prefix(ordered_categories)
+        pending_categories = ordered_categories[len(resolved):]
+        for category_name in pending_categories:
             cfg = category_config[category_name]
             method: str = cfg.get("method", "")
             category_schema = schema_categories[category_name]
@@ -855,10 +861,54 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                 raise
 
             resolved[category_name] = value
+            # Checkpoint AFTER the value lands in ``resolved``, never before: the
+            # checkpoint's contract is "these categories are paid for", and writing
+            # it first would resume a persona past a category it never generated.
+            # ``_call_index`` travels with it so the telemetry log's correlation
+            # keys continue rather than collide when this persona is resumed.
+            if self.writer is not None:
+                self.writer.checkpoint(resolved, self._call_index)
             logging.debug(f"{category_name} ({method}) -> {value}")
 
         logging.info(f"Configurable identity generation complete ({len(resolved)} categories).")
         return resolved, {}
+
+    def _resume_prefix(self, ordered_categories: list[str]) -> dict:
+        """Seed ``resolved`` (and ``_call_index``) from the writer's checkpoint.
+
+        Returns the longest **prefix** of ``ordered_categories`` the checkpoint
+        covers, rebuilt in DAG order rather than in the JSON file's key order. Two
+        properties follow, and together they are what makes a resumed persona
+        indistinguishable from an uninterrupted one:
+
+        * the prompt context block is a pure function of ``resolved``'s contents and
+          insertion order, so replaying the order here reproduces it byte for byte;
+        * stopping at the first gap means no category can ever see a context an
+          uninterrupted run would not have shown it.
+
+        Returns an empty dict when there is no writer or no valid checkpoint.
+        """
+        if self.writer is None:
+            return {}
+        state = self.writer.resume()
+        if state is None:
+            return {}
+
+        resolved: dict = {}
+        for category_name in ordered_categories:
+            if category_name not in state.resolved:
+                break
+            resolved[category_name] = state.resolved[category_name]
+
+        # The counter continues from the checkpoint even where the prefix is shorter
+        # than the checkpoint's key set: indices already spent are in the telemetry
+        # log, and reusing one would break the (persona_id, call_index) join.
+        self._call_index = state.call_index
+        logging.info(
+            "Resuming generation after %d/%d categories (call index %d).",
+            len(resolved), len(ordered_categories), self._call_index,
+        )
+        return resolved
 
     def load_identity(self, identity_path: str) -> tuple[dict, dict]:
         if not os.path.exists(identity_path):

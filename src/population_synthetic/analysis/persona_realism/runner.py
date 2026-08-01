@@ -95,22 +95,6 @@ def _atexit_cleanup() -> None:
 atexit.register(_atexit_cleanup)
 
 
-class _AppendingCollector(LLMInteractionCollector):
-    """A throwaway ``LLMInteractionCollector`` that APPENDS instead of truncating.
-
-    Used when topping up an existing persona's telemetry so cost accumulates across
-    runs. Overrides only the file-open mode (``"a"`` instead of the parent's ``"w"``);
-    it does NOT modify the shared collector class. Constructed inside a persona's own
-    task and only ever appends to that persona's ``.jsonl``, so concurrent personas
-    never contend on a single file handle.
-    """
-
-    def _ensure_open(self) -> None:  # type: ignore[override]
-        if self._file is None:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._file = open(self._path, "a", encoding="utf-8")
-
-
 @dataclass(frozen=True)
 class JudgeConfig:
     """The persona-realism judge configuration, loaded once from ``judge.yaml``.
@@ -439,16 +423,15 @@ def _write_persona_file(
 def _flush_telemetry(path: Path, entries: list[LLMInteractionEntry], *, append: bool) -> None:
     """Write one persona's buffered telemetry to ``persona_XXXXX.jsonl`` (sequential).
 
-    ``append`` (a top-up onto an existing persona) opens a throwaway
-    :class:`_AppendingCollector` so prior passes' calls are retained and cumulative
-    cost stays correct; otherwise (fresh persona / ``--force``) a plain
-    :class:`LLMInteractionCollector` truncates. Called from within a persona's own
-    task; the handle targets only that persona's ``.jsonl`` (distinct per persona),
-    so concurrent personas never share it.
+    ``append`` (a top-up onto an existing persona) opens the collector in append
+    mode so prior passes' calls are retained and cumulative cost stays correct;
+    otherwise (fresh persona / ``--force``) it truncates. Called from within a
+    persona's own task; the handle targets only that persona's ``.jsonl`` (distinct
+    per persona), so concurrent personas never share it.
     """
     if not entries:
         return
-    collector = _AppendingCollector(path) if append else LLMInteractionCollector(path)
+    collector = LLMInteractionCollector(path, append=append)
     try:
         for entry in entries:
             collector.record(entry)
