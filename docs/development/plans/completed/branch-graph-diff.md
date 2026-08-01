@@ -2,11 +2,35 @@
 
 **Date:** 2026-07-24
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-08-01
 **Base Branch:** `dev`
-**Branch:** `feature/branch-graph-diff`
+**Branch:** `feature/branch-graph-diff` *(merged and deleted 2026-07-24)*
 
 ---
+
+## Closure note, 2026-08-01
+
+The tool shipped on 2026-07-24 in `14e0b9e` (standalone import-graph diff) and `626b821`
+(self-contained interactive HTML explorer), both on `dev`; `tools/graph-diff/` carries 11 modules
+and 7 test files. The branch was merged and deleted, but this plan was never moved out of
+`active/`, leaving it an orphan that every `/wrap-up` re-flagged. Closed here on the record, not
+by doing further work.
+
+**State at closure:** Phases 1–3 complete. `tools/graph-diff` suite: **65 passed, 1 skipped**.
+
+**Not done, and deliberately so:**
+
+- **Phase 4 (call-graph layer) was never built.** It is marked *Optional / stretch* with an
+  explicit gate — *"Only build if the module-level diff proves insufficient in practice"* — and the
+  gate has not been met. Its three tasks stay unticked rather than struck: the phase is available,
+  not withdrawn.
+- **Three edge cases remain untested** (absent package path at one ref, `--depth` legibility on a
+  very large graph, uncommitted changes preserved). The last is indirectly evidenced by the ticked
+  manual check that `git status` and `git worktree list` are identical before and after a run, but
+  it was never exercised as its own case.
+- The `CLAUDE.md` documentation-table row stays deferred by its own condition — the tool is
+  standalone and is not part of the standard review flow.
 
 ## Overview
 
@@ -258,7 +282,10 @@ python tools/graph-diff/graph_diff.py \
 - [x] Grep the `tools/graph-diff/` tree for `population_synthetic` / country names → zero hits.
 
 ### Edge Cases
-- [ ] Unresolvable ref → loud error, no partial artifacts, no orphaned worktree.
+- [x] Unresolvable ref → loud error, no partial artifacts, no orphaned worktree. *(Verified
+      2026-08-01: `--head-ref no-such-ref-xyz` exits 1 with `graph-diff error: Ref
+      'no-such-ref-xyz' does not resolve to a commit in <repo>`; `git worktree list` unchanged at
+      one entry and the working tree gains no artifacts.)*
 - [ ] Package path absent at one ref (feature adds a brand-new subpackage) → new nodes render as added, no crash.
 - [ ] Very large graph → `--depth` collapse keeps the diagram legible (documented guidance).
 - [ ] Uncommitted changes in the working tree at run time → run still succeeds and leaves them untouched (worktree isolation).
