@@ -459,20 +459,68 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             f"Return JSON: {{\"weights\": [0.x, 0.y, ...]}} in the same order as candidates: {candidates}."
         )
 
+    def _candidate_probabilities(
+        self,
+        candidates: list,
+        weights: list[float],
+        category_name: str,
+    ) -> dict[str, float]:
+        """Pair each candidate with its probability, summing any duplicate candidates.
+
+        The enumerate prompt asks for no duplicates but nothing enforces it, and a dict
+        rendering would otherwise let a repeated candidate's weight vanish. Summing is
+        the consistent reading -- the probability of a *value* being chosen is the total
+        mass its entries carry, which is also what ``random.choices`` effectively does in
+        the ``generate_evaluate_random_pick`` path.
+        """
+        probabilities: dict[str, float] = {}
+        for candidate, weight in zip(candidates, weights):
+            key = str(candidate)
+            probabilities[key] = probabilities.get(key, 0.0) + float(weight)
+        if len(probabilities) < len(candidates):
+            logging.warning(
+                f"Collapsed {len(candidates) - len(probabilities)} duplicate candidate(s) "
+                f"for '{category_name}' when pairing with weights ({len(candidates)} -> "
+                f"{len(probabilities)}); duplicate weights were summed."
+            )
+        # Rounded for prompt legibility only -- the stored weights are untouched.
+        return {key: round(value, 4) for key, value in probabilities.items()}
+
     def _build_select_prompt(
         self,
         category_name: str,
         candidates: list,
         resolved: dict,
         system_instruction: str,
+        weights: list[float] | None = None,
     ) -> str:
+        """Build the select-step prompt.
+
+        With *weights* omitted (the ``generate_pick`` path, which computes none), the
+        bare candidate list is offered. With *weights* supplied (the
+        ``generate_evaluate_pick`` path), each candidate is shown paired with the
+        probability the evaluate step assigned it, as a JSON ``value: probability``
+        object -- so the weights that call produced actually inform the choice instead of
+        being computed and discarded.
+        """
         context = self._build_context_block(resolved)
+        if weights is None:
+            return (
+                f"Context:\n{context}\n\n"
+                f"From the following candidates for '{category_name}', pick the single most appropriate value "
+                f"given the context. "
+                f'Return JSON: {{"value": "<chosen>"}}. '
+                f"Candidates: {candidates}."
+            )
+
+        probabilities = self._candidate_probabilities(candidates, weights, category_name)
         return (
             f"Context:\n{context}\n\n"
-            f"From the following candidates for '{category_name}', pick the single most appropriate value "
-            f"given the context. "
+            f"From the following candidates for '{category_name}' -- each paired with the probability "
+            f"you assigned it -- pick the single most appropriate value given the context and those "
+            f"probabilities. "
             f'Return JSON: {{"value": "<chosen>"}}. '
-            f"Candidates: {candidates}."
+            f"Candidates: {json.dumps(probabilities, ensure_ascii=False)}."
         )
 
     def _build_numeric_distribution_prompt(
@@ -636,7 +684,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
                 f"{len(candidates)} candidates (exceeds tolerance of {tolerance}). Retrying."
             )
 
-        sel_prompt = self._build_select_prompt(category_name, candidates, resolved, system_instruction)
+        sel_prompt = self._build_select_prompt(
+            category_name, candidates, resolved, system_instruction, weights=weights
+        )
         value = self._call_llm_json(
             sel_prompt, system_instruction,
             expected_key="value",

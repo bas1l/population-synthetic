@@ -2,7 +2,7 @@ id: "all_generate_evaluate_pick_v2"
 family: "all_generate_evaluate_pick"
 version: 2
 label: "All Generate Evaluate Pick (v2)"
-description: "All fields use generate_evaluate_pick method. LLM enumerates candidates, assigns probability weights, then picks the highest-probability value. 3 LLM calls per category (enumerate + evaluate + select). Uses dependency DAG so prior resolved values are passed as context. v2: 14 categories aligned to the SCB scored axis set -- birth_location, ethnicity_broad_global_approx and current_environment_type are not generated. birth_country_detail now depends on age and biological_sex, mirroring the real SCB conditional chain."
+description: "All fields use generate_evaluate_pick method. LLM enumerates candidates, assigns probability weights, then picks one value from the candidates presented as value:probability pairs. 3 LLM calls per category (enumerate + evaluate + select); the select call sees each candidate with its weight, so the evaluate step informs the choice. Uses dependency DAG so prior resolved values are passed as context. v2: 14 categories aligned to the SCB scored axis set -- birth_location, ethnicity_broad_global_approx and current_environment_type are not generated. birth_country_detail now depends on age and biological_sex, mirroring the real SCB conditional chain."
 categories:
   age:                   { method: generate_evaluate_pick, depends_on: [] }
   biological_sex:        { method: generate_evaluate_pick, depends_on: [] }
