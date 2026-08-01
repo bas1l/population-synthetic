@@ -44,5 +44,8 @@ persona creation), and **population comparison** (statistical evaluation of any 
   API source matrix.
 - [`../code-standards/`](../code-standards/) and [`../data-pipeline-engineering/`](../data-pipeline-engineering/)
   — repository-agnostic engineering-standards wiki sets.
+- [`../development/aborted-and-resumed-runs.md`](../development/aborted-and-resumed-runs.md) — the
+  crash-safety and resume protocol for persona generation: what each persona file means, the shared
+  telemetry/checkpoint lifecycle, the ordering constraints, and why there is no signal handler.
 - [`../development/`](../development/) — in-progress development notes, plans, and the
   [identity-generation debugging runbook](../development/debugging-identity-generation.md).

@@ -24,6 +24,7 @@ from typing import Any
 import pytest
 import yaml
 
+from population_synthetic.analysis.validate_raw.validate import expected_raw_keys, validate_raw_combo
 from population_synthetic.generators.synthetic.identity_generator_configurable import (
     IdentityGeneratorConfigurable,
     resolve_category_order,
@@ -287,6 +288,35 @@ def test_force_restarts_call_index_and_truncates_the_telemetry_log(tmp_path):
     # Truncated in lockstep with the discarded checkpoint: a restarted counter over
     # retained records would double-count every call in the cost analysis.
     assert [i for _, i in keys] == list(range(1, len(keys) + 1))
+
+
+# -- the containment argument ------------------------------------------------
+
+
+def test_validate_raw_passes_on_a_resumed_persona(tmp_path):
+    """Generation's completeness predicate is the stricter of the two, so this holds.
+
+    ``validate_raw`` derives its expected keys from the *country's* mapping index;
+    generation derives its own from the *strategy's* resolved category order. They
+    are deliberately separate predicates, safe only because
+    ``_assert_strategy_covers_country`` guarantees strategy categories ⊇ country
+    required keys. This exercises that containment on output a resume produced,
+    which is where a hole in the restored prefix would surface.
+    """
+    schema_file = _write_schema(tmp_path, _CUMULATIVE)
+    order = resolve_category_order(str(_CUMULATIVE))
+    required = expected_raw_keys("swedish")
+    assert set(required) <= set(order), "fixture strategy no longer covers the country"
+
+    combo = tmp_path / "combo"
+    persona = combo / "persona_00000"
+    with pytest.raises(Abort):
+        _run(persona, schema_file, _CUMULATIVE, abort_at=order[6])
+    _run(persona, schema_file, _CUMULATIVE)
+
+    summary = validate_raw_combo("combo", combo, required, tmp_path / "combo.csv")
+
+    assert (summary["passed"], summary["failed"], summary["missing_identity"]) == (1, 0, 0)
 
 
 def test_generation_without_a_writer_is_unchanged(tmp_path):

@@ -61,6 +61,23 @@ no correlation keys in the logs), so the joiner falls back to timestamp-proximit
 resume gap. Only ~45% of its 3,398 calls matched a logged token record — that row is a real but
 **incomplete lower bound**, not a full total. All other strategies matched ≥95% of calls.
 
+> **Superseded for runs generated after 2026-08-01.** Crash-safe generation landed on that date
+> (see [Aborted and resumed runs](aborted-and-resumed-runs.md)). It changes this caveat in two
+> ways, both of which improve the match rate for *future* runs and neither of which retro-fixes the
+> figures above.
+>
+> 1. A resumed persona now continues its `(persona_id, call_index)` correlation key rather than
+>    restarting it, and its `llm_interactions.jsonl` is appended to rather than truncated. The
+>    joiner no longer has to fall back to timestamp proximity across a resume gap, which is what
+>    cost this row ~55% of its calls.
+> 2. A retry round previously discarded the failed attempt's token records entirely. Those calls
+>    were paid for and are now retained.
+>
+> Direction of the shift: **every historical figure in this document under-counts actual spend.**
+> The correction is upward, and its size is unknown per row — it is bounded below by the unmatched
+> share (~55% here) plus every abandoned retry attempt. Do not pool token totals from before and
+> after 2026-08-01 in one comparison without saying which side of the change each row is on.
+
 ### Results — Swedish, Ollama Llama 3.1 (8B) (REAL)
 
 | Strategy | Calls | Personas | Input Tokens | Output Tokens | Total Tokens | Match rate |

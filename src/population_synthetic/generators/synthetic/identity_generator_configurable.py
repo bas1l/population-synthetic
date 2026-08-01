@@ -10,21 +10,50 @@ Per-category prompts live on ``Category``, the LLM call lives on
 ``ResolutionContext``, and the walk plus its checkpointing live on ``Persona`` --
 so the generation methods that this project compares are each an independently
 constructible class rather than a branch of one chain.
+
+Config interpretation stops here. ``build_blueprint`` is the single function that
+reads the two files, and ``build_population`` wraps its output into the
+``SyntheticPopulation`` an orchestrator fills -- so neither the population, nor the
+personas, nor the categories ever learn what a strategy YAML looks like.
 """
+
+from __future__ import annotations
 
 import json
 import logging
 import os
 from collections import deque
+from dataclasses import dataclass
+from pathlib import Path
 
 import yaml
 
 from population_synthetic.clients.llm_protocol import LLMClient
 
 from .base_identity_generator import BaseIdentityGenerator
-from .category import build_categories
+from .category import Category, build_categories
 from .persona import CONTEXT_MODES, Persona
 from .resolution_context import ResolutionContext
+from .synthetic_population import SyntheticPopulation
+
+
+@dataclass(frozen=True)
+class Blueprint:
+    """Everything the two config files determine about how a run resolves personas.
+
+    Frozen because it is shared: the orchestration edge builds one to construct the
+    population, and each worker's generator builds an equal one for its own walk.
+    A blueprint that could be mutated after construction would let two workers of
+    the same run disagree about the category order -- which is the order the prompts
+    and the resume replay are both built from.
+    """
+
+    #: One :class:`~.category.Category` per declared attribute, in DAG order.
+    categories: list[Category]
+    #: The strategy's ``context`` mode; one of :data:`~.persona.CONTEXT_MODES`.
+    context_mode: str
+    #: The run-level system prompt, identical for every category and every persona.
+    system_instruction: str
 
 
 class IdentityGeneratorConfigurable(BaseIdentityGenerator):
@@ -39,7 +68,8 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         self.persona_id: str | None = None
         self._call_index: int = 0
 
-    def _load_flat_schema(self, filepath: str) -> dict:
+    @staticmethod
+    def _load_flat_schema(filepath: str) -> dict:
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Flat schema file not found: {filepath}")
         with open(filepath, "r", encoding="utf-8") as f:
@@ -190,6 +220,88 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
         return ordered
 
+    @classmethod
+    def build_blueprint(cls, prompt_file: str, strategy_file: str) -> Blueprint:
+        """Turn the two config files into everything a run needs to resolve personas.
+
+        The whole of this class's stated job -- load, validate, resolve the DAG,
+        construct one :class:`~.category.Category` per declared attribute -- with
+        no client, no persona and no output directory involved. It is a classmethod
+        because a run needs the blueprint *before* it has a worker (and therefore
+        before it has a client): the orchestration edge builds the population from
+        it, and each worker's generator rebuilds the same blueprint for its own
+        walk. Both paths going through this one function is what keeps the
+        categories a worker resolves identical to the ones the resume gate checked
+        for.
+
+        Raises:
+            ValueError: Any config defect -- deprecated ``mode`` key, a category the
+                schema does not describe, an unimplemented ``method``, a dependency
+                cycle. Every one of them fails here, before the first LLM call.
+        """
+        category_config, context_mode = cls._load_strategy(strategy_file)
+
+        if any("mode" in cfg for cfg in category_config.values()):
+            raise ValueError(
+                "Strategy file uses deprecated 'mode' key. Please update to 'method' key "
+                "with new method names: pick, generate_pick, generate_evaluate_pick, "
+                "generate_evaluate_random_pick."
+            )
+
+        flat_schema = cls._load_flat_schema(prompt_file)
+        schema_categories: dict = flat_schema.get("categories", {})
+        system_instruction: str = "\n".join(flat_schema.get("instruction", []))
+
+        strategy_keys = set(category_config.keys())
+        schema_keys = set(schema_categories.keys())
+        missing_in_schema = strategy_keys - schema_keys
+        if missing_in_schema:
+            raise ValueError(f"Strategy declares categories not in schema: {missing_in_schema}")
+        missing_in_strategy = schema_keys - strategy_keys
+        if missing_in_strategy:
+            logging.warning(
+                f"Schema has categories not declared in strategy (will be skipped): {missing_in_strategy}"
+            )
+
+        ordered_categories = cls._build_dag(category_config)
+        # Every method is resolved to a class here, before the first prompt is sent:
+        # an unimplemented method is a config error, and a config error must not cost
+        # a single LLM call -- least of all on a resumed persona, which would re-pay
+        # nothing and fail at the same category on every retry round.
+        categories = build_categories(ordered_categories, category_config, schema_categories)
+        return Blueprint(
+            categories=categories,
+            context_mode=context_mode,
+            system_instruction=system_instruction,
+        )
+
+    @classmethod
+    def build_population(
+        cls,
+        prompt_file: str,
+        strategy_file: str,
+        *,
+        n: int,
+        output_dir: Path | str,
+        fingerprint: dict,
+    ) -> SyntheticPopulation:
+        """Build the persona set a run will fill, from its two config files.
+
+        The seam that keeps config interpretation in one layer: the population is
+        handed finished :class:`~.category.Category` objects and never learns what a
+        strategy YAML or a flat schema is. Callers that need the resume plan before
+        any worker exists (the parallel runner) construct the population through
+        here rather than assembling one themselves.
+        """
+        blueprint = cls.build_blueprint(prompt_file, strategy_file)
+        return SyntheticPopulation(
+            n,
+            output_dir,
+            fingerprint,
+            blueprint.categories,
+            context_mode=blueprint.context_mode,
+        )
+
     def _build_resolution_context(self, system_instruction: str) -> ResolutionContext:
         """Bind this generator's client and run-level flags into one call seam.
 
@@ -222,39 +334,10 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         if not strategy_file:
             raise ValueError("'strategy_file' must be provided as a kwarg.")
 
-        category_config, context_mode = self._load_strategy(strategy_file)
+        blueprint = self.build_blueprint(prompt_file, strategy_file)
 
-        if any("mode" in cfg for cfg in category_config.values()):
-            raise ValueError(
-                "Strategy file uses deprecated 'mode' key. Please update to 'method' key "
-                "with new method names: pick, generate_pick, generate_evaluate_pick, "
-                "generate_evaluate_random_pick."
-            )
-
-        flat_schema = self._load_flat_schema(prompt_file)
-        schema_categories: dict = flat_schema.get("categories", {})
-        system_instruction: str = "\n".join(flat_schema.get("instruction", []))
-
-        strategy_keys = set(category_config.keys())
-        schema_keys = set(schema_categories.keys())
-        missing_in_schema = strategy_keys - schema_keys
-        if missing_in_schema:
-            raise ValueError(f"Strategy declares categories not in schema: {missing_in_schema}")
-        missing_in_strategy = schema_keys - strategy_keys
-        if missing_in_strategy:
-            logging.warning(
-                f"Schema has categories not declared in strategy (will be skipped): {missing_in_strategy}"
-            )
-
-        ordered_categories = self._build_dag(category_config)
-        # Every method is resolved to a class here, before the first prompt is sent:
-        # an unimplemented method is a config error, and a config error must not cost
-        # a single LLM call -- least of all on a resumed persona, which would re-pay
-        # nothing and fail at the same category on every retry round.
-        categories = build_categories(ordered_categories, category_config, schema_categories)
-
-        ctx = self._build_resolution_context(system_instruction)
-        persona = Persona(categories, context_mode=context_mode, writer=self.writer)
+        ctx = self._build_resolution_context(blueprint.system_instruction)
+        persona = Persona(blueprint.categories, context_mode=blueprint.context_mode, writer=self.writer)
         try:
             resolved = persona.generate(ctx)
         finally:

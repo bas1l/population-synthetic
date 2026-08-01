@@ -311,3 +311,51 @@ def test_telemetry_mode_is_decided_before_the_first_record_either_order(tmp_path
 def test_close_is_safe_when_no_telemetry_was_ever_opened(tmp_path):
     _writer(tmp_path).close()
     assert not (tmp_path / "llm_interactions.jsonl").exists()
+
+
+def test_resume_continues_past_attempts_spent_after_the_last_checkpoint(tmp_path):
+    """The failing-category case: retries spend indices the checkpoint never saw.
+
+    A category that exhausts its retry budget records one telemetry entry per
+    attempt and then raises, so the persona's last checkpoint is older than the
+    highest index actually spent. Resuming from the checkpoint alone would hand
+    those indices out twice.
+    """
+    first = _writer(tmp_path)
+    _record(first, 1)
+    first.checkpoint({"age": 20}, call_index=1)
+    for index in (2, 3, 4):  # the failing category's three attempts
+        _record(first, index)
+    first.close()
+
+    state = _writer(tmp_path).resume()
+
+    assert state is not None
+    assert state.resolved == {"age": 20}
+    assert state.call_index == 4
+
+
+def test_a_torn_telemetry_line_does_not_cost_the_readable_indices(tmp_path):
+    # A kill mid-append leaves a partial trailing line; the records before it are
+    # still evidence of indices that were spent.
+    first = _writer(tmp_path)
+    _record(first, 1)
+    first.checkpoint({"age": 20}, call_index=1)
+    _record(first, 2)
+    first.close()
+    with (tmp_path / "llm_interactions.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write('{"persona_id": "persona_00000", "call_i')
+
+    assert _writer(tmp_path).resume().call_index == 2
+
+
+def test_has_checkpoint_reports_presence_without_consuming_it(tmp_path):
+    writer = _writer(tmp_path)
+    assert writer.has_checkpoint is False
+
+    _write_checkpoint(tmp_path, _valid_payload())
+    # A stale-fingerprint checkpoint is still *present*: the counting query must not
+    # reach the verdict that deletes it, which belongs to the attempt that generates.
+    stale = PersonaWriter(tmp_path, {**FINGERPRINT, "strategy_sha256": "c" * 64})
+    assert stale.has_checkpoint is True
+    assert (tmp_path / "identity.partial.json").exists()

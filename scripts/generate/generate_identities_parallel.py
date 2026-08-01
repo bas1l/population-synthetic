@@ -61,14 +61,17 @@ from population_synthetic.clients.ollama_control_client import OllamaControlClie
 from population_synthetic.clients.retry_policy import MAX_RETRY_ATTEMPTS
 from population_synthetic.generators.synthetic import ollama_concurrency, ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
-from population_synthetic.generators.synthetic.identity_generator_configurable import resolve_category_order
+from population_synthetic.generators.synthetic.identity_generator_configurable import (
+    IdentityGeneratorConfigurable,
+    resolve_category_order,
+)
 from population_synthetic.generators.synthetic.manifest_loader import (
     compose_manifest,
     load_manifest,
     serialize_manifest,
 )
-from population_synthetic.generators.synthetic.persona_writer import PersonaWriter
 from population_synthetic.generators.synthetic.run_fingerprint import build_run_fingerprint
+from population_synthetic.generators.synthetic.synthetic_population import SyntheticPopulation
 from population_synthetic.utils.atomic_io import atomic_write_json
 
 _SCRIPT_START_TIME = time.time()
@@ -130,47 +133,43 @@ def _generate_one(
     provider: str,
     model: str,
     config_path: str,
-    output_dir: Path,
+    population: SyntheticPopulation,
     kwargs: dict,
     log_llm: bool = False,
     base_url: str | None = None,
     api_key_env_var: str | None = None,
     generation_config: dict | None = None,
-    bypass_identity_skip: bool = False,
     discard_checkpoint: bool = False,
     retry_until_success: bool = False,
     structured_output: bool = False,
-    fingerprint: dict | None = None,
-    required_categories: list[str] | None = None,
 ) -> tuple[int, bool, str]:
-    """Generate one persona into ``output_dir/persona_XXXXX/``.
+    """Generate the persona occupying slot ``index`` of *population*.
 
-    The two skip levers are deliberately separate rather than one ``force``. A
-    retry round must re-enter a persona that has no finished ``identity.json``
-    (``bypass_identity_skip``) while *keeping* the categories the failed attempt
-    already paid for; only ``--force`` means "pretend this persona never existed"
-    (``discard_checkpoint``). Fusing them, as the previous ``force`` flag did,
-    made every retry round throw away the work it was retrying.
+    The worker no longer decides whether the slot needs work: ``population.plan()``
+    partitioned every slot once, before the pool existed, and this function is only
+    ever handed a slot from the pending side of that partition. A second gate here
+    could only ever disagree with the queue it was scheduled from.
+
+    What the worker still carries is ``discard_checkpoint``, and it is deliberately
+    *not* fused with "re-enter this slot" as the old ``force`` flag was. A retry
+    round re-enters a slot that has no finished ``identity.json`` while **keeping**
+    the categories the failed attempt already paid for; only ``--force`` means
+    "pretend this persona never existed". Fusing them made every retry round throw
+    away the work it was retrying.
+
+    Every argument is a resolved value: no config is re-read and no environment is
+    consulted here, so all workers of a run generate under provably the same regime.
     """
     global _completed, _failed
 
-    if fingerprint is None or not required_categories:
+    if population is None:
         raise ValueError(
-            "_generate_one requires the run's fingerprint and resolved category order: "
-            "without them a checkpoint cannot be validated and a persona cannot be "
-            "checked for completeness."
+            "_generate_one requires the run's SyntheticPopulation: it carries the "
+            "fingerprint a checkpoint is validated against and the directory layout "
+            "the persona is written into."
         )
 
-    persona_dir = output_dir / f"persona_{index:05d}"
-    writer = PersonaWriter(persona_dir, fingerprint, discard=discard_checkpoint)
-
-    if not bypass_identity_skip and writer.has_complete_identity(required_categories):
-        # A kill between finalize()'s identity write and its checkpoint unlink leaves
-        # both files. This is the only place that orphan is ever collected.
-        writer.discard_stale_checkpoint()
-        with _progress_lock:
-            _completed += 1
-        return index, True, "skipped (complete)"
+    writer = population.writer(index, discard_checkpoint=discard_checkpoint)
 
     cfg = generation_config or {}
 
@@ -783,6 +782,26 @@ def main() -> None:
         category_order=resolved_category_order,
     )
 
+    # The run's persona set, built once at the orchestration edge from the same two
+    # config files every worker will read. It answers which slots still need work
+    # *before* the pool exists, so a fully-complete rerun starts no thread and
+    # constructs no client, and every worker draws from one partition rather than
+    # each re-deciding the question from a path it built itself.
+    population = IdentityGeneratorConfigurable.build_population(
+        str(config_path),
+        kwargs["strategy_file"],
+        n=args.n,
+        output_dir=output_dir,
+        fingerprint=fingerprint,
+    )
+    resume_plan = population.plan(force=args.force)
+    if resume_plan.resumed:
+        logger.info(
+            "Resuming: %d/%d persona(s) already complete, %d of the %d remaining carry a "
+            "checkpoint to continue from.",
+            len(resume_plan.complete), args.n, len(resume_plan.checkpointed), len(resume_plan.pending),
+        )
+
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     run_metadata = {
         "name": m.name if m is not None else None,
@@ -831,6 +850,19 @@ def main() -> None:
         # serialises every attribute resolved so far -- so this sequence, not the
         # strategy's edge list, is what each persona's prompts actually saw.
         "resolved_category_order": resolved_category_order,
+        # What this run found on disk before generating anything. Recorded because a
+        # resumed run and a clean one are otherwise indistinguishable after the fact,
+        # and they are not interchangeable: a resumed combo's wall-clock and token
+        # totals cover only the slots this invocation actually paid for, so pooling
+        # it with a clean run's would under-report the population's true cost.
+        # ``--force`` reports resumed=false by construction -- it regenerates every
+        # slot, so it inherits nothing.
+        "resume": {
+            "resumed": resume_plan.resumed,
+            "skipped_complete": len(resume_plan.complete),
+            "resumed_from_checkpoint": len(resume_plan.checkpointed),
+            "pending": len(resume_plan.pending),
+        },
         "started_at": started_at,
     }
     if _composed_manifest is not None:
@@ -850,8 +882,17 @@ def main() -> None:
 
     t0 = time.perf_counter()
 
-    pending_indices = list(range(args.n))
-    all_results: dict[int, tuple[int, bool, str]] = {}
+    pending_indices = list(resume_plan.pending)
+    # The slots the plan skipped never reach a worker, so they are seeded into the
+    # results here: the final Success/Failed line counts personas the run leaves
+    # behind, not calls it made, and a fully-complete rerun that reported 0 successes
+    # would read as a failure.
+    all_results: dict[int, tuple[int, bool, str]] = {
+        idx: (idx, True, "skipped (complete)") for idx in resume_plan.complete
+    }
+    global _completed
+    with _progress_lock:
+        _completed = len(resume_plan.complete)
     round_num = 0
 
     while pending_indices:
@@ -872,22 +913,19 @@ def main() -> None:
                     provider=args.provider,
                     model=model,
                     config_path=str(config_path),
-                    output_dir=output_dir,
+                    population=population,
                     kwargs=kwargs,
                     log_llm=args.log_llm,
                     base_url=args.base_url,
                     api_key_env_var=args.api_key_env,
                     generation_config=generation_config,
-                    # A retry round must re-enter the slot it is retrying, but it
-                    # keeps that attempt's checkpoint -- the categories already
-                    # resolved were paid for and are still valid under the same
-                    # fingerprint. Only --force discards them.
-                    bypass_identity_skip=is_retry or args.force,
+                    # A retry round re-enters the slot it is retrying but keeps that
+                    # attempt's checkpoint -- the categories already resolved were
+                    # paid for and are still valid under the same fingerprint. Only
+                    # --force discards them.
                     discard_checkpoint=args.force,
                     retry_until_success=args.retry_until_success,
                     structured_output=args.structured_output,
-                    fingerprint=fingerprint,
-                    required_categories=resolved_category_order,
                 )
                 round_futures.append(fut)
 

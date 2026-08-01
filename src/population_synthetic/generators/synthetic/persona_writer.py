@@ -12,8 +12,11 @@ retry round silently discarded the telemetry of the attempt it replaced.
 **The shared lifecycle invariant.** ``llm_interactions.jsonl`` is truncated if
 and only if the checkpoint is discarded:
 
-* resumed  -> the JSONL is opened for append *and* ``call_index`` continues from
-  the checkpoint, so ``(persona_id, call_index)`` stays unique across the seam;
+* resumed  -> the JSONL is opened for append *and* ``call_index`` continues past
+  every index already spent, so ``(persona_id, call_index)`` stays unique across
+  the seam. "Already spent" is the larger of the checkpoint's counter and the
+  highest index the log itself carries: a category that exhausted its retry budget
+  spent indices *after* the last checkpoint, and only the log knows about them;
 * fresh    -> the JSONL is truncated *and* ``call_index`` restarts at 0.
 
 Nothing downstream has to dedupe, because the two decisions can never disagree:
@@ -133,6 +136,19 @@ class PersonaWriter:
             self._resume_state = self._read_checkpoint()
         return self._resume_state
 
+    @property
+    def has_checkpoint(self) -> bool:
+        """Whether a checkpoint file is present -- **not** whether it is usable.
+
+        Deliberately a bare existence check, and deliberately separate from
+        :meth:`resume`. A caller that only wants to *count* how much of a run was
+        inherited (the run-metadata resume record) must not consume the checkpoint
+        to find out: :meth:`resume` memoises its verdict, deletes what it rejects,
+        and fixes the telemetry log's append/truncate mode, all of which belong to
+        the attempt that actually generates the persona.
+        """
+        return self._checkpoint_path.exists()
+
     def _read_checkpoint(self) -> ResumeState | None:
         path = self._checkpoint_path
         if self._discard:
@@ -192,11 +208,56 @@ class PersonaWriter:
             path.unlink(missing_ok=True)
             return None
 
+        # The checkpoint records the counter as of the last *successful* category,
+        # but the attempts that failed after it are already in the telemetry log --
+        # a category exhausts its retry budget, and each of those attempts spent an
+        # index. Resuming from the checkpoint's value alone would hand those indices
+        # out a second time and break the (persona_id, call_index) join every cost
+        # and latency figure is computed over. The log is therefore consulted for the
+        # highest index actually spent, and the counter continues past whichever of
+        # the two is larger.
+        call_index = max(call_index, self._highest_recorded_call_index())
         logger.info(
             "Resuming %s from checkpoint: %d categor(ies) already resolved, continuing after call %d.",
             self._dir.name, len(resolved), call_index,
         )
         return ResumeState(resolved=resolved, call_index=call_index)
+
+    def _highest_recorded_call_index(self) -> int:
+        """The largest ``call_index`` the telemetry log already carries; 0 if none.
+
+        Read line by line and lenient about damage: this is an append log, so a
+        killed process can leave a torn trailing line, and one unparseable record
+        must not cost the indices the readable ones establish. Safe to call here
+        because :meth:`resume` is memoised and :attr:`telemetry` resolves it first,
+        so this never runs while the writer's own append handle is open.
+        """
+        path = self._telemetry_path
+        if not path.exists():
+            return 0
+        highest = 0
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    index = record.get("call_index") if isinstance(record, dict) else None
+                    if isinstance(index, int) and not isinstance(index, bool) and index > highest:
+                        highest = index
+        except (OSError, UnicodeDecodeError) as exc:
+            # Not fatal -- the persona can still be generated -- but it does mean the
+            # correlation keys of this persona may collide, so it is never silent.
+            logger.warning(
+                "Telemetry log %s could not be read (%s); resuming from the checkpoint's call "
+                "index alone, which may repeat a correlation key.", path, exc,
+            )
+            return 0
+        return highest
 
     # -- telemetry ------------------------------------------------------------
 

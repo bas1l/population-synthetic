@@ -70,6 +70,19 @@ class Persona:
     def category_names(self) -> list[str]:
         return [category.name for category in self._categories]
 
+    @property
+    def writer(self) -> PersonaWriter | None:
+        """The writer this persona checkpoints through, or ``None`` if in-memory.
+
+        Exposed read-only so a caller that obtained the persona from a
+        :class:`~.synthetic_population.SyntheticPopulation` can publish and close
+        the same files the walk checkpointed into, without a second lookup that
+        could disagree about which directory this persona owns. The persona still
+        knows nothing about those files -- it only hands back the object it was
+        constructed with.
+        """
+        return self._writer
+
     def generate(self, ctx: ResolutionContext) -> dict[str, Any]:
         """Resolve every outstanding category and return the flat persona.
 
