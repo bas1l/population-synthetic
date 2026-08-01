@@ -14,7 +14,7 @@ tasks:
   validate_raw:                   # pipeline root -- per-combo raw-persona completeness check
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force (overwrite CSV)
-    force: false
+    force: true
     options:
       output-base:                # --output-base (blank = script default)
     depends_on: []
@@ -22,7 +22,7 @@ tasks:
   mapping:                        # map the full validated raw pool (reads 01_Raw, not the cap)
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force
-    force: false
+    force: true
     options:
       output-base:                # --output-base (blank = script default)
     depends_on: [validate_raw]
@@ -30,7 +30,7 @@ tasks:
   validate_mapped:                # per-combo mapped-persona check (unmapped-value detection)
     enabled: true
     supports_force: true          # node shows a Force checkbox -> --force (overwrite CSV)
-    force: false
+    force: true
     options:
       output-base:                # --output-base (blank = script default)
     depends_on: [mapping]
@@ -46,7 +46,7 @@ tasks:
     depends_on: [validate_mapped]
 
   fidelity:
-    enabled: false
+    enabled: true
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options:
@@ -143,9 +143,11 @@ tasks:
     depends_on: [population_cap]
 
 selection:                        # shared by ALL tasks in the chain
-  models: [claude_haiku, claude_opus, claude_sonnet, ollama_deepseek_r1_14b, 
-      ollama_gemma4_e4b, ollama_llama31_8b, ollama_mistral_nemo_12b, 
-      openrouter_glm_52]
-  strategies: [all_generate_evaluate_pick, all_generate_evaluate_random_pick, 
-      all_generate_pick, all_pick, all_pick_dag]
-  countries: [swedish]
+  models: [claude_haiku, ollama_deepseek_r1_14b, ollama_gemma4_e4b, 
+      ollama_llama31_8b, ollama_mistral_nemo_12b, openrouter_glm_52, 
+      openrouter_gpt_oss_120b, openrouter_mistral_medium, 
+      openrouter_qwen35_flash]
+  strategies: [all_generate_evaluate_pick_v2, 
+      all_generate_evaluate_random_pick_v2, all_generate_pick_v2, 
+      all_pick_dag_v2, all_pick_v2]
+  countries: [swedish_02]

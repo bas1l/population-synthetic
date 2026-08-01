@@ -7,7 +7,7 @@
 # These figures are a static, dated snapshot -- not fetched live. Verify the
 # rows flagged [VERIFY] before using cost figures in a publication, and confirm
 # list-vs-effective pricing for the rows marked "effective/discounted".
-observed_date: "2026-07-23"
+observed_date: "2026-07-29"
 source: "OpenRouter model pages + platform.claude.com pricing (see plan appendix)"
 currency: "USD_per_1M_tokens"
 
@@ -38,13 +38,15 @@ models:
   claude_haiku:             {in: 1.00,  out: 5.00}    # Anthropic first-party (Haiku 4.5)
   claude_opus:              {in: 5.00,  out: 25.00}   # Anthropic first-party (Opus 4.8)
   gemini_flash:             {in: 0.30,  out: 2.50}    # google/gemini-2.5-flash (OpenRouter)
-  openrouter_claude_sonnet5: {in: 3.00,  out: 15.00}   # anthropic/claude-sonnet-4-5
-  openrouter_gpt55:          {in: 75.00, out: 150.00}  # openai/gpt-4.5-preview  [VERIFY: widget didn't render]
-  openrouter_gemini_flash:   {in: 0.075, out: 0.30}    # google/gemini-flash-1.5 [VERIFY: legacy slug, unconfirmed]
-  openrouter_deepseek_v4:    {in: 0.435, out: 0.87}    # deepseek/deepseek-v4-pro [effective/discounted]
-  openrouter_glm_52:         {in: 0.77,  out: 2.42}    # z-ai/glm-5.2 [effective/discounted]
-  openrouter_mistral_medium: {in: 1.50,  out: 7.50}    # mistralai/mistral-medium-3-5
-  openrouter_qwen37_max:     {in: 1.475, out: 4.425}   # qwen/qwen3.7-max [effective/discounted]
+  openrouter_deepseek_v4:      {in: 0.435, out: 0.87}    # deepseek/deepseek-v4-pro [effective/discounted]
+  openrouter_deepseek_v4_flash: {in: 0.14, out: 0.28}    # deepseek/deepseek-v4-flash
+  openrouter_gemini_flash_lite: {in: 0.10, out: 0.40}    # google/gemini-2.5-flash-lite
+  openrouter_glm_52:           {in: 0.739, out: 2.323}   # z-ai/glm-5.2 [effective/discounted]
+  openrouter_gpt_oss_120b:     {in: 0.037, out: 0.17}    # openai/gpt-oss-120b
+  openrouter_mistral_medium:   {in: 1.50,  out: 7.50}    # mistralai/mistral-medium-3-5
+  openrouter_nemotron3_super:  {in: 0.085, out: 0.40}    # nvidia/nemotron-3-super-120b-a12b
+  openrouter_qwen35_flash:     {in: 0.065, out: 0.26}    # qwen/qwen3.5-flash-02-23
+  openrouter_qwen37_max:       {in: 1.475, out: 4.425}   # qwen/qwen3.7-max [effective/discounted]
   # --- local models: no API cost ---
   ollama_deepseek_r1_14b:   {in: 0, out: 0}
   ollama_gemma2_9b:         {in: 0, out: 0}

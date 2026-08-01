@@ -1,8 +1,8 @@
-id: "openrouter_claude_sonnet5"
-label: "OpenRouter Claude Sonnet 4.5"
+id: "openrouter_qwen35_flash"
+label: "OpenRouter Qwen 3.5 Flash"
 model_config:
   provider: "openrouter"
-  model: "anthropic/claude-sonnet-4-5"
+  model: "qwen/qwen3.5-flash-02-23"
   generation_config:
     temperature: null
     top_p: null
