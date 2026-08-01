@@ -1,39 +1,30 @@
 """DAG-driven, per-category configurable identity generation.
 
-Defines ``IdentityGeneratorConfigurable``, a ``BaseIdentityGenerator``
-that resolves categories in topological order from an explicit dependency
-graph (Kahn's algorithm). Each category is filled via its declared
-method -- pick, generate_pick, generate_evaluate_pick, or
-generate_evaluate_random_pick -- using JSON-constrained LLM calls with
-retry, weight reconciliation, and incremental interaction logging.
+Defines ``IdentityGeneratorConfigurable``, a ``BaseIdentityGenerator`` that turns a
+strategy YAML and a flat schema into a resolved persona. Its job is assembly, not
+resolution: it loads and validates the two config files, builds the dependency
+graph (Kahn's algorithm), constructs one ``Category`` per declared attribute, and
+hands the result to a ``Persona`` to walk.
+
+Per-category prompts live on ``Category``, the LLM call lives on
+``ResolutionContext``, and the walk plus its checkpointing live on ``Persona`` --
+so the generation methods that this project compares are each an independently
+constructible class rather than a branch of one chain.
 """
 
 import json
 import logging
 import os
-import random
-import re
 from collections import deque
-from typing import Any
 
-import numpy as np
 import yaml
 
-from population_synthetic.clients.call_context import set_correlation
 from population_synthetic.clients.llm_protocol import LLMClient
-from population_synthetic.clients.retry_policy import FATAL_ERROR_CATEGORIES, max_attempts
 
 from .base_identity_generator import BaseIdentityGenerator
-from .llm_interaction_log import LLMInteractionEntry
-
-_WEIGHT_COUNT_TOLERANCE_RATIO = 0.1
-
-# Attempt budgets for the two generator-level retry layers WITHOUT
-# ``retry_until_success``. With it, both rise to the shared MAX_RETRY_ATTEMPTS
-# ceiling (see clients/retry_policy.py): a model that never returns usable
-# output then fails loudly instead of hanging in a truly unbounded loop.
-_DEFAULT_JSON_ATTEMPTS = 3
-_DEFAULT_WEIGHT_RECONCILE_ATTEMPTS = 3
+from .category import build_categories
+from .persona import CONTEXT_MODES, Persona
+from .resolution_context import ResolutionContext
 
 
 class IdentityGeneratorConfigurable(BaseIdentityGenerator):
@@ -42,8 +33,9 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
     def __init__(self, client: LLMClient):
         super().__init__(client)
         # Correlation context for exact log<->JSONL joining.  ``persona_id`` is
-        # assigned externally by the parallel runner; ``_call_index`` increments
-        # once per client call so each log line + JSONL entry share a unique key.
+        # assigned externally by the parallel runner; ``_call_index`` seeds the
+        # resolution context's counter and is read back from it after a run, so a
+        # generator reused for a second persona never replays an index.
         self.persona_id: str | None = None
         self._call_index: int = 0
 
@@ -90,10 +82,13 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
         if not categories or not isinstance(categories, dict):
             raise ValueError(f"Strategy file must contain a 'categories' dict: {filepath}")
         context_mode = data.get("context", "cumulative")
-        if context_mode not in ("cumulative", "none"):
+        # The modes are enumerated once, on ``Persona``, which is what implements
+        # them; validating against that list keeps a new mode from being accepted
+        # here and then silently unhandled during the walk.
+        if context_mode not in CONTEXT_MODES:
             raise ValueError(
                 f"Strategy file has invalid 'context' value {context_mode!r} "
-                f"(expected 'cumulative' or 'none'): {filepath}"
+                f"(expected one of {', '.join(CONTEXT_MODES)}): {filepath}"
             )
         IdentityGeneratorConfigurable._validate_axis_metadata(data, filepath)
         return categories, context_mode
@@ -195,588 +190,22 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
 
         return ordered
 
-    @staticmethod
-    def _extract_json(text: str) -> dict | list:
-        text = text.strip()
+    def _build_resolution_context(self, system_instruction: str) -> ResolutionContext:
+        """Bind this generator's client and run-level flags into one call seam.
 
-        # 1. Direct parse
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        # 2. Extract content between markdown fences
-        fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
-        if fence_match:
-            try:
-                return json.loads(fence_match.group(1))
-            except json.JSONDecodeError:
-                pass
-
-        # 3. Find first JSON object or array
-        for pattern in (r"\{[^{}]*\}", r"\[.*?\]"):
-            obj_match = re.search(pattern, text, re.DOTALL)
-            if obj_match:
-                try:
-                    return json.loads(obj_match.group(0))
-                except json.JSONDecodeError:
-                    pass
-
-        raise json.JSONDecodeError("No valid JSON found in response", text, 0)
-
-    @staticmethod
-    def _extract_expected_key(parsed: dict | list, expected_key: str) -> Any:
+        A separate method because it is the whole surface a test double needs to
+        replace: substituting the context removes the client without touching a
+        single prompt, a category or the walk.
         """
-        Return parsed[expected_key], tolerating whitespace-corrupted keys
-        (e.g. ' value' instead of 'value') that some models emit under Ollama's
-        JSON-constrained decoding. Raises KeyError when the key is absent so the
-        caller's retry loop treats it as a retriable parse failure.
-        """
-        if not isinstance(parsed, dict):
-            raise KeyError(expected_key)
-        if expected_key in parsed:
-            return parsed[expected_key]
-        target = expected_key.strip()
-        for key, value in parsed.items():
-            if isinstance(key, str) and key.strip() == target:
-                return value
-        raise KeyError(expected_key)
-
-    def _call_llm_json(
-        self,
-        prompt: str,
-        system_instruction: str,
-        *,
-        expected_key: str | None = None,
-        response_schema: dict | None = None,
-        log_category: str = "",
-        log_method: str = "",
-        log_step: str = "",
-    ) -> Any:
-        extra = (
-            {"response_schema": response_schema}
-            if self.use_structured_output and response_schema is not None
-            else {}
+        return ResolutionContext(
+            self.client,
+            system_instruction=system_instruction,
+            persona_id=self.persona_id,
+            call_index=self._call_index,
+            interaction_collector=self.interaction_collector,
+            retry_until_success=self.retry_until_success,
+            use_structured_output=self.use_structured_output,
         )
-        last_error: Exception | None = None
-        attempts = max_attempts(self.retry_until_success, _DEFAULT_JSON_ATTEMPTS)
-        for attempt in range(attempts):
-            raw = ""
-            # One unique correlation key per client call (not per invocation): the
-            # log line the client emits and the JSONL entry recorded below share it,
-            # so the joiner can attach token/latency to the exact persona+call.
-            self._call_index += 1
-            call_index = self._call_index
-            set_correlation(self.persona_id, call_index)
-            try:
-                raw = self.client.generate_content(
-                    prompt, system_instruction=system_instruction, **extra
-                )
-                meta = getattr(self.client, "last_metadata", None) or {}
-                parsed = self._extract_json(raw)
-                value = (
-                    self._extract_expected_key(parsed, expected_key)
-                    if expected_key is not None
-                    else parsed
-                )
-                if self.interaction_collector and log_category:
-                    self.interaction_collector.record(LLMInteractionEntry(
-                        category=log_category,
-                        method=log_method,
-                        step=log_step,
-                        prompt=prompt,
-                        raw_response=raw,
-                        parsed_value=parsed,
-                        attempt=attempt + 1,
-                        persona_id=self.persona_id,
-                        call_index=call_index,
-                        provider=meta.get("provider"),
-                        model=meta.get("model"),
-                        request_sent_at=meta.get("request_sent_at"),
-                        response_received_at=meta.get("response_received_at"),
-                        elapsed_ms=meta.get("elapsed_ms"),
-                        prompt_tokens=meta.get("prompt_tokens"),
-                        completion_tokens=meta.get("completion_tokens"),
-                        total_tokens=meta.get("total_tokens"),
-                    ))
-                return value
-            except (json.JSONDecodeError, KeyError, RuntimeError) as e:
-                meta = getattr(self.client, "last_metadata", None) or {}
-                if isinstance(e, (json.JSONDecodeError, KeyError)):
-                    error_category = "invalid_response"
-                else:
-                    error_category = meta.get("error_category") or "unknown"
-                if self.interaction_collector and log_category:
-                    self.interaction_collector.record(LLMInteractionEntry(
-                        category=log_category,
-                        method=log_method,
-                        step=f"{log_step}_retry",
-                        prompt=prompt,
-                        raw_response=raw,
-                        parsed_value=None,
-                        error=f"{type(e).__name__}: {e}",
-                        attempt=attempt + 1,
-                        persona_id=self.persona_id,
-                        call_index=call_index,
-                        provider=meta.get("provider"),
-                        model=meta.get("model"),
-                        request_sent_at=meta.get("request_sent_at"),
-                        response_received_at=meta.get("response_received_at"),
-                        elapsed_ms=meta.get("elapsed_ms"),
-                        prompt_tokens=meta.get("prompt_tokens"),
-                        completion_tokens=meta.get("completion_tokens"),
-                        total_tokens=meta.get("total_tokens"),
-                        error_category=error_category,
-                    ))
-                # A fatal provider error (missing model, rejected credentials) is not
-                # made truthy by repetition: it must escape the budget immediately,
-                # or ``retry_until_success`` turns a misconfigured run into a
-                # 100-attempt-per-call grind that still fails.
-                if error_category in FATAL_ERROR_CATEGORIES:
-                    raise
-                last_error = e
-                raw_snippet = raw[:500] if raw else "(no response)"
-                logging.warning(
-                    "LLM JSON parse attempt %d/%d failed (%s): %s\n--- RAW RESPONSE ---\n%s\n--- END ---",
-                    attempt + 1, attempts, type(e).__name__, e, raw_snippet,
-                )
-        raise ValueError(
-            f"LLM returned invalid or incomplete JSON after {attempts} attempts. Last error: {last_error}"
-        )
-
-    def _build_context_block(self, resolved: dict) -> str:
-        if not resolved:
-            return "This is the first category. Use the system instruction as context."
-        return "\n".join(f"{k}: {v}" for k, v in resolved.items())
-
-    def _is_numeric_category(self, category_schema: dict) -> bool:
-        return isinstance(category_schema, dict) and "min" in category_schema and "max" in category_schema
-
-    @staticmethod
-    def _schema_value(category_schema: dict) -> dict:
-        num_type = "integer" if category_schema.get("type") == "integer" else "number"
-        value_type = num_type if ("min" in category_schema and "max" in category_schema) else "string"
-        return {
-            "type": "object",
-            "properties": {"value": {"type": value_type}},
-            "required": ["value"],
-        }
-
-    @staticmethod
-    def _schema_candidates(category_schema: dict) -> dict:
-        item_type = "number" if ("min" in category_schema and "max" in category_schema) else "string"
-        return {
-            "type": "object",
-            "properties": {"candidates": {"type": "array", "items": {"type": item_type}}},
-            "required": ["candidates"],
-        }
-
-    @staticmethod
-    def _schema_weights() -> dict:
-        return {
-            "type": "object",
-            "properties": {"weights": {"type": "array", "items": {"type": "number"}}},
-            "required": ["weights"],
-        }
-
-    @staticmethod
-    def _schema_distribution() -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "distribution": {"type": "string", "enum": ["normal", "uniform", "beta"]},
-                "mean": {"type": "number"},
-                "std": {"type": "number"},
-            },
-            "required": ["distribution"],
-        }
-
-    def _build_pick_prompt(
-        self,
-        category_name: str,
-        category_schema: dict,
-        resolved: dict,
-        system_instruction: str,
-    ) -> str:
-        context = self._build_context_block(resolved)
-        description = category_schema.get("description", "")
-        if self._is_numeric_category(category_schema):
-            num_type = "integer" if category_schema.get("type") == "integer" else "number"
-            return (
-                f"Context:\n{context}\n\n"
-                f"Given the context above, pick a single {num_type} for '{category_name}' "
-                f"between {category_schema['min']} and {category_schema['max']}. "
-                f"{description} "
-                f'Return JSON: {{"value": <number>}}. No explanation.'
-            )
-        return (
-            f"Context:\n{context}\n\n"
-            f"Given the context above, pick a single appropriate value for '{category_name}'. "
-            f"{description} "
-            f'Return JSON: {{"value": "<your choice>"}}. No explanation.'
-        )
-
-    def _build_enumerate_prompt(
-        self,
-        category_name: str,
-        category_schema: dict,
-        resolved: dict,
-        system_instruction: str,
-    ) -> str:
-        context = self._build_context_block(resolved)
-        description = category_schema.get("description", "")
-        if self._is_numeric_category(category_schema):
-            return (
-                f"Context:\n{context}\n\n"
-                f"Given the context above, list all plausible candidate numbers for '{category_name}' "
-                f"between {category_schema['min']} and {category_schema['max']}. "
-                f"{description} "
-                f'Return JSON: {{"candidates": [n1, n2, ...]}}.'
-            )
-        return (
-            f"Context:\n{context}\n\n"
-            f"Given the context above, list up to 20 of the most plausible candidate values "
-            f"for '{category_name}' given the context. "
-            f"Prioritize the most realistic and likely options. "
-            f"{description} "
-            f'Return JSON: {{"candidates": ["value1", ...]}}. No duplicates.'
-        )
-
-    def _build_evaluate_prompt(
-        self,
-        category_name: str,
-        candidates: list,
-        resolved: dict,
-        system_instruction: str,
-    ) -> str:
-        context = self._build_context_block(resolved)
-        n = len(candidates)
-        return (
-            f"Context:\n{context}\n\n"
-            f"Assign probability weights to these {n} candidates for '{category_name}' given the context. "
-            f"Weights must sum to 1.0. "
-            f"You MUST return exactly {n} weights. "
-            f"Return JSON: {{\"weights\": [0.x, 0.y, ...]}} in the same order as candidates: {candidates}."
-        )
-
-    def _candidate_probabilities(
-        self,
-        candidates: list,
-        weights: list[float],
-        category_name: str,
-    ) -> dict[str, float]:
-        """Pair each candidate with its probability, summing any duplicate candidates.
-
-        The enumerate prompt asks for no duplicates but nothing enforces it, and a dict
-        rendering would otherwise let a repeated candidate's weight vanish. Summing is
-        the consistent reading -- the probability of a *value* being chosen is the total
-        mass its entries carry, which is also what ``random.choices`` effectively does in
-        the ``generate_evaluate_random_pick`` path.
-        """
-        probabilities: dict[str, float] = {}
-        for candidate, weight in zip(candidates, weights):
-            key = str(candidate)
-            probabilities[key] = probabilities.get(key, 0.0) + float(weight)
-        if len(probabilities) < len(candidates):
-            logging.warning(
-                f"Collapsed {len(candidates) - len(probabilities)} duplicate candidate(s) "
-                f"for '{category_name}' when pairing with weights ({len(candidates)} -> "
-                f"{len(probabilities)}); duplicate weights were summed."
-            )
-        # Rounded for prompt legibility only -- the stored weights are untouched.
-        return {key: round(value, 4) for key, value in probabilities.items()}
-
-    def _build_select_prompt(
-        self,
-        category_name: str,
-        candidates: list,
-        resolved: dict,
-        system_instruction: str,
-        weights: list[float] | None = None,
-    ) -> str:
-        """Build the select-step prompt.
-
-        With *weights* omitted (the ``generate_pick`` path, which computes none), the
-        bare candidate list is offered. With *weights* supplied (the
-        ``generate_evaluate_pick`` path), each candidate is shown paired with the
-        probability the evaluate step assigned it, as a JSON ``value: probability``
-        object -- so the weights that call produced actually inform the choice instead of
-        being computed and discarded.
-        """
-        context = self._build_context_block(resolved)
-        if weights is None:
-            return (
-                f"Context:\n{context}\n\n"
-                f"From the following candidates for '{category_name}', pick the single most appropriate value "
-                f"given the context. "
-                f'Return JSON: {{"value": "<chosen>"}}. '
-                f"Candidates: {candidates}."
-            )
-
-        probabilities = self._candidate_probabilities(candidates, weights, category_name)
-        return (
-            f"Context:\n{context}\n\n"
-            f"From the following candidates for '{category_name}' -- each paired with the probability "
-            f"you assigned it -- pick the single most appropriate value given the context and those "
-            f"probabilities. "
-            f'Return JSON: {{"value": "<chosen>"}}. '
-            f"Candidates: {json.dumps(probabilities, ensure_ascii=False)}."
-        )
-
-    def _build_numeric_distribution_prompt(
-        self,
-        category_name: str,
-        category_schema: dict,
-        resolved: dict,
-        system_instruction: str,
-    ) -> str:
-        context = self._build_context_block(resolved)
-        description = category_schema.get("description", "")
-        return (
-            f"Context:\n{context}\n\n"
-            f"Specify a probability distribution for '{category_name}' between "
-            f"{category_schema['min']} and {category_schema['max']} given the context. "
-            f"{description} "
-            f'Return JSON: {{"distribution": "normal"|"uniform"|"beta", "mean": <n>, "std": <n>}} '
-            f"(mean/std only for normal). Use 'uniform' for no preference."
-        )
-
-    def _normalize_weights(self, weights: list[float], category_name: str) -> list[float]:
-        total = sum(weights)
-        if abs(total) < 1e-9:
-            logging.warning(
-                f"Weights for '{category_name}' sum to zero — will retry."
-            )
-            return weights
-        if abs(total - 1.0) > 1e-6:
-            logging.warning(
-                f"Weights for '{category_name}' sum to {total:.4f}, not 1.0 — normalizing."
-            )
-            weights = [w / total for w in weights]
-        return weights
-
-    def _reconcile_weight_count(
-        self,
-        weights: list[float],
-        candidates: list,
-        category_name: str,
-    ) -> list[float] | None:
-        n_weights, n_candidates = len(weights), len(candidates)
-        if n_weights == n_candidates:
-            return weights
-
-        if not weights or any(w < 0 for w in weights) or all(w == 0 for w in weights):
-            return None
-
-        tolerance = int(n_candidates * _WEIGHT_COUNT_TOLERANCE_RATIO)
-        diff = abs(n_weights - n_candidates)
-        if diff > tolerance:
-            return None
-
-        if n_weights < n_candidates:
-            pad_value = min(weights)
-            weights = weights + [pad_value] * (n_candidates - n_weights)
-            logging.warning(
-                f"Padded {diff} missing weight(s) for '{category_name}' "
-                f"({n_weights} -> {n_candidates}) with min-weight {pad_value:.4f}."
-            )
-        else:
-            weights = weights[:n_candidates]
-            logging.warning(
-                f"Truncated {diff} excess weight(s) for '{category_name}' "
-                f"({n_weights} -> {n_candidates})."
-            )
-
-        return self._normalize_weights(weights, category_name)
-
-    def _process_pick(
-        self,
-        category_name: str,
-        category_schema: dict,
-        resolved: dict,
-        system_instruction: str,
-    ) -> Any:
-        prompt = self._build_pick_prompt(category_name, category_schema, resolved, system_instruction)
-        value = self._call_llm_json(
-            prompt, system_instruction,
-            expected_key="value",
-            response_schema=self._schema_value(category_schema),
-            log_category=category_name, log_method="pick", log_step="pick",
-        )
-        if self._is_numeric_category(category_schema):
-            value = max(category_schema["min"], min(category_schema["max"], float(value)))
-            if category_schema.get("type") == "integer":
-                value = int(round(value))
-        return value
-
-    def _process_generate_pick(
-        self,
-        category_name: str,
-        category_schema: dict,
-        resolved: dict,
-        system_instruction: str,
-    ) -> Any:
-        enum_prompt = self._build_enumerate_prompt(category_name, category_schema, resolved, system_instruction)
-        candidates = self._call_llm_json(
-            enum_prompt, system_instruction,
-            expected_key="candidates",
-            response_schema=self._schema_candidates(category_schema),
-            log_category=category_name, log_method="generate_pick", log_step="enumerate",
-        )
-
-        sel_prompt = self._build_select_prompt(category_name, candidates, resolved, system_instruction)
-        value = self._call_llm_json(
-            sel_prompt, system_instruction,
-            expected_key="value",
-            response_schema=self._schema_value(category_schema),
-            log_category=category_name, log_method="generate_pick", log_step="select",
-        )
-
-        if self._is_numeric_category(category_schema):
-            value = max(category_schema["min"], min(category_schema["max"], float(value)))
-            if category_schema.get("type") == "integer":
-                value = int(round(value))
-        return value
-
-    def _process_generate_evaluate_pick(
-        self,
-        category_name: str,
-        category_schema: dict,
-        resolved: dict,
-        system_instruction: str,
-    ) -> Any:
-        enum_prompt = self._build_enumerate_prompt(category_name, category_schema, resolved, system_instruction)
-        candidates = self._call_llm_json(
-            enum_prompt, system_instruction,
-            expected_key="candidates",
-            response_schema=self._schema_candidates(category_schema),
-            log_category=category_name, log_method="generate_evaluate_pick", log_step="enumerate",
-        )
-        if len(candidates) > 25:
-            logging.warning(f"Truncating {len(candidates)} candidates to 25 for '{category_name}'.")
-            candidates = candidates[:25]
-
-        reconcile_attempts = max_attempts(self.retry_until_success, _DEFAULT_WEIGHT_RECONCILE_ATTEMPTS)
-        attempt = 0
-        while True:
-            attempt += 1
-            eval_prompt = self._build_evaluate_prompt(category_name, candidates, resolved, system_instruction)
-            weights = self._call_llm_json(
-                eval_prompt, system_instruction,
-                expected_key="weights",
-                response_schema=self._schema_weights(),
-                log_category=category_name, log_method="generate_evaluate_pick", log_step="evaluate",
-            )
-            weights = self._normalize_weights(weights, category_name)
-            reconciled = self._reconcile_weight_count(weights, candidates, category_name)
-            if reconciled is not None:
-                weights = reconciled
-                break
-            tolerance = int(len(candidates) * _WEIGHT_COUNT_TOLERANCE_RATIO)
-            if attempt >= reconcile_attempts:
-                raise ValueError(
-                    f"Weight/candidate count mismatch for '{category_name}' after {attempt} attempts: "
-                    f"{len(weights)} weights for {len(candidates)} candidates."
-                )
-            logging.warning(
-                f"Weight/candidate mismatch for '{category_name}' "
-                f"(attempt {attempt}/{reconcile_attempts}): {len(weights)} weights for "
-                f"{len(candidates)} candidates (exceeds tolerance of {tolerance}). Retrying."
-            )
-
-        sel_prompt = self._build_select_prompt(
-            category_name, candidates, resolved, system_instruction, weights=weights
-        )
-        value = self._call_llm_json(
-            sel_prompt, system_instruction,
-            expected_key="value",
-            response_schema=self._schema_value(category_schema),
-            log_category=category_name, log_method="generate_evaluate_pick", log_step="select",
-        )
-
-        if self._is_numeric_category(category_schema):
-            value = max(category_schema["min"], min(category_schema["max"], float(value)))
-            if category_schema.get("type") == "integer":
-                value = int(round(value))
-        return value
-
-    def _process_generate_evaluate_random_pick(
-        self,
-        category_name: str,
-        category_schema: dict,
-        resolved: dict,
-        system_instruction: str,
-    ) -> Any:
-        if self._is_numeric_category(category_schema):
-            dist_prompt = self._build_numeric_distribution_prompt(
-                category_name, category_schema, resolved, system_instruction
-            )
-            spec = self._call_llm_json(
-                dist_prompt, system_instruction,
-                response_schema=self._schema_distribution(),
-                log_category=category_name, log_method="generate_evaluate_random_pick", log_step="distribution",
-            )
-            lo, hi = category_schema["min"], category_schema["max"]
-            distribution = spec.get("distribution", "uniform")
-
-            if distribution == "normal":
-                mean = float(spec.get("mean", (lo + hi) / 2))
-                std = float(spec.get("std", (hi - lo) / 6))
-                raw = np.random.normal(mean, std)
-            elif distribution == "beta":
-                # Map beta(2,2) to [lo, hi] as a reasonable default when no alpha/beta given
-                alpha = float(spec.get("alpha", 2))
-                beta = float(spec.get("beta", 2))
-                raw = lo + np.random.beta(alpha, beta) * (hi - lo)
-            else:
-                raw = np.random.uniform(lo, hi)
-
-            value = max(lo, min(hi, float(raw)))
-            if category_schema.get("type") == "integer":
-                value = int(round(value))
-            return value
-
-        # Categorical path
-        enum_prompt = self._build_enumerate_prompt(category_name, category_schema, resolved, system_instruction)
-        candidates = self._call_llm_json(
-            enum_prompt, system_instruction,
-            expected_key="candidates",
-            response_schema=self._schema_candidates(category_schema),
-            log_category=category_name, log_method="generate_evaluate_random_pick", log_step="enumerate",
-        )
-        if len(candidates) > 25:
-            logging.warning(f"Truncating {len(candidates)} candidates to 25 for '{category_name}'.")
-            candidates = candidates[:25]
-
-        reconcile_attempts = max_attempts(self.retry_until_success, _DEFAULT_WEIGHT_RECONCILE_ATTEMPTS)
-        attempt = 0
-        while True:
-            attempt += 1
-            eval_prompt = self._build_evaluate_prompt(category_name, candidates, resolved, system_instruction)
-            weights = self._call_llm_json(
-                eval_prompt, system_instruction,
-                expected_key="weights",
-                response_schema=self._schema_weights(),
-                log_category=category_name, log_method="generate_evaluate_random_pick", log_step="evaluate",
-            )
-            weights = self._normalize_weights(weights, category_name)
-            reconciled = self._reconcile_weight_count(weights, candidates, category_name)
-            if reconciled is not None:
-                weights = reconciled
-                break
-            tolerance = int(len(candidates) * _WEIGHT_COUNT_TOLERANCE_RATIO)
-            if attempt >= reconcile_attempts:
-                raise ValueError(
-                    f"Weight/candidate count mismatch for '{category_name}' after {attempt} attempts: "
-                    f"{len(weights)} weights for {len(candidates)} candidates."
-                )
-            logging.warning(
-                f"Weight/candidate mismatch for '{category_name}' "
-                f"(attempt {attempt}/{reconcile_attempts}): {len(weights)} weights for "
-                f"{len(candidates)} candidates (exceeds tolerance of {tolerance}). Retrying."
-            )
-
-        return random.choices(candidates, weights=weights, k=1)[0]
 
     def generate_identity(self, prompt_file: str, **kwargs) -> tuple[dict, dict]:
         """
@@ -818,97 +247,24 @@ class IdentityGeneratorConfigurable(BaseIdentityGenerator):
             )
 
         ordered_categories = self._build_dag(category_config)
+        # Every method is resolved to a class here, before the first prompt is sent:
+        # an unimplemented method is a config error, and a config error must not cost
+        # a single LLM call -- least of all on a resumed persona, which would re-pay
+        # nothing and fail at the same category on every retry round.
+        categories = build_categories(ordered_categories, category_config, schema_categories)
 
-        resolved = self._resume_prefix(ordered_categories)
-        pending_categories = ordered_categories[len(resolved):]
-        for category_name in pending_categories:
-            cfg = category_config[category_name]
-            method: str = cfg.get("method", "")
-            category_schema = schema_categories[category_name]
-
-            # Under ``context: none`` the prompt sees no prior-attribute values;
-            # ``resolved`` is still accumulated below (only what the prompt sees
-            # changes, not DAG order, clamping, or the returned persona).
-            context_view = {} if context_mode == "none" else resolved
-
-            try:
-                if method == "pick":
-                    value = self._process_pick(
-                        category_name, category_schema, context_view, system_instruction
-                    )
-                elif method == "generate_pick":
-                    value = self._process_generate_pick(
-                        category_name, category_schema, context_view, system_instruction
-                    )
-                elif method == "generate_evaluate_pick":
-                    value = self._process_generate_evaluate_pick(
-                        category_name, category_schema, context_view, system_instruction
-                    )
-                elif method == "generate_evaluate_random_pick":
-                    value = self._process_generate_evaluate_random_pick(
-                        category_name, category_schema, context_view, system_instruction
-                    )
-                else:
-                    raise ValueError(
-                        f"Unknown method '{method}' for category '{category_name}'. "
-                        f"Valid: pick, generate_pick, generate_evaluate_pick, generate_evaluate_random_pick."
-                    )
-            except Exception as e:
-                logging.error(
-                    "Category '%s' (method=%s) failed after resolving %d/%d categories: %s",
-                    category_name, method, len(resolved), len(ordered_categories), e,
-                )
-                raise
-
-            resolved[category_name] = value
-            # Checkpoint AFTER the value lands in ``resolved``, never before: the
-            # checkpoint's contract is "these categories are paid for", and writing
-            # it first would resume a persona past a category it never generated.
-            # ``_call_index`` travels with it so the telemetry log's correlation
-            # keys continue rather than collide when this persona is resumed.
-            if self.writer is not None:
-                self.writer.checkpoint(resolved, self._call_index)
-            logging.debug(f"{category_name} ({method}) -> {value}")
+        ctx = self._build_resolution_context(system_instruction)
+        persona = Persona(categories, context_mode=context_mode, writer=self.writer)
+        try:
+            resolved = persona.generate(ctx)
+        finally:
+            # Read back even when the walk raised: the indices this attempt spent are
+            # already in the telemetry log, so a retry on the same generator must
+            # continue past them rather than reuse them.
+            self._call_index = ctx.call_index
 
         logging.info(f"Configurable identity generation complete ({len(resolved)} categories).")
         return resolved, {}
-
-    def _resume_prefix(self, ordered_categories: list[str]) -> dict:
-        """Seed ``resolved`` (and ``_call_index``) from the writer's checkpoint.
-
-        Returns the longest **prefix** of ``ordered_categories`` the checkpoint
-        covers, rebuilt in DAG order rather than in the JSON file's key order. Two
-        properties follow, and together they are what makes a resumed persona
-        indistinguishable from an uninterrupted one:
-
-        * the prompt context block is a pure function of ``resolved``'s contents and
-          insertion order, so replaying the order here reproduces it byte for byte;
-        * stopping at the first gap means no category can ever see a context an
-          uninterrupted run would not have shown it.
-
-        Returns an empty dict when there is no writer or no valid checkpoint.
-        """
-        if self.writer is None:
-            return {}
-        state = self.writer.resume()
-        if state is None:
-            return {}
-
-        resolved: dict = {}
-        for category_name in ordered_categories:
-            if category_name not in state.resolved:
-                break
-            resolved[category_name] = state.resolved[category_name]
-
-        # The counter continues from the checkpoint even where the prefix is shorter
-        # than the checkpoint's key set: indices already spent are in the telemetry
-        # log, and reusing one would break the (persona_id, call_index) join.
-        self._call_index = state.call_index
-        logging.info(
-            "Resuming generation after %d/%d categories (call index %d).",
-            len(resolved), len(ordered_categories), self._call_index,
-        )
-        return resolved
 
     def load_identity(self, identity_path: str) -> tuple[dict, dict]:
         if not os.path.exists(identity_path):

@@ -10,9 +10,9 @@ The companion property is the shared lifecycle: a resumed persona continues its
 ``call_index`` and appends to its telemetry log, so ``(persona_id, call_index)``
 stays unique across the seam and no downstream consumer has to dedupe.
 
-No live LLM call is made. ``CrashingGenerator`` returns canned values keyed by
-``expected_key`` and can be told to abort at a chosen category, standing in for a
-``taskkill`` mid-persona.
+No live LLM call is made. ``CrashingContext`` replaces the generator's call seam:
+it returns canned values keyed by ``expected_key`` and can be told to abort at a
+chosen category, standing in for a ``taskkill`` mid-persona.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from population_synthetic.generators.synthetic.identity_generator_configurable i
 )
 from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionEntry
 from population_synthetic.generators.synthetic.persona_writer import PersonaWriter
+from population_synthetic.generators.synthetic.resolution_context import ResolutionContext
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STRATEGY_DIR = _REPO_ROOT / "config" / "synthetic" / "axes" / "strategies"
@@ -45,8 +46,54 @@ class Abort(RuntimeError):
     """Stands in for the process dying mid-persona."""
 
 
-class CrashingGenerator(IdentityGeneratorConfigurable):
+class CrashingContext(ResolutionContext):
     """Records every prompt, returns canned values, optionally aborts at a category."""
+
+    def __init__(self, recorder: "CrashingGenerator", abort_at: str | None = None, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._recorder = recorder
+        self._abort_at = abort_at
+
+    def call_json(
+        self,
+        prompt: str,
+        *,
+        expected_key: str | None = None,
+        response_schema: dict | None = None,
+        category: str = "",
+        method: str = "",
+        step: str = "",
+    ) -> Any:
+        if category == self._abort_at:
+            raise Abort(f"killed while resolving {category}")
+        # Mirror the real seam's counter and telemetry emission -- they are what
+        # the checkpoint carries across the seam, so a fake that skipped them would
+        # test nothing about the lifecycle.
+        call_index = self._next_call_index()
+        self._recorder.prompts.append((category, prompt))
+        if self.interaction_collector is not None:
+            self.interaction_collector.record(
+                LLMInteractionEntry(
+                    category=category,
+                    method=method,
+                    step=step,
+                    prompt=prompt,
+                    raw_response="",
+                    persona_id=self.persona_id,
+                    call_index=call_index,
+                )
+            )
+        if expected_key == "value":
+            return f"{category}{_VALUE_MARKER}"
+        if expected_key == "candidates":
+            return [f"{category}{_VALUE_MARKER}"]
+        if expected_key == "weights":
+            return [1.0]
+        return {"distribution": "uniform"}
+
+
+class CrashingGenerator(IdentityGeneratorConfigurable):
+    """Generator whose call seam is a ``CrashingContext``."""
 
     def __init__(self, abort_at: str | None = None) -> None:
         super().__init__(client=object())
@@ -54,43 +101,16 @@ class CrashingGenerator(IdentityGeneratorConfigurable):
         self.prompts: list[tuple[str, str]] = []  # (category, prompt)
         self._abort_at = abort_at
 
-    def _call_llm_json(
-        self,
-        prompt: str,
-        system_instruction: str,
-        *,
-        expected_key: str | None = None,
-        response_schema: dict | None = None,
-        log_category: str = "",
-        log_method: str = "",
-        log_step: str = "",
-    ) -> Any:
-        if log_category == self._abort_at:
-            raise Abort(f"killed while resolving {log_category}")
-        # Mirror the real method's counter and telemetry emission -- they are what
-        # the checkpoint carries across the seam, so a fake that skipped them would
-        # test nothing about the lifecycle.
-        self._call_index += 1
-        self.prompts.append((log_category, prompt))
-        if self.interaction_collector is not None:
-            self.interaction_collector.record(
-                LLMInteractionEntry(
-                    category=log_category,
-                    method=log_method,
-                    step=log_step,
-                    prompt=prompt,
-                    raw_response="",
-                    persona_id=self.persona_id,
-                    call_index=self._call_index,
-                )
-            )
-        if expected_key == "value":
-            return f"{log_category}{_VALUE_MARKER}"
-        if expected_key == "candidates":
-            return [f"{log_category}{_VALUE_MARKER}"]
-        if expected_key == "weights":
-            return [1.0]
-        return {"distribution": "uniform"}
+    def _build_resolution_context(self, system_instruction: str) -> ResolutionContext:
+        return CrashingContext(
+            self,
+            abort_at=self._abort_at,
+            client=self.client,
+            system_instruction=system_instruction,
+            persona_id=self.persona_id,
+            call_index=self._call_index,
+            interaction_collector=self.interaction_collector,
+        )
 
 
 def _write_schema(tmp_path: Path, strategy_path: Path) -> str:

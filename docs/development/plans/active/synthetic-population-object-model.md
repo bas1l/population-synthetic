@@ -108,7 +108,7 @@ independently constructible or testable.
       prompt an uninterrupted run would have produced. *(Asserted for `all_pick_dag`
       (`context: cumulative`) and `all_pick` (`context: none`); not yet swept over all 10.)*
 - [x] `identity.json` remains a flat single-level object; no nesting is introduced.
-- [ ] Each of the four `Category` subclasses is constructible and testable without a live client.
+- [x] Each of the four `Category` subclasses is constructible and testable without a live client.
 - [x] `ruff check src/` clean; full `pytest` green.
 
 ## Definitions
@@ -335,25 +335,37 @@ No domain classes yet.
 **Goal:** Replace the `if/elif` dispatch with a class per generation method, and move the
 category walk onto `Persona`. `generate_identity()`'s signature stays stable.
 
-- [ ] 2.1 — Add `resolution_context.py::ResolutionContext`; move `_call_llm_json`
+**Started:** 2026-08-01
+**Completed:** 2026-08-01
+
+- [x] 2.1 — Add `resolution_context.py::ResolutionContext`; move `_call_llm_json`
       (`:262-345`) onto it along with `_call_index` and the telemetry emission.
-- [ ] 2.2 — Add `category.py`: `Category` ABC + `PickCategory`, `GeneratePickCategory`,
+      *(`_extract_json` / `_extract_expected_key` travelled with it as module-level
+      helpers; the counter is exposed read-only plus a `resume_from()` setter.)*
+- [x] 2.2 — Add `category.py`: `Category` ABC + `PickCategory`, `GeneratePickCategory`,
       `GenerateEvaluatePickCategory`, `GenerateEvaluateRandomPickCategory`. Move the four
       `_process_*` bodies (`:544-729`) and their prompt builders (`:401-485`) onto them verbatim.
-- [ ] 2.3 — Add `_METHOD_MAP` and validate **every** category's method at build time, before
+      *(Two non-public intermediates — `_CandidateCategory` for the enumerate step,
+      `_WeightedCategory` for the evaluate loop — hold what the subclasses share.)*
+- [x] 2.3 — Add `_METHOD_MAP` and validate **every** category's method at build time, before
       resolution starts.
-- [ ] 2.4 — Add `persona.py::Persona`: holds ordered categories, context mode, writer; owns the
+- [x] 2.4 — Add `persona.py::Persona`: holds ordered categories, context mode, writer; owns the
       walk, `_build_context_block`, and the per-category `writer.checkpoint(...)` call.
-- [ ] 2.5 — Reduce `IdentityGeneratorConfigurable.generate_identity()` to: build categories from
+      *(`_resume_prefix` moved here too — it is part of the walk.)*
+- [x] 2.5 — Reduce `IdentityGeneratorConfigurable.generate_identity()` to: build categories from
       config → construct `Persona` → `persona.generate(ctx)` → return `(resolved, {})`.
-- [ ] 2.6 — Move the weight-reconcile helper (`_reconcile_weight_count`, `:510-542`) to wherever
-      its two callers land.
+- [x] 2.6 — Move the weight-reconcile helper (`_reconcile_weight_count`, `:510-542`) to wherever
+      its two callers land. *(Module-level in `category.py` with `_normalize_weights` and
+      `_candidate_probabilities`; all three are pure functions of their arguments.)*
 
 **Files Modified:**
 - `src/population_synthetic/generators/synthetic/resolution_context.py` — new
 - `src/population_synthetic/generators/synthetic/category.py` — new
 - `src/population_synthetic/generators/synthetic/persona.py` — new
 - `src/population_synthetic/generators/synthetic/identity_generator_configurable.py` — large reduction
+- `tests/test_category.py`, `tests/test_persona.py`, `tests/test_prompt_stability.py` — new
+- `tests/test_identity_generator_configurable.py`, `tests/test_identity_generator_resume.py` —
+  their test doubles move from the old `_call_llm_json` seam to `ResolutionContext`
 
 **Dependencies:** Phase 1
 
@@ -391,9 +403,13 @@ category walk onto `Persona`. `generate_identity()`'s signature stays stable.
 - [x] `finalize()` removes the partial; a pre-existing stale partial next to a valid
       `identity.json` is cleaned on the next run.
 - [x] Checkpoint round-trip preserves **key insertion order** (guards the `sort_keys` trap).
-- [ ] Each of the four `Category` subclasses resolves against a fake `ResolutionContext` with no
+- [x] Each of the four `Category` subclasses resolves against a fake `ResolutionContext` with no
       live client.
-- [ ] An unknown `method` string raises **before** any category resolves.
+- [x] An unknown `method` string raises **before** any category resolves.
+- [x] Every prompt every strategy renders is byte-identical to the pre-refactor implementation
+      (`tests/test_prompt_stability.py` pins a sha256 of the full
+      `(category, method, step, prompt)` stream per strategy YAML), plus per-builder golden
+      strings in `tests/test_category.py`.
 - [x] `_build_dag` output unchanged for all 10 selectable strategies —
       `tests/test_identity_generator_configurable.py:320` passes unmodified.
 - [x] First coverage for `BaseIdentityGenerator` and `FactoryIdentityGenerator`.
