@@ -7,6 +7,18 @@ value; everything between -- the JSON-extraction fallbacks, the attempt budget,
 the fatal-error escape, the ``(persona_id, call_index)`` correlation key and the
 ``LLMInteractionEntry`` written for every attempt -- lives here.
 
+The first of those fallbacks is a reasoning-block strip: a reasoning model
+inlines its chain-of-thought in the response content, so extraction scans only
+what follows the last ``</think>`` before falling back on a direct parse, a
+markdown fence, a last-first scan of the balanced ``{...}`` spans, and -- only
+once none of those parse -- a bare array.
+
+Whatever comes back is then checked against the ``response_schema`` the caller
+declared: a list where an object was named is a retriable parse failure here,
+spending one unit of the budget, rather than an ``AttributeError`` raised in the
+category the moment it indexes the value -- which escapes the budget entirely
+and kills the persona at whichever attribute it was resolving.
+
 The context also owns the correlation counter, which is what keeps that key
 unique. One index is claimed per *client call*, not per :meth:`call_json`
 invocation, so a category that retries three times spends three indices and the
@@ -19,6 +31,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Iterator
 from typing import Any
 
 from population_synthetic.clients.call_context import set_correlation
@@ -33,9 +46,95 @@ from .llm_interaction_log import LLMInteractionCollector, LLMInteractionEntry
 # loudly instead of hanging in a truly unbounded loop.
 _DEFAULT_JSON_ATTEMPTS = 3
 
+# The only marker a reasoning block is reliably terminated by. See _strip_reasoning.
+_REASONING_CLOSE_TAG = "</think>"
+
+
+def _strip_reasoning(text: str) -> str:
+    """Return the answer payload of *text*, with any leading reasoning block removed.
+
+    Reasoning models emit their chain-of-thought as literal text inside the
+    response content instead of a separate field, and some suppress the opening
+    token entirely: measured over the 2026-08-04 ``qwen/qwen3.5-flash-02-23`` run
+    (3492 calls), 3480 responses contained ``</think>`` and **none** contained
+    ``<think>``. Matching on the closing tag alone is therefore the only pattern
+    that fires -- one requiring the pair would match nothing -- and without it the
+    caller scans ~17 k characters of prose in which a quoted schema sketch or a
+    throwaway array outranks the real answer at the very end.
+
+    The split takes what follows the *last* occurrence, so a tag quoted inside the
+    reasoning cannot truncate the answer. When only whitespace follows the tag the
+    response has no payload after it, and the original text is returned unchanged
+    so a model that emitted its JSON *before* a stray tag is not lost.
+
+    Pure ``str -> str``: it knows nothing of JSON, schemas, providers or categories.
+    """
+    if _REASONING_CLOSE_TAG not in text:
+        return text
+    payload = text.rsplit(_REASONING_CLOSE_TAG, 1)[-1]
+    return payload if payload.strip() else text
+
+
+def _iter_json_candidates(text: str) -> Iterator[str]:
+    """Yield the brace-balanced ``{...}`` spans of *text*, last one first.
+
+    A single left-to-right pass tracks brace depth plus string and escape state,
+    so a brace inside a string value (``{"note": "a } brace"}``) cannot truncate
+    a span and a nested object is returned whole rather than as its innermost
+    pair. Only spans that close are yielded; an unbalanced ``{`` yields nothing.
+
+    The reversal is the point. A model narrates before it answers -- it quotes
+    the prompt's own schema sketch, or an example -- so an *earlier* brace pair
+    is by construction the less likely answer, and the last one is the value the
+    response settled on.
+
+    Pure ``str -> Iterator[str]``: it decides nothing about JSON validity,
+    schemas or what any caller wants. The candidates it yields may well be
+    unparseable; judging them belongs to :func:`_extract_json`.
+    """
+    spans: list[str] = []
+    depth = 0
+    start = 0
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}" and depth > 0:
+            depth -= 1
+            if depth == 0:
+                spans.append(text[start:index + 1])
+    return reversed(spans)
+
 
 def _extract_json(text: str) -> dict | list:
-    text = text.strip()
+    """Parse the JSON value a raw response carries, tolerating how models wrap it.
+
+    Steps, in order:
+
+    0. strip the reasoning block, if any (:func:`_strip_reasoning`)
+    1. direct :func:`json.loads`
+    2. markdown fence, applied to the payload only
+    3. every balanced ``{...}`` span, last-first (:func:`_iter_json_candidates`)
+    4. a bare ``[...]``, only once no object span parsed
+
+    Raises:
+        json.JSONDecodeError: No step yielded a parseable value. The caller's
+            retry loop treats this as a retriable parse failure.
+    """
+    # 0. Drop any inlined chain-of-thought before scanning for JSON
+    text = _strip_reasoning(text).strip()
 
     # 1. Direct parse
     try:
@@ -51,16 +150,71 @@ def _extract_json(text: str) -> dict | list:
         except json.JSONDecodeError:
             pass
 
-    # 3. Find first JSON object or array
-    for pattern in (r"\{[^{}]*\}", r"\[.*?\]"):
-        obj_match = re.search(pattern, text, re.DOTALL)
-        if obj_match:
-            try:
-                return json.loads(obj_match.group(0))
-            except json.JSONDecodeError:
-                pass
+    # 3. Every balanced object span, last-first. One candidate failing to parse
+    #    says nothing about the next -- the schema sketch a model quotes
+    #    mid-answer (``{"distribution": "normal"|"uniform"|"beta"}``) is not JSON,
+    #    and abandoning the object shape on that failure is what used to let the
+    #    prose win.
+    for candidate in _iter_json_candidates(text):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+
+    # 4. A bare array, reached only when no object span parsed: a throwaway list
+    #    quoted in prose (``[0, 1]`` in a sentence about the Beta support) must
+    #    never outrank a real object later in the same response.
+    array_match = re.search(r"\[.*?\]", text, re.DOTALL)
+    if array_match:
+        try:
+            return json.loads(array_match.group(0))
+        except json.JSONDecodeError:
+            pass
 
     raise json.JSONDecodeError("No valid JSON found in response", text, 0)
+
+
+# The declared JSON types a parsed value can be checked against, and the Python
+# type each must have produced. Deliberately only these two: they are the shapes
+# a caller indexes (``.get`` / ``[i]``), so a mismatch is what crashes downstream.
+_PYTHON_TYPE_BY_JSON_TYPE: dict[str, type] = {"object": dict, "array": list}
+
+
+def _check_shape(parsed: dict | list, response_schema: dict | None) -> None:
+    """Raise when *parsed* contradicts the JSON type *response_schema* declares.
+
+    The caller already states the shape it will index; this turns that statement
+    into a checked precondition at the seam that owns parse failures. Without it a
+    response that parses cleanly but yields the wrong shape crashes inside the
+    category instead -- ``'list' object has no attribute 'get'`` -- with an
+    ``AttributeError`` that no retry layer catches, so one bad response ends a
+    persona rather than costing one attempt.
+
+    The constraint comes from the schema the caller declared, never from a per-call
+    site type literal, and it is checked whether or not that schema was sent to the
+    provider: an unconstrained provider is precisely the one that returns the wrong
+    shape. An absent ``response_schema``, or a declared type outside
+    :data:`_PYTHON_TYPE_BY_JSON_TYPE`, imposes no constraint -- this validates shape
+    only, never properties or required keys.
+
+    Raises:
+        json.JSONDecodeError: The declared and actual types disagree. That type is
+            what puts the failure inside the caller's existing retry boundary,
+            recorded as ``invalid_response``.
+    """
+    if response_schema is None:
+        return
+    declared = response_schema.get("type")
+    # A schema may legally name a *list* of types; that is not one of the two
+    # single-type declarations checked here, and looking it up would raise.
+    expected = _PYTHON_TYPE_BY_JSON_TYPE.get(declared) if isinstance(declared, str) else None
+    if expected is None or isinstance(parsed, expected):
+        return
+    raise json.JSONDecodeError(
+        f"Response declared JSON {declared} but parsed as Python {type(parsed).__name__}",
+        json.dumps(parsed),
+        0,
+    )
 
 
 def _extract_expected_key(parsed: dict | list, expected_key: str) -> Any:
@@ -174,8 +328,11 @@ class ResolutionContext:
             prompt: The rendered user prompt. Built by the category; never touched here.
             expected_key: Key to lift out of the parsed object, or ``None`` for the
                 whole object. A missing key is a retriable parse failure.
-            response_schema: JSON schema for constrained decoding, honoured only
-                when ``use_structured_output`` is set.
+            response_schema: JSON schema for constrained decoding, sent to the
+                client only when ``use_structured_output`` is set. Its declared
+                ``type`` constrains the parsed shape either way (see
+                :func:`_check_shape`): a value that contradicts it is a retriable
+                parse failure, not a crash in the caller.
             category: Which attribute this call serves. Doubles as the telemetry
                 switch -- an empty string records nothing.
             method: Which generation method is resolving that attribute.
@@ -201,6 +358,7 @@ class ResolutionContext:
                 )
                 meta = getattr(self._client, "last_metadata", None) or {}
                 parsed = _extract_json(raw)
+                _check_shape(parsed, response_schema)
                 value = (
                     _extract_expected_key(parsed, expected_key)
                     if expected_key is not None
