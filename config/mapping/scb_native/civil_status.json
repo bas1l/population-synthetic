@@ -44,7 +44,8 @@
         "Single",
         "Förlovad",
         "Ugift",
-        "Unmarried"
+        "Unmarried",
+        "engaged"
       ],
       "contains": [
         "singel",
@@ -76,7 +77,9 @@
         "Sammanboende med partner",
         "Gifta",
         "Civilstånd: Gift",
-        "Civilstånd: Giftermål"
+        "Civilstånd: Giftermål",
+        "Sammanboende med barn",
+        "Sammanboende utan barn"
       ],
       "contains": [
         "gift",
@@ -119,7 +122,8 @@
         "Änklig",
         "Änkeman",
         "Änkja",
-        "Änkla"
+        "Änkla",
+        "Enka"
       ],
       "contains": [
         "änka",

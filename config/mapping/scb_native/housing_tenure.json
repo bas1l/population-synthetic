@@ -71,7 +71,11 @@
         "Äga",
         "Ägt bostad",
         "Egen hem",
-        "Own"
+        "Own",
+        "Äga bostad",
+        "äga sin bostad",
+        "bostad med hypotek",
+        "Hypotek"
       ],
       "contains": [
         "villa",
@@ -111,7 +115,8 @@
         "Ägarlägenhet",
         "Ägd lägenhet",
         "Owner-occupied apartment",
-        "Owned apartment"
+        "Owned apartment",
+        "ägs lägenhet"
       ],
       "contains": [
         "bostadsrätt",
@@ -154,7 +159,11 @@
         "Ej ägt hem",
         "Ej ägt egen bostad",
         "Hyrbostad",
-        "student_housing"
+        "student_housing",
+        "Subletting",
+        "Subletting (andrahandskontrakt)",
+        "Kollektivboende",
+        "Socialbostad"
       ],
       "contains": [
         "rental",

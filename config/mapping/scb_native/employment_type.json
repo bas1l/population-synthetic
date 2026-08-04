@@ -513,7 +513,17 @@
         "student",
         "studerande",
         "arbetslös",
-        "arbetssökande"
+        "arbetssökande",
+        "not applicable (retired)",
+        "Not applicable (unemployed)",
+        "Not applicable/No current employment",
+        "not_applicable_retired",
+        "No employment",
+        "retired (no employment)",
+        "none",
+        "Volunteer work",
+        "voluntary work",
+        "unemployed"
       ],
       "contains": [
         "ej tillämpligt",

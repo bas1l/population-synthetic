@@ -104,7 +104,11 @@
         "Aktivt arbetande",
         "Tidsbegränsad anställning",
         "Arbetande i fast anställning",
-        "Doktorand"
+        "Doktorand",
+        "consultant",
+        "Självständig",
+        "Fast anställning",
+        "arbetad"
       ],
       "contains": [
         "parental leave",

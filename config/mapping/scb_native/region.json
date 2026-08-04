@@ -181,7 +181,9 @@
         "Västra Götaland",
         "Västra Götalands län",
         "Göteborg",
-        "Borås"
+        "Borås",
+        "Västra Götarelands län",
+        "Västra Götareland"
       ],
       "contains": [
         "västra götaland",
@@ -281,7 +283,8 @@
       "equals": [
         "Södermanland",
         "Södermanlands län",
-        "Eskilstuna"
+        "Eskilstuna",
+        "Södermanaland"
       ],
       "contains": [
         "södermanland",
