@@ -7,6 +7,11 @@ value; everything between -- the JSON-extraction fallbacks, the attempt budget,
 the fatal-error escape, the ``(persona_id, call_index)`` correlation key and the
 ``LLMInteractionEntry`` written for every attempt -- lives here.
 
+The first of those fallbacks is a reasoning-block strip: a reasoning model
+inlines its chain-of-thought in the response content, so extraction scans only
+what follows the last ``</think>`` before falling back on a direct parse, a
+markdown fence, and finally a bare object/array match.
+
 The context also owns the correlation counter, which is what keeps that key
 unique. One index is claimed per *client call*, not per :meth:`call_json`
 invocation, so a category that retries three times spends three indices and the
@@ -33,9 +38,51 @@ from .llm_interaction_log import LLMInteractionCollector, LLMInteractionEntry
 # loudly instead of hanging in a truly unbounded loop.
 _DEFAULT_JSON_ATTEMPTS = 3
 
+# The only marker a reasoning block is reliably terminated by. See _strip_reasoning.
+_REASONING_CLOSE_TAG = "</think>"
+
+
+def _strip_reasoning(text: str) -> str:
+    """Return the answer payload of *text*, with any leading reasoning block removed.
+
+    Reasoning models emit their chain-of-thought as literal text inside the
+    response content instead of a separate field, and some suppress the opening
+    token entirely: measured over the 2026-08-04 ``qwen/qwen3.5-flash-02-23`` run
+    (3492 calls), 3480 responses contained ``</think>`` and **none** contained
+    ``<think>``. Matching on the closing tag alone is therefore the only pattern
+    that fires -- one requiring the pair would match nothing -- and without it the
+    caller scans ~17 k characters of prose in which a quoted schema sketch or a
+    throwaway array outranks the real answer at the very end.
+
+    The split takes what follows the *last* occurrence, so a tag quoted inside the
+    reasoning cannot truncate the answer. When only whitespace follows the tag the
+    response has no payload after it, and the original text is returned unchanged
+    so a model that emitted its JSON *before* a stray tag is not lost.
+
+    Pure ``str -> str``: it knows nothing of JSON, schemas, providers or categories.
+    """
+    if _REASONING_CLOSE_TAG not in text:
+        return text
+    payload = text.rsplit(_REASONING_CLOSE_TAG, 1)[-1]
+    return payload if payload.strip() else text
+
 
 def _extract_json(text: str) -> dict | list:
-    text = text.strip()
+    """Parse the JSON value a raw response carries, tolerating how models wrap it.
+
+    Steps, in order:
+
+    0. strip the reasoning block, if any (:func:`_strip_reasoning`)
+    1. direct :func:`json.loads`
+    2. markdown fence, applied to the payload only
+    3. first non-nested ``{...}``, else the first ``[...]``
+
+    Raises:
+        json.JSONDecodeError: No step yielded a parseable value. The caller's
+            retry loop treats this as a retriable parse failure.
+    """
+    # 0. Drop any inlined chain-of-thought before scanning for JSON
+    text = _strip_reasoning(text).strip()
 
     # 1. Direct parse
     try:
