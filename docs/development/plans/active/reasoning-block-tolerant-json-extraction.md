@@ -87,13 +87,19 @@ arms unusable for the cost/latency figures `generation_metadata` reports.
 
 ## Success Criteria
 
-- [ ] Replaying `_extract_json` over every `raw_response` in the 2026-08-04 run yields a parseable
+- [x] Replaying `_extract_json` over every `raw_response` in the 2026-08-04 run yields a parseable
       value for ≥ 3071 of the 3080 previously-failing calls (the 9 with no `</think>` at all are
-      genuinely truncated and must still raise).
-- [ ] No call in that replay returns a `list` where the call site declared an object schema.
-- [ ] `pytest tests/test_resolution_context.py tests/test_category.py` passes.
-- [ ] `pytest` (full suite) passes — no existing extraction behaviour regresses.
-- [ ] `ruff check src/` clean.
+      genuinely truncated and must still raise). *(3072 of the 3082 the replay finds failing;
+      10 truncated responses still raise — see the completion note for the 3080/3082 and 9/10
+      discrepancies.)*
+- [x] No call in that replay returns a `list` where the call site declared an object schema.
+      *(0 lists after, 15 before; every one of the 3482 successes is a `dict`.)*
+- [x] `pytest tests/test_resolution_context.py tests/test_category.py` passes.
+- [x] `pytest` (full suite) passes — no existing extraction behaviour regresses. *(1303 passed;
+      the 3 failures are pre-existing and unrelated — `test_ollama_host_composition.py` ×2 and
+      `test_workflow_state.py::test_dep_incomplete_blocks_then_mark_completed_unlocks`, all caused
+      by uncommitted working-tree edits to config files.)*
+- [x] `ruff check src/` clean.
 
 ## Definitions
 
@@ -236,9 +242,9 @@ last-first order is what makes a trailing answer beat a quoted schema sketch.
 
 **Goal:** Both failure modes pinned by tests taken from the real responses.
 
-- [ ] 4.1 — New `tests/test_resolution_context.py` with fixtures excerpted from
+- [x] 4.1 — New `tests/test_resolution_context.py` with fixtures excerpted from
       `persona_00458/llm_interactions.jsonl` of the 2026-08-04 run.
-- [ ] 4.2 — Replay `_extract_json` over the run's `llm_interactions.jsonl` files and record the
+- [x] 4.2 — Replay `_extract_json` over the run's `llm_interactions.jsonl` files and record the
       before/after counts in the plan's completion note.
 
 **Files Modified:**
@@ -252,57 +258,59 @@ last-first order is what makes a trailing answer beat a quoted schema sketch.
 
 ### Unit Tests
 
-- [ ] Reasoning prose + `</think>` + `{"distribution": "uniform"}` → the dict.
-- [ ] Reasoning containing a stray `[0, 1]` **and** an invalid schema sketch
+- [x] Reasoning prose + `</think>` + `{"distribution": "uniform"}` → the dict.
+- [x] Reasoning containing a stray `[0, 1]` **and** an invalid schema sketch
       `{"distribution": "normal"|"uniform"|"beta"}`, with the real object last → the object, not the
       list. *(Regression pin for `'list' object has no attribute 'get'`.)*
-- [ ] Paired `<think>…</think>` wrapper → the trailing object.
-- [ ] Two `</think>` occurrences → payload after the **last** one.
-- [ ] `</think>` with nothing after it → raises `json.JSONDecodeError`.
-- [ ] JSON present *before* a stray `</think>` and nothing after → still extracted (empty-payload
+- [x] Paired `<think>…</think>` wrapper → the trailing object.
+- [x] Two `</think>` occurrences → payload after the **last** one.
+- [x] `</think>` with nothing after it → raises `json.JSONDecodeError`.
+- [x] JSON present *before* a stray `</think>` and nothing after → still extracted (empty-payload
       fallback).
-- [ ] Unchanged behaviour: bare object; fenced ```json object; nested object; bare array with no
+- [x] Unchanged behaviour: bare object; fenced ```json object; nested object; bare array with no
       object anywhere.
-- [ ] Brace inside a JSON string value (`{"note": "a } brace"}`) → parsed correctly by the balanced
+- [x] Brace inside a JSON string value (`{"note": "a } brace"}`) → parsed correctly by the balanced
       scanner.
-- [ ] `_check_shape`: list vs `"type": "object"` → `JSONDecodeError`; dict vs `"object"` → passes;
+- [x] `_check_shape`: list vs `"type": "object"` → `JSONDecodeError`; dict vs `"object"` → passes;
       no schema → passes.
 
 ### Integration Tests
 
-- [ ] `call_json` with an object schema against a stub client returning a list: retries within
+- [x] `call_json` with an object schema against a stub client returning a list: retries within
       budget, records `error_category="invalid_response"`, never raises `AttributeError`.
-- [ ] `call_json` against a stub client returning reasoning-then-JSON: succeeds on attempt 1 and
+- [x] `call_json` against a stub client returning reasoning-then-JSON: succeeds on attempt 1 and
       records one telemetry entry with the correct `parsed_value`.
-- [ ] `NumericDistributionCategory.resolve` end-to-end against that reasoning stub → a value inside
-      `[min, max]`.
+- [x] `NumericDistributionCategory.resolve` end-to-end against that reasoning stub → a value inside
+      `[min, max]`. *(The class is `GenerateEvaluateRandomPickCategory`; its numeric branch is the
+      distribution call site the plan names.)*
 
 ### Manual Verification
 
-- [ ] Replay script over the 2026-08-04 run's JSONL: previously 3080 failures / 3492 calls; expect
-      ≤ 9 failures after the fix and zero list-typed results.
+- [x] Replay script over the 2026-08-04 run's JSONL: previously 3080 failures / 3492 calls; expect
+      ≤ 9 failures after the fix and zero list-typed results. *(10 failures after, all truncated;
+      zero lists. See the completion note.)*
 - [ ] Short live run: `python scripts/generate/generate_identities_parallel.py --model-id
       openrouter_qwen35_flash --strategy-id all_generate_evaluate_random_pick_v2 --country-id
       swedish --n 5 --force` — expect no `No valid JSON` warnings and no persona FAIL lines.
 
 ### Edge Cases
 
-- [ ] Response that is *only* a reasoning block (no closing tag, truncated at max tokens) → raises,
+- [x] Response that is *only* a reasoning block (no closing tag, truncated at max tokens) → raises,
       retried, unchanged from today.
-- [ ] Unbalanced trailing `{` after `</think>` → falls through to the array step, then raises.
-- [ ] Non-reasoning models (claude/gemini paths): text without `</think>` takes the identical path
+- [x] Unbalanced trailing `{` after `</think>` → falls through to the array step, then raises.
+- [x] Non-reasoning models (claude/gemini paths): text without `</think>` takes the identical path
       it takes today.
 
 ---
 
 ## Documentation Plan
 
-- [ ] Inline docstrings in `resolution_context.py` — the module docstring already advertises
+- [x] Inline docstrings in `resolution_context.py` — the module docstring already advertises
       "the JSON-extraction fallbacks"; extend it with the reasoning-strip step and the shape guard.
-- [ ] `docs/development/debugging-identity-generation.md` — add a short "reasoning models" note:
+- [x] `docs/development/debugging-identity-generation.md` — add a short "reasoning models" note:
       what `</think>` in `raw_response` means and that the extractor now strips it.
-- [ ] No `README.md` change (no new command or flag).
-- [ ] No `CLAUDE.md` change — no invariant, config surface, or DAG stage moves.
+- [x] No `README.md` change (no new command or flag).
+- [x] No `CLAUDE.md` change — no invariant, config surface, or DAG stage moves.
 
 ---
 
@@ -351,3 +359,64 @@ last-first order is what makes a trailing answer beat a quoted schema sketch.
 - Guides applied: `~/.claude/knowledge/data-pipeline-engineering/02-architecture-principles-and-patterns.md`
   (error boundaries, separation of concerns), `05-code-craftsmanship-and-maintainability.md`
   (cohesion, YAGNI, tests as the safety net)
+
+---
+
+## Completion Note
+
+**Date:** 2026-08-04 · **Branch:** `fix/reasoning-block-json-extraction`
+
+### Replay: `_extract_json` before vs after
+
+Every `persona_*/llm_interactions.jsonl` under
+`01_Raw/swedish_02_all_generate_evaluate_random_pick_v2_openrouter_qwen35_flash`, filtered to
+entries timestamped `2026-08-04*`, replayed through both the pre-fix extractor (reconstructed
+verbatim from `dev`) and the current one:
+
+| Measure | Before | After |
+|---|---|---|
+| Calls replayed | 3492 | 3492 |
+| Responses with no `</think>` at all | 12 | 12 |
+| Raised `JSONDecodeError` | **3082** | **10** |
+| … of which had no `</think>` | — | 10 (all of them) |
+| Returned a `list` | **15** | **0** |
+| Parsed types | — | 3482 × `dict`, 0 × `list` |
+
+Derived: **3072 previously-failing calls now parse**, and **0 previously-parsing calls now fail** —
+the change is strictly additive on this corpus.
+
+Two figures differ from the ones in the Problem Statement, both because those were read off the
+run log while these are replayed off the JSONL:
+
+- **3082 pre-fix failures, not 3080.** The replay counts every recorded call; the log-derived
+  baseline missed two. Immaterial to the criterion — the target of ≥3071 recovered is met at 3072.
+- **10 responses still raise, not 9.** All 10 lack `</think>` entirely: they were truncated at the
+  token ceiling before the model finished thinking, which is a genuine failure that must still be
+  retried. The remaining 2 of the 12 no-tag responses were terse and parsed on both sides.
+
+The 15 pre-fix `list` results are the silent-wrong-value mode. Only the `distribution` call site
+passes `expected_key=None`, so only there could a list reach `.get()`; the other sites raised
+`KeyError` and retried. That is why 15 bad extractions produced 11 killed personas.
+
+### Test coverage
+
+`tests/test_resolution_context.py` — 26 tests, all passing. Fixtures are excerpted from
+`persona_00458/llm_interactions.jsonl` call 1 (category `age`, step `distribution`), the response
+recorded with `parsed_value: [0, 1]` while ending in `{"distribution": "uniform"}`. The excerpt keeps
+the four features that made it fail — the unparseable schema sketch quoted back from the prompt, the
+throwaway `[0,1]` in the Beta sentence, the single bare `</think>`, and the trailing answer — and a
+tag-stripped variant of the same text pins the last-first balanced scan independently of the strip.
+
+Full suite: **1303 passed, 3 failed**. The 3 failures are pre-existing and unrelated to this branch
+(`test_ollama_host_composition.py` ×2 and
+`test_workflow_state.py::test_dep_incomplete_blocks_then_mark_completed_unlocks`), all caused by
+uncommitted working-tree edits to config files. `ruff check src/` and
+`ruff check tests/test_resolution_context.py` are clean.
+
+### Still outstanding
+
+- The live 5-persona confirmation run is unticked — it costs provider tokens and is an operational
+  call, not a code one.
+- Out of scope by design, and now due: the `swedish_02_*_qwen35_flash` combos carry values the model
+  never chose (15 wrong extractions across 11 personas, plus 3072 calls' worth of retry cost) and
+  must be regenerated before they enter any analysis.

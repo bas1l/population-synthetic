@@ -37,6 +37,31 @@ When a persona generation fails, look at these files in the output directory (e.
 2. **`llm_interactions.jsonl`** (single runs) or **`persona_XXXXX/llm_interactions.jsonl`** (parallel runs) -- JSONL file written incrementally during generation. Each line is a JSON object with: `category`, `method`, `step`, `prompt`, `raw_response`, `parsed_value`, `error`, `attempt`, `timestamp`. On failed LLM parse attempts, `error` contains the exception type and message (e.g., `"JSONDecodeError: Expecting ',' delimiter"`), `parsed_value` is `null`, and `step` has a `_retry` suffix. This file survives crashes -- entries are flushed to disk as they happen.
 3. **`run_metadata.json`** -- Run-level config (provider, model, strategy, timestamps). Useful for reproducing the run.
 
+## Reasoning models: `</think>` in `raw_response`
+
+A `raw_response` that runs to many thousands of characters of first-person deliberation and ends
+with a bare `</think>` came from a **reasoning model**. Such models emit their chain-of-thought as
+literal text inside the response content rather than a separate field, and some suppress the opening
+`<think>` entirely -- over the 2026-08-04 `qwen/qwen3.5-flash-02-23` run, 3480 of 3492 responses
+carried `</think>` and none carried `<think>`. The answer is the short JSON object *after* the last
+tag; everything before it is prose.
+
+`_extract_json` (`src/population_synthetic/generators/synthetic/resolution_context.py`) strips that
+block before scanning, so a reasoning response parses to the same value a terse one would. Two
+consequences when reading a JSONL from such a run:
+
+- **A `raw_response` full of reasoning is not itself a fault.** Judge the entry by `parsed_value`
+  and `error`, not by its length.
+- **`parsed_value` recorded before this behaviour existed may be wrong, not merely missing.** The
+  old scan searched the whole response, so a JSON fragment quoted mid-thought -- the prompt's own
+  schema sketch, or a throwaway array such as `[0, 1]` in a sentence about the Beta support -- could
+  be recorded as the persona's answer. A pre-fix run of a reasoning model is suspect even where it
+  reports no error; regenerate it rather than analysing it.
+
+If such a response still fails, check whether it contains `</think>` at all: one that does not was
+truncated at the token ceiling before the model finished thinking, which is a genuine failure and is
+retried normally.
+
 ## Logging infrastructure
 
 Key implementation files for the logging infrastructure:
