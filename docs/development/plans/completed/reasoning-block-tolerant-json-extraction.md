@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-04
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-08-04 14:20
 **Base Branch:** `dev`
 **Branch:** `fix/reasoning-block-json-extraction`
 
