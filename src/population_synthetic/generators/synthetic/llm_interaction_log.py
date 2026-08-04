@@ -48,15 +48,25 @@ class LLMInteractionEntry:
 class LLMInteractionCollector:
     """Collects LLM interaction entries and writes each one to disk immediately as JSONL."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, append: bool = False) -> None:
+        """Collect entries for one ``.jsonl``.
+
+        ``append`` selects the file-open mode: False (the default) truncates, so a
+        fresh unit of work owns the whole file; True appends, so a resumed or
+        topped-up unit keeps the calls a previous pass already paid for. Appending
+        is only correct when the caller also continues that unit's ``call_index``
+        -- otherwise ``(persona_id, call_index)`` stops being unique and every
+        consumer that sums the file double-counts.
+        """
         self._path = path
+        self._mode = "a" if append else "w"
         self._file: IO[str] | None = None
         self._count = 0
 
     def _ensure_open(self) -> None:
         if self._file is None:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._file = open(self._path, "w", encoding="utf-8")
+            self._file = open(self._path, self._mode, encoding="utf-8")
 
     def record(self, entry: LLMInteractionEntry) -> None:
         self._ensure_open()

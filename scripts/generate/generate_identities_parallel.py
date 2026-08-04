@@ -47,7 +47,6 @@ Usage:
 
 import argparse
 import atexit
-import json
 import logging
 import sys
 import threading
@@ -62,13 +61,18 @@ from population_synthetic.clients.ollama_control_client import OllamaControlClie
 from population_synthetic.clients.retry_policy import MAX_RETRY_ATTEMPTS
 from population_synthetic.generators.synthetic import ollama_concurrency, ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
-from population_synthetic.generators.synthetic.identity_generator_configurable import resolve_category_order
-from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
+from population_synthetic.generators.synthetic.identity_generator_configurable import (
+    IdentityGeneratorConfigurable,
+    resolve_category_order,
+)
 from population_synthetic.generators.synthetic.manifest_loader import (
     compose_manifest,
     load_manifest,
     serialize_manifest,
 )
+from population_synthetic.generators.synthetic.run_fingerprint import build_run_fingerprint
+from population_synthetic.generators.synthetic.synthetic_population import SyntheticPopulation
+from population_synthetic.utils.atomic_io import atomic_write_json
 
 _SCRIPT_START_TIME = time.time()
 
@@ -129,25 +133,43 @@ def _generate_one(
     provider: str,
     model: str,
     config_path: str,
-    output_dir: Path,
+    population: SyntheticPopulation,
     kwargs: dict,
     log_llm: bool = False,
     base_url: str | None = None,
     api_key_env_var: str | None = None,
     generation_config: dict | None = None,
-    force: bool = False,
+    discard_checkpoint: bool = False,
     retry_until_success: bool = False,
     structured_output: bool = False,
 ) -> tuple[int, bool, str]:
+    """Generate the persona occupying slot ``index`` of *population*.
+
+    The worker no longer decides whether the slot needs work: ``population.plan()``
+    partitioned every slot once, before the pool existed, and this function is only
+    ever handed a slot from the pending side of that partition. A second gate here
+    could only ever disagree with the queue it was scheduled from.
+
+    What the worker still carries is ``discard_checkpoint``, and it is deliberately
+    *not* fused with "re-enter this slot" as the old ``force`` flag was. A retry
+    round re-enters a slot that has no finished ``identity.json`` while **keeping**
+    the categories the failed attempt already paid for; only ``--force`` means
+    "pretend this persona never existed". Fusing them made every retry round throw
+    away the work it was retrying.
+
+    Every argument is a resolved value: no config is re-read and no environment is
+    consulted here, so all workers of a run generate under provably the same regime.
+    """
     global _completed, _failed
 
-    persona_dir = output_dir / f"persona_{index:05d}"
-    out_file = persona_dir / "identity.json"
+    if population is None:
+        raise ValueError(
+            "_generate_one requires the run's SyntheticPopulation: it carries the "
+            "fingerprint a checkpoint is validated against and the directory layout "
+            "the persona is written into."
+        )
 
-    if not force and out_file.exists():
-        with _progress_lock:
-            _completed += 1
-        return index, True, "skipped (exists)"
+    writer = population.writer(index, discard_checkpoint=discard_checkpoint)
 
     cfg = generation_config or {}
 
@@ -210,16 +232,16 @@ def _generate_one(
         # Correlation key for exact log<->JSONL joining; matches persona_dir name.
         if hasattr(generator, "persona_id"):
             generator.persona_id = f"persona_{index:05d}"
+        # The writer owns every file of this persona and the lifecycle binding them:
+        # asking it for the telemetry collector is what ties "the JSONL appends" to
+        # "the checkpoint was resumed", so the two can never disagree.
+        generator.writer = writer
         if log_llm:
-            generator.interaction_collector = LLMInteractionCollector(
-                persona_dir / "llm_interactions.jsonl"
-            )
+            generator.interaction_collector = writer.telemetry
 
         identity_data, _ = generator.generate_identity(config_path, **kwargs)
 
-        persona_dir.mkdir(parents=True, exist_ok=True)
-        with open(out_file, "w", encoding="utf-8") as f:
-            json.dump(identity_data, f, indent=2, ensure_ascii=False)
+        writer.finalize(identity_data)
 
         with _progress_lock:
             _completed += 1
@@ -235,8 +257,10 @@ def _generate_one(
         return index, False, str(e)
 
     finally:
-        if generator is not None and generator.interaction_collector:
-            generator.interaction_collector.close()
+        # The writer owns the telemetry handle, so closing it closes the collector
+        # the generator was handed; closing both would be harmless but would split
+        # ownership of one file across two objects again.
+        writer.close()
         if client is not None and hasattr(client, "close"):
             client.close()
             with _active_clients_lock:
@@ -442,7 +466,9 @@ def main() -> None:
         "--force",
         action="store_true",
         default=False,
-        help="Overwrite existing personas instead of skipping",
+        help="Regenerate every persona from scratch: bypass the completeness skip AND "
+             "discard any checkpoint an aborted run left behind. Without it, a complete "
+             "persona is skipped and an incomplete one resumes from its checkpoint.",
     )
     parser.add_argument(
         "--retry-until-success",
@@ -743,6 +769,39 @@ def main() -> None:
     # sample. Only 'configurable' mode has a category DAG; other modes record null.
     resolved_category_order = resolve_category_order(kwargs["strategy_file"]) if args.strategy else None
 
+    # The generation regime every persona of this run is produced under. Computed
+    # once, here, where the strategy/schema paths and the resolved model are all
+    # final -- each worker only compares it for equality against what a checkpoint
+    # claims, so a strategy edited between two runs of the same slug discards the
+    # stale checkpoints instead of splicing two regimes into one persona.
+    fingerprint = build_run_fingerprint(
+        strategy_path=Path(args.strategy) if args.strategy else None,
+        schema_path=config_path,
+        provider=args.provider,
+        model=model,
+        category_order=resolved_category_order,
+    )
+
+    # The run's persona set, built once at the orchestration edge from the same two
+    # config files every worker will read. It answers which slots still need work
+    # *before* the pool exists, so a fully-complete rerun starts no thread and
+    # constructs no client, and every worker draws from one partition rather than
+    # each re-deciding the question from a path it built itself.
+    population = IdentityGeneratorConfigurable.build_population(
+        str(config_path),
+        kwargs["strategy_file"],
+        n=args.n,
+        output_dir=output_dir,
+        fingerprint=fingerprint,
+    )
+    resume_plan = population.plan(force=args.force)
+    if resume_plan.resumed:
+        logger.info(
+            "Resuming: %d/%d persona(s) already complete, %d of the %d remaining carry a "
+            "checkpoint to continue from.",
+            len(resume_plan.complete), args.n, len(resume_plan.checkpointed), len(resume_plan.pending),
+        )
+
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     run_metadata = {
         "name": m.name if m is not None else None,
@@ -791,6 +850,19 @@ def main() -> None:
         # serialises every attribute resolved so far -- so this sequence, not the
         # strategy's edge list, is what each persona's prompts actually saw.
         "resolved_category_order": resolved_category_order,
+        # What this run found on disk before generating anything. Recorded because a
+        # resumed run and a clean one are otherwise indistinguishable after the fact,
+        # and they are not interchangeable: a resumed combo's wall-clock and token
+        # totals cover only the slots this invocation actually paid for, so pooling
+        # it with a clean run's would under-report the population's true cost.
+        # ``--force`` reports resumed=false by construction -- it regenerates every
+        # slot, so it inherits nothing.
+        "resume": {
+            "resumed": resume_plan.resumed,
+            "skipped_complete": len(resume_plan.complete),
+            "resumed_from_checkpoint": len(resume_plan.checkpointed),
+            "pending": len(resume_plan.pending),
+        },
         "started_at": started_at,
     }
     if _composed_manifest is not None:
@@ -800,8 +872,9 @@ def main() -> None:
             "country_id": args.country_id,
         }
     metadata_path = output_dir / "run_metadata.json"
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+    # Atomic: this file is the run's provenance record, and a kill mid-write would
+    # leave the combo describing itself with truncated JSON that no analysis reads.
+    atomic_write_json(metadata_path, run_metadata)
     logger.info("Run metadata written to %s", metadata_path)
 
     logger.info("Provider: %s | Mode: %s | Config: %s | Strategy: %s", args.provider, args.mode, args.config, args.strategy)
@@ -809,8 +882,17 @@ def main() -> None:
 
     t0 = time.perf_counter()
 
-    pending_indices = list(range(args.n))
-    all_results: dict[int, tuple[int, bool, str]] = {}
+    pending_indices = list(resume_plan.pending)
+    # The slots the plan skipped never reach a worker, so they are seeded into the
+    # results here: the final Success/Failed line counts personas the run leaves
+    # behind, not calls it made, and a fully-complete rerun that reported 0 successes
+    # would read as a failure.
+    all_results: dict[int, tuple[int, bool, str]] = {
+        idx: (idx, True, "skipped (complete)") for idx in resume_plan.complete
+    }
+    global _completed
+    with _progress_lock:
+        _completed = len(resume_plan.complete)
     round_num = 0
 
     while pending_indices:
@@ -831,13 +913,17 @@ def main() -> None:
                     provider=args.provider,
                     model=model,
                     config_path=str(config_path),
-                    output_dir=output_dir,
+                    population=population,
                     kwargs=kwargs,
                     log_llm=args.log_llm,
                     base_url=args.base_url,
                     api_key_env_var=args.api_key_env,
                     generation_config=generation_config,
-                    force=True if is_retry else args.force,
+                    # A retry round re-enters the slot it is retrying but keeps that
+                    # attempt's checkpoint -- the categories already resolved were
+                    # paid for and are still valid under the same fingerprint. Only
+                    # --force discards them.
+                    discard_checkpoint=args.force,
                     retry_until_success=args.retry_until_success,
                     structured_output=args.structured_output,
                 )
@@ -877,8 +963,7 @@ def main() -> None:
         "rounds": round_num,
         "max_rounds": MAX_RETRY_ATTEMPTS if args.retry_until_success else 1,
     }
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+    atomic_write_json(metadata_path, run_metadata)
 
     logger.info("Done in %.1fs. Success: %d, Failed: %d, Output: %s", elapsed, ok_count, fail_count, output_dir)
 

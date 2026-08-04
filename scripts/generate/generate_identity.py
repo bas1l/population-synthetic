@@ -39,7 +39,6 @@ Providers:
 """
 
 import argparse
-import json
 import logging
 import sys
 import time
@@ -48,12 +47,15 @@ from pathlib import Path
 from population_synthetic.clients.retry_policy import MAX_RETRY_ATTEMPTS
 from population_synthetic.generators.synthetic import ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
-from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
+from population_synthetic.generators.synthetic.identity_generator_configurable import resolve_category_order
 from population_synthetic.generators.synthetic.manifest_loader import (
     compose_manifest,
     load_manifest,
     serialize_manifest,
 )
+from population_synthetic.generators.synthetic.persona_writer import PersonaWriter
+from population_synthetic.generators.synthetic.run_fingerprint import build_run_fingerprint
+from population_synthetic.utils.atomic_io import atomic_write_json
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -140,7 +142,8 @@ def main() -> None:
         "--force",
         action="store_true",
         default=False,
-        help="Overwrite the output file if it already exists",
+        help="Discard any checkpoint left by an aborted run and regenerate every "
+             "category from scratch (the output file is overwritten either way)",
     )
     parser.add_argument(
         "--retry-until-success",
@@ -342,25 +345,39 @@ def main() -> None:
     generator.retry_until_success = args.retry_until_success
     generator.use_structured_output = args.structured_output
 
-    if args.log_llm:
-        llm_log_path = output_path.parent / "llm_interactions.jsonl"
-        generator.interaction_collector = LLMInteractionCollector(llm_log_path)
-
     kwargs = {}
     if args.strategy:
         kwargs["strategy_file"] = str(Path(args.strategy))
 
+    resolved_category_order = resolve_category_order(kwargs["strategy_file"]) if args.strategy else None
+
+    # Same durable-persistence contract as the parallel runner, on the one-persona
+    # path: the writer owns identity/checkpoint/telemetry together, and --force is
+    # the only thing that discards a checkpoint left by an aborted run.
+    fingerprint = build_run_fingerprint(
+        strategy_path=Path(args.strategy) if args.strategy else None,
+        schema_path=config_path,
+        provider=args.provider,
+        model=client.get_current_configuration()["model"],
+        category_order=resolved_category_order,
+    )
+    writer = PersonaWriter(
+        output_path.parent,
+        fingerprint,
+        discard=args.force,
+        identity_filename=output_path.name,
+    )
+    generator.writer = writer
+    if args.log_llm:
+        generator.interaction_collector = writer.telemetry
+
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     try:
         identity_data, level_strings = generator.generate_identity(str(config_path), **kwargs)
+        writer.finalize(identity_data)
     finally:
-        if generator.interaction_collector:
-            generator.interaction_collector.close()
+        writer.close()
     completed_at = time.strftime("%Y-%m-%dT%H:%M:%S")
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(identity_data, f, indent=2, ensure_ascii=False)
 
     logger.info("Identity written to %s", output_path)
 
@@ -393,8 +410,7 @@ def main() -> None:
             "country_id": args.country_id,
         }
     metadata_path = output_path.parent / "run_metadata.json"
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+    atomic_write_json(metadata_path, run_metadata)
     logger.info("Run metadata written to %s", metadata_path)
 
     if level_strings:

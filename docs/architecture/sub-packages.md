@@ -28,6 +28,29 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
 - Mode semantics:
   - `configurable` -- strategy-driven generation controlled by a simulation config JSON file with pluggable strategy definitions
 
+  Under `configurable`, generation is a small domain object graph rather than one class. Each
+  object states what it must **not** know, and those exclusions are the contract:
+
+  | Module | Responsibility | Must NOT know about |
+  |--------|----------------|---------------------|
+  | `identity_generator_configurable.py` -- `IdentityGeneratorConfigurable`, `Blueprint` | Loads + validates the strategy YAML and flat schema, builds the dependency DAG (Kahn, ties in YAML declaration order), constructs one `Category` per attribute, owns the client. `build_blueprint()` / `build_population()` are the **only** places config is interpreted. | Per-category prompt construction |
+  | `synthetic_population.py` -- `SyntheticPopulation`, `ResumePlan` | The run's `n` persona slots and which of them still need work: `plan(force=...)` partitions `range(n)` into pending / already complete / resumable, `persona(i)` and `writer(i)` hand out the objects that fill a slot | **Threading**, prompts, LLM methods, file formats |
+  | `persona.py` -- `Persona` | Walks its categories in DAG order, renders the context block each one sees, accumulates values, checkpoints after every category | Paths, slugs, `output_base`, serialization format |
+  | `category.py` -- `Category` ABC + `PickCategory`, `GeneratePickCategory`, `GenerateEvaluatePickCategory`, `GenerateEvaluateRandomPickCategory` | Resolve **one** attribute via **one** generation method; `_METHOD_MAP` + `build_categories()` reject an unimplemented `method` before the first LLM call | Paths, persona dirs, file IO, other categories, the resolved dict |
+  | `resolution_context.py` -- `ResolutionContext` | One JSON-constrained LLM call: retry budget, the `(persona_id, call_index)` correlation counter, telemetry emission | Category semantics, what prompts mean, output paths |
+  | `persona_writer.py` -- `PersonaWriter`, `ResumeState` | Every file of **one** persona -- `identity.json`, `identity.partial.json`, `llm_interactions.jsonl` -- and their shared lifecycle | Strategies, methods, prompts, the DAG, other personas |
+  | `run_fingerprint.py` -- `build_run_fingerprint` | Reduces the generation regime (strategy + schema bytes, `provider:model`, category order) to a dict the writer only ever compares for equality | Personas, files, the walk |
+
+  `SyntheticPopulation` is deliberately **passive**: it starts nothing and calls no client. The
+  parallel runner keeps its `ThreadPoolExecutor` and its one-client-plus-one-generator-per-worker
+  allocation, which is what keeps the correlation counter and the client's connection state
+  per-persona by construction. Nothing here is memoised across threads -- `writer(i)` returns a fresh
+  object per call, and the resume verdict is memoised on that per-persona writer.
+
+  Generation is **crash-safe and resumable**; the protocol, the shared-lifecycle invariant, and why
+  there is no signal handler are in
+  [Aborted and resumed runs](../development/aborted-and-resumed-runs.md).
+
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
 (`validate_raw/`, `mapping/`, `validate_mapped/`, `population_cap/`, `fidelity/`,
 `multivariate_fidelity/`, `model_ranking/`, `method_significance/`, `real_population_stats/`,

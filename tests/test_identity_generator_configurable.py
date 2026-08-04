@@ -9,10 +9,10 @@ Also covers ``_build_dag`` determinism: the resolved category order must be a pu
 function of the strategy YAML, identical across separate interpreter processes with
 hash randomisation active.
 
-No live LLM call is made -- a ``RecordingGenerator`` subclass overrides
-``_call_llm_json`` to capture every prompt it receives and return canned values
-keyed by ``expected_key``. The flat schema is derived from the strategy under test
-(so every declared category is present), and the real strategy YAMLs under
+No live LLM call is made -- a ``RecordingContext`` replaces ``ResolutionContext``,
+capturing every prompt it receives and returning canned values keyed by
+``expected_key``. The flat schema is derived from the strategy under test (so every
+declared category is present), and the real strategy YAMLs under
 ``config/synthetic/axes/strategies/`` drive the DAG.
 """
 
@@ -29,10 +29,12 @@ from typing import Any
 import pytest
 import yaml
 
+from population_synthetic.generators.synthetic.category import _candidate_probabilities
 from population_synthetic.generators.synthetic.identity_generator_configurable import (
     IdentityGeneratorConfigurable,
     resolve_category_order,
 )
+from population_synthetic.generators.synthetic.resolution_context import ResolutionContext
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STRATEGY_DIR = _REPO_ROOT / "config" / "synthetic" / "axes" / "strategies"
@@ -48,35 +50,50 @@ _SENTINEL = "This is the first category. Use the system instruction as context."
 _VALUE_MARKER = "__VAL"
 
 
+class RecordingContext(ResolutionContext):
+    """Call seam that records every prompt and answers with canned values."""
+
+    def __init__(self, recorder: "RecordingGenerator", **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.recorder = recorder
+
+    def _canned(self, expected_key: str | None, category: str) -> Any:
+        if expected_key == "value":
+            return f"{category}{_VALUE_MARKER}"
+        if expected_key == "candidates":
+            return [f"{category}{_VALUE_MARKER}"]
+        if expected_key == "weights":
+            return [1.0]
+        # distribution / free-form (expected_key is None)
+        return {"distribution": "uniform"}
+
+    def call_json(
+        self,
+        prompt: str,
+        *,
+        expected_key: str | None = None,
+        response_schema: dict | None = None,
+        category: str = "",
+        method: str = "",
+        step: str = "",
+    ) -> Any:
+        self.recorder.calls.append((category, prompt))
+        self.recorder.steps.append((category, method, step, prompt))
+        return self._canned(expected_key, category)
+
+
 class RecordingGenerator(IdentityGeneratorConfigurable):
-    """Generator that records prompts and returns canned values (no live LLM)."""
+    """Generator whose call seam is a ``RecordingContext`` (no live LLM)."""
+
+    context_class = RecordingContext
 
     def __init__(self, client: Any):
         super().__init__(client)
         self.calls: list[tuple[str, str]] = []  # (category, prompt)
         self.steps: list[tuple[str, str, str, str]] = []  # (category, method, step, prompt)
 
-    def _call_llm_json(
-        self,
-        prompt: str,
-        system_instruction: str,
-        *,
-        expected_key: str | None = None,
-        response_schema: dict | None = None,
-        log_category: str = "",
-        log_method: str = "",
-        log_step: str = "",
-    ) -> Any:
-        self.calls.append((log_category, prompt))
-        self.steps.append((log_category, log_method, log_step, prompt))
-        if expected_key == "value":
-            return f"{log_category}{_VALUE_MARKER}"
-        if expected_key == "candidates":
-            return [f"{log_category}{_VALUE_MARKER}"]
-        if expected_key == "weights":
-            return [1.0]
-        # distribution / free-form (expected_key is None)
-        return {"distribution": "uniform"}
+    def _build_resolution_context(self, system_instruction: str) -> ResolutionContext:
+        return self.context_class(self, client=self.client, system_instruction=system_instruction)
 
     def select_prompts(self) -> list[str]:
         """Every select-step prompt recorded, in call order."""
@@ -389,7 +406,7 @@ _ALL_GENERATE_PICK = _STRATEGY_DIR / "all_generate_pick.yaml"
 _ALL_GENERATE_EVALUATE_PICK = _STRATEGY_DIR / "all_generate_evaluate_pick.yaml"
 
 
-class WeightedRecordingGenerator(RecordingGenerator):
+class WeightedRecordingContext(RecordingContext):
     """Recorder returning a multi-candidate list with uneven weights.
 
     The base recorder returns a single candidate weighted 1.0, which cannot
@@ -399,20 +416,18 @@ class WeightedRecordingGenerator(RecordingGenerator):
     CANDIDATES = ["alpha", "beta", "gamma"]
     WEIGHTS = [0.6, 0.3, 0.1]
 
-    def _call_llm_json(self, prompt, system_instruction, *, expected_key=None, **kwargs) -> Any:
+    def _canned(self, expected_key: str | None, category: str) -> Any:
         if expected_key == "candidates":
-            super()._call_llm_json(
-                prompt, system_instruction, expected_key="__record_only__", **kwargs
-            )
             return list(self.CANDIDATES)
         if expected_key == "weights":
-            super()._call_llm_json(
-                prompt, system_instruction, expected_key="__record_only__", **kwargs
-            )
             return list(self.WEIGHTS)
-        return super()._call_llm_json(
-            prompt, system_instruction, expected_key=expected_key, **kwargs
-        )
+        return super()._canned(expected_key, category)
+
+
+class WeightedRecordingGenerator(RecordingGenerator):
+    """Generator wired to the uneven-weight recorder."""
+
+    context_class = WeightedRecordingContext
 
 
 def _run_weighted(tmp_path: Path, strategy_path: Path) -> WeightedRecordingGenerator:
@@ -457,12 +472,10 @@ def test_generate_pick_select_prompt_has_no_probabilities(tmp_path):
 
 def test_candidate_probabilities_sums_duplicate_candidates():
     # A repeated candidate must not lose its mass to dict-key collision.
-    gen = RecordingGenerator(client=object())
-    paired = gen._candidate_probabilities(["a", "b", "a"], [0.5, 0.2, 0.3], "some_category")
+    paired = _candidate_probabilities(["a", "b", "a"], [0.5, 0.2, 0.3], "some_category")
     assert paired == {"a": 0.8, "b": 0.2}
 
 
 def test_candidate_probabilities_rounds_for_legibility():
-    gen = RecordingGenerator(client=object())
-    paired = gen._candidate_probabilities(["a", "b"], [1 / 3, 2 / 3], "some_category")
+    paired = _candidate_probabilities(["a", "b"], [1 / 3, 2 / 3], "some_category")
     assert paired == {"a": 0.3333, "b": 0.6667}

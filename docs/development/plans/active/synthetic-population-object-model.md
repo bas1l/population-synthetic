@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-29
 **Author:** Basil
-**Status:** Draft
+**Status:** In Progress
 **Base Branch:** `dev`
 **Branch:** `feature/synthetic-population-object-model`
 
@@ -97,18 +97,26 @@ independently constructible or testable.
       run and produces personas whose `identity.json` files are all parseable and complete.
 - [ ] After such a kill+resume, no persona directory contains an `identity.partial.json`.
 - [ ] After such a kill+resume, every `llm_interactions.jsonl` has unique
-      `(persona_id, call_index)` pairs.
-- [ ] A persona interrupted after resolving K categories re-runs at most one category's worth of
+      `(persona_id, call_index)` pairs. *(Asserted in simulation for both interruption modes — an
+      abort before a call is claimed, and a category that exhausted its retry budget after the last
+      checkpoint (the Phase 3 fix). Still requires the live `taskkill` run to tick.)*
+- [x] A persona interrupted after resolving K categories re-runs at most one category's worth of
       LLM calls, not K+1.
-- [ ] A truncated/zero-byte `identity.json` is detected and regenerated on the next run without
+- [x] A truncated/zero-byte `identity.json` is detected and regenerated on the next run without
       `--force`.
-- [ ] `_build_dag` output is byte-identical to pre-refactor for all 10 selectable strategies;
+- [x] `_build_dag` output is byte-identical to pre-refactor for all 10 selectable strategies;
       `tests/test_identity_generator_configurable.py:320` passes **unmodified**.
 - [ ] For every strategy, a resumed persona's prompt for category K is byte-identical to the
-      prompt an uninterrupted run would have produced.
-- [ ] `identity.json` remains a flat single-level object; no nesting is introduced.
-- [ ] Each of the four `Category` subclasses is constructible and testable without a live client.
-- [ ] `ruff check src/` clean; full `pytest` green.
+      prompt an uninterrupted run would have produced. *(Asserted for `all_pick_dag`
+      (`context: cumulative`) and `all_pick` (`context: none`); not yet swept over all 10.)*
+- [x] `identity.json` remains a flat single-level object; no nesting is introduced.
+- [x] Each of the four `Category` subclasses is constructible and testable without a live client.
+- [x] A run records whether it resumed: `run_metadata.json` carries a `resume` block
+      (`resumed` / `skipped_complete` / `resumed_from_checkpoint` / `pending`), and `--force`
+      reports `resumed: false` by construction.
+- [x] The resume decision has exactly one home: `SyntheticPopulation.plan()`, evaluated once before
+      the thread pool exists. A fully-complete re-run constructs no LLM client at all.
+- [x] `ruff check src/` clean; full `pytest` green.
 
 ## Definitions
 
@@ -283,36 +291,46 @@ offending category (`:796-799`), which under resume would fail again on every re
 **Goal:** Kill-safety and per-category checkpointing, against the existing flat `resolved` dict.
 No domain classes yet.
 
-- [ ] 1.1 — Add `src/population_synthetic/utils/atomic_io.py`: `atomic_write_text`,
+**Started:** 2026-08-01
+**Completed:** 2026-08-01
+
+- [x] 1.1 — Add `src/population_synthetic/utils/atomic_io.py`: `atomic_write_text`,
       `atomic_write_json`. `mkstemp` in the target directory, `flush` + `fsync`, `os.replace`,
       `unlink(missing_ok=True)` on `BaseException`. Export from `utils/__init__.py`.
-- [ ] 1.2 — Add `generators/synthetic/persona_writer.py` with `PersonaWriter` and the
+- [x] 1.2 — Add `generators/synthetic/persona_writer.py` with `PersonaWriter` and the
       `ResumeState` DTO, per the contract above. Compose (do not replace)
       `LLMInteractionCollector`, so `LLMInteractionEntry`'s schema is untouched.
-- [ ] 1.3 — Add append-mode support to `LLMInteractionCollector` — an `append: bool = False`
+- [x] 1.3 — Add append-mode support to `LLMInteractionCollector` — an `append: bool = False`
       constructor arg selecting the `_ensure_open` mode. Fold
       `analysis/persona_realism/runner.py:98` `_AppendingCollector` onto it in the same commit,
-      or leave it and note the duplication explicitly.
-- [ ] 1.4 — Compute the fingerprint in the runner (both hashes + `model_key` + category order)
-      and pass it to each `PersonaWriter`.
-- [ ] 1.5 — Inject the writer into the generator by attribute assignment beside
+      or leave it and note the duplication explicitly. *(Folded — `_AppendingCollector` is
+      deleted and `_flush_telemetry` now passes `append=` to the shared collector.)*
+- [x] 1.4 — Compute the fingerprint in the runner (both hashes + `model_key` + category order)
+      and pass it to each `PersonaWriter`. *(Built by
+      `generators/synthetic/run_fingerprint.py::build_run_fingerprint`, a new module so both
+      entry-point scripts share one definition and `PersonaWriter` stays strategy-agnostic.)*
+- [x] 1.5 — Inject the writer into the generator by attribute assignment beside
       `interaction_collector` (`generate_identities_parallel.py:213-216`); close it in the same
-      `finally` (`:237-243`).
-- [ ] 1.6 — In `generate_identity()`: pre-seed `resolved` and `self._call_index` from
+      `finally` (`:237-243`). *(The collector now comes from `writer.telemetry`, so the writer
+      owns the handle and `writer.close()` closes it.)*
+- [x] 1.6 — In `generate_identity()`: pre-seed `resolved` and `self._call_index` from
       `writer.resume()`, filter `ordered_categories` to the unresolved tail, and call
       `writer.checkpoint(...)` immediately after `resolved[category_name] = value` (`:807`).
-- [ ] 1.7 — Replace the write at `:220-222` with `writer.finalize(...)`.
-- [ ] 1.8 — Replace the exists-only gate at `:147-150` with the content-validating predicate
+- [x] 1.7 — Replace the write at `:220-222` with `writer.finalize(...)`.
+- [x] 1.8 — Replace the exists-only gate at `:147-150` with the content-validating predicate
       (parse + flat + all `resolved_category_order` keys present and non-empty).
-- [ ] 1.9 — Split the fused flag at `:840`: `bypass_identity_skip` (true on retry rounds) vs
+- [x] 1.9 — Split the fused flag at `:840`: `bypass_identity_skip` (true on retry rounds) vs
       `discard_checkpoint` (true only for `args.force`). Update `_generate_one`'s signature.
-- [ ] 1.10 — Write `run_metadata.json` via `atomic_write_json` at both sites (`:802-805`, `:880-881`).
+- [x] 1.10 — Write `run_metadata.json` via `atomic_write_json` at both sites (`:802-805`, `:880-881`).
 
 **Files Modified:**
 - `src/population_synthetic/utils/atomic_io.py` — new
 - `src/population_synthetic/utils/__init__.py` — export the helpers
 - `src/population_synthetic/generators/synthetic/persona_writer.py` — new
+- `src/population_synthetic/generators/synthetic/run_fingerprint.py` — new (fingerprint builder,
+  shared by both entry-point scripts)
 - `src/population_synthetic/generators/synthetic/llm_interaction_log.py` — `append` mode
+- `src/population_synthetic/analysis/persona_realism/runner.py` — `_AppendingCollector` folded away
 - `src/population_synthetic/generators/synthetic/base_identity_generator.py` — `writer` slot
 - `src/population_synthetic/generators/synthetic/identity_generator_configurable.py` — resume pre-seed, per-category checkpoint call
 - `scripts/generate/generate_identities_parallel.py` — fingerprint, writer injection, gate, force split, atomic run metadata
@@ -324,45 +342,88 @@ No domain classes yet.
 **Goal:** Replace the `if/elif` dispatch with a class per generation method, and move the
 category walk onto `Persona`. `generate_identity()`'s signature stays stable.
 
-- [ ] 2.1 — Add `resolution_context.py::ResolutionContext`; move `_call_llm_json`
+**Started:** 2026-08-01
+**Completed:** 2026-08-01
+
+- [x] 2.1 — Add `resolution_context.py::ResolutionContext`; move `_call_llm_json`
       (`:262-345`) onto it along with `_call_index` and the telemetry emission.
-- [ ] 2.2 — Add `category.py`: `Category` ABC + `PickCategory`, `GeneratePickCategory`,
+      *(`_extract_json` / `_extract_expected_key` travelled with it as module-level
+      helpers; the counter is exposed read-only plus a `resume_from()` setter.)*
+- [x] 2.2 — Add `category.py`: `Category` ABC + `PickCategory`, `GeneratePickCategory`,
       `GenerateEvaluatePickCategory`, `GenerateEvaluateRandomPickCategory`. Move the four
       `_process_*` bodies (`:544-729`) and their prompt builders (`:401-485`) onto them verbatim.
-- [ ] 2.3 — Add `_METHOD_MAP` and validate **every** category's method at build time, before
+      *(Two non-public intermediates — `_CandidateCategory` for the enumerate step,
+      `_WeightedCategory` for the evaluate loop — hold what the subclasses share.)*
+- [x] 2.3 — Add `_METHOD_MAP` and validate **every** category's method at build time, before
       resolution starts.
-- [ ] 2.4 — Add `persona.py::Persona`: holds ordered categories, context mode, writer; owns the
+- [x] 2.4 — Add `persona.py::Persona`: holds ordered categories, context mode, writer; owns the
       walk, `_build_context_block`, and the per-category `writer.checkpoint(...)` call.
-- [ ] 2.5 — Reduce `IdentityGeneratorConfigurable.generate_identity()` to: build categories from
+      *(`_resume_prefix` moved here too — it is part of the walk.)*
+- [x] 2.5 — Reduce `IdentityGeneratorConfigurable.generate_identity()` to: build categories from
       config → construct `Persona` → `persona.generate(ctx)` → return `(resolved, {})`.
-- [ ] 2.6 — Move the weight-reconcile helper (`_reconcile_weight_count`, `:510-542`) to wherever
-      its two callers land.
+- [x] 2.6 — Move the weight-reconcile helper (`_reconcile_weight_count`, `:510-542`) to wherever
+      its two callers land. *(Module-level in `category.py` with `_normalize_weights` and
+      `_candidate_probabilities`; all three are pure functions of their arguments.)*
 
 **Files Modified:**
 - `src/population_synthetic/generators/synthetic/resolution_context.py` — new
 - `src/population_synthetic/generators/synthetic/category.py` — new
 - `src/population_synthetic/generators/synthetic/persona.py` — new
 - `src/population_synthetic/generators/synthetic/identity_generator_configurable.py` — large reduction
+- `tests/test_category.py`, `tests/test_persona.py`, `tests/test_prompt_stability.py` — new
+- `tests/test_identity_generator_configurable.py`, `tests/test_identity_generator_resume.py` —
+  their test doubles move from the old `_call_llm_json` seam to `ResolutionContext`
 
 **Dependencies:** Phase 1
 
 ### Phase 3: `SyntheticPopulation` and runner rewiring
 **Goal:** Give the persona set a home and move the resume policy out of the runner's loop body.
 
-- [ ] 3.1 — Add `synthetic_population.py::SyntheticPopulation`: constructed from `(n, output_dir,
+**Started:** 2026-08-01
+**Completed:** 2026-08-01
+
+- [x] 3.1 — Add `synthetic_population.py::SyntheticPopulation`: constructed from `(n, output_dir,
       fingerprint, category blueprint)`; exposes `pending_indices(force=...)` and
-      `persona(index) -> Persona`. Passive — no threading.
-- [ ] 3.2 — `IdentityGeneratorConfigurable` builds and owns the `SyntheticPopulation`.
-- [ ] 3.3 — Rewire `generate_identities_parallel.py`: the runner keeps its `ThreadPoolExecutor`
+      `persona(index) -> Persona`. Passive — no threading. *(Plus `plan(force=...) -> ResumePlan`,
+      the frozen DTO both `pending_indices` and the run-metadata record are views over, and
+      `writer(index)`, which `persona()` is built on and the runner's worker uses directly.)*
+- [x] 3.2 — `IdentityGeneratorConfigurable` builds and owns the `SyntheticPopulation`.
+      *(As `build_population()`, a **classmethod** over the new `build_blueprint()` — the run needs
+      the population before it has a worker, and therefore before it has a client. The generator
+      remains the only thing that interprets a strategy YAML or a flat schema; the live instance is
+      held by the orchestration edge because it spans every worker.)*
+- [x] 3.3 — Rewire `generate_identities_parallel.py`: the runner keeps its `ThreadPoolExecutor`
       and per-worker client/generator construction, but asks the population for the pending set
-      and for `Persona` objects instead of open-coding the skip logic.
-- [ ] 3.4 — Record `resumed: true` plus the resumed/skipped index counts in `run_metadata.json`,
-      so a resumed run is distinguishable from a clean one.
+      and for `Persona` objects instead of open-coding the skip logic. *(The worker asks for
+      `population.writer(index, ...)` and injects it, exactly as before; `persona(index)` returns
+      the `Persona` fully bound to that writer for callers that drive the walk themselves. The
+      in-worker skip branch and the `bypass_identity_skip` flag are gone — the plan is the single
+      decision point, so a worker is only ever handed a pending slot.)*
+- [x] 3.4 — Record `resumed: true` plus the resumed/skipped index counts in `run_metadata.json`,
+      so a resumed run is distinguishable from a clean one. *(A `resume` block:
+      `{resumed, skipped_complete, resumed_from_checkpoint, pending}`, written before generation
+      starts so it survives a kill.)*
 
 **Files Modified:**
 - `src/population_synthetic/generators/synthetic/synthetic_population.py` — new
-- `src/population_synthetic/generators/synthetic/identity_generator_configurable.py` — owns the population
+- `src/population_synthetic/generators/synthetic/identity_generator_configurable.py` — `Blueprint`,
+  `build_blueprint()`, `build_population()`
+- `src/population_synthetic/generators/synthetic/persona.py` — read-only `writer` accessor
+- `src/population_synthetic/generators/synthetic/persona_writer.py` — `has_checkpoint`; resume now
+  continues past attempts spent *after* the last checkpoint (see below)
 - `scripts/generate/generate_identities_parallel.py` — loop body delegates to the population
+- `tests/_driver.py`, `tests/test_synthetic_population.py`,
+  `tests/test_generate_parallel_resume_run.py` — new; `tests/test_generate_parallel_gate.py`,
+  `tests/test_persona_writer.py`, `tests/test_identity_generator_resume.py` — extended
+
+**Defect found and fixed during this phase.** The end-to-end smoke exposed a real hole in the shared
+lifecycle: a category that *exhausts its retry budget* records one telemetry entry per attempt and
+then raises, so the persona's last checkpoint is older than the highest `call_index` actually spent.
+Resuming from the checkpoint's counter alone re-issued those indices and duplicated
+`(persona_id, call_index)`. `PersonaWriter.resume()` now continues past the larger of the
+checkpoint's counter and the highest index the JSONL itself carries, reading that log leniently (a
+torn trailing line must not cost the indices the readable records establish). The pre-existing
+`CrashingContext` tests never caught it because that double raises *before* claiming an index.
 
 **Dependencies:** Phase 2
 
@@ -371,31 +432,42 @@ category walk onto `Persona`. `generate_identity()`'s signature stays stable.
 ## Testing Plan
 
 ### Unit Tests
-- [ ] `atomic_write_json` leaves no `.tmp` residue when the serializer raises mid-write.
-- [ ] Concurrent `atomic_write_json` to the *same* path from N threads yields a valid file
+- [x] `atomic_write_json` leaves no `.tmp` residue when the serializer raises mid-write.
+- [x] Concurrent `atomic_write_json` to the *same* path from N threads yields a valid file
       (no interleaved temp-name collision).
-- [ ] `PersonaWriter.resume()` on: absent / zero-byte / truncated / stale-fingerprint / wrong
+- [x] `PersonaWriter.resume()` on: absent / zero-byte / truncated / stale-fingerprint / wrong
       `schema_version` / valid checkpoint — returns `None` for the first five, state for the last.
-- [ ] Parse failure and fingerprint mismatch produce *different* log messages.
-- [ ] `finalize()` removes the partial; a pre-existing stale partial next to a valid
+- [x] Parse failure and fingerprint mismatch produce *different* log messages.
+- [x] `finalize()` removes the partial; a pre-existing stale partial next to a valid
       `identity.json` is cleaned on the next run.
-- [ ] Checkpoint round-trip preserves **key insertion order** (guards the `sort_keys` trap).
-- [ ] Each of the four `Category` subclasses resolves against a fake `ResolutionContext` with no
+- [x] Checkpoint round-trip preserves **key insertion order** (guards the `sort_keys` trap).
+- [x] Each of the four `Category` subclasses resolves against a fake `ResolutionContext` with no
       live client.
-- [ ] An unknown `method` string raises **before** any category resolves.
-- [ ] `_build_dag` output unchanged for all 10 selectable strategies —
+- [x] An unknown `method` string raises **before** any category resolves.
+- [x] Every prompt every strategy renders is byte-identical to the pre-refactor implementation
+      (`tests/test_prompt_stability.py` pins a sha256 of the full
+      `(category, method, step, prompt)` stream per strategy YAML), plus per-builder golden
+      strings in `tests/test_category.py`.
+- [x] `_build_dag` output unchanged for all 10 selectable strategies —
       `tests/test_identity_generator_configurable.py:320` passes unmodified.
-- [ ] First coverage for `BaseIdentityGenerator` and `FactoryIdentityGenerator`.
+- [x] First coverage for `BaseIdentityGenerator` and `FactoryIdentityGenerator`.
 
 ### Integration Tests
-- [ ] Resume-faithfulness: a persona interrupted after K categories produces, for category K+1, a
+- [x] Resume-faithfulness: a persona interrupted after K categories produces, for category K+1, a
       prompt byte-identical to the uninterrupted run's. Run for both `context: cumulative` and
       `context: none`.
-- [ ] Shared lifecycle: resume → JSONL appended and `call_index` monotonic, no duplicate
+- [x] Shared lifecycle: resume → JSONL appended and `call_index` monotonic, no duplicate
       `(persona_id, call_index)`. Fresh/`--force` → JSONL truncated and `call_index` restarts.
-- [ ] Retry round keeps the checkpoint; `--force` discards it.
-- [ ] `validate_raw` passes on a resumed run's output (exercises the containment argument).
-- [ ] End-to-end smoke with a fake client over `_debug_minimal.yaml`.
+- [x] Retry round keeps the checkpoint; `--force` discards it. *(Now asserted through
+      `SyntheticPopulation`'s API as well as through the injected writer.)*
+- [x] `validate_raw` passes on a resumed run's output (exercises the containment argument).
+      *(`tests/test_identity_generator_resume.py::test_validate_raw_passes_on_a_resumed_persona`,
+      against `expected_raw_keys("swedish")` and the real `all_pick_dag` strategy.)*
+- [x] End-to-end smoke with a fake client over `_debug_minimal.yaml`.
+      *(`tests/test_generate_parallel_resume_run.py` drives `main()` three times over one output
+      dir — fail-partway, resume, no-op — with only the transport faked.)*
+- [x] A resumed run is distinguishable from a clean one in `run_metadata.json`, and `--force`
+      reports `resumed: false`.
 
 ### Manual Verification
 - [ ] Launch a real GUI run, press **Abort** mid-generation, inspect: partial files present, no
@@ -406,12 +478,13 @@ category walk onto `Persona`. `generate_identity()`'s signature stays stable.
       plausible and no duplicate correlation keys are reported.
 
 ### Edge Cases
-- [ ] Kill during `finalize()`, between the identity write and the partial unlink.
-- [ ] Kill during `checkpoint()` itself.
-- [ ] Strategy YAML edited between two runs of the same slug (fingerprint mismatch path).
-- [ ] `--force` on a directory holding both a valid identity and a stale partial.
-- [ ] A persona that fails every retry round: leaves a partial, no `identity.json`; `validate_raw`
-      must still classify it correctly.
+- [x] Kill during `finalize()`, between the identity write and the partial unlink.
+- [x] Kill during `checkpoint()` itself.
+- [x] Strategy YAML edited between two runs of the same slug (fingerprint mismatch path).
+- [x] `--force` on a directory holding both a valid identity and a stale partial.
+- [x] A persona that fails every retry round: leaves a partial, no `identity.json`; `validate_raw`
+      must still classify it correctly. *(Both halves asserted in the end-to-end smoke's first
+      pass: 0 passed / N failed / N missing_identity, with a checkpoint present in each dir.)*
 - [ ] Property/fuzz test: interrupt at N random points, assert on-disk state is always either
       "old valid" or "new valid" — never torn.
 
@@ -419,16 +492,22 @@ category walk onto `Persona`. `generate_identity()`'s signature stays stable.
 
 ## Documentation Plan
 
-- [ ] Update `CLAUDE.md` — note that generation is crash-safe/resumable and that `--force` is the
-      only checkpoint discard.
-- [ ] Update `docs/architecture/sub-packages.md` — the new classes and their boundaries.
-- [ ] Update `docs/architecture/axis-composition.md` — the run-dir layout gains
-      `identity.partial.json`.
-- [ ] New `docs/development/aborted-and-resumed-runs.md` — the resume protocol, the shared
+- [x] Update `CLAUDE.md` — note that generation is crash-safe/resumable and that `--force` is the
+      only checkpoint discard. *(One Core Invariant bullet + a wiki row; depth lives in the new doc.)*
+- [x] Update `docs/architecture/sub-packages.md` — the new classes and their boundaries.
+      *(A module table under `generators/synthetic/`, each row stating what it must **not** know.)*
+- [x] Update `docs/architecture/axis-composition.md` — the run-dir layout gains
+      `identity.partial.json`. *(New "Run directory layout" tree + what a surviving partial means.)*
+- [x] New `docs/development/aborted-and-resumed-runs.md` — the resume protocol, the shared
       lifecycle invariant, and why there is no signal handler. No such doc exists today.
-- [ ] Amend `docs/development/swedish-token-usage-by-model.md` — the ~45% token-record match
-      caveat should improve; note that historical figures under-count spend.
-- [ ] Inline `why` comments at every ordering-sensitive site listed under Architecture.
+- [x] Amend `docs/development/swedish-token-usage-by-model.md` — the ~45% token-record match
+      caveat should improve; note that historical figures under-count spend. *(A "superseded for
+      runs after 2026-08-01" note stating the direction of the shift is upward.)*
+- [x] Inline `why` comments at every ordering-sensitive site listed under Architecture.
+      *(Verified all five: `atomic_io._atomic_write` (write→flush→fsync→replace, and the
+      per-worker-unique `mkstemp`), `Persona.generate` + `PersonaWriter.checkpoint` (checkpoint
+      after the value lands), `PersonaWriter.finalize` (identity before unlink), and
+      `PersonaWriter.telemetry` (mode decided by resolving `resume()` itself).)*
 
 ---
 
@@ -487,5 +566,44 @@ category walk onto `Persona`. `generate_identity()`'s signature stays stable.
   (idempotency, "overwrite don't append", complete-output markers), §8 (error boundaries),
   §3 (DTOs validated at the boundary); `05-code-craftsmanship-and-maintainability.md` §2
   (information hiding, connascence of execution order)
+
+---
+
+## Modified Files
+
+<!-- auto-generated by /plan-implement — do not edit manually -->
+- CLAUDE.md
+- docs/architecture/README.md
+- docs/architecture/axis-composition.md
+- docs/architecture/sub-packages.md
+- docs/development/aborted-and-resumed-runs.md
+- docs/development/plans/active/synthetic-population-object-model.md
+- docs/development/swedish-token-usage-by-model.md
+- scripts/generate/generate_identities_parallel.py
+- scripts/generate/generate_identity.py
+- src/population_synthetic/analysis/persona_realism/runner.py
+- src/population_synthetic/generators/synthetic/base_identity_generator.py
+- src/population_synthetic/generators/synthetic/category.py
+- src/population_synthetic/generators/synthetic/identity_generator_configurable.py
+- src/population_synthetic/generators/synthetic/llm_interaction_log.py
+- src/population_synthetic/generators/synthetic/persona.py
+- src/population_synthetic/generators/synthetic/persona_writer.py
+- src/population_synthetic/generators/synthetic/resolution_context.py
+- src/population_synthetic/generators/synthetic/run_fingerprint.py
+- src/population_synthetic/generators/synthetic/synthetic_population.py
+- src/population_synthetic/utils/__init__.py
+- src/population_synthetic/utils/atomic_io.py
+- tests/_driver.py
+- tests/test_atomic_io.py
+- tests/test_category.py
+- tests/test_generate_parallel_gate.py
+- tests/test_generate_parallel_resume_run.py
+- tests/test_identity_generator_configurable.py
+- tests/test_identity_generator_contract.py
+- tests/test_identity_generator_resume.py
+- tests/test_persona.py
+- tests/test_persona_writer.py
+- tests/test_prompt_stability.py
+- tests/test_synthetic_population.py
 
 ---

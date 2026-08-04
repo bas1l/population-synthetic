@@ -31,6 +31,26 @@ The output slug is `{country_id}_{strategy_id}_{model_id}`, and the run director
 `{output_base}/01_Raw/{slug}/`. Use `--model-id`, `--strategy-id`, `--country-id` CLI flags instead
 of `--manifest` to invoke this path.
 
+### Run directory layout
+
+```
+{output_base}/01_Raw/{slug}/
+├── manifest_snapshot.yaml          # axis path only: the composed manifest, verbatim
+├── run_metadata.json               # provenance; includes resolved_category_order and the resume record
+├── logs/run_YYYYmmdd_HHMMSS.log
+└── persona_00000/ … persona_00NNN/
+    ├── identity.json               # the finished persona -- flat, single-level, complete-output marker
+    ├── identity.partial.json       # checkpoint; present only while a persona is unfinished
+    └── llm_interactions.jsonl      # per-call telemetry, one JSON object per attempt
+```
+
+`identity.partial.json` is written after **every** resolved category and deleted by the same object
+that publishes `identity.json`, so a *complete* persona never has one. Finding one means that slot
+was interrupted; re-running the same command resumes it from there. Only `--force` discards it. A
+persona directory with a partial and no identity is therefore an unfinished slot, not a corrupt one,
+and `validate_raw` classifies it as such (no `identity.json` -> failed). See
+[Aborted and resumed runs](../development/aborted-and-resumed-runs.md).
+
 ## Strategy versioning: `family` + `version`
 
 The strategy axis carries a **version** dimension. Every selectable strategy declares two metadata

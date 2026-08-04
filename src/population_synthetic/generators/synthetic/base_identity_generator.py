@@ -2,9 +2,9 @@
 
 Defines ``BaseIdentityGenerator``, the ABC that fixes the contract for
 all identity generators. It centralizes shared state -- the injected
-``LLMClient`` and ``LLMInteractionCollector`` -- and declares the
-``generate_identity`` and ``load_identity`` abstract methods that each
-concrete strategy must implement.
+``LLMClient``, ``LLMInteractionCollector`` and ``PersonaWriter`` -- and
+declares the ``generate_identity`` and ``load_identity`` abstract methods
+that each concrete strategy must implement.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from typing import Any
 from population_synthetic.clients.llm_protocol import LLMClient
 
 from .llm_interaction_log import LLMInteractionCollector
+from .persona_writer import PersonaWriter
 
 
 class BaseIdentityGenerator(ABC):
@@ -33,6 +34,10 @@ class BaseIdentityGenerator(ABC):
         """
         self.client = client
         self.interaction_collector: LLMInteractionCollector | None = None
+        # Injected by the orchestration layer when this generator's output is
+        # durable. ``None`` means "generate in memory, persist nothing" -- the
+        # generator never chooses a path or a filename of its own.
+        self.writer: PersonaWriter | None = None
         self.retry_until_success: bool = False
         self.use_structured_output: bool = False
         logging.info(f"{self.__class__.__name__} initialized.")
