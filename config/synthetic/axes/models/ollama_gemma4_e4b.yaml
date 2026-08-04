@@ -20,4 +20,4 @@ parameters:
     #   (0.051 GB KV/slot; 546 MiB headroom at 84 slots, spills to CPU at 85).
     workers:
       linux_3060: 12
-      windows_4070tis: 84
+      windows_4070tis: 32

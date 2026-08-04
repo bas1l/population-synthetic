@@ -52,7 +52,7 @@ from population_synthetic.generators.synthetic.ollama_hosts import host_ids, loa
 UNSUPPORTED = None
 
 EXPECTED_WORKERS: dict[str, dict[str, int | None]] = {
-    "ollama_gemma4_e4b":       {"linux_3060": 12, "windows_4070tis": 84},
+    "ollama_gemma4_e4b":       {"linux_3060": 12, "windows_4070tis": 32},
     "ollama_llama32_3b":       {"linux_3060": 10, "windows_4070tis": UNSUPPORTED},
     "ollama_lucie_7b":         {"linux_3060": 7,  "windows_4070tis": UNSUPPORTED},
     "ollama_llama31_8b":       {"linux_3060": 6,  "windows_4070tis": 16},
