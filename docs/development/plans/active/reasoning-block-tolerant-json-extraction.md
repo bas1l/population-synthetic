@@ -215,14 +215,14 @@ last-first order is what makes a trailing answer beat a quoted schema sketch.
 
 **Goal:** A list where an object was declared costs one retry, not a persona.
 
-- [ ] 3.1 — Add `_check_shape(parsed, response_schema)`: when `response_schema["type"]` is
+- [x] 3.1 — Add `_check_shape(parsed, response_schema)`: when `response_schema["type"]` is
       `"object"` and `parsed` is not a `dict`, or `"array"` and not a `list`, raise
       `json.JSONDecodeError` naming the declared and actual types. No `response_schema`, or any
       other declared type → no constraint.
-- [ ] 3.2 — Call it in `call_json` immediately after `_extract_json`, **before**
+- [x] 3.2 — Call it in `call_json` immediately after `_extract_json`, **before**
       `_extract_expected_key`, and unconditionally on `response_schema` — *not* gated on
       `use_structured_output`, which only controls whether the schema is sent to the provider.
-- [ ] 3.3 — Confirm no call site needs changing: all six `ctx.call_json(...)` sites in `category.py`
+- [x] 3.3 — Confirm no call site needs changing: all six `ctx.call_json(...)` sites in `category.py`
       (lines 272, 316, 345, 361, 378, 423) declare `"type": "object"`. Only the `distribution` site
       (423) passes `expected_key=None` and is therefore the only one that could reach `.get()` on a
       list — leave `category.py:429` as-is.

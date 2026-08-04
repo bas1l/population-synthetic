@@ -13,6 +13,12 @@ what follows the last ``</think>`` before falling back on a direct parse, a
 markdown fence, a last-first scan of the balanced ``{...}`` spans, and -- only
 once none of those parse -- a bare array.
 
+Whatever comes back is then checked against the ``response_schema`` the caller
+declared: a list where an object was named is a retriable parse failure here,
+spending one unit of the budget, rather than an ``AttributeError`` raised in the
+category the moment it indexes the value -- which escapes the budget entirely
+and kills the persona at whichever attribute it was resolving.
+
 The context also owns the correlation counter, which is what keeps that key
 unique. One index is claimed per *client call*, not per :meth:`call_json`
 invocation, so a category that retries three times spends three indices and the
@@ -168,6 +174,49 @@ def _extract_json(text: str) -> dict | list:
     raise json.JSONDecodeError("No valid JSON found in response", text, 0)
 
 
+# The declared JSON types a parsed value can be checked against, and the Python
+# type each must have produced. Deliberately only these two: they are the shapes
+# a caller indexes (``.get`` / ``[i]``), so a mismatch is what crashes downstream.
+_PYTHON_TYPE_BY_JSON_TYPE: dict[str, type] = {"object": dict, "array": list}
+
+
+def _check_shape(parsed: dict | list, response_schema: dict | None) -> None:
+    """Raise when *parsed* contradicts the JSON type *response_schema* declares.
+
+    The caller already states the shape it will index; this turns that statement
+    into a checked precondition at the seam that owns parse failures. Without it a
+    response that parses cleanly but yields the wrong shape crashes inside the
+    category instead -- ``'list' object has no attribute 'get'`` -- with an
+    ``AttributeError`` that no retry layer catches, so one bad response ends a
+    persona rather than costing one attempt.
+
+    The constraint comes from the schema the caller declared, never from a per-call
+    site type literal, and it is checked whether or not that schema was sent to the
+    provider: an unconstrained provider is precisely the one that returns the wrong
+    shape. An absent ``response_schema``, or a declared type outside
+    :data:`_PYTHON_TYPE_BY_JSON_TYPE`, imposes no constraint -- this validates shape
+    only, never properties or required keys.
+
+    Raises:
+        json.JSONDecodeError: The declared and actual types disagree. That type is
+            what puts the failure inside the caller's existing retry boundary,
+            recorded as ``invalid_response``.
+    """
+    if response_schema is None:
+        return
+    declared = response_schema.get("type")
+    # A schema may legally name a *list* of types; that is not one of the two
+    # single-type declarations checked here, and looking it up would raise.
+    expected = _PYTHON_TYPE_BY_JSON_TYPE.get(declared) if isinstance(declared, str) else None
+    if expected is None or isinstance(parsed, expected):
+        return
+    raise json.JSONDecodeError(
+        f"Response declared JSON {declared} but parsed as Python {type(parsed).__name__}",
+        json.dumps(parsed),
+        0,
+    )
+
+
 def _extract_expected_key(parsed: dict | list, expected_key: str) -> Any:
     """
     Return parsed[expected_key], tolerating whitespace-corrupted keys
@@ -279,8 +328,11 @@ class ResolutionContext:
             prompt: The rendered user prompt. Built by the category; never touched here.
             expected_key: Key to lift out of the parsed object, or ``None`` for the
                 whole object. A missing key is a retriable parse failure.
-            response_schema: JSON schema for constrained decoding, honoured only
-                when ``use_structured_output`` is set.
+            response_schema: JSON schema for constrained decoding, sent to the
+                client only when ``use_structured_output`` is set. Its declared
+                ``type`` constrains the parsed shape either way (see
+                :func:`_check_shape`): a value that contradicts it is a retriable
+                parse failure, not a crash in the caller.
             category: Which attribute this call serves. Doubles as the telemetry
                 switch -- an empty string records nothing.
             method: Which generation method is resolving that attribute.
@@ -306,6 +358,7 @@ class ResolutionContext:
                 )
                 meta = getattr(self._client, "last_metadata", None) or {}
                 parsed = _extract_json(raw)
+                _check_shape(parsed, response_schema)
                 value = (
                     _extract_expected_key(parsed, expected_key)
                     if expected_key is not None
