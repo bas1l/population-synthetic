@@ -199,11 +199,11 @@ last-first order is what makes a trailing answer beat a quoted schema sketch.
 
 **Goal:** No JSON fragment quoted inside prose can outrank the real answer.
 
-- [ ] 2.1 — Add `_iter_json_candidates(text)`: single left-to-right pass tracking brace depth and
+- [x] 2.1 — Add `_iter_json_candidates(text)`: single left-to-right pass tracking brace depth and
       string/escape state, collecting balanced `{…}` spans; yield them **reversed**.
-- [ ] 2.2 — Replace step 3's `re.search(r"\{[^{}]*\}")` with a loop over `_iter_json_candidates`
+- [x] 2.2 — Replace step 3's `re.search(r"\{[^{}]*\}")` with a loop over `_iter_json_candidates`
       that tries **every** candidate rather than abandoning the pattern after one failed parse.
-- [ ] 2.3 — Demote the bare-array pattern to step 4, reached only when step 3 yields nothing
+- [x] 2.3 — Demote the bare-array pattern to step 4, reached only when step 3 yields nothing
       parseable. Comment records that a stray array in prose must never outrank an object.
 
 **Files Modified:**

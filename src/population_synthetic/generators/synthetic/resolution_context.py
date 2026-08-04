@@ -10,7 +10,8 @@ the fatal-error escape, the ``(persona_id, call_index)`` correlation key and the
 The first of those fallbacks is a reasoning-block strip: a reasoning model
 inlines its chain-of-thought in the response content, so extraction scans only
 what follows the last ``</think>`` before falling back on a direct parse, a
-markdown fence, and finally a bare object/array match.
+markdown fence, a last-first scan of the balanced ``{...}`` spans, and -- only
+once none of those parse -- a bare array.
 
 The context also owns the correlation counter, which is what keeps that key
 unique. One index is claimed per *client call*, not per :meth:`call_json`
@@ -24,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Iterator
 from typing import Any
 
 from population_synthetic.clients.call_context import set_correlation
@@ -67,6 +69,49 @@ def _strip_reasoning(text: str) -> str:
     return payload if payload.strip() else text
 
 
+def _iter_json_candidates(text: str) -> Iterator[str]:
+    """Yield the brace-balanced ``{...}`` spans of *text*, last one first.
+
+    A single left-to-right pass tracks brace depth plus string and escape state,
+    so a brace inside a string value (``{"note": "a } brace"}``) cannot truncate
+    a span and a nested object is returned whole rather than as its innermost
+    pair. Only spans that close are yielded; an unbalanced ``{`` yields nothing.
+
+    The reversal is the point. A model narrates before it answers -- it quotes
+    the prompt's own schema sketch, or an example -- so an *earlier* brace pair
+    is by construction the less likely answer, and the last one is the value the
+    response settled on.
+
+    Pure ``str -> Iterator[str]``: it decides nothing about JSON validity,
+    schemas or what any caller wants. The candidates it yields may well be
+    unparseable; judging them belongs to :func:`_extract_json`.
+    """
+    spans: list[str] = []
+    depth = 0
+    start = 0
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}" and depth > 0:
+            depth -= 1
+            if depth == 0:
+                spans.append(text[start:index + 1])
+    return reversed(spans)
+
+
 def _extract_json(text: str) -> dict | list:
     """Parse the JSON value a raw response carries, tolerating how models wrap it.
 
@@ -75,7 +120,8 @@ def _extract_json(text: str) -> dict | list:
     0. strip the reasoning block, if any (:func:`_strip_reasoning`)
     1. direct :func:`json.loads`
     2. markdown fence, applied to the payload only
-    3. first non-nested ``{...}``, else the first ``[...]``
+    3. every balanced ``{...}`` span, last-first (:func:`_iter_json_candidates`)
+    4. a bare ``[...]``, only once no object span parsed
 
     Raises:
         json.JSONDecodeError: No step yielded a parseable value. The caller's
@@ -98,14 +144,26 @@ def _extract_json(text: str) -> dict | list:
         except json.JSONDecodeError:
             pass
 
-    # 3. Find first JSON object or array
-    for pattern in (r"\{[^{}]*\}", r"\[.*?\]"):
-        obj_match = re.search(pattern, text, re.DOTALL)
-        if obj_match:
-            try:
-                return json.loads(obj_match.group(0))
-            except json.JSONDecodeError:
-                pass
+    # 3. Every balanced object span, last-first. One candidate failing to parse
+    #    says nothing about the next -- the schema sketch a model quotes
+    #    mid-answer (``{"distribution": "normal"|"uniform"|"beta"}``) is not JSON,
+    #    and abandoning the object shape on that failure is what used to let the
+    #    prose win.
+    for candidate in _iter_json_candidates(text):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+
+    # 4. A bare array, reached only when no object span parsed: a throwaway list
+    #    quoted in prose (``[0, 1]`` in a sentence about the Beta support) must
+    #    never outrank a real object later in the same response.
+    array_match = re.search(r"\[.*?\]", text, re.DOTALL)
+    if array_match:
+        try:
+            return json.loads(array_match.group(0))
+        except json.JSONDecodeError:
+            pass
 
     raise json.JSONDecodeError("No valid JSON found in response", text, 0)
 
