@@ -10,7 +10,7 @@
 
 ## Overview
 
-Add 48 `equals` tokens to the `synthetic` block of 11 files under `config/mapping/scb_native/`,
+Add 47 `equals` tokens to the `synthetic` block of 10 files under `config/mapping/scb_native/`,
 recovering **103 personas** that currently fail the mapped-validity gate on a single attribute.
 Every token is a spelling, inflection, diacritic, casing or translation variant of a token the
 config **already declares for that same target value** — no new category, no new mapping policy.
@@ -55,14 +55,14 @@ of 50 combos below the N=100 clean target.
 
 ## Success Criteria
 
-- [x] 48 `equals` tokens added across 11 files; `values` and the `real` block byte-identical.
+- [x] 47 `equals` tokens added across 10 files; `values` and the `real` block byte-identical.
 - [x] `probe.py` shows every listed value resolving to its stated target value, and no listed value
       resolving to a *different* value than stated.
 - [x] `regress.py` over all 50 combos reports `regressions == 0`.
 - [x] Every re-routed pair reported by `regress.py` reviewed and recorded in the plan.
-- [ ] Miss counts of untargeted attributes unchanged. — **not met**: `birth_location` moved
-      170 → 169 through its declared `refine_from: birth_country_detail` directive. See the
-      Verification results below; the decision on whether this is acceptable is the user's.
+- [x] Miss counts of untargeted attributes unchanged. — confirmed on the re-run after the
+      `Göteborg` withdrawal: `regress.py` reports `untargeted attributes moved: 0`, and
+      `birth_location` is back at 170 → 170.
 - [x] `ruff check src/` clean.
 - [ ] Post-edit `rank.py` shows sole-cause personas recovered ≈ 103 (deviation explained if not).
 - [x] No file gained a `contains`, `all_of`, `none_of` or `on_miss` key it did not already have.
@@ -106,7 +106,7 @@ and it is why the audit refused ~250 personas' worth of plausible-looking candid
 
 | Approach | Pros | Cons | Decision |
 |----------|------|------|----------|
-| `equals` tokens with a named precedent (this plan) | Matches only strings that resolve to nothing today (verified: all 48 currently miss); reviewable one line at a time | Verbose — one token per observed spelling. **Not** unconditionally safe: `_walk` sweeps tier-outer/value-inner, so an `equals` under value A *does* pre-empt a string that value B's `contains` resolves today. The safety here is empirical, not structural — which is what Phase 2's `regress.py` gate exists to confirm | **Chosen** |
+| `equals` tokens with a named precedent (this plan) | Matches only strings that resolve to nothing today (verified: all 47 currently miss); reviewable one line at a time | Verbose — one token per observed spelling. **Not** unconditionally safe: `_walk` sweeps tier-outer/value-inner, so an `equals` under value A *does* pre-empt a string that value B's `contains` resolves today. The safety here is empirical, not structural — which is what Phase 2's `regress.py` gate exists to confirm | **Chosen** |
 | `contains` stems (e.g. `högskola`, `arbetande`, `konsult`) | Fewer tokens, catches unseen variants | Steals across values: `contains: 'arbetande'` under Employed would capture `hemarbetande`, already a `contains` token under Unemployed — and Employed is declared first, so it wins. Same class of defect as the live `'rent'` → "pa**rent**s" bug. It also silently absorbs strings nobody has read, which is precisely the benchmark widening this audit refuses | Rejected |
 | Add an `Other` / `Unknown` value where the model keeps answering outside the space | Would recover ~55 more personas (birth country, biological sex) | Forbidden: the real population defines the category space, and an invented category has no reference distribution to score against | Rejected — recorded as a schema gap |
 | Add `on_miss` fallbacks | Recovers every persona instantly | Fabricates the marginal that TV distance measures; the score improves for no reason | Rejected |
@@ -133,8 +133,7 @@ config/mapping/scb_native/
 ├── civil_status.json          ← Married, Single/Never Married, Widowed
 ├── region.json                ← Västra Götaland, Södermanland
 ├── income_source.json         ← Wage / Business, Insurance / Allowance
-├── industry_sector.json       ← Financial & Business Services, Manufacturing
-└── birth_country_detail.json  ← Sweden
+└── industry_sector.json       ← Financial & Business Services, Manufacturing
 ```
 
 ---
@@ -142,10 +141,14 @@ config/mapping/scb_native/
 ## Implementation Plan
 
 ### Phase 1: Tier A token additions
-**Goal:** Add the 48 tokens below to the `synthetic` block `equals` arrays. Nothing else.
+**Goal:** Add the 47 tokens below to the `synthetic` block `equals` arrays. Nothing else.
 
 **Started:** 2026-08-04T15:05:00+02:00
 **Completed:** 2026-08-04T15:30:02+02:00
+**Corrected:** 2026-08-04T15:47:00+02:00 — `Göteborg` withdrawn from `birth_country_detail.json`
+(see [Refusals](#findings-recorded-not-actioned)); the file is byte-identical to its pre-plan state
+again, so Phase 1 now touches 10 files and 47 tokens. Phases 1 and 2 were both re-run and
+re-measured against the corrected config; every Phase 2 figure below is from that re-run.
 
 Each table is one file. `personas` is the sole-cause count this token recovers, from the
 2026-08-04 audit. `precedent` is the existing token in the same attribute, under the same target
@@ -261,14 +264,8 @@ for the volunteer pair.
 | Financial & Business Services | `Vetenskaplig och teknisk verksamhet` | 1 | `Professionell, vetenskaplig och teknisk verksamhet` (equals) — the same string minus one leading word |
 | Manufacturing, Mining & Energy | `Industry` | 1 | `Industri` (equals) + `industrial` (contains) — translation |
 
-#### `config/mapping/scb_native/birth_country_detail.json` — 1 persona
-
-| target value | tokens to add | personas | precedent |
-|---|---|---|---|
-| Sweden | `Göteborg` | 1 | `stockholm` (contains) — a Swedish place name already resolves to Sweden |
-
-**Files Modified:** the 11 files listed above, `synthetic` block only. (`biological_sex.json` is a
-12th file, but it is touched only by the optional Phase 4.)
+**Files Modified:** the 10 files listed above, `synthetic` block only. (`biological_sex.json` and
+`birth_country_detail.json` are touched only by the optional Phase 4.)
 
 **Dependencies:** None.
 
@@ -286,9 +283,10 @@ for the volunteer pair.
       on ~9,000 personas). Acceptance: `regressions == 0`.
 - [x] 2.3 — Review **every** re-routed pair by eye and record them in this plan under a
       "Verification results" heading.
-- [ ] 2.4 — Confirm the miss counts of untargeted attributes are unchanged (`rollup.py` diff).
-      **Performed, and it did not confirm**: one untargeted attribute moved (`birth_location`,
-      −1), for the reason recorded below. Left unticked rather than ticked-with-a-caveat.
+- [x] 2.4 — Confirm the miss counts of untargeted attributes are unchanged (`rollup.py` diff).
+      **Confirmed on the post-correction re-run**: `untargeted attributes moved: 0`, with
+      `birth_location` at 170 in both arms. (On the first run, with `Göteborg` present, it moved
+      170 → 169; that token has since been withdrawn.)
 - [x] 2.5 — `ruff check src/`.
 - [x] 2.6 — Confirm no `contains` token was added anywhere, so `substring.py` is not required.
 
@@ -301,9 +299,12 @@ ruff check src/
 
 #### Verification results
 
+All figures below are from the **post-correction re-run** (2026-08-04, after `Göteborg` was
+withdrawn); they supersede the first run's, which measured the 48-token tier.
+
 **How the A/B was driven.** The Phase 1 edits were already committed (`fc5d1a0`), so the usual
 orientation is inverted: the *candidate* is the live `config/mapping/scb_native/`, and the
-*baseline* is the pre-edit tier materialised into the scratchpad from `HEAD~1` (all 17 tier files,
+*baseline* is the pre-edit tier materialised into the scratchpad from `fc5d1a0^` (all 17 tier files,
 rewritten with CRLF so the byte digests compare against the working-tree convention rather than
 flagging every file as changed). No candidate config was ever written into `config/`. With that
 orientation the provenance arm — baseline re-map vs the stored mapped files — is a real staleness
@@ -317,51 +318,53 @@ all_generate_evaluate_pick_v2, all_generate_evaluate_random_pick_v2, all_generat
 all_pick_dag_v2, all_pick_v2 | models: all | combos: all
 ```
 
-50 combos, 8,976 personas re-mapped, 0 skipped by the mapper, 0 combos excluded.
+50 combos, 8,977 personas re-mapped, 0 skipped by the mapper, 0 combos excluded.
 `selftest.py`: 84/84 checks, 1,161 assertions, 0 failures.
 
-**Structural diff, `HEAD~1` vs live config.** 11 files differ, `_index.json` is untouched. 48
-tokens added, every one of them into an `equals` array, every one a pure append (no existing
-element moved or removed). `values` and the `real` block are byte-identical in all 11 files; no
-matcher key was added or removed under any target value; no `contains`, `all_of`, `none_of` or
-`on_miss` key appears among the added lines. The 48 additions match the Phase 1 tables above
-exactly — 0 in the plan but missing from config, 0 in config but not in the plan. `git diff
---numstat` is +68/−20 = 48 net lines, the 20 being the reflowed previous-last elements.
-`substring.py` is therefore not required.
+**Structural diff, `fc5d1a0^` vs live config.** 10 files differ, `_index.json` is untouched, and
+`birth_country_detail.json` is byte-identical to its pre-plan state. 47 tokens added, every one of
+them into an `equals` array, every one a pure append (no existing element moved or removed).
+`values` and the `real` block are byte-identical in all 10 files; no matcher key was added or
+removed under any target value; no `contains`, `all_of`, `none_of` or `on_miss` key appears among
+the added lines. The 47 additions match the Phase 1 tables above exactly — 0 in the plan but
+missing from config, 0 in config but not in the plan. `git diff --numstat` is +66/−19 = 47 net
+lines, the 19 being the reflowed previous-last elements. `substring.py` is therefore not required.
 
-**2.1 — `probe.py`, all 48 tokens.** Every one: `before = __UNMAPPED__`, `after` = the target value
-stated in the Phase 1 tables, verdict `newly-resolved`. 48 of 48 changed outcome; 0 failures. That
+**2.1 — `probe.py`, all 47 tokens.** Every one: `before = __UNMAPPED__`, `after` = the target value
+stated in the Phase 1 tables, verdict `newly-resolved`. 47 of 47 changed outcome; 0 failures. That
 covers the plan's edge cases directly: `not_applicable_retired`, `none`, `Volunteer work` and
 `voluntary work` all land on Not Applicable (the `none_of` veto does not fire — `work` ≠ `worker`),
 `Hypotek` and `Socialbostad` reach Owner-occupied and Rental respectively, and no token resolves to
-a value other than the one it was written under.
+a value other than the one it was written under. `Göteborg` was probed as a 48th value to confirm
+the withdrawal: `birth_country_detail` leaves it `__UNMAPPED__` in **both** arms, verdict
+`unchanged`.
 
 **2.2 — `regress.py`, all 50 combos** (background, ~10 min, full run, no `--limit`):
 
 | count | value |
 |---|---:|
-| newly resolved | 205 |
+| newly resolved | 203 |
 | **regressions** | **0** |
 | re-routed | 0 |
 | provenance disagreements | 0 |
-| untargeted attributes moved | 1 |
+| untargeted attributes moved | 0 |
 
-Exit code **3** (`EXIT_NOISE_MOVED`) — not 1. The gate proper (`regressions == 0`) passes; the
-non-zero exit is the noise-invariance arm, below.
+Exit code **0**. (The first run, with `Göteborg` present, exited **3** — `EXIT_NOISE_MOVED` — on
+the noise-invariance arm; that arm is now clean.)
 
-The 205 newly-resolved pairs decompose exactly into the per-attribute miss deltas
-(14+20+13+53+5+12+7+37+33+9+1 targeted = 204, plus 1 on `birth_location`). 65 distinct
-`(attribute, raw value)` pairs were newly captured — the 48 tokens plus their casing variants,
+The 203 newly-resolved pairs decompose exactly into the per-attribute miss deltas
+(14+20+13+53+5+12+7+37+33+9 = 203, all on targeted attributes). 62 distinct
+`(attribute, raw value)` pairs were newly captured — the 47 tokens plus their casing variants,
 which the `equals` tier folds by design. No captured pair resolves to more than one target, and
 every captured pair resolves to the value its token was written under.
 
 **2.3 — re-routed pairs: none.** `regress.py` reports `RE-ROUTED: 0` over all 50 combos, so the
 list of pairs to review by eye is empty. This is the expected structural outcome and not merely a
-lucky one: `equals` is the first tier of the sweep and all 48 tokens were verified (2.1) to match
+lucky one: `equals` is the first tier of the sweep and all 47 tokens were verified (2.1) to match
 nothing at all under the pre-edit config, so no string could be taken away from a value that
 already owned it. Recorded here as an empty list rather than omitted.
 
-**2.4 — untargeted miss counts: one moved.** `rollup.py` cannot serve as the before/after here —
+**2.4 — untargeted miss counts: none moved.** `rollup.py` cannot serve as the before/after here —
 it reads the stored `03_Analysis/mapping/*.misses.csv`, which are pre-edit artefacts, and it takes
 no `--candidate`/`--override`, so it has no "after" arm. It was run once for the record and
 reproduces the audit's baseline exactly (50 combos, 5,485 misses, 4,006 distinct values, 0 masked).
@@ -373,44 +376,33 @@ both tiers:
 | age_group | no | 0 | 0 | +0 |
 | biological_sex | no | 118 | 118 | +0 |
 | household_size | no | 3 | 3 | +0 |
-| **birth_location** | **no** | **170** | **169** | **−1** |
+| **birth_location** | **no** | **170** | **170** | **+0** |
+| **birth_country_detail** | **no** | **170** | **170** | **+0** |
 | education_level | yes | 282 | 268 | −14 |
 | employment_status | yes | 341 | 321 | −20 |
 | socioeconomic_class | yes | 732 | 719 | −13 |
 | parental_structure | yes | 866 | 813 | −53 |
 | region | yes | 260 | 255 | −5 |
 | civil_status | yes | 190 | 178 | −12 |
-| industry_sector | yes | 702 | 695 | −7 |
+| industry_sector | yes | 703 | 696 | −7 |
 | employment_type | yes | 658 | 621 | −37 |
-| housing_tenure | yes | 612 | 579 | −33 |
+| housing_tenure | yes | 613 | 580 | −33 |
 | income_source | yes | 584 | 575 | −9 |
-| birth_country_detail | yes | 170 | 169 | −1 |
 
-The movement is **fully traced to a single persona** and is a declared config mechanism, not a
-force-mapped stem:
+Every untargeted attribute is flat, `birth_location` included, and `birth_country_detail` is no
+longer a targeted attribute at all — it is byte-identical to its pre-plan state.
 
-`swedish_02_all_pick_dag_v2_openrouter_glm_52 / persona_00139` carries **no `birth_location` key at
-all** (v2 strategies drop that category), and `birth_country_detail = "Göteborg"`.
-`birth_location.json` declares `"refine_from": "birth_country_detail"`: when the primary raw walk
-misses, the engine re-runs it against the *resolved* value of the named sibling. Adding
-`Göteborg → Sweden` under `birth_country_detail` therefore lets `birth_location` resolve to Sweden
-through that directive. `regress.py` classifies `birth_location` as untargeted because it derives
-the targeted set from the config byte digests alone — correct for its contract, which has no notion
-of `refine_from`.
-
-Three facts about the movement, stated separately from any verdict on it:
-
-1. It is a miss **becoming a resolution** (−1 miss, counted among the 205 newly-resolved), not a
-   regression and not a re-route. Nothing moved between two real categories.
-2. `birth_location` is Sweden's **deprecated** attribute (`_index.json` `deprecated_attributes`).
-   It is still mapped and emitted, but excluded from every analysis and exempted by
-   `validate_mapped`, so the movement changes no scored marginal and no persona's gate verdict.
-3. It is confined to exactly one persona, verified by scanning all 8,976 raw identities for a
-   `birth_country_detail` folding to `goteborg`: exactly one hit, the persona above.
-
-Whether this is acceptable is a decision for the user, not for the verification. It is recorded as
-a **failure of the stated criterion** ("miss counts of untargeted attributes unchanged"), with the
-mechanism, magnitude and blast radius above, and no config change was made in response to it.
+**What the first run found, and why it no longer applies.** With `Göteborg` present under
+`birth_country_detail → Sweden`, this table showed `birth_location` at 170 → 169. The mechanism was
+traced to a single persona: `swedish_02_all_pick_dag_v2_openrouter_glm_52 / persona_00139` carries
+**no `birth_location` key at all** (v2 strategies drop that category) and
+`birth_country_detail = "Göteborg"`. `birth_location.json` declares
+`"refine_from": "birth_country_detail"`, so when the primary raw walk misses, the engine re-runs it
+against the *resolved* value of the named sibling — and the new token therefore cascaded a
+resolution onto Sweden's deprecated axis. `regress.py` classified `birth_location` as untargeted
+because it derives the targeted set from the config byte digests alone, which is correct for its
+contract: it has no notion of `refine_from`. The token has been withdrawn (see the refusal record
+below), so the cascade is gone and the criterion is met.
 
 **Three-combo staleness caveat — outcome.** The three combos whose raw pool is newer than their
 mapping artefacts were all run and all reported separately:
@@ -435,10 +427,13 @@ Consequently the `regressions == 0` verdict does not rest on excusing anything: 
 regression anywhere, in these three combos or the other 47, and none had to be attributed to a
 new persona.
 
-**Newly-resolved persona count vs the 103 predicted.** Measured directly against the stored
+**Newly-resolved persona count vs the prediction.** Measured directly against the stored
 `validate_mapped` CSVs (personas failing on exactly one non-deprecated attribute, that attribute's
-raw value re-resolved under both tiers): **107 sole-cause personas recovered**, of 1,762 sole-cause
+raw value re-resolved under both tiers): **106 sole-cause personas recovered**, of 1,762 sole-cause
 failures — the same 1,762 the audit reported, confirming the slice is identical.
+
+The plan's headline prediction of 103 included the 1 persona attributed to the withdrawn
+`Göteborg` token, so the prediction the 47 shipped tokens are measured against is **102**.
 
 | attribute | predicted | measured | Δ |
 |---|---:|---:|---:|
@@ -452,20 +447,19 @@ failures — the same 1,762 the audit reported, confirming the slice is identica
 | income_source | 4 | 4 | 0 |
 | region | 4 | 4 | 0 |
 | industry_sector | 2 | 2 | 0 |
-| birth_country_detail | 1 | 1 | 0 |
-| **total** | **103** | **107** | **+4** |
+| **total** | **102** | **106** | **+4** |
 
 The deviation is +4, spread as four independent +1s, and it is over-recovery rather than
 under-recovery. The cause is the `equals` casing fold: the audit's extract listed each observed
 casing as a distinct value and the Phase 1 tables carry the count of the exact-cased row only,
-while one token covers every casing. 26 of the 107 fall in the three stale combos and are
+while one token covers every casing. 26 of the 106 fall in the three stale combos and are
 legitimate — the provenance arm proves their stored artefacts are reproduced exactly. This figure
 is a Phase 2 measurement over the pre-edit artefacts; Phase 3's `rank.py` remains the figure of
 record after the re-map.
 
 **Report artefacts** (scratchpad, none in the repo): `structural_diff.md`, `probe.md`,
 `probe_verification.md`, `regress.md` (+ `regress.run_metadata.json`), `rollup_preedit.md`,
-`sole_cause.md`, `birth_location_movement.md`.
+`sole_cause.md`, `stale_combos.md`, `stale_all.md`, `birth_location_movement.md`.
 
 **Files Modified:** none (verification only; reports go to the scratchpad).
 
@@ -545,8 +539,6 @@ without touching Phases 1–3 if the added surface is not judged worth it.
 - [ ] `Volunteer work` / `voluntary work` against Not Applicable's `none_of` list.
 - [ ] `Hypotek` and `Socialbostad` must not be captured by `Owner-occupied.none_of`
       (`hemförsäkring`, `ej ägd`, …) before reaching their intended value.
-- [ ] `Göteborg` in `birth_country_detail` must not disturb `region.json`, where `göteborg` already
-      maps to Västra Götaland — different attribute, confirm no interaction.
 
 ---
 
@@ -602,6 +594,21 @@ without touching Phases 1–3 if the added surface is not judged worth it.
    and no `Tomträtt` (site leasehold).
 5. `civil_status` has no unknown bucket.
 
+**Refused tokens** — proposed, then withdrawn:
+
+- `Göteborg` under `birth_country_detail → Sweden` (1 sole-cause persona). It was added in
+  `fc5d1a0` and removed again before merge. **Not a mapping error**: the token has a valid
+  precedent (`stockholm`, `contains`, same target value), it resolves exactly as intended, and
+  `probe.py` confirmed it never touched `region.json`, where `göteborg` independently maps to
+  Västra Götaland. It is a **scope decision**. `birth_location.json` declares
+  `"refine_from": "birth_country_detail"`, so a persona carrying no `birth_location` key falls
+  through to the sibling's *resolved* value; the token therefore cascaded a resolution onto
+  `birth_location` — Sweden's deprecated, non-analysed axis — for one persona
+  (`swedish_02_all_pick_dag_v2_openrouter_glm_52 / persona_00139`). Phase 2's noise-invariance arm
+  reported that as an untargeted attribute moving, and the user declined the side effect rather
+  than accept a movement on an axis this plan does not target. Anything under
+  `birth_country_detail` inherits the same cascade, so the file stays untouched in Tier A.
+
 **Config defects** — each needs its own scope and gate:
 
 - `Rental apartment.contains: 'rent'` matches "pa**rent**s". Confirmed live: matching is
@@ -624,7 +631,7 @@ biological sex.`) appear as raw values.
 
 | Phase | Estimated Effort | Dependencies |
 |-------|-----------------|--------------|
-| Phase 1 — Tier A edits | ~1 h (48 tokens, 11 files) | None |
+| Phase 1 — Tier A edits | ~1 h (47 tokens, 10 files) | None |
 | Phase 2 — Verification gate | ~1 h wall-clock, mostly waiting on background `regress.py` | Phase 1 |
 | Phase 3 — Re-map / re-validate / re-project | ~1–2 h, dominated by the map + validate runs | Phase 2 |
 | Phase 4 — Tier B (optional) | ~1 h including its own gate | Phase 3 |
