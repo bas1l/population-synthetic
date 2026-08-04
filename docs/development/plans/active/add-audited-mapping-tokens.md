@@ -11,7 +11,8 @@
 ## Overview
 
 Add 47 `equals` tokens to the `synthetic` block of 10 files under `config/mapping/scb_native/`,
-recovering **103 personas** that currently fail the mapped-validity gate on a single attribute.
+recovering **106 personas** (measured in Phase 2; 102 predicted for these 47 tokens) that fail the
+mapped-validity gate on a single attribute.
 Every token is a spelling, inflection, diacritic, casing or translation variant of a token the
 config **already declares for that same target value** — no new category, no new mapping policy.
 
