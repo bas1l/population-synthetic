@@ -1,24 +1,29 @@
-"""artifacts.py -- orchestrate one combo's (and the run's) realism artifacts.
+"""artifacts.py -- orchestrate ONE combination's realism artifacts.
 
-The **only** path-aware module of the persona-realism subpackage and its
-aggregation+reporting orchestrator. It consumes an *already-judged* verdict cache
-(``<out_dir>/persona_XXXXX.json`` at the combo root, written by Phase 2's
-``runner``) -- it does NOT call the judge. Its per-combo entry point runs the pure
-pipeline
+The **only** path-aware module of the persona-realism subpackage. It consumes an
+*already-judged* verdict cache (``<out_dir>/persona_XXXXX.json`` at the combo root,
+written by ``runner``) -- it does NOT call the judge. Its single entry point runs the
+pure pipeline
 
     load_combo_verdicts -> reduce_combo -> compute_realism_stats -> cost -> sinks
 
 and materialises the publication artifacts idempotently (skip a unit whose output
 already exists unless ``force``; dual PNG+SVG via ``utils/figures.save_figure``;
-skip a chart only when its field is genuinely empty). A cross-combo entry renders
-the headline map from a set of already-computed :class:`RealismStats` plus the
-combined CSV and the run-level report.
+skip a chart only when its field is genuinely empty).
+
+**Strictly per-combination.** Every artifact written here is a deterministic function
+of *this* combination's verdict cache plus config -- it does not read, accumulate, or
+depend on the existence, content, or processing order of any other combination. That
+is what makes ``{combo}.json`` and ``{combo}.csv`` byte-reproducible in isolation and
+identical no matter which slug was judged first. The cross-combination sinks (the
+headline map, the combined summary CSV, the run report) moved to the ``realism_ranking``
+process, which consumes the ``{combo}_personas.csv`` tidy contract this module writes.
 
 Boundary (02-architecture guide sect. 2/9): this module owns output paths, the
 per-unit skip decision, and the cost aggregation; it must NOT know how the
 population/scheme were loaded, how the combos were selected, or anything about the
-CLI / GUI dispatch -- those live in the Phase-5 script. Statistics come entirely
-from the pure ``reduce``/``stats`` layers; the cost chain reuses the
+CLI / GUI dispatch -- those live in the driver script. Statistics come entirely from
+the pure ``reduce``/``stats`` layers; the cost chain reuses the
 ``generation_metadata`` primitives (fail-fast on a missing pricing row).
 """
 
@@ -37,22 +42,21 @@ from population_synthetic.analysis.generation_metadata.persona_metrics import (
 )
 from population_synthetic.analysis.generation_metadata.pricing import PricingTable, load_pricing_table
 from population_synthetic.analysis.persona_realism.charts import (
-    HeadlinePoint,
     plot_clash_taxonomy,
-    plot_headline_map,
     plot_typicality_distribution,
 )
+from population_synthetic.analysis.persona_realism.config import JudgeConfig
 from population_synthetic.analysis.persona_realism.csv_writer import RealismRow, write_realism_csv
 from population_synthetic.analysis.persona_realism.reduce import (
     ClashKey,
     ComboRealism,
     LoadedPersona,
+    PersonaVerdict,
     load_combo_verdicts,
     reduce_combo,
     reduce_persona,
 )
-from population_synthetic.analysis.persona_realism.report import write_combo_report, write_run_report
-from population_synthetic.analysis.persona_realism.runner import JudgeConfig
+from population_synthetic.analysis.persona_realism.report import write_combo_report
 from population_synthetic.analysis.persona_realism.stats import RealismStats, compute_realism_stats
 from population_synthetic.analysis.persona_realism.validation import (
     HardRule,
@@ -60,27 +64,33 @@ from population_synthetic.analysis.persona_realism.validation import (
     validate_against_hard_rules,
 )
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.realism_csv import (
+    SCHEMA_VERSION as PERSONA_CSV_SCHEMA_VERSION,
+)
+from population_synthetic.analysis.utils.realism_csv import (
+    RealismPersonaRow,
+    write_realism_personas_csv,
+)
 
 __all__ = [
     "ComboArtifacts",
     "load_combo_realism",
     "load_realism_hard_rules",
     "write_combo_artifacts",
-    "write_headline_map",
 ]
 
 _LOGGER = logging.getLogger(__name__)
 
-# Default dispersion measure the headline-map y-axis (distance-to-SCB) uses.
-_DEFAULT_HEADLINE_MEASURE = "variance"
+# Severity ordering for the per-persona ``max_severity`` column (worst first).
+_SEVERITY_ORDER: tuple[str, ...] = ("S3", "S2", "S1")
 
 
 @dataclass(frozen=True)
 class ComboArtifacts:
     """One combination's computed stats + written artifacts.
 
-    ``stats``/``combo`` are the pure reductions (carried so the cross-combo
-    :func:`write_headline_map` needs no reload); ``row`` is the flat CSV record;
+    ``stats``/``combo`` are the pure reductions (returned so the caller can report
+    without re-reading the files it just wrote); ``row`` is the flat CSV record;
     ``cost_coverage`` is the resume-honesty marker; ``paths`` lists every artifact
     written OR left in place (existing-and-skipped paths are included so the caller
     can report the full set either way).
@@ -103,19 +113,37 @@ def _prompt_template_hash(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+#: Stamped beside the severity config so a reader can never mistake a declared-but-
+#: unwired knob for an active one (the honest alternative to deleting the keys).
+_SEVERITY_CONFIG_STATUS = (
+    "declared but not wired: a persona's impossibility is decided solely by the "
+    "majority of the boolean can_exist across rounds (reduce.possible_majority). "
+    "severity_weights and impossibility_severities gate nothing in this pipeline."
+)
+
+
 def _provenance_meta(cfg: JudgeConfig) -> dict[str, Any]:
-    """Build the run/combo provenance meta from the judge config (verbatim snapshot)."""
+    """Build the combo provenance meta from the judge config (verbatim snapshot).
+
+    Every tunable that can move a published number is stamped here, because this is
+    the block the downstream ``realism_ranking`` homogeneity guard compares across
+    combinations: ranking units judged by different judge models, prompt versions, or
+    round counts measures the judges, not the units.
+    """
     return {
         "judge_model": cfg.judge_model,
         "n_rounds": cfg.n_rounds,
         "temperature": cfg.temperature,
         "bootstrap": dict(cfg.bootstrap),
-        "typicality_level": cfg.reliability.get("typicality_level", "ordinal"),
+        "typicality_level": cfg.reliability_value("typicality_level"),
+        "tail_threshold": float(cfg.reliability_value("tail_threshold")),
         "sample_size": cfg.sample_size,
         "severity_weights": dict(cfg.severity_weights),
         "impossibility_severities": list(cfg.impossibility_severities),
+        "severity_config_status": _SEVERITY_CONFIG_STATUS,
         "prompt_template": str(cfg.prompt_template),
         "prompt_template_sha256": _prompt_template_hash(cfg.prompt_template),
+        "persona_csv_schema_version": PERSONA_CSV_SCHEMA_VERSION,
         "config_dir": str(cfg.config_dir),
     }
 
@@ -255,8 +283,6 @@ def _build_row(stats: RealismStats, cost: dict[str, Any], validation: dict[str, 
     """Flatten a :class:`RealismStats` (+ cost + validation) into a CSV row."""
     imp = stats.impossibility
     disp = stats.dispersion
-    dist = disp.get("distance_to_scb") or {}
-    veq = disp.get("variance_equality") or {}
     rel = stats.reliability
     return RealismRow(
         combo_label=stats.combo_label,
@@ -269,11 +295,6 @@ def _build_row(stats: RealismStats, cost: dict[str, Any], validation: dict[str, 
         disp_variance=disp.get("variance"),
         disp_entropy=disp.get("entropy"),
         disp_tail_coverage=disp.get("tail_coverage"),
-        dist_variance=dist.get("variance"),
-        dist_entropy=dist.get("entropy"),
-        dist_tail_coverage=dist.get("tail_coverage"),
-        variance_equality_stat=veq.get("statistic"),
-        variance_equality_p=veq.get("p"),
         can_exist_alpha=rel["can_exist_alpha"].get("alpha"),
         typicality_alpha=rel["typicality_alpha"].get("alpha"),
         typicality_icc=rel["typicality_icc"].get("icc"),
@@ -284,24 +305,58 @@ def _build_row(stats: RealismStats, cost: dict[str, Any], validation: dict[str, 
     )
 
 
-def _headline_point(stats: RealismStats, *, is_reference: bool, measure: str) -> HeadlinePoint | None:
-    """Build a map point from a combo's stats (``None`` when its coords are undefined)."""
-    x = stats.impossibility.get("rate")
-    if x is None:
-        return None
-    if is_reference:
-        y: float | None = 0.0
-    else:
-        y = (stats.dispersion.get("distance_to_scb") or {}).get(measure)
-    if y is None:
-        return None
-    return HeadlinePoint(
-        label=stats.combo_label,
-        impossibility_rate=float(x),
-        dispersion_distance=float(y),
-        is_reference=is_reference,
-        n_personas=stats.n_personas,
-    )
+def _max_severity(persona: PersonaVerdict) -> str:
+    """Worst clash severity the judge raised for *persona* (``""`` when none)."""
+    severities = {key.severity for key in persona.clash_frequency}
+    for level in _SEVERITY_ORDER:
+        if level in severities:
+            return level
+    return ""
+
+
+def _persona_rows(
+    personas: dict[str, PersonaVerdict],
+    loaded: dict[str, LoadedPersona],
+    *,
+    combo_label: str,
+    country: str,
+    model: str,
+    strategy: str,
+    is_real_reference: bool,
+) -> list[RealismPersonaRow]:
+    """Build the tidy per-persona rows -- the inter-task contract for ``realism_ranking``.
+
+    One row per persona with **>= 1 successful round** (a persona whose every round
+    failed is uncached by construction and is carried instead as the combination's
+    ``n_failed``), sorted by persona id so two runs over the same cache write byte-
+    identical files. ``n_rounds_attempted`` adds back the round-level failures the
+    runner recorded, so the successful count is never read as if it were the attempt
+    count.
+    """
+    rows: list[RealismPersonaRow] = []
+    for persona_id in sorted(personas):
+        pv = personas[persona_id]
+        failed_rounds = loaded[persona_id].failed_rounds
+        rows.append(
+            RealismPersonaRow(
+                persona_id=persona_id,
+                slug=combo_label,
+                country=country,
+                model=model,
+                strategy=strategy,
+                is_real_reference=is_real_reference,
+                n_rounds_attempted=pv.n_rounds + failed_rounds,
+                n_rounds_successful=pv.n_rounds,
+                can_exist_true_votes=pv.n_possible,
+                can_exist_majority=pv.possible_majority,
+                typicality_mean=pv.typicality_mean,
+                typicality_sd=pv.typicality_sd,
+                typicality_rounds=pv.typicality_rounds,
+                max_severity=_max_severity(pv),
+                clash_count=len(pv.clash_frequency),
+            )
+        )
+    return rows
 
 
 # --------------------------------------------------------------------------- #
@@ -342,10 +397,13 @@ def write_combo_artifacts(
     out_dir: Path,
     combo_label: str,
     *,
-    scb_ref: ComboRealism | None,
     cfg: JudgeConfig,
     dpi: int,
     force: bool,
+    country: str = "",
+    model: str = "",
+    strategy: str = "",
+    is_real_reference: bool = False,
     expected_ids: list[str] | None = None,
     hard_rules: tuple[HardRule, ...] | None = None,
     pricing: PricingTable | None = None,
@@ -358,24 +416,34 @@ def write_combo_artifacts(
     combo-root cache, computes the combo's cost by summing the per-persona
     ``<out_dir>/persona_XXXXX.jsonl`` telemetry logs (fail-fast if the judge model's
     pricing row is absent), and writes ``{combo}.csv``, ``{combo}.json``,
-    ``typicality.png/.svg`` and ``clash_taxonomy.png/.svg``. The idempotent skip keys
-    on those specific output filenames, so the sibling ``persona_*.json/.jsonl``
-    files never confuse it.
+    ``{combo}_personas.csv``, ``typicality.png/.svg`` and ``clash_taxonomy.png/.svg``.
+    The idempotent skip keys on those specific output filenames, so the sibling
+    ``persona_*.json/.jsonl`` files never confuse it.
+
+    Nothing written here depends on any other combination: judging this slug on an
+    empty output base produces the complete artifact set, and judging it before or
+    after any other slug produces identical bytes (modulo nothing -- the reports carry
+    no timestamp).
 
     The stats are **always** computed (cheap, pure) so the returned
-    :class:`ComboArtifacts` can seed the cross-combo headline map even when every
-    file is skipped; only the file *writes* honour the idempotent skip (a unit whose
-    output already exists is left untouched unless *force*). A chart is skipped only
-    when its field is genuinely empty (no can_exist typicality means / no clashes).
+    :class:`ComboArtifacts` is complete even when every file write is skipped; only
+    the file *writes* honour the idempotent skip (a unit whose output already exists
+    is left untouched unless *force*). A chart is skipped only when its field is
+    genuinely empty (no can_exist typicality means / no clashes).
 
     Args:
         out_dir: the combo's resolved output dir (holds the per-persona cache +
             telemetry directly at its root).
         combo_label: the combination label (a ``{slug}`` or ``real_{country}``).
-        scb_ref: the SCB real-population :class:`ComboRealism` dispersion reference
-            (``None`` when *combo* itself is the reference).
         cfg: the loaded :class:`JudgeConfig`.
         dpi, force: forwarded to ``save_figure`` / the skip gate.
+        country, model, strategy: the decomposed axis ids, recorded verbatim in the
+            per-persona tidy CSV so the aggregator's factor tests need not re-parse
+            the slug. Empty for the real competitor, which is not a model x method
+            cell -- that is what *is_real_reference* marks.
+        is_real_reference: whether this combination is the ``real_{country}``
+            competitor. It is a *label only*: the real competitor's artifacts are
+            computed exactly like any other combination's.
         expected_ids: the selected persona roster (marks absent personas failed).
         hard_rules: pre-loaded hard rules; loaded from config when ``None``.
         pricing: pre-loaded pricing table; the default table is loaded when ``None``.
@@ -391,17 +459,17 @@ def write_combo_artifacts(
     if provenance is None:
         provenance = _provenance_meta(cfg)
 
-    typ_level = cfg.reliability.get("typicality_level", "ordinal")
-    tail_threshold = float(cfg.reliability.get("tail_threshold", 3.0))
-    variance_center = str(cfg.reliability.get("variance_center", "median"))
+    # Fail-fast config reads: no in-code default, so an emitted number can never
+    # silently disagree with the judge.yaml that is supposed to describe it.
+    typ_level = str(cfg.reliability_value("typicality_level"))
+    tail_threshold = float(cfg.reliability_value("tail_threshold"))
 
     combo, present = load_combo_realism(out_dir, combo_label, expected_ids=expected_ids)
     stats = compute_realism_stats(
-        combo, scb_ref,
+        combo,
         bootstrap=cfg.bootstrap,
         typicality_level=typ_level,
         tail_threshold=tail_threshold,
-        variance_center=variance_center,
     )
 
     cost, cost_coverage = _combo_cost(out_dir, cfg.judge_model, pricing, combo.n_personas)
@@ -440,6 +508,32 @@ def write_combo_artifacts(
     else:
         logger.info("combo %s: %s exists; skipping (force=False)", combo_label, json_path.name)
         paths.append(json_path)
+
+    # --- per-persona tidy CSV (the realism_ranking inter-task contract) -------- #
+    # Written whole (never appended), so N runs are equivalent to one and its row
+    # count keeps matching the report's n_personas -- the completeness marker the
+    # aggregator gates on.
+    personas_csv_path = out_dir / f"{combo_label}_personas.csv"
+    if force or not personas_csv_path.exists():
+        loaded_by_id = {lp.persona_id: lp for lp in present}
+        reduced_by_id = {
+            pid: reduce_persona(lp.rounds, persona_id=pid) for pid, lp in loaded_by_id.items()
+        }
+        paths.append(
+            write_realism_personas_csv(
+                _persona_rows(
+                    reduced_by_id, loaded_by_id,
+                    combo_label=combo_label, country=country, model=model,
+                    strategy=strategy, is_real_reference=is_real_reference,
+                ),
+                personas_csv_path,
+            )
+        )
+    else:
+        logger.info(
+            "combo %s: %s exists; skipping (force=False)", combo_label, personas_csv_path.name,
+        )
+        paths.append(personas_csv_path)
 
     # --- typicality distribution figure (skip only when genuinely empty) ------- #
     paths.extend(
@@ -484,112 +578,3 @@ def _emit_figure(png_path, *, present, build, empty_msg, dpi, force, logger) -> 
         return [png_path, svg_path]
     saved = save_figure(build(), png_path, dpi=dpi)
     return [saved, saved.with_suffix(".svg")]
-
-
-# --------------------------------------------------------------------------- #
-# cross-combo orchestration (headline map + combined CSV + run report)         #
-# --------------------------------------------------------------------------- #
-
-
-def write_headline_map(
-    combos: list[ComboArtifacts],
-    out_root: Path,
-    *,
-    cfg: JudgeConfig,
-    dpi: int,
-    force: bool,
-    scb_label: str | None = None,
-    measure: str = _DEFAULT_HEADLINE_MEASURE,
-    pricing: PricingTable | None = None,
-    provenance: dict[str, Any] | None = None,
-    logger: logging.Logger | None = None,
-) -> list[Path]:
-    """Render the cross-combo headline map + combined CSV + run report under *out_root*.
-
-    ``combos`` are the per-combo results from :func:`write_combo_artifacts` (incl.
-    the SCB reference, whose label is *scb_label*). Builds one :class:`HeadlinePoint`
-    per combo (x = impossibility rate, y = typicality-dispersion distance to SCB;
-    the reference sits at ``y == 0``), skipping any whose coordinates are undefined.
-    Writes ``headline_map.png/.svg``, ``realism_summary.csv`` (all rows) and
-    ``run_report.json`` (provenance + per-combo summaries + the plotted points),
-    each honouring the idempotent skip unless *force*.
-    """
-    logger = logger or _LOGGER
-    out_root = Path(out_root)
-    if pricing is None:
-        pricing = load_pricing_table()
-    if provenance is None:
-        provenance = _provenance_meta(cfg)
-
-    points: list[HeadlinePoint] = []
-    for ca in combos:
-        pt = _headline_point(ca.stats, is_reference=ca.stats.combo_label == scb_label, measure=measure)
-        if pt is None:
-            logger.info("combo %s: headline coords undefined (skipped from map)", ca.stats.combo_label)
-        else:
-            points.append(pt)
-
-    paths: list[Path] = []
-
-    # --- headline map figure --------------------------------------------------- #
-    png_path = out_root / "headline_map.png"
-    svg_path = png_path.with_suffix(".svg")
-    if not points:
-        logger.warning("write_headline_map: no plottable competitor points; skipping the map figure")
-    elif not force and png_path.exists() and svg_path.exists():
-        logger.info("headline_map exists under %s; skipping (force=False)", out_root)
-        paths.extend([png_path, svg_path])
-    else:
-        saved = save_figure(plot_headline_map(points, measure_label=measure), png_path, dpi=dpi)
-        paths.extend([saved, saved.with_suffix(".svg")])
-
-    # --- combined CSV (one row per combo) -------------------------------------- #
-    csv_path = out_root / "realism_summary.csv"
-    if force or not csv_path.exists():
-        paths.append(write_realism_csv([ca.row for ca in combos], csv_path))
-    else:
-        logger.info("realism_summary.csv exists under %s; skipping (force=False)", out_root)
-        paths.append(csv_path)
-
-    # --- run-level report ------------------------------------------------------ #
-    json_path = out_root / "run_report.json"
-    if force or not json_path.exists():
-        combos_summary = [
-            {
-                "combo_label": ca.stats.combo_label,
-                "n_personas": ca.stats.n_personas,
-                "n_failed": ca.stats.n_failed,
-                "impossibility_rate": ca.stats.impossibility.get("rate"),
-                "impossibility_ci": [ca.stats.impossibility.get("lo"), ca.stats.impossibility.get("hi")],
-                "dispersion_distance_to_scb": ca.stats.dispersion.get("distance_to_scb"),
-                "cost_coverage": ca.cost_coverage,
-            }
-            for ca in combos
-        ]
-        headline = {
-            "measure": measure,
-            "reference": scb_label,
-            "points": [
-                {
-                    "label": pt.label,
-                    "impossibility_rate": pt.impossibility_rate,
-                    "dispersion_distance": pt.dispersion_distance,
-                    "is_reference": pt.is_reference,
-                }
-                for pt in points
-            ],
-        }
-        paths.append(
-            write_run_report(
-                json_path,
-                combos=combos_summary,
-                headline=headline,
-                provenance=provenance,
-                pricing=_pricing_meta(pricing),
-            )
-        )
-    else:
-        logger.info("run_report.json exists under %s; skipping (force=False)", out_root)
-        paths.append(json_path)
-
-    return paths

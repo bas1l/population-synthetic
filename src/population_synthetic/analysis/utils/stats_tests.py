@@ -613,6 +613,118 @@ def bootstrap_ci(
     return {"point": point, "lo": lo, "hi": hi, **base}
 
 
+def bootstrap_difference_ci(
+    values_a: Sequence[float],
+    values_b: Sequence[float],
+    *,
+    iterations: int = 2000,
+    ci_level: float = 0.95,
+    seed: int | None = None,
+) -> dict[str, Any]:
+    """Percentile bootstrap CI for ``mean(a) - mean(b)`` on two independent samples.
+
+    Each group is resampled with replacement at its own size from one seeded local
+    :func:`numpy.random.default_rng`, so the interval reflects the uncertainty of both
+    groups and is byte-stable for a given ``(a, b, seed, iterations)``. On 0/1 inputs
+    this is the CI of a **rate difference**, which is how the realism ranking contrasts
+    each synthetic competitor with the real population.
+
+    Returns ``{"point","lo","hi","ci_level","iterations","n_a","n_b","method"}``. Either
+    sample empty -> ``point``/``lo``/``hi`` ``None`` with a ``"note"`` (a difference
+    against nothing is undefined, not zero).
+
+    Raises
+    ------
+    ValueError
+        If ``iterations < 1`` or ``ci_level`` is not in the open interval ``(0, 1)``.
+    """
+    if iterations < 1:
+        raise ValueError(f"bootstrap iterations must be >= 1, got {iterations}")
+    if not 0.0 < ci_level < 1.0:
+        raise ValueError(f"ci_level must be in (0, 1), got {ci_level}")
+
+    a = np.asarray(values_a, dtype=float)
+    b = np.asarray(values_b, dtype=float)
+    base = {
+        "ci_level": ci_level, "iterations": iterations,
+        "n_a": int(a.size), "n_b": int(b.size), "method": "percentile",
+    }
+    if a.size == 0 or b.size == 0:
+        return {"point": None, "lo": None, "hi": None, **base, "note": "empty sample"}
+
+    point = float(np.mean(a) - np.mean(b))
+    rng = np.random.default_rng(seed)
+    resampled = np.empty(iterations, dtype=float)
+    for i in range(iterations):
+        resampled[i] = float(
+            np.mean(rng.choice(a, size=a.size, replace=True))
+            - np.mean(rng.choice(b, size=b.size, replace=True))
+        )
+    tail = (1.0 - ci_level) / 2.0
+    return {
+        "point": point,
+        "lo": float(np.quantile(resampled, tail)),
+        "hi": float(np.quantile(resampled, 1.0 - tail)),
+        **base,
+    }
+
+
+def two_proportion_test(
+    successes_a: int, n_a: int, successes_b: int, n_b: int
+) -> dict[str, Any]:
+    """Two-sided two-proportion z-test with a Cohen's h effect size.
+
+    Tests ``p_a == p_b`` using the pooled-variance normal approximation, and reports
+    the **effect** alongside the p-value: ``diff`` (the raw rate difference, on the
+    scale readers care about) and ``h`` (Cohen's h, the arcsine-transformed
+    standardised effect, which stays interpretable near 0 and 1 where the raw
+    difference compresses). A p-value without an effect size cannot distinguish a
+    large difference from a large sample.
+
+    Returns ``{"p_a","p_b","diff","h","h_magnitude","z","p","n_a","n_b"}``. Degenerate
+    inputs (a non-positive denominator, or a pooled rate of exactly 0 or 1 -- where the
+    test statistic has no variance) return ``z``/``p`` ``None`` with a ``"note"``,
+    never a ``NaN``.
+    """
+    if n_a <= 0 or n_b <= 0:
+        return {"p_a": None, "p_b": None, "diff": None, "h": None, "h_magnitude": None,
+                "z": None, "p": None, "n_a": n_a, "n_b": n_b,
+                "note": "a group has no personas; proportion undefined"}
+
+    p_a = successes_a / n_a
+    p_b = successes_b / n_b
+    diff = p_a - p_b
+    # Cohen's h: the arcsine (variance-stabilising) transform, so a 0.01 -> 0.02 shift
+    # is not treated as the same effect as 0.50 -> 0.51.
+    h = 2.0 * math.asin(math.sqrt(p_a)) - 2.0 * math.asin(math.sqrt(p_b))
+    magnitude = "negligible" if abs(h) < 0.2 else "small" if abs(h) < 0.5 else \
+        "medium" if abs(h) < 0.8 else "large"
+
+    pooled = (successes_a + successes_b) / (n_a + n_b)
+    if pooled in (0.0, 1.0):
+        return {"p_a": p_a, "p_b": p_b, "diff": diff, "h": h, "h_magnitude": magnitude,
+                "z": None, "p": None, "n_a": n_a, "n_b": n_b,
+                "note": "both groups are entirely one outcome; the z statistic has no variance"}
+
+    se = math.sqrt(pooled * (1.0 - pooled) * (1.0 / n_a + 1.0 / n_b))
+    z = diff / se
+    return {
+        "p_a": p_a, "p_b": p_b, "diff": diff, "h": h, "h_magnitude": magnitude,
+        "z": float(z), "p": float(2.0 * stats.norm.sf(abs(z))), "n_a": n_a, "n_b": n_b,
+    }
+
+
+def holm_adjust(pvals: list[float]) -> list[float]:
+    """Holm step-down adjustment of a list of p-values (order preserved).
+
+    The public name for the module-internal :func:`_holm`, exposed because a family of
+    tests assembled outside this module (e.g. the realism ranking's contrasts against
+    the real population) must be corrected with the *same* implementation the Dunn
+    post-hoc uses -- two Holm implementations in one codebase is one too many.
+    """
+    return _holm(pvals)
+
+
 def icc(ratings: Sequence[Sequence[float]]) -> dict[str, Any]:
     """Intraclass correlation ICC(1,1) -- one-way random-effects, single measure.
 
@@ -785,8 +897,15 @@ def variance_equality_test(
     Input ``groups`` maps a group label to its sample list. Returns
     ``{"statistic","p","k","center","n"}`` on success. Degenerate inputs return
     those keys with ``statistic``/``p`` ``None`` and a ``"note"``: fewer than 2
-    groups with >=2 samples each, or zero variance in *every* group (all values
-    identical -> the statistic is undefined rather than a meaningful ``NaN``).
+    groups with >=2 samples each, zero variance in *every* group (all values
+    identical), or a non-finite statistic.
+
+    The last case is the subtle one and must not be waved through. When *some* group
+    has zero spread but not all of them do, Levene's within-group deviations for that
+    group are all exactly zero, the pooled denominator collapses, and ``scipy`` returns
+    ``statistic=inf, p=0.0`` -- which reads downstream as an overwhelmingly significant
+    difference in spread rather than as an undefined test. It is reported here as
+    skipped-with-a-reason, like every other degenerate input.
 
     Raises
     ------
@@ -798,13 +917,24 @@ def variance_equality_test(
 
     usable = {g: v for g, v in groups.items() if len(v) >= 2}
     n_total = sum(len(v) for v in usable.values())
+    base = {"statistic": None, "p": None, "k": len(usable), "center": center, "n": n_total}
     if len(usable) < 2:
-        return {"statistic": None, "p": None, "k": len(usable), "center": center,
-                "n": n_total, "note": "need >=2 groups with >=2 samples each"}
+        return {**base, "note": "need >=2 groups with >=2 samples each"}
     if all(float(np.var(v)) == 0.0 for v in usable.values()):
-        return {"statistic": None, "p": None, "k": len(usable), "center": center,
-                "n": n_total, "note": "zero variance in every group; test undefined"}
+        return {**base, "note": "zero variance in every group; test undefined"}
 
-    stat, p = stats.levene(*usable.values(), center=center)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        stat, p = stats.levene(*usable.values(), center=center)
+    if not math.isfinite(float(stat)):
+        zero_spread = [g for g, v in usable.items() if float(np.var(v)) == 0.0]
+        return {
+            **base,
+            "note": (
+                "a group has zero spread ("
+                + ", ".join(sorted(zero_spread))
+                + "), so the Levene denominator collapses and the statistic is undefined "
+                "(scipy returns inf/p=0, which is not a significant result)"
+            ),
+        }
     return {"statistic": float(stat), "p": float(p), "k": len(usable),
             "center": center, "n": n_total}

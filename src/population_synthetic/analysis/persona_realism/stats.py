@@ -1,11 +1,18 @@
-"""stats.py -- pure combination-level realism statistics.
+"""stats.py -- pure single-combination realism statistics.
 
-The second pure layer (guide 02 sect. 8): it takes a combination's
-:class:`~population_synthetic.analysis.persona_realism.reduce.ComboRealism` (and
-the SCB real-population ``ComboRealism`` as the dispersion reference) and computes
-a :class:`RealismStats` bundle -- an impossibility rate with a bootstrap CI, a
-typicality-dispersion characterisation with a distance to the SCB reference and a
-variance-equality test, and a judge self-consistency (reliability) block.
+The second pure layer (guide 02 sect. 8): it takes **one** combination's
+:class:`~population_synthetic.analysis.persona_realism.reduce.ComboRealism` and
+computes a :class:`RealismStats` bundle -- an impossibility rate with a bootstrap
+CI, a typicality-dispersion characterisation, and a judge self-consistency
+(reliability) block.
+
+**Strictly per-combination.** This layer takes no reference combination and emits
+no field that depends on one. Every cross-combination claim -- the distance of a
+combination's typicality dispersion to the real reference's, the variance-equality
+test against it, the ranking -- belongs to the downstream ``realism_ranking``
+process, which reads the per-persona tidy CSVs. Keeping the reference out of here
+is what makes a combination's artifacts reproducible in isolation: they no longer
+depend on which other combination happened to be judged first.
 
 It must NOT know about rendering, paths, the judge, or config resolution. Every
 tunable (bootstrap iterations/seed/ci_level, the Krippendorff level for
@@ -46,17 +53,9 @@ from population_synthetic.analysis.utils.stats_tests import (
     bootstrap_ci,
     icc,
     krippendorff_alpha,
-    variance_equality_test,
 )
 
 __all__ = ["RealismStats", "compute_realism_stats"]
-
-# The dispersion measures compared combo-vs-SCB, in a fixed order (single source
-# for the distance-to-reference keys).
-_DISPERSION_MEASURES: tuple[str, ...] = ("variance", "entropy", "tail_coverage")
-
-# Label used for the SCB reference group inside the variance-equality test.
-_SCB_GROUP = "scb_reference"
 
 
 @dataclass(frozen=True)
@@ -73,10 +72,11 @@ class RealismStats:
     ``successful_count`` and ``failed_count``. Degenerate (no successful persona) ->
     ``point``/``lo``/``hi`` ``None`` with a ``note``.
 
-    ``dispersion`` carries this combo's ``variance``/``entropy``/``tail_coverage``
-    over the can_exist typicality means, the ``distance_to_scb`` per measure, and a
-    ``variance_equality`` Levene/Brown-Forsythe result (this combo vs SCB). An
-    empty can_exist set -> measures ``None`` with a ``note``.
+    ``dispersion`` carries **this combo's own** ``variance``/``entropy``/
+    ``tail_coverage`` over the can_exist typicality means (plus the ``tail_threshold``
+    used). An empty can_exist set -> measures ``None`` with a ``note``. There is
+    deliberately no distance-to-reference field: that comparison is the downstream
+    ``realism_ranking`` process's, computed there from the per-persona tidy CSVs.
 
     ``reliability`` carries ``can_exist_alpha`` (nominal Krippendorff over the
     boolean rounds), ``typicality_alpha`` (Krippendorff at ``typicality_level``),
@@ -153,24 +153,22 @@ def _typicality_icc(matrix: tuple[tuple[int | None, ...], ...]) -> dict[str, Any
 
 def compute_realism_stats(
     combo: ComboRealism,
-    scb_ref: ComboRealism | None,
     *,
     bootstrap: dict[str, Any],
     typicality_level: str = "ordinal",
     tail_threshold: float = 3.0,
-    variance_center: str = "median",
 ) -> RealismStats:
-    """Compute the :class:`RealismStats` for one combination against the SCB reference.
+    """Compute the :class:`RealismStats` for one combination, in isolation.
+
+    The result is a total function of *combo* and the passed tunables: it does not
+    read, accumulate, or depend on any other combination. Two runs that judge the
+    same combination produce the same statistics regardless of what else ran, and
+    in what order.
 
     Parameters
     ----------
     combo:
         The combination's reduced :class:`ComboRealism`.
-    scb_ref:
-        The SCB real-population :class:`ComboRealism` used as the dispersion
-        reference. ``None`` skips the distance/variance-equality comparison (with a
-        recorded ``note``) rather than raising -- e.g. when *combo* itself is the
-        real reference and no separate baseline applies.
     bootstrap:
         The config bootstrap block ``{iterations, seed, ci_level}`` -- passed
         straight to :func:`bootstrap_ci` so the RNG seed is the one recorded in run
@@ -181,9 +179,7 @@ def compute_realism_stats(
         config by the caller. ``can_exist`` reliability is always ``nominal``.
     tail_threshold:
         Typicality at or below which a persona counts toward ``tail_coverage``.
-    variance_center:
-        Levene centring for the variance-equality test (``median`` == the robust
-        Brown-Forsythe default, ``mean`` == classic Levene).
+        Sourced from config by the caller (fail-fast; no in-code default is used).
     """
     iterations = bootstrap["iterations"]
     seed = bootstrap["seed"]
@@ -204,28 +200,10 @@ def compute_realism_stats(
         "failed_count": combo.n_failed,
     }
 
-    # --- Typicality dispersion vs SCB ----------------------------------------- #
-    combo_sample = list(combo.typicality_means)
-    dispersion = _dispersion(combo_sample, tail_threshold=tail_threshold)
-    if scb_ref is None:
-        dispersion["scb_reference"] = None
-        dispersion["distance_to_scb"] = {m: None for m in _DISPERSION_MEASURES}
-        dispersion["variance_equality"] = {
-            "statistic": None, "p": None, "note": "no SCB reference provided",
-        }
-    else:
-        scb_sample = list(scb_ref.typicality_means)
-        scb_disp = _dispersion(scb_sample, tail_threshold=tail_threshold)
-        dispersion["scb_reference"] = scb_ref.combo_label
-        dispersion["distance_to_scb"] = {
-            m: (abs(dispersion[m] - scb_disp[m])
-                if dispersion[m] is not None and scb_disp[m] is not None else None)
-            for m in _DISPERSION_MEASURES
-        }
-        dispersion["variance_equality"] = variance_equality_test(
-            {combo.combo_label: combo_sample, _SCB_GROUP: scb_sample},
-            center=variance_center,
-        )
+    # --- This combination's own typicality dispersion -------------------------- #
+    # No reference enters here: the contrast against the real population is the
+    # downstream realism_ranking process's Axis B, computed from the tidy CSVs.
+    dispersion = _dispersion(list(combo.typicality_means), tail_threshold=tail_threshold)
 
     # --- Reliability across rounds (self-consistency, NOT validity) ----------- #
     can_exist_data = [[1 if flag else 0 for flag in row] for row in combo.can_exist_rounds_by_persona]

@@ -1,17 +1,23 @@
 """analyze_persona_realism.py -- Individual persona realism judge (LLM-as-judge).
 
-Sits AFTER the mapping stage: for each selected generation combination it reads the
-already-mapped synthetic population (``03_Analysis/mapping/{slug}.json``, shape
-``{"metadata", "individuals"}``) and judges every persona N times with an LLM
-(default ``claude-fable-5``), scoring per-persona ``can_exist`` (binary possibility)
-and ``typicality`` (0-10 ordinal) plus severity-tagged attribute clashes. It then
-reduces round -> persona -> combination into a per-combination impossibility rate
-(bootstrap CI), a typicality dispersion vs the SCB real reference (Levene variance
-test), and a judge self-reliability metric (ICC / Krippendorff's alpha across
-rounds). Each selected country's real API-sourced population (``real_{country}.json``)
-is judged as an additional competitor labelled ``real_{country}`` and serves as the
-dispersion reference for that country's synthetic combos plus a plotted point on the
-headline map.
+Sits AFTER the mapping stage: for each selected combination it reads the already-mapped
+population (``03_Analysis/mapping/{label}.json``, shape ``{"metadata", "individuals"}``)
+and judges every persona N times with an LLM, scoring per-persona ``can_exist`` (binary
+possibility) and ``typicality`` (0-10 ordinal) plus severity-tagged attribute clashes.
+It then reduces round -> persona -> combination into that combination's own
+impossibility rate (bootstrap CI), typicality dispersion, and judge self-reliability
+metric (ICC / Krippendorff's alpha across rounds).
+
+**This task is strictly per-combination.** Judging one combination requires no other
+combination: nothing is compared, ranked, or accumulated across units here, and each
+combination's artifacts are byte-reproducible in isolation and independent of the order
+in which units were processed. The real API-sourced population is enumerated as an
+**ordinary competitor** labelled ``real_{country}`` with no reference role -- it is
+judged exactly like a synthetic combination, differing only in its ``real_sample_size``
+cap and deterministic prefix draw. Every cross-combination claim (the ranking, the
+contrast against the real population, the headline map, factor significance) belongs to
+the downstream ``realism_ranking`` task, which consumes the per-persona tidy CSVs this
+script writes -- see ``scripts/analyze/rank_persona_realism.py``.
 
 This script owns argparse, registry/output-dir resolution, and input loading only;
 all judging, reduction, statistics, and rendering live in the ``persona_realism``
@@ -22,38 +28,39 @@ to have run first. Judge model, rounds, temperature, sampling size, and bootstra
 params are config-driven (``config/analysis/persona_realism/``); cost per combo
 reuses ``config/analysis/model_pricing.yaml`` (fail-fast on a missing pricing row).
 
-Outputs are nested one level per country (``persona_realism/{country}/...``), matching
-the repo's other per-country analysis outputs:
+Outputs are nested one level per country (``persona_realism/{country}/...``) and consist
+of combination directories ONLY -- no country-level aggregate file is produced here:
     {country}/{combo}/persona_XXXXX.json    per-persona verdict cache (combo root; resumable)
     {country}/{combo}/persona_XXXXX.jsonl   per-persona token/timing telemetry (1:1 with the cache)
-    {country}/{combo}/{combo}.csv / .json   per-combination stats + cost + validation
-    {country}/{combo}/typicality.png/.svg   per-combo typicality distribution
-    {country}/{combo}/clash_taxonomy.png/.svg  per-combo attribute-clash taxonomy
-    {country}/real_{country}/...            the judged real reference (same layout)
-    {country}/headline_map.png/.svg         impossibility rate x typicality-dispersion-vs-real
-    {country}/realism_summary.csv           one row per competitor (this country)
-    {country}/run_report.json               provenance + per-combo summaries + plotted points
-The run-level headline artifacts are per-country: a multi-country CLI batch emits one
-headline map / summary / run report under each selected country's folder.
+    {country}/{combo}/{combo}.csv / .json   this combination's stats + cost + validation
+    {country}/{combo}/{combo}_personas.csv  per-persona tidy rows (the realism_ranking contract)
+    {country}/{combo}/typicality.png/.svg   this combination's typicality distribution
+    {country}/{combo}/clash_taxonomy.png/.svg  this combination's attribute-clash taxonomy
+    {country}/real_{country}/...            the real competitor (identical layout)
 
 Usage:
     python scripts/analyze/analyze_persona_realism.py
     python scripts/analyze/analyze_persona_realism.py --country swedish
     python scripts/analyze/analyze_persona_realism.py --slug swedish_all_pick_claude_haiku
+    python scripts/analyze/analyze_persona_realism.py --slug real_swedish
     python scripts/analyze/analyze_persona_realism.py --model-id claude_haiku \
         --strategy-id all_pick --country-id swedish            # GUI per_combo shape
     python scripts/analyze/analyze_persona_realism.py --sample 50 --workers 8 --force
-    python scripts/analyze/analyze_persona_realism.py --judge-model claude-sonnet-5
+    python scripts/analyze/analyze_persona_realism.py --rewrite-artifacts   # no LLM calls
 
 --country / --country-id   Country axis ID filter. Repeatable. Default: all countries.
 --model / --model-id       Model axis ID filter. Repeatable. Default: all models.
 --strategy / --strategy-id Strategy axis ID filter. Repeatable. Default: all strategies.
---slug                     Exact slug filter ({country}_{strategy}_{model}). Repeatable.
+--slug                     Exact combination filter ({country}_{strategy}_{model} or
+                           real_{country}). Repeatable. Selects ONLY what it names.
+--no-real                  Do not enumerate the real_{country} competitor.
 --output-base              Base output directory. Default: experiment_defaults.yaml.
---force                    Re-judge personas and re-write artifacts (default: resume/skip).
+--force                    Re-judge personas from scratch AND re-write artifacts. Costs LLM calls.
+--rewrite-artifacts        Re-write the derived artifacts from the existing verdict cache
+                           WITHOUT re-judging (zero LLM calls). Use after a schema change.
 --workers                  Override the config judge-call fan-out width.
 --sample                   Override the config per-combo persona sample size (synthetic combos).
---real-sample              Cap personas judged for the real reference population (real_{country}).
+--real-sample              Cap personas judged for the real competitor (real_{country}).
 --rounds                   Override the config judge rounds per persona (n_rounds; must be >= 1).
 --judge-model              Override the config judge model (must be in model_options).
 --dpi                      PNG render resolution. Default: 200.
@@ -76,10 +83,9 @@ from population_synthetic.analysis.persona_realism.artifacts import (
     ComboArtifacts,
     load_realism_hard_rules,
     write_combo_artifacts,
-    write_headline_map,
 )
-from population_synthetic.analysis.persona_realism.reduce import ComboRealism
-from population_synthetic.analysis.persona_realism.runner import JudgeConfig, run_combo_judgements
+from population_synthetic.analysis.persona_realism.config import JudgeConfig
+from population_synthetic.analysis.persona_realism.runner import run_combo_judgements
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
 from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.registry import analysis_output_dir, resolve_output_base
@@ -114,7 +120,14 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--slug", dest="slugs", action="append", default=None, metavar="SLUG",
-        help="Exact slug filter ({country}_{strategy}_{model}). May be repeated.",
+        help="Exact combination filter ({country}_{strategy}_{model}, or real_{country} for "
+        "the real competitor). May be repeated. Selects ONLY the combinations it names -- "
+        "the real competitor is not pulled in implicitly.",
+    )
+    parser.add_argument(
+        "--no-real", dest="no_real", action="store_true",
+        help="Do not enumerate the real_{country} competitor for the selected countries "
+        "(it is enumerated by default whenever --slug is not used).",
     )
     # Singular ``-id`` aliases: the GUI per_combo dispatch emits exactly these three
     # (one combo per subprocess); they fold into the repeatable filters above.
@@ -133,7 +146,15 @@ def _parse_args() -> argparse.Namespace:
         "--force", action="store_true",
         help="Re-judge personas from scratch and re-write artifacts (default: resume -- the runner "
         "tops up personas below the --rounds target and skips those already cached; artifacts are "
-        "re-written only when the cache changed or the report is missing).",
+        "re-written only when the cache changed or the report is missing). COSTS LLM CALLS: it "
+        "truncates every verdict cache. To rewrite artifacts only, use --rewrite-artifacts.",
+    )
+    parser.add_argument(
+        "--rewrite-artifacts", dest="rewrite_artifacts", action="store_true",
+        help="Re-write the derived artifacts ({combo}.json/.csv, {combo}_personas.csv, the "
+        "figures) from the EXISTING verdict cache, without re-judging anything -- zero LLM "
+        "calls on a fully-cached combination. This is the supported way to regenerate "
+        "artifacts after an output-schema change; --force is not (it discards the cache).",
     )
     parser.add_argument("--workers", type=int, default=None,
                         help="Override the config judge-call fan-out width (ThreadPool workers).")
@@ -205,6 +226,26 @@ def _apply_overrides(cfg: JudgeConfig, args: argparse.Namespace) -> JudgeConfig:
     return dataclasses.replace(cfg, **updates) if updates else cfg
 
 
+@dataclasses.dataclass(frozen=True)
+class _Combo:
+    """One enumerated unit of work -- a synthetic combination or the real competitor.
+
+    ``is_real_reference`` is a *label*, not a role: the real competitor is judged,
+    reduced, scored and rendered exactly like any synthetic combination. The only two
+    things it changes are the persona draw (``sample_size_override`` -> a deterministic
+    first-N prefix instead of the seeded ``sample_size`` sample, because the mapped real
+    population is ~10 000 individuals) and the empty ``model``/``strategy`` recorded in
+    the tidy CSV, since it is not a model x method cell.
+    """
+
+    label: str
+    country: str
+    strategy: str
+    model: str
+    is_real_reference: bool
+    sample_size_override: int | None
+
+
 def _enumerate_combos(
     mapping_dir: Path,
     *,
@@ -213,14 +254,22 @@ def _enumerate_combos(
     strategies: list[str] | None,
     slugs: list[str] | None,
     axis_ids: tuple[list[str], list[str], list[str]],
-) -> tuple[list[tuple[str, str, str, str]], list[tuple[str, str]]]:
-    """Enumerate selected mapped synthetic combos from the mapping ``_index.json``.
+    real_sample_size: int | None,
+    include_real: bool,
+) -> tuple[list[_Combo], list[tuple[str, str]]]:
+    """Enumerate the selected combinations from the mapping ``_index.json``.
 
-    Returns ``(combos, skipped)`` where *combos* is a list of
-    ``(slug, country, strategy, model)`` and *skipped* lists ``(slug, reason)`` for
-    index entries that were selected but not usable (no mapped file / undecomposable
-    slug). Mirrors ``model_ranking.loader.load_combo_performances``' discovery walk
-    but stops at the mapping stage (no fidelity report is required for this task).
+    Returns ``(combos, skipped)`` where *combos* is a sorted list of :class:`_Combo`
+    and *skipped* lists ``(label, reason)`` for units that were selected but not usable
+    (no mapped file / undecomposable slug). Mirrors
+    ``model_ranking.loader.load_combo_performances``' discovery walk but stops at the
+    mapping stage (no fidelity report is required for this task).
+
+    The ``real_{country}`` competitor is enumerated alongside the synthetic units of
+    every selected country, so a broad run judges the full competitor set. An explicit
+    ``--slug`` selection is taken literally: it judges exactly the labels it names and
+    never pulls the real competitor in behind the caller's back -- which is what lets a
+    single slug be judged in complete isolation.
     """
     index_path = mapping_dir / "_index.json"
     if not index_path.is_file():
@@ -232,8 +281,9 @@ def _enumerate_combos(
     with open(index_path, "r", encoding="utf-8") as fh:
         entries = json.load(fh)
 
-    combos: list[tuple[str, str, str, str]] = []
+    combos: list[_Combo] = []
     skipped: list[tuple[str, str]] = []
+    seen_countries: list[str] = []
     for entry in entries:
         slug = entry["slug"]
         if slugs and slug not in slugs:
@@ -254,7 +304,43 @@ def _enumerate_combos(
             continue
         if strategies and strategy not in strategies:
             continue
-        combos.append((slug, country, strategy, model))
+        combos.append(
+            _Combo(label=slug, country=country, strategy=strategy, model=model,
+                   is_real_reference=False, sample_size_override=None)
+        )
+        if country not in seen_countries:
+            seen_countries.append(country)
+
+    # The real competitor: one per country in scope. Under an explicit --slug selection
+    # only the labels literally named are eligible; otherwise every selected country's
+    # real population joins the competitor set.
+    real_countries: list[str] = []
+    if include_real:
+        if slugs:
+            for label in slugs:
+                if not label.startswith("real_"):
+                    continue
+                country = label[len("real_"):]
+                if country not in country_ids:
+                    skipped.append((label, f"unknown country {country!r} in real competitor label"))
+                    continue
+                if countries and country not in countries:
+                    continue
+                real_countries.append(country)
+        else:
+            real_countries = list(seen_countries)
+
+    for country in real_countries:
+        label = f"real_{country}"
+        if not (mapping_dir / f"{label}.json").is_file():
+            skipped.append((label, "no mapped real population (run map_populations.py)"))
+            continue
+        combos.append(
+            _Combo(label=label, country=country, strategy="", model="",
+                   is_real_reference=True, sample_size_override=real_sample_size)
+        )
+
+    combos.sort(key=lambda c: c.label)
     return combos, skipped
 
 
@@ -275,19 +361,22 @@ def _load_individuals(path: Path, *, what: str) -> list[dict[str, Any]]:
 
 def _run_one_combo(
     *,
-    label: str,
+    combo: _Combo,
     individuals: list[dict[str, Any]],
     analyzed_attrs: list[str],
     out_dir: Path,
-    scb_ref: ComboRealism | None,
     cfg: JudgeConfig,
     dpi: int,
     force: bool,
+    rewrite_artifacts: bool = False,
     hard_rules: Any,
     pricing: Any,
-    sample_size_override: int | None = None,
 ) -> ComboArtifacts:
     """Judge (top-up if needed) then compute + render one combination's artifacts.
+
+    Everything this function reads and writes belongs to *combo* alone; it is called
+    once per unit and the units are independent, so the caller may process them in any
+    order (or not at all) without changing any result.
 
     The runner is **always** invoked -- its per-persona, round-count-aware resume
     gate is the authority on what needs judging and is cheap when everything is
@@ -296,43 +385,50 @@ def _run_one_combo(
     even though the combo's ``{label}.json`` report already exists: a combo-level
     report-exists gate would skip the runner wholesale and defeat the top-up.
 
-    Artifacts are re-written only when the runner actually did work (wrote or topped
-    up a persona), the report is missing, or *force* is set -- otherwise nothing
-    changed on disk, so the idempotent "don't rewrite unchanged outputs" behavior is
-    preserved. Under ``--force`` the runner re-judges every persona from scratch
-    (truncating) and the artifacts are always rewritten.
+    Artifacts are re-written when the runner actually did work (wrote or topped up a
+    persona), when the report is missing, under *force*, or under *rewrite_artifacts*
+    -- otherwise nothing on disk changed and the existing artifacts stand.
+
+    The two rewrite triggers are deliberately distinct. *force* re-judges from scratch
+    (truncating every verdict cache) and therefore costs the full LLM bill;
+    *rewrite_artifacts* recomputes the derived files from the cache already on disk and
+    costs nothing. An output-schema change needs the second, never the first.
+
+    Under *rewrite_artifacts* the runner is put in **plan-only** mode: it still resolves
+    the persona roster (so ``n_failed`` counts the personas that left no cache file) but
+    makes no judge call. That makes the flag zero-cost *by construction* rather than by
+    the operator remembering to match ``--rounds`` to whatever round count is cached --
+    a config sitting above the cached count would otherwise silently top every persona
+    up, turning a file rewrite into a full re-judge.
     """
-    report_path = out_dir / f"{label}.json"
+    report_path = out_dir / f"{combo.label}.json"
     report_exists = report_path.exists()
 
     summary = run_combo_judgements(
-        individuals, label, analyzed_attrs, out_dir, cfg, force=force,
-        sample_size_override=sample_size_override, logger=logger,
+        individuals, combo.label, analyzed_attrs, out_dir, cfg, force=force,
+        plan_only=rewrite_artifacts and not force,
+        sample_size_override=combo.sample_size_override, logger=logger,
     )
     if summary.failed:
         logger.warning(
             "combo %s: %d persona(s) had all rounds fail this run (uncached, retryable)",
-            label, summary.failed,
+            combo.label, summary.failed,
         )
 
-    # Regenerate the combo artifacts when the runner actually changed the cache
-    # (wrote a fresh persona or topped one up), when the report is missing, or under
-    # --force; otherwise nothing on disk changed and the existing artifacts stand.
-    # ``write_combo_artifacts`` is *always* called (its return value seeds the
-    # cross-combo headline map + this country's scb_ref), but its file writes key on
-    # output-file existence, so a top-up onto an existing combo (data changed, files
-    # already present) must force the rewrite to avoid stale artifacts.
     did_work = summary.written > 0 or summary.topped_up > 0
-    rewrite_artifacts = did_work or not report_exists or force
-    if not rewrite_artifacts:
+    rewrite = did_work or not report_exists or force or rewrite_artifacts
+    if not rewrite:
         logger.info(
             "combo %s: nothing changed (report exists, no personas written/topped-up); "
-            "skipping artifact re-write", label,
+            "skipping artifact re-write", combo.label,
         )
 
     return write_combo_artifacts(
-        out_dir, label,
-        scb_ref=scb_ref, cfg=cfg, dpi=dpi, force=rewrite_artifacts,
+        out_dir, combo.label,
+        cfg=cfg, dpi=dpi, force=rewrite,
+        country=combo.country, model=combo.model, strategy=combo.strategy,
+        is_real_reference=combo.is_real_reference,
+        expected_ids=list(summary.selected_ids) or None,
         hard_rules=hard_rules, pricing=pricing, logger=logger,
     )
 
@@ -370,20 +466,22 @@ def main() -> None:
             mapping_dir,
             countries=countries, models=models, strategies=strategies, slugs=slugs,
             axis_ids=(country_ids, strategy_ids, model_ids),
+            real_sample_size=cfg.real_sample_size,
+            include_real=not args.no_real,
         )
     except (FileNotFoundError, KeyError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
     if skipped:
-        print(f"Skipped {len(skipped)} combo(s):")
-        for slug, reason in skipped:
-            print(f"  {slug}: {reason}")
+        print(f"Skipped {len(skipped)} combination(s):")
+        for label, reason in skipped:
+            print(f"  {label}: {reason}")
         print()
 
     if not combos:
         print(
-            "ERROR: no mapped synthetic combos matched the selection. "
+            "ERROR: no mapped combination matched the selection. "
             "Run scripts/analyze/map_populations.py first (and check your filters).",
             file=sys.stderr,
         )
@@ -394,69 +492,48 @@ def main() -> None:
     pricing = load_pricing_table()
     hard_rules = load_realism_hard_rules(cfg)
 
-    # Distinct countries drive the real-reference set; group synthetic combos under them.
-    combos_by_country: dict[str, list[tuple[str, str, str, str]]] = {}
-    for combo in combos:
-        combos_by_country.setdefault(combo[1], []).append(combo)
-
     logger.info(
-        "persona_realism: %d combo(s) across %d country/countries; judge_model=%s "
-        "n_rounds=%d workers=%d sample=%s real_sample=%s",
-        len(combos), len(combos_by_country), cfg.judge_model, cfg.n_rounds, cfg.workers,
+        "persona_realism: %d combination(s); judge_model=%s n_rounds=%d workers=%d "
+        "sample=%s real_sample=%s",
+        len(combos), cfg.judge_model, cfg.n_rounds, cfg.workers,
         cfg.sample_size, cfg.real_sample_size,
     )
 
-    # One country per iteration: judge that country's real reference, then its synthetic
-    # combos against it, then write that country's own headline map / summary / run report
-    # under persona_realism/{country}/ (each country has its own real reference marker, so
-    # a multi-country batch produces one anchored map per country -- no shared/unmarked map).
-    total_ranked = 0
-    for country in sorted(combos_by_country):
-        analyzed_attrs = scheme_attributes(country)
-        real_label = f"real_{country}"
-        country_root = out_root / country
-        print(f"=== {country.upper()} :: {real_label} (real reference) ===")
-
-        real_individuals = _load_individuals(
-            mapping_dir / f"{real_label}.json", what=f"real {country}",
+    # An unordered set of independent units. They are iterated in sorted label order for
+    # readable logs only -- no unit reads another's output, so the order cannot change
+    # any result, and a run that judges a subset produces exactly the artifacts it would
+    # have produced inside a full batch.
+    attrs_by_country: dict[str, list[str]] = {}
+    judged = 0
+    for combo in combos:
+        if combo.country not in attrs_by_country:
+            attrs_by_country[combo.country] = scheme_attributes(combo.country)
+        role = (
+            "real competitor" if combo.is_real_reference
+            else f"strategy={combo.strategy}, model={combo.model}"
         )
-        # The real reference is its own dispersion baseline (no scb_ref) and is capped
-        # independently by real_sample_size (deterministic first-N prefix, not the seeded
-        # sample_size draw used for synthetic combos); it is the headline reference below.
-        real_ca = _run_one_combo(
-            label=real_label, individuals=real_individuals, analyzed_attrs=analyzed_attrs,
-            out_dir=country_root / real_label, scb_ref=None,
-            cfg=cfg, dpi=args.dpi, force=args.force, hard_rules=hard_rules, pricing=pricing,
-            sample_size_override=cfg.real_sample_size,
-        )
-        country_artifacts: list[ComboArtifacts] = [real_ca]
-        scb_ref = real_ca.combo  # this country's real ComboRealism (== load_combo_realism)
+        print(f"=== {combo.label} ({role}) ===")
 
-        for slug, _c, strategy, model in combos_by_country[country]:
-            print(f"=== {slug} (strategy={strategy}, model={model}) ===")
-            individuals = _load_individuals(mapping_dir / f"{slug}.json", what=f"synthetic {slug}")
-            ca = _run_one_combo(
-                label=slug, individuals=individuals, analyzed_attrs=analyzed_attrs,
-                out_dir=country_root / slug, scb_ref=scb_ref,
-                cfg=cfg, dpi=args.dpi, force=args.force, hard_rules=hard_rules, pricing=pricing,
-            )
-            country_artifacts.append(ca)
-
-        # Per-country headline map + combined CSV + run report. This country's real
-        # reference is always the marked y==0 point (one reference per country).
-        written = write_headline_map(
-            country_artifacts, country_root,
-            cfg=cfg, dpi=args.dpi, force=args.force, scb_label=real_label,
-            pricing=pricing, logger=logger,
+        individuals = _load_individuals(
+            mapping_dir / f"{combo.label}.json", what=combo.label,
         )
-        total_ranked += len(country_artifacts)
-        print(f"[{country}] headline map + summary written under {country_root} "
-              f"({len(written)} file(s)).")
+        ca = _run_one_combo(
+            combo=combo, individuals=individuals,
+            analyzed_attrs=attrs_by_country[combo.country],
+            out_dir=out_root / combo.country / combo.label,
+            cfg=cfg, dpi=args.dpi, force=args.force,
+            rewrite_artifacts=args.rewrite_artifacts,
+            hard_rules=hard_rules, pricing=pricing,
+        )
+        rate = ca.stats.impossibility.get("rate")
+        rate_str = "n/a" if rate is None else f"{rate:.4f}"
+        print(f"    n={ca.stats.n_personas} (failed {ca.stats.n_failed})  "
+              f"impossibility={rate_str}  -> {out_root / combo.country / combo.label}")
+        judged += 1
 
     print()
-    print(f"Competitors ranked: {total_ranked} "
-          f"({len(combos_by_country)} real reference(s) + {len(combos)} synthetic combo(s)) "
-          f"across {len(combos_by_country)} country/countries.")
+    print(f"Combinations judged: {judged}. Cross-combination ranking is a separate task -- "
+          f"run scripts/analyze/rank_persona_realism.py.")
 
 
 if __name__ == "__main__":

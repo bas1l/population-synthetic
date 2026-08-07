@@ -1,4 +1,4 @@
-"""report.py -- write per-combination and run-level realism JSON reports.
+"""report.py -- write one combination's realism JSON report.
 
 Pure sink: assembles already-computed structures into a JSON document and writes
 it via ``json.dump(indent=2, ensure_ascii=False)`` with a parent ``mkdir``. It
@@ -31,7 +31,7 @@ from typing import Any
 
 from population_synthetic.analysis.persona_realism.stats import RealismStats
 
-__all__ = ["write_combo_report", "write_run_report"]
+__all__ = ["write_combo_report"]
 
 _PROCESS = "persona_realism"
 _RELIABILITY_NOTE = (
@@ -85,32 +85,5 @@ def write_combo_report(
         "cost_coverage": cost_coverage,
         "pricing": pricing,
         "provenance": provenance,
-    }
-    return _dump(payload, path)
-
-
-def write_run_report(
-    path: Path,
-    *,
-    combos: list[dict[str, Any]],
-    headline: dict[str, Any],
-    provenance: dict[str, Any],
-    pricing: dict[str, Any],
-) -> Path:
-    """Write the run-level realism JSON report to *path*.
-
-    ``combos`` is one compact summary dict per combination (label + headline
-    metrics + cost-coverage), ``headline`` is the map metadata (measure + the
-    plotted point coordinates), and the pricing/provenance meta are carried
-    verbatim. This is the run's provenance record (judge model, prompt hash, N,
-    temperature, bootstrap seed, config snapshot).
-    """
-    payload = {
-        "process": _PROCESS,
-        "reliability_note": _RELIABILITY_NOTE,
-        "provenance": provenance,
-        "pricing": pricing,
-        "headline_map": headline,
-        "combos": combos,
     }
     return _dump(payload, path)

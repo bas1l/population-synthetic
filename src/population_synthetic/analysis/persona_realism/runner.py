@@ -9,13 +9,24 @@ Phase-4 cost chain (one telemetry file per persona, 1:1 with the verdict cache).
 Orchestration mirrors ``scripts/generate/generate_identities_parallel.py``:
 a ``ThreadPoolExecutor`` fan-out over PERSONAS (not rounds) and a
 *round-count-aware* per-persona resume gate. Each persona is one unit of work:
-its own throwaway judge client judges that persona's shortfall rounds
-sequentially (with per-round retry of only the rounds that fail), and the
-persona writes its OWN verdict json and telemetry jsonl the moment its rounds
-finish -- so a long run reports incremental progress and an interrupt keeps
-every persona already completed. Because each persona owns its two distinct
-files (written atomically via ``tmp``+``replace``), no cross-thread write lock
-or shared telemetry buffer is needed.
+the judge client **owned by the worker thread that picked it up** judges that
+persona's shortfall rounds sequentially (with per-round retry of only the rounds
+that fail), and the persona writes its OWN verdict json and telemetry jsonl the
+moment its rounds finish -- so a long run reports incremental progress and an
+interrupt keeps every persona already completed. Because each persona owns its
+two distinct files (written atomically via ``tmp``+``replace``), no cross-thread
+write lock or shared telemetry buffer is needed.
+
+The judge client is **per worker thread, not per persona**. ``ClaudeCodeClient``
+is a *persistent* CLI wrapper: its ``_ensure_process`` keeps one live ``claude``
+subprocess and relaunches only when the model or system prompt changes -- and the
+system prompt is invariant across personas (``prompt.build_prompts`` passes it
+through verbatim), so every persona after a thread's first reuses that process.
+Creating a client per persona instead spawned one full ``claude`` process *per
+persona* -- hundreds of ~400 MB process launches per combo, thousands per sweep --
+which starved the host machine. Clients are closed when the pool drains, not
+between personas; the retry path stays correct because a failed call closes the
+underlying process itself and ``_ensure_process`` relaunches on the next call.
 
 Resume is *round-count-aware* (not binary-exists): a persona is skipped only when
 its cached file already holds ``>= n_rounds`` successful rounds. A file left by an
@@ -35,8 +46,10 @@ persona judged possible: a persona whose every round failed is counted as
 ``failed`` and is *not* written to the cache (so a later run retries it), never
 serialized as a verdict.
 
-Config is the single source of truth: :class:`JudgeConfig` loads
-``judge.yaml`` and raises on any missing/malformed key (fail-fast).
+Config is the single source of truth: :class:`~population_synthetic.analysis.persona_realism.config.JudgeConfig`
+(:mod:`population_synthetic.analysis.persona_realism.config`) loads ``judge.yaml``
+and raises on any missing/malformed key (fail-fast). It lives in its own module so
+the config can be loaded without importing this module's LLM client layer.
 """
 
 from __future__ import annotations
@@ -46,14 +59,15 @@ import dataclasses
 import json
 import logging
 import random
+import re
 import threading
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-import yaml
-
+from population_synthetic.analysis.persona_realism.config import JudgeConfig
 from population_synthetic.analysis.persona_realism.judge import RoundVerdict, parse_round_verdict
 from population_synthetic.analysis.persona_realism.prompt import build_prompts, load_prompt_template
 from population_synthetic.generators.synthetic.llm_interaction_log import (
@@ -61,9 +75,14 @@ from population_synthetic.generators.synthetic.llm_interaction_log import (
     LLMInteractionEntry,
 )
 
-__all__ = ["JudgeConfig", "RunnerSummary", "run_combo_judgements"]
+__all__ = ["RunnerSummary", "run_combo_judgements"]
 
 _LOGGER = logging.getLogger(__name__)
+
+# The verdict/telemetry filename shape the sibling readers glob for: ``artifacts.py``
+# on ``persona_*.jsonl`` and ``reduce.py`` on ``persona_[0-9]*.json``. A cache key
+# outside this shape is invisible to both, so :func:`_persona_key` enforces it.
+_PERSONA_KEY_RE = re.compile(r"persona_\d+")
 
 # Bounded number of fan-out passes: one initial pass plus retries of the calls
 # that failed (transient CLI errors the client's own retry did not clear, or a
@@ -96,99 +115,6 @@ atexit.register(_atexit_cleanup)
 
 
 @dataclass(frozen=True)
-class JudgeConfig:
-    """The persona-realism judge configuration, loaded once from ``judge.yaml``.
-
-    All fields are required in the YAML; :meth:`load` raises on any missing or
-    malformed key. ``prompt_template`` is resolved to an absolute path relative to
-    the config directory. Fields beyond Phase 2's needs (``severity_weights``,
-    ``impossibility_severities``, ``bootstrap``) are carried through so downstream
-    phases share this one config DTO.
-    """
-
-    judge_model: str
-    model_options: tuple[str, ...]
-    n_rounds: int
-    temperature: float
-    severity_weights: dict[str, float]
-    impossibility_severities: tuple[str, ...]
-    sample_size: int | None
-    real_sample_size: int | None
-    bootstrap: dict[str, Any]
-    workers: int
-    timeout_seconds: int
-    prompt_template: Path
-    config_dir: Path
-    reliability: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def load(cls, config_dir: str | Path) -> JudgeConfig:
-        """Read ``<config_dir>/judge.yaml`` into a validated config (fail-fast)."""
-        config_dir = Path(config_dir)
-        judge_path = config_dir / "judge.yaml"
-        if not judge_path.exists():
-            raise FileNotFoundError(f"judge config not found: {judge_path}")
-        data = yaml.safe_load(judge_path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            raise ValueError(f"judge config {judge_path} did not parse to a mapping")
-
-        required = [
-            "judge_model", "model_options", "n_rounds", "temperature",
-            "severity_weights", "impossibility_severities", "sample_size",
-            "real_sample_size", "bootstrap", "workers", "timeout_seconds",
-            "prompt_template",
-        ]
-        missing = [key for key in required if key not in data]
-        if missing:
-            raise ValueError(f"judge config {judge_path} is missing required keys: {missing}")
-
-        template_path = (config_dir / str(data["prompt_template"])).resolve()
-        if not template_path.exists():
-            raise FileNotFoundError(f"prompt template not found: {template_path}")
-
-        n_rounds = int(data["n_rounds"])
-        if n_rounds < 1:
-            raise ValueError(f"judge config 'n_rounds' must be >= 1, got {n_rounds}")
-        workers = int(data["workers"])
-        if workers < 1:
-            raise ValueError(f"judge config 'workers' must be >= 1, got {workers}")
-        timeout_seconds = int(data["timeout_seconds"])
-        if timeout_seconds < 1:
-            raise ValueError(f"judge config 'timeout_seconds' must be >= 1, got {timeout_seconds}")
-
-        sample_size = data["sample_size"]
-        if sample_size is not None:
-            sample_size = int(sample_size)
-            if sample_size < 1:
-                raise ValueError(f"judge config 'sample_size' must be >= 1 or null, got {sample_size}")
-
-        real_sample_size = data["real_sample_size"]
-        if real_sample_size is not None:
-            real_sample_size = int(real_sample_size)
-            if real_sample_size < 1:
-                raise ValueError(
-                    f"judge config 'real_sample_size' must be >= 1 or null, got {real_sample_size}"
-                )
-
-        return cls(
-            judge_model=str(data["judge_model"]),
-            model_options=tuple(str(m) for m in data["model_options"]),
-            n_rounds=n_rounds,
-            temperature=float(data["temperature"]),
-            severity_weights=dict(data["severity_weights"]),
-            impossibility_severities=tuple(str(s) for s in data["impossibility_severities"]),
-            sample_size=sample_size,
-            real_sample_size=real_sample_size,
-            bootstrap=dict(data["bootstrap"]),
-            workers=workers,
-            timeout_seconds=timeout_seconds,
-            prompt_template=template_path,
-            config_dir=config_dir,
-            reliability=dict(data.get("reliability") or {}),
-        )
-
-
-@dataclass(frozen=True)
 class RunnerSummary:
     """Outcome of one combo's judge fan-out. All counts are over the sampled set.
 
@@ -199,6 +125,13 @@ class RunnerSummary:
     successful rounds). ``failed`` counts only *fresh* personas whose every round
     failed (left uncached, retryable); a top-up that adds zero new rounds keeps its
     prior cache and is counted in none of these.
+
+    ``selected_ids`` is the **roster**: the verdict-cache key of every persona this
+    run selected, sorted. It is the honest denominator for the artifact layer --
+    without it ``load_combo_realism`` sees only the personas present on disk and so
+    reports ``n_failed == 0`` by construction, silently hiding the personas whose
+    every round failed (which are deliberately left uncached and therefore leave no
+    trace of their own).
     """
 
     combo_label: str
@@ -213,6 +146,7 @@ class RunnerSummary:
     failed_rounds: int       # new failed rounds this run
     passes: int              # max per-persona judge attempts any persona used (1 + retries); 0 if none judged
     out_dir: Path
+    selected_ids: tuple[str, ...] = ()   # verdict-cache key of every selected persona (sorted)
 
 
 @dataclass(frozen=True)
@@ -269,6 +203,45 @@ def _select_prefix_indices(n: int, sample_size: int | None) -> list[int]:
     if sample_size is None or sample_size >= n:
         return list(range(n))
     return list(range(sample_size))
+
+
+def _persona_key(population: Sequence[dict[str, Any]], idx: int, combo_label: str) -> str:
+    """Return the verdict-cache key for population index *idx*: the record's OWN id.
+
+    NOT ``f"persona_{idx:05d}"``. The population read by this runner is the **capped**
+    mapped file -- a seeded sparse subset of the clean pool -- so list index k and
+    persona id k are different personas as soon as ``population_cap`` runs. Keying the
+    cache on the index would attribute one persona's rounds to another on any re-draw
+    (a new cap, a grown pool, a changed mapping config), silently and undetectably.
+
+    The key is normalised to the ``persona_<5 digits>`` shape the sibling readers glob
+    for (``artifacts.py`` on ``persona_*.jsonl``, ``reduce.py`` on
+    ``persona_[0-9]*.json``): a synthetic record already carries its raw persona-dir
+    name (``persona_00312``) and is used verbatim; the real reference carries an
+    integer ``id`` (0, 1, 2, ...) and is formatted to match. Anything else raises --
+    a key outside that shape is invisible to the readers, which would look like a
+    combo that judged nothing.
+    """
+    raw = population[idx].get("id")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        raise ValueError(
+            f"combo {combo_label!r}: mapped individual at index {idx} carries no 'id'; "
+            f"the verdict cache is keyed on it."
+        )
+    if isinstance(raw, bool):  # bool is an int subclass; never a persona id
+        raise ValueError(f"combo {combo_label!r}: index {idx} has a boolean 'id' ({raw!r}).")
+    if isinstance(raw, int):
+        return f"persona_{raw:05d}"
+    text = str(raw).strip()
+    if text.isdigit():
+        return f"persona_{int(text):05d}"
+    if _PERSONA_KEY_RE.fullmatch(text):
+        return text
+    raise ValueError(
+        f"combo {combo_label!r}: index {idx} has id {raw!r}, which is neither an integer "
+        f"nor of the form 'persona_<digits>'; the verdict readers glob 'persona_[0-9]*' "
+        f"and would not see it."
+    )
 
 
 def _build_entry(
@@ -355,17 +328,31 @@ def _judge_one_round(
     return verdict, error
 
 
-def _read_cached_rounds(path: Path) -> list[dict[str, Any]]:
+def _read_cached_rounds(path: Path, *, expected_id: str) -> list[dict[str, Any]]:
     """Return the successful round dicts already cached for a persona (fail-fast).
 
     Used by the round-count-aware resume gate to decide skip vs top-up. The list
     length is the count of successful rounds already stored. A malformed cache
     raises (a silent default here would corrupt the resume/top-up decision).
+
+    ``expected_id`` is the key the caller resolved from the mapped record. A stored
+    ``persona_id`` that disagrees means the file was written against a different
+    capped population (or was renamed by hand): its rounds describe another persona,
+    so reusing them would silently mis-attribute verdicts. That raises rather than
+    being repaired, because the correct repair (re-judge, or restore the matching
+    cap) is a decision about cost that this layer cannot make.
     """
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"could not read persona cache {path}: {exc}") from exc
+    stored = payload.get("persona_id")
+    if stored != expected_id:
+        raise ValueError(
+            f"persona cache {path} holds verdicts for {stored!r}, not {expected_id!r}. "
+            f"The cache was written against a different capped population; re-run with "
+            f"--force to re-judge, or restore the cap this cache belongs to."
+        )
     rounds = payload.get("rounds")
     if not isinstance(rounds, list):
         raise ValueError(f"persona cache {path} has no 'rounds' list to resume from")
@@ -447,6 +434,7 @@ def run_combo_judgements(
     cfg: JudgeConfig,
     *,
     force: bool = False,
+    plan_only: bool = False,
     sample_size_override: int | None = None,
     client_factory: Callable[[], Any] | None = None,
     logger: logging.Logger | None = None,
@@ -482,6 +470,12 @@ def run_combo_judgements(
         Zero-arg factory returning a judge client (duck-typed ``generate_content``
         + ``last_metadata`` + optional ``close``). Defaults to a real
         ``ClaudeCodeClient``; tests inject a stub.
+    plan_only:
+        Resolve the persona roster and the resume gate, then return **without judging
+        anything** -- guaranteed zero LLM calls, no client ever constructed, no file
+        written. Used by the artifact-rewrite path, which needs the roster (so
+        ``n_failed`` counts the personas that left no cache file) but must not incur
+        judge cost. A persona below the round-count target is logged, not judged.
 
     Returns a :class:`RunnerSummary`. Raises (fail-fast) if a selected persona is
     missing an analyzed axis -- a data-schema error, distinct from a judge failure.
@@ -509,10 +503,11 @@ def run_combo_judgements(
     skipped = 0
     existing: dict[int, list[dict[str, Any]]] = {}
     append_jsonl: dict[int, bool] = {}
+    keys: dict[int, str] = {idx: _persona_key(population, idx, combo_label) for idx in selected}
     for idx in selected:
-        persona_file = out_dir / f"persona_{idx:05d}.json"
+        persona_file = out_dir / f"{keys[idx]}.json"
         if persona_file.exists() and not force:
-            cached = _read_cached_rounds(persona_file)
+            cached = _read_cached_rounds(persona_file, expected_id=keys[idx])
             if len(cached) >= cfg.n_rounds:
                 skipped += 1  # already at/above the target round count
                 continue
@@ -523,6 +518,25 @@ def run_combo_judgements(
             append_jsonl[idx] = False
         to_judge.append(idx)
 
+    # Plan-only: resolve the roster and the resume gate, then stop before any judge call.
+    # This is what makes the caller's artifact-rewrite path zero-cost *by construction*
+    # rather than by the operator remembering to match --rounds to the cached round count:
+    # a config whose n_rounds sits above what is cached would otherwise silently top every
+    # persona up, turning a "just rewrite the files" run into a full re-judge.
+    if plan_only:
+        if to_judge:
+            logger.warning(
+                "combo %s: plan-only run -- %d persona(s) are below the %d-round target and were "
+                "NOT judged (no LLM call made). Re-run without --rewrite-artifacts to top them up.",
+                combo_label, len(to_judge), cfg.n_rounds,
+            )
+        return RunnerSummary(
+            combo_label=combo_label, n_selected=len(selected), requested=0,
+            written=0, topped_up=0, skipped=skipped, failed=0,
+            total_rounds=0, successful_rounds=0, failed_rounds=0, passes=0,
+            out_dir=out_dir, selected_ids=tuple(sorted(keys[idx] for idx in selected)),
+        )
+
     # Render each persona's prompts once (fail-fast on a missing analyzed axis --
     # a data error that must abort, not be recorded as a judge-round failure).
     prompts: dict[int, tuple[str, str]] = {}
@@ -531,10 +545,48 @@ def run_combo_judgements(
             prompts[idx] = build_prompts(population[idx], analyzed_attrs, system_str, user_template)
         except KeyError as exc:
             raise RuntimeError(
-                f"combo {combo_label!r} persona_{idx:05d}: {exc}"
+                f"combo {combo_label!r} {keys[idx]}: {exc}"
             ) from exc
 
     total_new_rounds = sum(cfg.n_rounds - len(existing[idx]) for idx in to_judge)
+
+    # One judge client PER WORKER THREAD (see the module docstring): created on that
+    # thread's first persona and reused for every later one, so the live `claude`
+    # subprocess count is bounded by `cfg.workers` instead of scaling with the
+    # persona count. Registered in `_ACTIVE_CLIENTS` for the atexit drain and closed
+    # in `_close_pool_clients` once the executor has drained.
+    thread_state = threading.local()
+    pool_clients: list[Any] = []
+    pool_clients_lock = threading.Lock()
+
+    def _thread_client() -> Any:
+        """Return this worker thread's judge client, creating it on first use."""
+        client = getattr(thread_state, "client", None)
+        if client is not None:
+            return client
+        client = client_factory()
+        thread_state.client = client
+        with pool_clients_lock:
+            pool_clients.append(client)
+        if hasattr(client, "close"):
+            with _ACTIVE_LOCK:
+                _ACTIVE_CLIENTS.add(client)
+        return client
+
+    def _close_pool_clients() -> None:
+        """Close every client this pool created; safe to call when none were made."""
+        with pool_clients_lock:
+            clients = list(pool_clients)
+            pool_clients.clear()
+        for client in clients:
+            if not hasattr(client, "close"):
+                continue
+            try:
+                client.close()
+            except Exception:  # teardown must never mask the run's own outcome
+                logger.debug("combo %s: judge client close() failed", combo_label, exc_info=True)
+            with _ACTIVE_LOCK:
+                _ACTIVE_CLIENTS.discard(client)
 
     def _judge_and_write_persona(idx: int) -> _PersonaOutcome:
         """Judge one persona's shortfall rounds, then write ITS OWN files immediately.
@@ -549,7 +601,7 @@ def run_combo_judgements(
         persona with zero successful rounds is left uncached (retryable, no telemetry);
         a top-up that adds zero rounds keeps its prior cache untouched.
         """
-        persona_id = f"persona_{idx:05d}"
+        persona_id = keys[idx]
         system_str, user_str = prompts[idx]
         n_existing = len(existing[idx])
         is_topup = append_jsonl[idx]
@@ -558,42 +610,29 @@ def run_combo_judgements(
         local_entries: list[LLMInteractionEntry] = []
         passes_used = 1
 
-        client = client_factory()
-        registered = hasattr(client, "close")
-        if registered:
-            with _ACTIVE_LOCK:
-                _ACTIVE_CLIENTS.add(client)
-        try:
-            for r in range(n_existing, cfg.n_rounds):
-                for attempt in range(1, _MAX_JUDGE_PASSES + 1):
-                    passes_used = max(passes_used, attempt)
-                    verdict, error = _judge_one_round(
-                        client,
-                        persona_id=persona_id, round_idx=r, attempt=attempt,
-                        system_str=system_str, user_str=user_str, cfg=cfg,
-                        entries=local_entries,
+        client = _thread_client()
+        for r in range(n_existing, cfg.n_rounds):
+            for attempt in range(1, _MAX_JUDGE_PASSES + 1):
+                passes_used = max(passes_used, attempt)
+                verdict, error = _judge_one_round(
+                    client,
+                    persona_id=persona_id, round_idx=r, attempt=attempt,
+                    system_str=system_str, user_str=user_str, cfg=cfg,
+                    entries=local_entries,
+                )
+                if verdict is not None:
+                    new_verdicts.append(verdict)
+                    break
+                if attempt < _MAX_JUDGE_PASSES:
+                    logger.info(
+                        "combo %s %s round %d failed (attempt %d/%d), retrying: %s",
+                        combo_label, persona_id, r, attempt, _MAX_JUDGE_PASSES, error,
                     )
-                    if verdict is not None:
-                        new_verdicts.append(verdict)
-                        break
-                    if attempt < _MAX_JUDGE_PASSES:
-                        logger.info(
-                            "combo %s %s round %d failed (attempt %d/%d), retrying: %s",
-                            combo_label, persona_id, r, attempt, _MAX_JUDGE_PASSES, error,
-                        )
-                    else:
-                        logger.warning(
-                            "combo %s %s round %d failed after %d attempt(s): %s",
-                            combo_label, persona_id, r, _MAX_JUDGE_PASSES, error,
-                        )
-        finally:
-            if registered:
-                try:
-                    client.close()
-                except Exception:
-                    pass
-                with _ACTIVE_LOCK:
-                    _ACTIVE_CLIENTS.discard(client)
+                else:
+                    logger.warning(
+                        "combo %s %s round %d failed after %d attempt(s): %s",
+                        combo_label, persona_id, r, _MAX_JUDGE_PASSES, error,
+                    )
 
         n_ok = len(new_verdicts)
         n_failed_rounds = (cfg.n_rounds - n_existing) - n_ok
@@ -640,20 +679,25 @@ def run_combo_judgements(
     failed_rounds = 0
     passes = 0
     if to_judge:
-        with ThreadPoolExecutor(max_workers=cfg.workers) as executor:
-            futures = [executor.submit(_judge_and_write_persona, idx) for idx in to_judge]
-            for future in as_completed(futures):
-                outcome = future.result()
-                successful_rounds += outcome.n_ok
-                failed_rounds += outcome.n_failed_rounds
-                passes = max(passes, outcome.passes_used)
-                if outcome.status == "written":
-                    written += 1
-                elif outcome.status == "topped_up":
-                    topped_up += 1
-                elif outcome.status == "failed":
-                    failed_personas += 1
-                # "topup_noop": prior cache kept, counted in no progress bucket.
+        try:
+            with ThreadPoolExecutor(max_workers=cfg.workers) as executor:
+                futures = [executor.submit(_judge_and_write_persona, idx) for idx in to_judge]
+                for future in as_completed(futures):
+                    outcome = future.result()
+                    successful_rounds += outcome.n_ok
+                    failed_rounds += outcome.n_failed_rounds
+                    passes = max(passes, outcome.passes_used)
+                    if outcome.status == "written":
+                        written += 1
+                    elif outcome.status == "topped_up":
+                        topped_up += 1
+                    elif outcome.status == "failed":
+                        failed_personas += 1
+                    # "topup_noop": prior cache kept, counted in no progress bucket.
+        finally:
+            # The pool has drained (normally or by exception), so no worker thread can
+            # still be using its client: tear them down here rather than per persona.
+            _close_pool_clients()
 
     summary = RunnerSummary(
         combo_label=combo_label,
@@ -668,6 +712,7 @@ def run_combo_judgements(
         failed_rounds=failed_rounds,
         passes=passes,
         out_dir=out_dir,
+        selected_ids=tuple(sorted(keys[idx] for idx in selected)),
     )
     logger.info(
         "combo %s judged: written=%d topped_up=%d skipped=%d failed=%d "
