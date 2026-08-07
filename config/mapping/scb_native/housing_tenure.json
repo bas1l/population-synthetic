@@ -163,7 +163,10 @@
         "Subletting",
         "Subletting (andrahandskontrakt)",
         "Kollektivboende",
-        "Socialbostad"
+        "Socialbostad",
+        "Municipal housing tenant",
+        "Municipal housing",
+        "kommunalt boende"
       ],
       "contains": [
         "rental",

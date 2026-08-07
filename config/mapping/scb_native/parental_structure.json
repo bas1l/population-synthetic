@@ -290,7 +290,9 @@
         "single parent (mother)",
         "Single-parent household (mother)",
         "Endast mor",
-        "Endast mamma"
+        "Endast mamma",
+        "one parent (mother)",
+        "Enkel förälder (mamma)"
       ],
       "contains": [
         "single mother",
@@ -320,7 +322,8 @@
         "singlefather",
         "father and grandfather",
         "father and grandmother",
-        "Single-parent household (father)"
+        "Single-parent household (father)",
+        "Enkel förälder (far)"
       ],
       "contains": [
         "single father",

@@ -293,7 +293,9 @@
         "Fastighetsverksamhet",
         "Professionella tjänster",
         "Professionell, vetenskaplig och teknisk verksamhet",
-        "Vetenskaplig och teknisk verksamhet"
+        "Vetenskaplig och teknisk verksamhet",
+        "Verksamhet inom professionell, vetenskaplig och teknisk verksamhet",
+        "Affärsmässig tjänsteverksamhet"
       ],
       "contains": [
         "finansiell",
@@ -391,7 +393,8 @@
         "Socialt arbete",
         "Hemtjänst",
         "Äldreomsorg",
-        "Healthcare/Social Work"
+        "Healthcare/Social Work",
+        "Personlig assistans"
       ],
       "contains": [
         "vård",
