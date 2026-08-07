@@ -230,7 +230,14 @@ processes:
       levels are not a partition), so every row carries its counting unit, its
       denominator and the level's penalised flag.
       --driver-top-n / --driver-min-count bound the tables; what falls below either is
-      counted, never silently dropped.
+      counted, never silently dropped. The same question asked country-wide is a third
+      figure per level, severity_pair_summary_s3/s2/s1: the attribute pairs that clashed
+      at that level, ranked descending and pooled across the synthetic combinations,
+      computed from EVERY per-clash row and deliberately not from the per-cell-truncated
+      severity_drivers tables. The real population is drawn as its own series over its own
+      denominator and is never pooled into the bars; the denominator, the persona counting
+      unit, the non-additivity warning and the count of what the top-N cut all appear on
+      the figure. --pair-summary-top-n bounds the bars.
     folder: "realism_ranking"
     script: "scripts/analyze/rank_persona_realism.py"
     dispatch: "slugs"

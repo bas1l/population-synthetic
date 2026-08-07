@@ -221,12 +221,25 @@ both rank 1. The counts are **personas, not clashes**, and they are **not additi
 may carry several clashes, each names two attributes, and the levels are not a partition — which is
 why every row carries its counting unit and the level's `penalised` flag.
 
+The same question asked country-wide rather than per cell is a third figure per level,
+`severity_pair_summary_s3/s2/s1.png/.svg`: the attribute pairs that clashed at that level, ranked
+descending, pooled across the synthetic combinations. It is computed from **every** per-clash row,
+deliberately **not** from `severity_drivers.csv` — that table is already cut per cell by
+`--driver-top-n` and floored by `--driver-min-count`, so summing it into a country total would
+over-weight pairs that merely clear many cells' cut and erase pairs that are broad but never locally
+top-ranked. The real population is drawn as its **own** series (a red diamond over its own
+denominator) and is never pooled into the bars; both series' numbers are written in aligned columns
+beside the axes. The denominator, the persona counting unit, the non-additivity warning and the
+count of what the top-N cut all appear **on the figure**, and S1 additionally carries the
+never-a-defect caption.
+
 ```bash
 python scripts/analyze/analyze_persona_realism.py --slug swedish_02_all_pick_v2_claude_haiku
 python scripts/analyze/analyze_persona_realism.py --rewrite-artifacts   # rebuild artifacts, 0 LLM calls
 python scripts/analyze/rank_persona_realism.py --country swedish_02
 python scripts/analyze/rank_persona_realism.py --country swedish_02 --force \
-    --driver-top-n 5 --driver-min-count 3        # bounds on the driver tables
+    --driver-top-n 5 --driver-min-count 3 \      # bounds on the driver tables
+    --pair-summary-top-n 15                      # bars on each severity_pair_summary figure
 ```
 
 `--rewrite-artifacts` regenerates the derived files from the verdict cache already on disk. It is
@@ -240,6 +253,10 @@ cost.
 (default 3) is the number of personas a driver needs before it is ranked rather than
 suppressed-and-counted — a rank-1 driver seen in two personas is an anecdote presented as a finding.
 Both exclusions are counted in the JSON block and printed at the end of the run.
+`--pair-summary-top-n` (default 15) bounds the bars on each `severity_pair_summary` figure; what
+falls below that cut is printed on the figure itself, including how many of the hidden pairs were
+raised only by the real population. All three are resolved at the CLI edge — the builder reads no
+config — and `--no-charts` skips the figures while still writing the JSON and the CSVs.
 
 ## See also
 

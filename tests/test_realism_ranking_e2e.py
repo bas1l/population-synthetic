@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import csv
 import json
+import subprocess
+import sys
 from typing import Any
 
 import matplotlib
@@ -36,6 +38,7 @@ from population_synthetic.analysis.realism_ranking.builder import (  # noqa: E40
     scb_contrast_rows,
     severity_driver_rows,
     severity_driver_value_rows,
+    severity_pair_summary,
     summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
@@ -43,6 +46,7 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_impossibility_forest,
     plot_impossibility_heatmap,
     plot_severity_heatmap,
+    plot_severity_pair_summary,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors  # noqa: E402
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
@@ -177,6 +181,10 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
     for level in ("S1", "S2", "S3"):
         save_figure(plot_severity_heatmap(ranking, level),
                     out_dir / f"severity_heatmap_{level.lower()}.png", dpi=80)
+        # The heatmap's complement, computed from the records rather than the ranking --
+        # it must see the full per-clash series, not the per-cell-truncated driver block.
+        save_figure(plot_severity_pair_summary(severity_pair_summary(records, level, top_n=15)),
+                    out_dir / f"severity_pair_summary_{level.lower()}.png", dpi=80)
 
     for name in ("realism_ranking.json", "realism_summary.csv", "scb_contrast.csv",
                  "headline_map.png", "headline_map.svg",
@@ -184,7 +192,10 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
                  "impossibility_heatmap.png", "impossibility_heatmap.svg",
                  "severity_heatmap_s1.png", "severity_heatmap_s1.svg",
                  "severity_heatmap_s2.png", "severity_heatmap_s2.svg",
-                 "severity_heatmap_s3.png", "severity_heatmap_s3.svg"):
+                 "severity_heatmap_s3.png", "severity_heatmap_s3.svg",
+                 "severity_pair_summary_s1.png", "severity_pair_summary_s1.svg",
+                 "severity_pair_summary_s2.png", "severity_pair_summary_s2.svg",
+                 "severity_pair_summary_s3.png", "severity_pair_summary_s3.svg"):
         assert (out_dir / name).is_file(), name
 
 
@@ -298,6 +309,41 @@ def test_judging_order_does_not_change_a_combination_s_bytes(tmp_path):
     root = lambda base: analysis_output_dir("persona_realism", base) / _COUNTRY / slug_a  # noqa: E731
     for name in (f"{slug_a}.json", f"{slug_a}.csv", f"{slug_a}_personas.csv"):
         assert (root(forward) / name).read_bytes() == (root(reverse) / name).read_bytes(), name
+
+
+_SCRIPT = PROJECT_ROOT / "scripts" / "analyze" / "rank_persona_realism.py"
+_PAIR_SUMMARIES = tuple(f"severity_pair_summary_s{n}" for n in (1, 2, 3))
+
+
+def _run_ranking_script(base, *extra):
+    """Drive the real CLI on *base* and return the country's output directory.
+
+    A subprocess rather than an in-process call to ``main``: the flags, the argument
+    resolution at the edge and the chart wiring are exactly what this test is about, and
+    calling the builder directly would assert the test's own emulation of them.
+    """
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--country", _COUNTRY,
+         "--output-base", str(base), "--force", *extra],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return analysis_output_dir("realism_ranking", base) / _COUNTRY
+
+
+def test_the_driver_script_emits_the_pair_summaries_and_honours_no_charts(judged_base):
+    """The three figures are wired to the CLI, and ``--no-charts`` really skips them."""
+    out_dir = _run_ranking_script(judged_base, "--no-charts")
+    assert (out_dir / "realism_ranking.json").is_file()
+    assert sorted(p.name for p in out_dir.glob("*.png")) == []
+    assert sorted(p.name for p in out_dir.glob("*.svg")) == []
+
+    out_dir = _run_ranking_script(judged_base)
+    for name in _PAIR_SUMMARIES:
+        assert (out_dir / f"{name}.png").is_file(), name
+        assert (out_dir / f"{name}.svg").is_file(), name
+    # Beside the heatmaps they complement, in the registry-resolved folder.
+    assert all((out_dir / f"severity_heatmap_s{n}.png").is_file() for n in (1, 2, 3))
 
 
 def test_a_single_slug_judged_alone_produces_its_complete_artifact_set(tmp_path):

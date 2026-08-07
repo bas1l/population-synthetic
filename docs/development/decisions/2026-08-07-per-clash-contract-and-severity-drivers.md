@@ -172,3 +172,63 @@ Two properties become load-bearing that were previously merely present:
   `slug` → severity by `SEVERITY_RANK` (S3, S2, S1, never alphabetical) → `rank` — so a competitor's
   three levels arrive contiguous and worst-first, and the repeated `1` is legible as a per-level
   rank rather than a duplicate.
+
+---
+
+## Amendment 2 — the country-wide pair summary reads the clash rows, not the published drivers
+
+**Date:** 2026-08-07 (post-implementation, operator-requested)
+
+Three figures were added beside the severity heatmaps, `severity_pair_summary_s{3,2,1}.png/.svg`:
+per level, the attribute pairs that clashed, ranked descending, pooled across the country. The
+heatmaps answer *which cells have a high rate*; the driver tables answer *what drove one cell*;
+neither answers *at this level, what clashed, ranked* — which is the question a reader asks first and
+the one the manuscript needs a figure for.
+
+Two decisions inside it are worth recording, because both have a tempting wrong answer that would
+have produced a plausible-looking figure.
+
+**The figure is computed from the full per-clash rows, not from `severity_drivers.csv` or the
+`severity_drivers` JSON block.** Those are the obvious source — they are already ranked, already
+attached to the ranking document, and already in memory. They are also already *cut*: truncated per
+cell by `--driver-top-n` and floored by `--driver-min-count`. Summing a per-cell top-5 into a country
+total is biased twice over. It over-weights a pair that is mediocre everywhere but clears many
+cells' cut, and it erases a pair that is broad across the sweep but never locally top-ranked — the
+second being exactly the kind of finding a country-wide figure exists to surface. The summary
+therefore reads `CompetitorRecord.clashes` directly, which is the untruncated series the loader
+already holds, and the provenance sentence explaining this is printed **on the figure**, because the
+two blocks answer neighbouring questions from the same rows and the difference is invisible in the
+output.
+
+**SCB is drawn as its own series and is never pooled into the bars.** It is an ordinary competitor
+with no reference role, which is the argument *for* including it — but it is also one 100-persona
+unit against ~50 synthetic ones, so an honest pooled bar would bury it, and a reader would then
+attribute its contribution to the synthetic population. The contrast it supplies is the single most
+useful thing these numbers produced: at S3 it raises **no** clash on any pair, while at S1 its own
+rate exceeds the pooled synthetic rate on most pairs (`civil_status × household_size` 27% against
+5%, `housing_tenure × socioeconomic_class` 24% against 0.9%) — the mode-collapse concern Axis B
+exists for, seen from a second direction. It keeps the red-diamond encoding it already has on the
+forest plot, so identity is carried by shape as well as hue and the mapping is learned once for the
+whole folder.
+
+Consequences and smaller choices that follow from those two:
+
+- **Ranking is by pooled *synthetic* persona count**, with `n_personas` desc → `attr_a` → `attr_b`
+  as a total tie-break. A pair only the real population raised therefore ranks at zero and is
+  normally below the cut; it stays in the universe and is counted under `n_pairs_real_only` on the
+  figure, rather than being dropped — excluding it would privilege-by-omission the competitor this
+  analysis refuses to privilege.
+- **The denominator is the summed `len(record.personas)` over the pooled competitors** — the same
+  population the corresponding heatmap divides each of its cells by, so a bar is readable against
+  that grid. It is stated numerically on the figure, as is the real population's separate base.
+- **The name is `severity_pair_summary`, not `severity_driver_summary`.** "Driver" is pinned by the
+  plan to a clash ranked *within* a `(competitor, severity)` cell; this ranking is across
+  competitors and is deliberately not built from those tables, so borrowing the word would assert
+  the provenance the figure exists to avoid.
+- **A level with nothing to rank renders an explaining figure**, not a skip and not empty axes.
+  "No pair clashed at this level anywhere" is a measurement, and the artifact set staying complete is
+  what keeps it distinguishable from a crashed render.
+- **Reporting-only, and computed outside `build_ranking`.** `severity_pair_summary(records, level,
+  *, top_n)` is a standalone pure function the CLI calls at the edge; nothing is added to the ranking
+  document, so `axis_a`, `axis_b`, `severity` and `factor_significance` are provably untouched
+  (asserted by test). `--pair-summary-top-n` is resolved at the edge like the two driver bounds.

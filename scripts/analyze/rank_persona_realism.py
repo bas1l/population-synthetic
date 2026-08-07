@@ -51,6 +51,14 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
                                           impossibility rate is unaffected. S3/S2 are defects
                                           (lower is better); S1 is unusual-but-possible and is
                                           reported, never penalised, so it uses a neutral ramp.
+    {country}/severity_pair_summary_s3/s2/s1.png/.svg  the complement of those heatmaps, one
+                                          per level: WHAT clashed, ranked country-wide at the
+                                          attribute-pair grain. Computed from every per-clash
+                                          row -- NOT from severity_drivers.csv, which is already
+                                          cut per cell by --driver-top-n. The synthetic
+                                          combinations are pooled into the bars; the real
+                                          population is a separate red-diamond series over its
+                                          own denominator and is never pooled in.
 
 Two gates run before any statistic (both failure modes produce plausible-looking wrong
 numbers, so neither is a warning): a combination is consumed only if its report, its
@@ -80,6 +88,8 @@ Usage:
 --driver-top-n  Severity drivers published per cell per level. Default: 5.
 --driver-min-count  Personas a driver needs before it is ranked rather than suppressed-and-
                 counted. Default: 3.
+--pair-summary-top-n  Attribute pairs drawn on each severity_pair_summary figure. Default: 15.
+                What falls below the cut is printed on the figure, never dropped silently.
 --dpi           PNG render resolution. Default: 200.
 """
 
@@ -96,6 +106,7 @@ from population_synthetic.analysis.realism_ranking.builder import (
     scb_contrast_rows,
     severity_driver_rows,
     severity_driver_value_rows,
+    severity_pair_summary,
     summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (
@@ -103,6 +114,7 @@ from population_synthetic.analysis.realism_ranking.charts import (
     plot_impossibility_forest,
     plot_impossibility_heatmap,
     plot_severity_heatmap,
+    plot_severity_pair_summary,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors
 from population_synthetic.analysis.utils.figures import save_figure
@@ -173,6 +185,11 @@ def _parse_args() -> argparse.Namespace:
         help="Personas a driver must be exhibited by before it is ranked. Default: 3. Below "
         "it the driver is suppressed and counted -- publishing a rank-1 driver seen in two "
         "personas presents an anecdote as a finding.",
+    )
+    parser.add_argument(
+        "--pair-summary-top-n", type=int, default=15, dest="pair_summary_top_n",
+        help="Attribute pairs drawn on each severity_pair_summary figure. Default: 15. What "
+        "falls below the cut is printed on the figure itself, never dropped silently.",
     )
     parser.add_argument("--dpi", type=int, default=200, help="PNG render resolution. Default: 200.")
     return parser.parse_args()
@@ -393,6 +410,19 @@ def main() -> None:
             charts += [
                 (f"severity_heatmap_{level.lower()}",
                  lambda level=level: plot_severity_heatmap(ranking, level))
+                for level in SEVERITY_LEVELS
+            ]
+            # The complement of those heatmaps: what clashed, ranked country-wide. Built
+            # from the loaded records rather than from `ranking`, because it must see the
+            # FULL per-clash series -- the published severity_drivers block is already cut
+            # per cell by --driver-top-n, and summing a per-cell top-N into a country total
+            # would over-weight pairs that merely clear many cells' cut while erasing pairs
+            # that are broad but never locally top-ranked.
+            charts += [
+                (f"severity_pair_summary_{level.lower()}",
+                 lambda level=level: plot_severity_pair_summary(severity_pair_summary(
+                     country_records, level, top_n=args.pair_summary_top_n,
+                 )))
                 for level in SEVERITY_LEVELS
             ]
             for name, build in charts:

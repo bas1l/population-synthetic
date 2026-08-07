@@ -22,6 +22,7 @@ from population_synthetic.analysis.realism_ranking.builder import (  # noqa: E40
     scb_contrast_rows,
     severity_driver_rows,
     severity_driver_value_rows,
+    severity_pair_summary,
     summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
@@ -29,6 +30,7 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_impossibility_forest,
     plot_impossibility_heatmap,
     plot_severity_heatmap,
+    plot_severity_pair_summary,
 )
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord  # noqa: E402
 from population_synthetic.analysis.utils.realism_clash_csv import RealismClashRow  # noqa: E402
@@ -964,3 +966,173 @@ def test_driver_flatteners_raise_when_the_block_is_missing_a_level():
     for flatten in (severity_driver_rows, severity_driver_value_rows):
         with pytest.raises(KeyError, match="Unknown severity level"):
             flatten(ranking)
+
+
+# --------------------------------------------------------------------------- #
+# severity pair summary (what clashed country-wide -- reporting only)           #
+# --------------------------------------------------------------------------- #
+
+
+def _summary(records, level, **kwargs):
+    kwargs.setdefault("top_n", 10)
+    return severity_pair_summary(records, level, **kwargs)
+
+
+def test_pair_summary_counts_personas_not_clash_rows_and_pools_the_denominator():
+    """Hand-computed: the round-duplicated clash counts its persona once.
+
+    Competitor A raises ``age_group x education_level`` in personas 0 (twice -- two
+    rounds), 1 and 2: four clash rows, three affected personas. The denominator is the
+    two synthetic competitors' personas summed (4 + 4), which is exactly what the S3
+    heatmap divides each of its two cells by.
+    """
+    summary = _summary(_driver_fixture(), "S3")
+
+    assert summary["denominator"] == 8
+    assert summary["n_synthetic_competitors"] == 2
+    assert summary["real_slug"] == "real_swedish" and summary["real_denominator"] == 4
+    assert [(p["attr_a"], p["attr_b"], p["n_personas"]) for p in summary["pairs"]] == [
+        ("age_group", "education_level", 3),
+        ("civil_status", "household_size", 1),
+    ]
+    assert summary["pairs"][0]["prevalence"] == pytest.approx(3 / 8)
+    assert summary["pairs"][1]["prevalence"] == pytest.approx(1 / 8)
+    # Reporting-only, and the level's direction travels with the numbers.
+    assert summary["penalised"] is True and summary["severity"] == "S3"
+
+
+def test_pair_summary_keeps_the_real_population_out_of_the_bars():
+    """The real population is a separate series with its own denominator, never pooled."""
+    summary = _summary(_driver_fixture(), "S3")
+    # It raises no S3 clash at all: zero is a measurement, not an absent series.
+    assert all(p["real_n_personas"] == 0 and p["real_prevalence"] == 0.0
+               for p in summary["pairs"])
+
+    s1 = _summary(_driver_fixture(), "S1")
+    pair = s1["pairs"][0]
+    assert (pair["attr_a"], pair["attr_b"]) == ("civil_status", "housing_tenure")
+    # Two of the real competitor's four personas -- and none of the eight synthetic ones.
+    assert pair["n_personas"] == 0 and pair["prevalence"] == 0.0
+    assert pair["real_n_personas"] == 2 and pair["real_prevalence"] == pytest.approx(0.5)
+    assert s1["n_pairs_real_only"] == 1
+
+
+def test_pair_summary_denominator_is_the_population_the_heatmap_divides_by():
+    """The pooled base equals the summed synthetic cell denominators, cell for cell."""
+    records = _driver_fixture()
+    grid = _build(records)["severity"]["levels"]["S3"]["grid"]
+    cells = [grid["cells"][model][method]
+             for model in grid["models"] for method in grid["methods"]
+             if grid["cells"][model][method] is not None]
+
+    summary = _summary(records, "S3")
+    assert summary["denominator"] == sum(cell["denominator"] for cell in cells)
+    assert summary["real_denominator"] == grid["real"]["denominator"]
+
+
+def _tied_fixture():
+    """Two synthetic competitors whose S2 pairs tie at one persona each.
+
+    A tie is what makes the declared tie-break observable: without one the order is a
+    function of the counts alone and the name ordering is never exercised.
+    """
+    a = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[5.0] * 3,
+                model="claude_haiku", strategy="all_pick")
+    a = _with_clashes(a, [
+        _clash(a, 0, ("civil_status", "household_size"), ("Married", "1"), "S2"),
+        _clash(a, 1, ("age_group", "housing_tenure"), ("16-19", "Owned"), "S2"),
+        _clash(a, 2, ("age_group", "education_level"), ("16-19", "Doctorate"), "S2"),
+    ])
+    b = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0, typicalities=[5.0] * 3,
+                model="claude_sonnet", strategy="all_pick_dag")
+    b = _with_clashes(b, [
+        _clash(b, 0, ("age_group", "employment_status"), ("16-19", "Retired"), "S2"),
+    ])
+    return [a, b]
+
+
+def test_pair_summary_order_is_total_with_no_residual_tie():
+    """Four pairs, all tied at one persona: the order is name order, and it is stable."""
+    records = _tied_fixture()
+    summary = _summary(records, "S2")
+
+    assert all(pair["n_personas"] == 1 for pair in summary["pairs"])
+    assert [(p["attr_a"], p["attr_b"]) for p in summary["pairs"]] == [
+        ("age_group", "education_level"),
+        ("age_group", "employment_status"),
+        ("age_group", "housing_tenure"),
+        ("civil_status", "household_size"),
+    ]
+    assert [p["rank"] for p in summary["pairs"]] == [1, 2, 3, 4]
+    # The emitted order is a function of the counts and names alone: reversing the record
+    # order (and with it every dict insertion order upstream) changes nothing.
+    assert _summary(list(reversed(records)), "S2")["pairs"] == summary["pairs"]
+    assert _summary(records, "S2") == summary
+
+
+def test_pair_summary_counts_what_top_n_cut_rather_than_truncating_silently():
+    summary = _summary(_driver_fixture(), "S3", top_n=1)
+    assert summary["n_pairs_total"] == 2
+    assert summary["n_pairs_shown"] == 1
+    assert summary["n_pairs_hidden"] == 1
+    assert summary["top_n"] == 1
+
+
+def test_pair_summary_of_a_level_with_no_clash_is_empty_rather_than_absent():
+    records = _driver_fixture()
+    records[-1] = _with_clashes(records[-1], [])   # drop the real competitor's S1 clash
+    summary = _summary(records, "S1")
+    assert summary["pairs"] == []
+    assert summary["n_pairs_total"] == 0 and summary["n_pairs_hidden"] == 0
+    # The denominators are still reported: "nobody clashed" is a rate over a real base.
+    assert summary["denominator"] == 8 and summary["real_denominator"] == 4
+
+
+def test_pair_summary_raises_on_input_that_would_make_its_denominator_a_lie():
+    records = _driver_fixture()
+    with pytest.raises(KeyError, match="Unknown severity level"):
+        _summary(records, "S9")
+    with pytest.raises(ValueError, match="top_n must be >= 1"):
+        _summary(records, "S3", top_n=0)
+    with pytest.raises(ValueError, match="at least one competitor"):
+        _summary([], "S3")
+    with pytest.raises(ValueError, match="one country"):
+        _summary([records[0], dataclasses.replace(records[1], country="italian")], "S3")
+    with pytest.raises(ValueError, match="More than one competitor is flagged"):
+        _summary([records[-1], dataclasses.replace(records[0], is_real_reference=True)], "S3")
+
+
+def test_pair_summary_changes_no_number_in_the_ranking_document():
+    """Reporting-only, and computed off to the side: the document must not notice it."""
+    records = _driver_fixture()
+    before = _build(records)
+    for level in SEVERITY_LEVELS:
+        _summary(records, level)
+    after = _build(records)
+    for block in ("axis_a", "axis_b", "severity"):
+        assert after[block] == before[block]
+    assert after["factor_significance"]["by_model"] == before["factor_significance"]["by_model"]
+    assert after["factor_significance"]["by_method"] == before["factor_significance"]["by_method"]
+    assert "severity_pair_summary" not in after
+
+
+def test_pair_summary_figures_render_for_every_level():
+    records = _driver_fixture()
+    for level in SEVERITY_LEVELS:
+        fig = plot_severity_pair_summary(_summary(records, level))
+        assert fig.axes, level
+        texts = " ".join(t.get_text() for t in fig.texts)
+        # The caveats travel on the figure, not only in the docs.
+        assert "Never render these as a pie" in texts, level
+        assert "not from the per-cell severity_drivers tables" in texts, level
+        assert (f"{level} is neither better nor worse" in texts) is (level == "S1"), level
+
+
+def test_pair_summary_figure_of_an_empty_level_explains_itself():
+    """No bars anywhere, and a stated reason -- never blank axes and never a crash."""
+    records = _driver_fixture()
+    records[-1] = _with_clashes(records[-1], [])
+    fig = plot_severity_pair_summary(_summary(records, "S1"))
+    ax = fig.axes[0]
+    assert not ax.patches, "an empty level must draw no bar"
+    assert "measured absence" in " ".join(t.get_text() for t in ax.texts)

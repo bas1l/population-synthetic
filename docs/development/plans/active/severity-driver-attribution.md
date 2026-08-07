@@ -490,6 +490,37 @@ competitor's S3 drivers against its S2 drivers was a three-file diff over a sort
 - The six obsolete `severity_drivers_s*.csv` / `severity_driver_values_s*.csv` were deleted from the
   `swedish_02` output base; a stale file under the old name is worse than none.
 
+**Post-implementation addition — 2026-08-07: three country-wide pair-summary figures.**
+
+*Reason: the heatmaps answer "which cells have a high rate at this level" and the driver tables
+answer "what drove one cell"; neither answers "at this level, what clashed, ranked", which is the
+first question a reader asks and the one the manuscript needs a figure for.*
+
+- `severity_pair_summary_s{3,2,1}.png/.svg` beside the heatmaps: horizontal bars, sorted descending,
+  attribute-pair grain, pooled across the synthetic combinations, `--pair-summary-top-n` (default
+  15) bars with the cut printed on the figure.
+- **Computed from the full `CompetitorRecord.clashes` series, not from `severity_drivers.csv` or the
+  `severity_drivers` JSON block** — those are already cut per cell by `--driver-top-n` and floored
+  by `--driver-min-count`, so aggregating them into a country total over-weights pairs that merely
+  clear many cells' cut and erases pairs that are broad but never locally top-ranked.
+- **SCB is a separate red-diamond series over its own denominator, never pooled into the bars.** Its
+  contribution must not be readable as the synthetic population's; the contrast (zero S3 clashes at
+  all, S1 rates above the pooled synthetic rate on most pairs) is the most useful thing the numbers
+  produced.
+- Implemented as `builder.severity_pair_summary(records, level, *, top_n)` — a standalone pure
+  function outside `build_ranking` — plus `charts.plot_severity_pair_summary`. Nothing is added to
+  `realism_ranking.json`, so `axis_a` / `axis_b` / `severity` / `factor_significance` are provably
+  unmoved. Named `pair_summary` rather than `driver_summary` because "driver" is pinned by this
+  plan's Definitions to a within-cell ranking.
+- See the second ADR amendment for the two decisions and their rejected alternatives.
+
+**Files Modified (addition):**
+- `src/population_synthetic/analysis/realism_ranking/builder.py` — `severity_pair_summary`
+- `src/population_synthetic/analysis/realism_ranking/charts.py` — `plot_severity_pair_summary`
+- `scripts/analyze/rank_persona_realism.py` — `--pair-summary-top-n`, the three chart writes
+- `tests/test_realism_ranking_builder.py` — the pair-summary suite
+- `tests/test_realism_ranking_e2e.py` — the CLI-level `--no-charts` / figures-written test
+
 **Files Modified:**
 - `src/population_synthetic/analysis/realism_ranking/loader.py` — third contract file, new record field
 - `src/population_synthetic/analysis/realism_ranking/builder.py` — `_severity_drivers`, flatteners, `__all__`

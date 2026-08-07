@@ -65,12 +65,14 @@ __all__ = [
     "DISPERSION_MEASURES",
     "DRIVER_COUNTING_UNIT",
     "DRIVER_NON_ADDITIVE",
+    "PAIR_SUMMARY_COUNTING_UNIT",
     "SEVERITY_DIRECTIONS",
     "build_ranking",
     "summary_rows",
     "scb_contrast_rows",
     "severity_driver_rows",
     "severity_driver_value_rows",
+    "severity_pair_summary",
 ]
 
 #: The multiple-comparison correction applied to every family of tests here. Stated
@@ -704,6 +706,194 @@ def _severity_drivers(
                 "respectively."
             ),
         },
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Severity pair summary -- WHAT clashed country-wide (reporting only)          #
+# --------------------------------------------------------------------------- #
+
+
+#: The counting unit of the country-wide pair summary. A sibling of
+#: :data:`DRIVER_COUNTING_UNIT` and deliberately not the same string: the per-cell driver
+#: tables divide by *the cell's* persona count, this block divides by the **pooled** count
+#: over the competitors it pools, and a caveat that named the wrong denominator would be
+#: worse than none. The persona-not-clash half is identical in both, by construction.
+PAIR_SUMMARY_COUNTING_UNIT = (
+    "personas, not clashes: a pair the judge raised in several rounds of one persona "
+    "counts that persona once, and each series is divided by its own pooled persona count"
+)
+
+#: Why this block reads the raw clash rows rather than the published driver tables.
+#: Carried as a data field, and printed on the figure, because the two blocks answer
+#: neighbouring questions from the same rows and the difference is invisible downstream.
+PAIR_SUMMARY_PROVENANCE = (
+    "computed from every per-clash row, not from the per-cell severity_drivers tables: "
+    "those are already cut by --driver-top-n and floored by --driver-min-count, so summing "
+    "them would over-weight pairs that merely clear many cells' cut and erase pairs that "
+    "are broad but never locally top-ranked"
+)
+
+
+def _pair_personas(
+    records: Sequence[CompetitorRecord], level: str
+) -> dict[tuple[str, str], set[tuple[str, str]]]:
+    """``{attribute pair: {(slug, persona_id)}}`` over *records* at *level*.
+
+    The value is a set of ``(slug, persona_id)`` because the counting unit is the persona
+    and ``persona_id`` is only unique *within* a combination: keyed on the id alone,
+    ``persona_00007`` of one combination and of another would collapse into one. The set
+    also absorbs the rounds -- a pair raised in three rounds of one persona is three clash
+    rows and one affected persona -- which is the same dedupe :func:`_clash_index` and
+    :func:`_affected_at` apply, one grain coarser.
+    """
+    by_pair: dict[tuple[str, str], set[tuple[str, str]]] = {}
+    for record in records:
+        for row in record.clashes:
+            if row.severity != level:
+                continue
+            by_pair.setdefault((row.attr_a, row.attr_b), set()).add((record.slug, row.persona_id))
+    return by_pair
+
+
+def severity_pair_summary(
+    records: Sequence[CompetitorRecord], level: str, *, top_n: int
+) -> dict[str, Any]:
+    """Country-wide ranking of the attribute pairs that clashed at one severity *level*.
+
+    The complement of the severity heatmaps: those answer "which model x method cells have
+    a high rate at this level", this answers "at this level, what actually clashed,
+    ranked". Attribute-pair grain, pooled **across** competitors -- deliberately not the
+    model x method grain and not the category-value grain.
+
+    Two properties make the numbers readable against the heatmap they complement:
+
+    * **The counting unit is the persona.** A pair is counted once per persona that raised
+      it, however many rounds or clash rows carried it -- the dedupe key is
+      ``(slug, persona_id, attr_a, attr_b)`` at a fixed severity, matching
+      :func:`_affected_at` and the driver prevalences.
+    * **The denominator is the pooled persona count** over the competitors pooled, i.e.
+      the summed ``len(record.personas)`` -- the same population the corresponding
+      heatmap divides each of its cells by, so a bar is readable against that grid.
+
+    **The real population is never pooled into the synthetic bars.** It is an ordinary
+    competitor with no reference role, but it is also a single 100-persona unit against
+    ~50 synthetic ones, so pooling it would both bury it and let its contribution be read
+    as the synthetic population's. It is carried as its own series, with its own
+    denominator, exactly as :func:`_grid` carries it as its own band.
+
+    Ranking is by pooled **synthetic** persona count descending, with the pair itself as a
+    total tie-break (``n_personas`` desc -> ``attr_a`` -> ``attr_b``), so the order is a
+    function of the counts alone and no residual tie survives. A pair only the real
+    population raised therefore ranks at zero and is almost always below the cut; it stays
+    in the universe and is counted under ``n_pairs_real_only`` rather than dropped, since
+    excluding it would privilege-by-omission the competitor this analysis refuses to
+    privilege.
+
+    *top_n* bounds how many pairs are published; what it leaves out is **counted**, never
+    silently truncated. It arrives as an argument because this module reads no config.
+
+    Returns a payload with an empty ``pairs`` list when no competitor clashed at *level* --
+    a real and reportable outcome, which the renderer states rather than drawing as an
+    empty axis. The denominators travel on it regardless, because "nobody clashed" is a
+    rate over a real base and is worth nothing without one.
+
+    Raises ``KeyError`` on an unknown severity level, and ``ValueError`` on *top_n* below
+    one, on an empty *records*, on records spanning more than one country, or on more than
+    one competitor flagged as the real population -- each of those makes the pooled
+    denominator mean something other than what the figure would claim.
+    """
+    if level not in SEVERITY_DIRECTIONS:
+        raise KeyError(
+            f"Unknown severity level {level!r}: the judge emits {list(SEVERITY_LEVELS)}."
+        )
+    if top_n < 1:
+        raise ValueError(
+            f"pair-summary top_n must be >= 1, got {top_n!r}: a figure of zero bars ranks nothing."
+        )
+    if not records:
+        raise ValueError(
+            "severity_pair_summary needs at least one competitor: with none there is no "
+            "denominator, and a pooled share over an empty population is undefined."
+        )
+    countries = sorted({record.country for record in records})
+    if len(countries) > 1:
+        raise ValueError(
+            f"severity_pair_summary pools one country's competitors, got {countries}. "
+            "Pooling across countries would divide clashes from several populations by one "
+            "denominator that describes none of them."
+        )
+
+    real_records = [record for record in records if record.is_real_reference]
+    if len(real_records) > 1:
+        raise ValueError(
+            "More than one competitor is flagged as the real population "
+            f"({[r.slug for r in real_records]}); the consumption set is corrupt."
+        )
+    real = real_records[0] if real_records else None
+    synthetic = [record for record in records if not record.is_real_reference]
+
+    synthetic_pairs = _pair_personas(synthetic, level)
+    real_pairs = _pair_personas(real_records, level)
+
+    denominator = sum(len(record.personas) for record in synthetic)
+    real_denominator = len(real.personas) if real is not None else None
+
+    def _share(count: int, base: int | None) -> float | None:
+        # A zero base is never used as a divisor: no persona, no rate (and 0.0 would be a
+        # measurement -- the best possible one for a defect share).
+        return (count / base) if base else None
+
+    ordered = sorted(
+        set(synthetic_pairs) | set(real_pairs),
+        key=lambda pair: (-len(synthetic_pairs.get(pair, ())), pair[0], pair[1]),
+    )
+    pairs = [
+        {
+            "rank": rank,
+            "attr_a": pair[0],
+            "attr_b": pair[1],
+            "n_personas": len(synthetic_pairs.get(pair, ())),
+            "prevalence": _share(len(synthetic_pairs.get(pair, ())), denominator),
+            "real_n_personas": None if real is None else len(real_pairs.get(pair, ())),
+            "real_prevalence": (
+                None if real is None
+                else _share(len(real_pairs.get(pair, ())), real_denominator)
+            ),
+        }
+        for rank, pair in enumerate(ordered[:top_n], start=1)
+    ]
+
+    return {
+        "severity": level,
+        **SEVERITY_DIRECTIONS[level],
+        "country": countries[0],
+        "pairs": pairs,
+        "denominator": denominator,
+        "n_synthetic_competitors": len(synthetic),
+        "real_slug": None if real is None else real.slug,
+        "real_denominator": real_denominator,
+        "n_pairs_total": len(ordered),
+        "n_pairs_shown": len(pairs),
+        "n_pairs_hidden": max(0, len(ordered) - len(pairs)),
+        # Pairs no synthetic competitor raised. They rank at zero and are therefore almost
+        # always below the cut, so their absence from the bars is explained rather than
+        # looking like the real population was held out of the universe.
+        "n_pairs_real_only": sum(
+            1 for pair in ordered if not synthetic_pairs.get(pair) and real_pairs.get(pair)
+        ),
+        "top_n": top_n,
+        "metric": (
+            "share of personas exhibiting a given attribute-pair clash at this severity, "
+            "each series over its own pooled denominator"
+        ),
+        "counting_unit": PAIR_SUMMARY_COUNTING_UNIT,
+        "non_additive": DRIVER_NON_ADDITIVE,
+        "provenance": PAIR_SUMMARY_PROVENANCE,
+        "reporting_only": (
+            "Descriptive. This block feeds no ranking, no contrast and no significance "
+            "test, and changes no number already published."
+        ),
     }
 
 

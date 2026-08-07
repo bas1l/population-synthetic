@@ -159,6 +159,7 @@ Outputs per country under `03_Analysis/realism_ranking/<country>/`:
 | `severity_heatmap_s3/s2/s1.png/.svg` | the same grid layout, one per clash severity — see below |
 | `severity_drivers.csv` | **what** clashed in each cell: the attribute pairs ranked by how many of that cell's personas exhibit them, all three levels in one table with `severity` as a column — see below |
 | `severity_driver_values.csv` | the same one grain finer: the category pairs (e.g. `Student × Permanent Full-time`) under each ranked attribute pair, likewise one table for all three levels |
+| `severity_pair_summary_s3/s2/s1.png/.svg` | the country-wide complement of the heatmap, one per level: which attribute pairs clashed, ranked descending, with the real population as its own series — see below |
 
 ### The severity dimension (reporting only)
 
@@ -228,6 +229,35 @@ Four properties worth knowing before reading one:
 the floor below which a driver is **suppressed and counted** rather than ranked. Both exclusion
 counts, plus unconsumable combinations, personas with no successful round, and clashes whose
 category values could not be joined, are reported in the JSON block and printed at the end of a run.
+
+### The pair summary figures (the same question, country-wide)
+
+`severity_pair_summary_s3/s2/s1.png` answer at the country level what `severity_drivers.csv`
+answers per cell: at this level, **what actually clashed, ranked**. Horizontal bars, sorted
+descending, at the attribute-pair grain, pooled across the synthetic combinations.
+
+Four things about them are load-bearing:
+
+- **They are computed from every per-clash row, not from the driver tables.** Those are already cut
+  per cell by `--driver-top-n` and floored by `--driver-min-count`; aggregating a per-cell top-N
+  into a country total is biased twice over — it over-weights pairs that merely clear many cells'
+  cut, and it erases pairs that are broad but never locally top-ranked.
+- **The real population is a separate series, never pooled into the bars.** It is an ordinary
+  competitor with no reference role, but it is also one 100-persona unit against ~50 synthetic ones,
+  so pooling it would both bury it and let its contribution be read as the synthetic population's.
+  It is drawn as a red diamond over its own denominator, the same encoding it already has on the
+  forest plot, and both series' numbers sit in aligned columns beside the axes.
+- **The bars do not sum to the level's overall rate**, for the same three reasons the driver tables
+  do not. The caveat is printed on the figure, not only here.
+- **S1 carries the never-a-defect caption**, taken from the same per-level `direction` the S1
+  heatmap's neutral ramp is chosen from.
+
+`--pair-summary-top-n` (default 15) bounds the bars; what falls below the cut is printed on the
+figure, including how many of the hidden pairs were raised **only** by the real population (those
+rank at zero synthetic personas and so almost never make the cut). A level with no clash at all
+renders an explaining figure rather than empty axes — on the current Swedish data the real
+population raises no S3 clash whatsoever, which the S3 figure states as a column of `0.0000 n=0`
+rather than as an absent series.
 
 Two gates run before any statistic, because both failure modes produce plausible-looking wrong
 numbers:
