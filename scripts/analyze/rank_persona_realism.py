@@ -26,6 +26,9 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
     {country}/scb_contrast.csv            one row per synthetic competitor vs the real population
     {country}/headline_map.png/.svg       Axis A x Axis B map (real population plotted, not pinned)
     {country}/impossibility_forest.png/.svg  every competitor's rate + bootstrap CI, rank order
+    {country}/impossibility_heatmap.png/.svg model x method grid of the rate, with the real
+                                          population as a separate band (grey = not judged,
+                                          which is NOT a rate of zero)
 
 Two gates run before any statistic (both failure modes produce plausible-looking wrong
 numbers, so neither is a warning): a combination is consumed only if its report, its
@@ -71,6 +74,7 @@ from population_synthetic.analysis.realism_ranking.builder import (
 from population_synthetic.analysis.realism_ranking.charts import (
     plot_headline_map,
     plot_impossibility_forest,
+    plot_impossibility_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors
 from population_synthetic.analysis.utils.figures import save_figure
@@ -303,6 +307,7 @@ def main() -> None:
             for name, build in (
                 ("headline_map", lambda: plot_headline_map(ranking)),
                 ("impossibility_forest", lambda: plot_impossibility_forest(ranking)),
+                ("impossibility_heatmap", lambda: plot_impossibility_heatmap(ranking)),
             ):
                 try:
                     saved = save_figure(build(), country_dir / f"{name}.png", dpi=args.dpi)

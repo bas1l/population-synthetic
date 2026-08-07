@@ -141,6 +141,7 @@ Outputs per country under `03_Analysis/realism_ranking/<country>/`:
 | `scb_contrast.csv` | one row per synthetic competitor vs the real population, both axes |
 | `headline_map.png/.svg` | Axis A x Axis B; the real population is a plotted competitor, **not** pinned to the origin |
 | `impossibility_forest.png/.svg` | every competitor's rate + bootstrap CI, rank order |
+| `impossibility_heatmap.png/.svg` | the rate as a model × method grid, with the real population as a separate band beneath it. Grey `n/a` = that pair was never judged, which is **not** a rate of zero |
 
 Two gates run before any statistic, because both failure modes produce plausible-looking wrong
 numbers:

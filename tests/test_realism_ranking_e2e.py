@@ -38,6 +38,7 @@ from population_synthetic.analysis.realism_ranking.builder import (  # noqa: E40
 from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_headline_map,
     plot_impossibility_forest,
+    plot_impossibility_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors  # noqa: E402
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
@@ -148,10 +149,12 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
         (out_dir / name).write_text("ok", encoding="utf-8")
     save_figure(plot_headline_map(ranking), out_dir / "headline_map.png", dpi=80)
     save_figure(plot_impossibility_forest(ranking), out_dir / "impossibility_forest.png", dpi=80)
+    save_figure(plot_impossibility_heatmap(ranking), out_dir / "impossibility_heatmap.png", dpi=80)
 
     for name in ("realism_ranking.json", "realism_summary.csv", "scb_contrast.csv",
                  "headline_map.png", "headline_map.svg",
-                 "impossibility_forest.png", "impossibility_forest.svg"):
+                 "impossibility_forest.png", "impossibility_forest.svg",
+                 "impossibility_heatmap.png", "impossibility_heatmap.svg"):
         assert (out_dir / name).is_file(), name
 
 

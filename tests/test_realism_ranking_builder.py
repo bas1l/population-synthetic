@@ -23,6 +23,7 @@ from population_synthetic.analysis.realism_ranking.builder import (  # noqa: E40
 from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_headline_map,
     plot_impossibility_forest,
+    plot_impossibility_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord  # noqa: E402
 from population_synthetic.analysis.utils.realism_csv import RealismPersonaRow  # noqa: E402
@@ -76,7 +77,11 @@ def _build(records, **kwargs):
 
 def test_impossibility_rate_and_denominator_are_hand_computable():
     record = _record("s1", n_impossible=2, typicalities=[5.0, 6.0, 7.0, 8.0])  # 2 of 6
-    ranking = _build([record, _record("s2", n_impossible=0, typicalities=[5.0, 5.0])])
+    ranking = _build([
+        record,
+        # A distinct model: two competitors may not share one model x method cell.
+        _record("s2", n_impossible=0, typicalities=[5.0, 5.0], model="claude_sonnet"),
+    ])
     entry = next(e for e in ranking["axis_a"]["ranking"] if e["slug"] == "s1")
     assert entry["rate"] == pytest.approx(2 / 6)
     assert entry["impossible_count"] == 2
@@ -308,7 +313,10 @@ def test_combination_with_no_successful_persona_has_no_rate_and_ranks_last():
         provenance=dict(_PROVENANCE), report_path="/fake/dead.json",
         personas_csv_path="/fake/dead_personas.csv",
     )
-    ranking = _build([empty, _record("s1", n_impossible=1, typicalities=[5.0, 6.0])])
+    ranking = _build([
+        empty,
+        _record("s1", n_impossible=1, typicalities=[5.0, 6.0], model="claude_sonnet"),
+    ])
     last = ranking["axis_a"]["ranking"][-1]
     assert last["slug"] == "dead"
     assert last["rate"] is None          # not an imputed 0.0
@@ -338,6 +346,111 @@ def test_charts_render_from_a_built_ranking():
     ranking = _build(_factor_fixture())
     assert plot_headline_map(ranking) is not None
     assert plot_impossibility_forest(ranking) is not None
+    assert plot_impossibility_heatmap(ranking) is not None
+
+
+# --------------------------------------------------------------------------- #
+# Axis A grid (model x method heatmap input)                                   #
+# --------------------------------------------------------------------------- #
+
+
+def test_grid_places_each_combination_at_its_model_method_coordinate():
+    ranking = _build(_factor_fixture())
+    grid = ranking["axis_a"]["grid"]
+    assert grid["models"] == ["claude_haiku", "claude_sonnet"]
+    assert grid["methods"] == ["all_pick", "all_pick_dag"]
+    for model in grid["models"]:
+        for method in grid["methods"]:
+            cell = grid["cells"][model][method]
+            assert cell is not None, (model, method)
+            assert cell["slug"] == f"swedish_{method}_{model}"
+            assert cell["denominator"] == 5          # 1 impossible + 4 possible
+            assert cell["rate"] == pytest.approx(1 / 5)
+
+
+def test_grid_rates_equal_the_ranking_rates():
+    """The heatmap and the forest plot can never disagree: one source, not two."""
+    ranking = _build(_factor_fixture())
+    grid = ranking["axis_a"]["grid"]
+    by_slug = {e["slug"]: e for e in ranking["axis_a"]["ranking"]}
+    for model in grid["models"]:
+        for method in grid["methods"]:
+            cell = grid["cells"][model][method]
+            entry = by_slug[cell["slug"]]
+            assert cell["rate"] == entry["rate"]
+            assert (cell["ci_lo"], cell["ci_hi"]) == (entry["ci_lo"], entry["ci_hi"])
+            assert cell["denominator"] == entry["denominator"]
+
+
+def test_unjudged_pair_is_none_not_zero():
+    """The load-bearing guard: an absent cell must never read as a perfect score.
+
+    A rate of 0.0 is the BEST possible result. Rendering an unjudged combination at
+    zero would report a combination nobody judged as the most coherent in the sweep.
+    """
+    records = [
+        _record("swedish_all_pick_claude_haiku", n_impossible=1, typicalities=[5.0, 6.0],
+                model="claude_haiku", strategy="all_pick"),
+        _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0, typicalities=[5.0, 6.0],
+                model="claude_sonnet", strategy="all_pick_dag"),
+    ]  # the other two corners of the 2x2 were never judged
+    grid = _build(records)["axis_a"]["grid"]
+
+    assert grid["cells"]["claude_haiku"]["all_pick_dag"] is None
+    assert grid["cells"]["claude_sonnet"]["all_pick"] is None
+    # ... and the judged corners are present, one of them with a genuine 0.0.
+    assert grid["cells"]["claude_haiku"]["all_pick"]["rate"] == pytest.approx(1 / 3)
+    assert grid["cells"]["claude_sonnet"]["all_pick_dag"]["rate"] == pytest.approx(0.0)
+    assert "NOT an impossibility rate of zero" in grid["note"]
+
+
+def test_real_population_is_carried_separately_and_is_not_a_grid_cell():
+    ranking = _build(_factor_fixture())
+    grid = ranking["axis_a"]["grid"]
+    assert grid["real"]["slug"] == "real_swedish"
+    assert grid["real"]["rate"] == pytest.approx(0.0)
+    assert grid["real"]["denominator"] == 3
+    # It has no model/method, so it must not appear anywhere in the grid proper.
+    assert "" not in grid["models"] and "" not in grid["methods"]
+    assert "real_swedish" not in grid["models"]
+    slugs = {
+        cell["slug"]
+        for row in grid["cells"].values() for cell in row.values() if cell is not None
+    }
+    assert "real_swedish" not in slugs
+
+
+def test_grid_real_is_none_without_a_real_competitor_and_the_heatmap_still_renders():
+    records = [r for r in _factor_fixture() if not r.is_real_reference]
+    ranking = _build(records)
+    assert ranking["axis_a"]["grid"]["real"] is None
+    assert plot_impossibility_heatmap(ranking) is not None
+
+
+def test_heatmap_raises_rather_than_emitting_an_empty_figure():
+    empty = CompetitorRecord(
+        slug="dead", country=_COUNTRY, model="m", strategy="s", is_real_reference=False,
+        n_personas=0, n_failed=1, personas=(), impossibility={"rate": None},
+        dispersion={}, reliability={}, provenance=dict(_PROVENANCE),
+        report_path="/fake/dead.json", personas_csv_path="/fake/dead_personas.csv",
+    )
+    with pytest.raises(ValueError):
+        plot_impossibility_heatmap(_build([empty]))
+
+
+def test_duplicate_grid_coordinate_raises_naming_both_slugs():
+    """Slugs are unique by construction, so a duplicate cell means a corrupt input."""
+    a = _record("swedish_all_pick_claude_haiku", n_impossible=1, typicalities=[5.0])
+    b = _record("swedish_all_pick_claude_haiku_copy", n_impossible=0, typicalities=[5.0])
+    with pytest.raises(ValueError, match="same grid cell"):
+        _build([a, b])
+
+
+def test_synthetic_competitor_without_a_coordinate_raises():
+    orphan = _record("swedish_orphan", n_impossible=1, typicalities=[5.0],
+                     model="", strategy="")
+    with pytest.raises(ValueError, match="missing its model/method coordinate"):
+        _build([orphan])
 
 
 def test_charts_raise_rather_than_emitting_an_empty_figure():

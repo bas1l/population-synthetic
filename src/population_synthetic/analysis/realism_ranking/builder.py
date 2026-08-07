@@ -171,6 +171,95 @@ def _axis_a_ranking(
     return entries
 
 
+def _axis_a_grid(ranking: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Reshape the Axis A ranking into a model x method grid plus the real population.
+
+    Built **from the ranking entries**, never recomputed, so the heatmap and the forest
+    plot cannot drift apart: both render the same numbers from the same objects.
+
+    Three properties the shape is chosen to guarantee:
+
+    * **An unjudged pair is ``None``, not ``0.0``.** A rate of zero is the best possible
+      result -- not one impossible persona -- so an absent cell rendered as zero would
+      report a combination that was never judged as the most coherent in the sweep. The
+      cell stays ``None`` here and the chart draws it as an explicit ``n/a``.
+    * **The real population is not a grid cell.** It has no model and no method, so it
+      has no coordinate; forcing it into a row would invent a factor level. It is carried
+      separately under ``real`` and drawn as its own band -- the same reason the factor
+      tests hold it out.
+    * **Every rate keeps its denominator**, so a cell is never read without the base it
+      was computed over.
+
+    Raises ``ValueError`` if two combinations claim the same ``(model, method)`` cell, or
+    if a synthetic competitor is missing either coordinate. Slugs are
+    ``{country}_{strategy}_{model}`` and unique by construction, so either case means the
+    consumption set is corrupt -- silently overwriting one with the other would publish a
+    grid that omits a judged combination without saying so.
+    """
+    models: list[str] = []
+    methods: list[str] = []
+    cells: dict[str, dict[str, dict[str, Any] | None]] = {}
+    placed: dict[tuple[str, str], str] = {}
+    real: dict[str, Any] | None = None
+
+    for entry in ranking:
+        if entry["is_real_reference"]:
+            real = {
+                "slug": entry["slug"],
+                "rate": entry["rate"],
+                "ci_lo": entry["ci_lo"],
+                "ci_hi": entry["ci_hi"],
+                "denominator": entry["denominator"],
+            }
+            continue
+        model, method = entry["model"], entry["strategy"]
+        if not model or not method:
+            raise ValueError(
+                f"Competitor {entry['slug']!r} is not the real population but is missing its "
+                f"model/method coordinate (model={model!r}, strategy={method!r}); it cannot be "
+                "placed on the model x method grid. The consumption set is corrupt -- re-run "
+                "scripts/analyze/analyze_persona_realism.py for this combination."
+            )
+        if (model, method) in placed:
+            raise ValueError(
+                f"Two combinations claim the same grid cell (model={model!r}, method={method!r}): "
+                f"{placed[(model, method)]!r} and {entry['slug']!r}. Slugs are unique by "
+                "construction, so this means the consumption set holds a duplicate."
+            )
+        placed[(model, method)] = entry["slug"]
+        if model not in models:
+            models.append(model)
+        if method not in methods:
+            methods.append(method)
+        cells.setdefault(model, {})[method] = {
+            "slug": entry["slug"],
+            "rate": entry["rate"],
+            "ci_lo": entry["ci_lo"],
+            "ci_hi": entry["ci_hi"],
+            "denominator": entry["denominator"],
+        }
+
+    models.sort()
+    methods.sort()
+    # Materialise the full rectangle so an unjudged pair is an explicit None rather than a
+    # missing key a reader has to notice the absence of.
+    full = {model: {method: cells.get(model, {}).get(method) for method in methods}
+            for model in models}
+
+    return {
+        "models": models,
+        "methods": methods,
+        "cells": full,
+        "real": real,
+        "note": (
+            "A null cell means that model x method combination was not judged (or was not "
+            "consumable) -- it is NOT an impossibility rate of zero, which would be the best "
+            "possible result. The real population is carried under 'real' rather than as a grid "
+            "row: it has no model and no method, so it has no cell on this grid."
+        ),
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Axis A -- pairwise contrasts against the real competitor                     #
 # --------------------------------------------------------------------------- #
@@ -502,6 +591,7 @@ def build_ranking(
         },
         "axis_a": {
             "ranking": ranking,
+            "grid": _axis_a_grid(ranking),
             "scb_contrast": contrasts,
             "correction": CORRECTION,
         },
