@@ -286,7 +286,13 @@
         "Ensamstående biologisk mor",
         "SingleParent-Mother",
         "mother and grandmother",
-        "mother and maternal grandmother"
+        "mother and maternal grandmother",
+        "single parent (mother)",
+        "Single-parent household (mother)",
+        "Endast mor",
+        "Endast mamma",
+        "one parent (mother)",
+        "Enkel förälder (mamma)"
       ],
       "contains": [
         "single mother",
@@ -315,7 +321,9 @@
         "Ensamstående förälder (far)",
         "singlefather",
         "father and grandfather",
-        "father and grandmother"
+        "father and grandmother",
+        "Single-parent household (father)",
+        "Enkel förälder (far)"
       ],
       "contains": [
         "single father",

@@ -234,7 +234,12 @@
         "Högskoleutbildad",
         "Master",
         "post-secondary",
-        "higher"
+        "higher",
+        "Socionomexamen",
+        "Civilekonomexamen",
+        "Högskola (3 år)",
+        "Högskola (3 år eller mer)",
+        "Högskola 3 år eller mer"
       ],
       "contains": [
         "post-secondary 3",

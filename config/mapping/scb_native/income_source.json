@@ -85,7 +85,12 @@
         "Företagsinkomst",
         "Näringsverksamhet",
         "Frilansinkomst",
-        "Inkomst av tjänst"
+        "Inkomst av tjänst",
+        "lon_fran_anstallning",
+        "Inkomst från tjänst",
+        "Consulting fees",
+        "Konsulttjänster",
+        "Konsultarvoden"
       ],
       "contains": [
         "wage",
@@ -170,6 +175,7 @@
         "Studiemedel",
         "Studiebidrag",
         "Bostadsbidrag",
+        "Bostadstillägg",
         "Parental Support",
         "Parental financial support",
         "Parents financial support",
@@ -185,7 +191,8 @@
         "Child support",
         "Barnbidrag",
         "Bistånd",
-        "Ekonomiskt stöd från föräldrar"
+        "Ekonomiskt stöd från föräldrar",
+        "Arbetsförmedlingen"
       ],
       "contains": [
         "insurance",

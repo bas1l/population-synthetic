@@ -194,7 +194,8 @@
         "Mellansk klass",
         "Mellanstand",
         "Mittelklasse",
-        "Mitten"
+        "Mitten",
+        "pensioner class"
       ],
       "contains": [
         "middle class",
@@ -270,7 +271,8 @@
         "Högklass",
         "Höginkomst",
         "high",
-        "upper"
+        "upper",
+        "Högstatus"
       ],
       "contains": [
         "wealthy",
