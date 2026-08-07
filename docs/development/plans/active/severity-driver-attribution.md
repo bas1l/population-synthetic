@@ -87,15 +87,25 @@ actionable fact the judge produces, and it is currently unreachable.
       raises, naming both files and `--rewrite-artifacts`.
 - [x] A combination with no clashes at all produces a **header-only** `{combo}_clashes.csv`, not an
       absent file; the reader accepts it and raises only on a genuinely absent file.
-- [ ] `realism_ranking.json` contains a `severity_drivers` block whose per-cell denominators are
-      identical to the corresponding `severity.levels.{L}.grid` cell denominators.
-- [ ] `severity_drivers_s3.csv` for `swedish_02_all_pick_v2_ollama_mistral_nemo_12b` ranks
-      `employment_status × employment_type` first, and its nested value row names
-      `Student × Permanent Full-time`.
-- [ ] Every emitted driver row carries its denominator and the level's `penalised` flag.
-- [ ] Excluded combinations (real reference where inapplicable, zero-successful-round personas,
-      unresolvable attribute names) are counted and reported, never silently dropped.
-- [ ] `ruff check src/` clean; `pytest` green.
+- [x] `realism_ranking.json` contains a `severity_drivers` block whose per-cell denominators are
+      identical to the corresponding `severity.levels.{L}.grid` cell denominators — guaranteed by
+      construction (one `_affected_at` / one `len(record.personas)`) and asserted cell by cell.
+- [x] `severity_drivers_s3.csv` for `swedish_02_all_pick_v2_ollama_mistral_nemo_12b` ranks
+      `employment_status × employment_type` first, ~~and its nested value row names
+      `Student × Permanent Full-time`~~ **and its nested value rows name
+      `Unemployed × Permanent Full-time` (6) then `Student × Permanent Full-time` (5)**. The rank-1
+      placement holds only via the declared tie-break — the pair is tied at 12 personas with
+      `employment_status × income_source` — and the value-row order in the original criterion was
+      wrong. See Manual Verification for the full corrected reading.
+- [x] Every emitted driver row carries its denominator and the level's `penalised` flag — and, for
+      the same reason, its counting unit and the non-additivity warning.
+- [x] Excluded combinations (real reference where inapplicable, zero-successful-round personas,
+      unresolvable attribute names) are counted and reported, never silently dropped. On the current
+      `swedish_02` data: 0 unconsumable combinations, 0 personas with no successful round, 5
+      unresolved clashes, 320 drivers below min-count and 45 below the top-n cut.
+- [x] `ruff check src/` clean; `pytest` green (one **pre-existing**, unrelated failure:
+      `test_axis_facet_defaults.py::test_flow_default_selects_exactly_the_highest_version_strategies`,
+      caused by an uncommitted working-tree edit to `config/gui/flows/generate_parallel.yaml`).
 
 ## Definitions
 
@@ -387,31 +397,71 @@ consumer wired to it yet.
 ### Phase 3: Consumer — load, rank, emit
 **Goal:** `severity_drivers` in the JSON and six CSVs beside the heatmaps.
 
-- [ ] 3.1 — `loader.py`: add `clashes_csv_path` at `:160`, a missing-file skip branch mirroring the
+**Started:** 2026-08-07
+**Completed:** 2026-08-07
+
+- [x] 3.1 — `loader.py`: add `clashes_csv_path` at `:160`, a missing-file skip branch mirroring the
       personas-CSV branch at `:164-167` (same remediation wording naming `--rewrite-artifacts`), the
       reader call at `:173` with the reconciliation counts derived from the already-loaded rows, and
       a `clashes: tuple[RealismClashRow, ...]` field on `CompetitorRecord`.
-- [ ] 3.2 — `builder.py`: add `_severity_drivers(records, *, top_n, min_count)` above
+- [x] 3.2 — `builder.py`: add `_severity_drivers(records, *, top_n, min_count)` above
       `build_ranking`, modelled directly on `_severity_grids` — same adapter dicts with `"_record"`,
       same default-argument closure binding, same denominator, reusing the `directions` dict.
-- [ ] 3.3 — Suppress or flag ranks below `min_count` rather than publishing a rank-1 driver with
+- [x] 3.3 — Suppress or flag ranks below `min_count` rather than publishing a rank-1 driver with
       n=2; count what was suppressed into the block.
-- [ ] 3.4 — Insert `"severity_drivers": _severity_drivers(...)` into the `build_ranking` return
+- [x] 3.4 — Insert `"severity_drivers": _severity_drivers(...)` into the `build_ranking` return
       literal beside `"severity"` (`:728`), with the same two-line comment stating it is outside
       `axis_a` and changes no existing number. Append `_Skip` records rather than emitting `None`
       when it cannot compute.
-- [ ] 3.5 — Add two module-level flatteners returning `list[dict]`, keyed by slug like
+- [x] 3.5 — Add two module-level flatteners returning `list[dict]`, keyed by slug like
       `summary_rows` / `scb_contrast_rows`, and add both to `__all__`.
-- [ ] 3.6 — `rank_persona_realism.py`: add `--driver-top-n` and `--driver-min-count`, resolved at the
+- [x] 3.6 — `rank_persona_realism.py`: add `--driver-top-n` and `--driver-min-count`, resolved at the
       edge and passed as arguments (the builder docstring forbids it reading config); six
       `_write_csv` calls with their `None`-message branches.
-- [ ] 3.7 — Report exclusions: combinations skipped, personas with zero successful rounds, and the
+- [x] 3.7 — Report exclusions: combinations skipped, personas with zero successful rounds, and the
       `n_unresolved` total, all surfaced in the block and on stdout.
+
+**Implementation notes (deviations worth a reviewer's attention):**
+
+- **`_severity_drivers` takes two more arguments than the task states**: `skips` (positionally, as
+  `_factor_significance(records, factor, skips)` already does) and `skipped_combinations`. Task 3.4
+  requires it to append `_Skip` records and 3.7 requires it to report skipped combinations; neither
+  is reachable from `(records, *, top_n, min_count)` alone, and the alternative — mutating the
+  returned block from `build_ranking` — would put half the block's construction outside the function
+  that owns it.
+- **`build_ranking` gained `driver_top_n` / `driver_min_count` as *required* keyword arguments.** A
+  default here would be a second source of truth for a number `rank_persona_realism.py` already
+  declares, and the two could silently disagree; the module contract ("values arrive as arguments")
+  is what makes required the right answer rather than merely a strict one. The call sites in the
+  builder and e2e tests pass fixture-appropriate bounds through one helper each.
+- **The block is built before the document literal, not inside it.** It appends to `skips`, which
+  the same literal reads under `skipped_tests`, so building it inline would make the block's
+  completeness depend on dict-literal key order — a trap for the next person to reorder the
+  document.
+- **Three things were lifted out of `_severity_grids` rather than copied**: the per-level
+  `directions` dict (now the module-level `SEVERITY_DIRECTIONS`), the `_grid` adapter-entry builder
+  (`_grid_entries`), and the "how many personas carry a clash at this level" count (`_affected_at`).
+  The last one is load-bearing: the drivers exist to explain the heatmap cell's `affected`, and two
+  implementations of that count could drift into explaining a different number than the one shown.
+- **`min_count` applies at both grains**, attribute pair and category pair, with the suppressed
+  counts reported separately at each. A rank-1 *value* on n=1 is as over-readable as a rank-1 pair
+  on n=1, and a pair whose value list is empty because every category pair was a singleton is itself
+  the finding (a broad problem with no single category driver) — which is why the count travels.
+- **The cell payload carries five fields beyond the shape the plan sketches**: `model` / `strategy` /
+  `is_real_reference` (so the flat tables are self-contained — the real competitor has no grid
+  coordinate to re-derive them from) and `n_distinct_pairs` / `n_truncated` beside `n_suppressed`.
+- **Ranks are positional, not shared on ties** (unlike `_axis_a_ranking`, where a tie shares a rank).
+  The tie-break is total and declared, the equality stays visible in `n_personas`, and every grid
+  note says to read the count rather than the rank.
 
 **Files Modified:**
 - `src/population_synthetic/analysis/realism_ranking/loader.py` — third contract file, new record field
 - `src/population_synthetic/analysis/realism_ranking/builder.py` — `_severity_drivers`, flatteners, `__all__`
 - `scripts/analyze/rank_persona_realism.py` — two CLI flags, six CSV writes
+- `tests/test_realism_ranking_loader.py` — `clashes_csv` switch + the new gate/reconciliation tests
+- `tests/test_realism_ranking_builder.py` — the `_with_clashes` fixture mutator + the driver suite
+- `tests/test_realism_ranking_e2e.py` — the six-table end-to-end
+- `tests/test_persona_realism_smoke.py` — optional S2/S1 clash markers on the stub judge
 
 **Dependencies:** Phase 2
 
@@ -434,12 +484,23 @@ consumer wired to it yet.
       confirm identical output.
 - [x] Reconciliation mismatch raises, naming both files and `--rewrite-artifacts` (unit level,
       against hand-built rows; the end-to-end producer↔consumer version stays under Integration).
-- [ ] `_severity_drivers` on a hand-computed fixture — extend the `_with_severities` mutator pattern
-      (`test_realism_ranking_builder.py:464-471`) with clash rows.
-- [ ] Tie-break determinism: two drivers with equal counts always rank in the same order.
-- [ ] `min_count` suppression is counted, not silently dropped.
-- [ ] Assert `severity_drivers` has not leaked into `axis_a`, contrasts, or factor tests, mirroring
-      `test_realism_ranking_builder.py:553-556`.
+- [x] `_severity_drivers` on a hand-computed fixture — extend the `_with_severities` mutator pattern
+      (`test_realism_ranking_builder.py:464-471`) with clash rows. *(A sibling `_with_clashes`
+      mutator: it attaches the clash rows **and derives** the per-persona `clash_count_s{L}` columns
+      from them, mirroring the loader's reconciliation inside the fixture. Setting the two
+      independently would let the denominator-agreement test pass only because both sides were
+      hand-written to agree.)*
+- [x] Tie-break determinism: two drivers with equal counts always rank in the same order — asserted
+      both by name order and by re-building from the reversed row list.
+- [x] `min_count` suppression is counted, not silently dropped; `top_n` truncation is counted
+      **separately**, since those two exclusions mean different things.
+- [x] Assert `severity_drivers` has not leaked into `axis_a`, contrasts, or factor tests, mirroring
+      `test_realism_ranking_builder.py:553-556` — plus a stronger form: the same records built with
+      loose and tight driver bounds produce identical `axis_a` / `axis_b` / `severity` /
+      `factor_significance` blocks. *(The mixed logit is excluded from that comparison: its
+      variational fit is not bit-reproducible between two calls, a property of the fitter that would
+      mask rather than reveal a leak.)*
+- [x] Degenerate bounds (`top_n < 1`, `min_count < 1`) raise rather than emitting an empty table.
 
 ### Integration Tests
 - [x] **Reconciliation** — distinct `(persona, pair, severity)` count per level equals the summed
@@ -449,17 +510,26 @@ consumer wired to it yet.
       unsorted order raises the row-level invariant. A pair **renamed** without changing the count is
       by construction invisible to a count-based invariant — noted so a reader does not read the
       check as stronger than it is.)*
-- [ ] Loader gate: a combination directory missing `{combo}_clashes.csv` yields the skip reason under
+- [x] Loader gate: a combination directory missing `{combo}_clashes.csv` yields the skip reason under
       default and raises under `strict`, using the `_write_combo(..., clashes_csv=False)` switch
-      added to `test_realism_ranking_loader.py:61-105`.
-- [ ] Denominator agreement: every `severity_drivers` cell denominator equals the corresponding
-      `severity.levels.{L}.grid` cell denominator.
+      added to `test_realism_ranking_loader.py:61-105`. *(Plus the producer↔consumer reconciliation
+      at loader level — a header-only clashes CSV against personas declaring clashes raises naming
+      `--rewrite-artifacts` — and a test that the loaded record carries its clash rows.)*
+- [x] Denominator agreement: every `severity_drivers` cell denominator equals the corresponding
+      `severity.levels.{L}.grid` cell denominator. *(Extended to `affected`, to the grids' axes, and
+      to the real competitor's entry; and to the `None`-ness of each cell, so the two grids agree on
+      which pairs were never judged.)*
 - [x] `--rewrite-artifacts` CLI dispatch triple, extending
       `test_persona_realism_smoke.py:495-542`: `artifacts_force is True`, `force is False`,
       `plan_only is True`. *(Already asserted verbatim by
       `test_cli_combo_dispatch_skips_rewrite_when_nothing_changed`; no extension was needed, and it
       now covers the two new files because they sit under the same `force` gate.)*
-- [ ] e2e in `test_realism_ranking_e2e.py`: judge → rank on a `tmp_path` base produces all six CSVs.
+- [x] e2e in `test_realism_ranking_e2e.py`: judge → rank on a `tmp_path` base produces all six CSVs.
+      *(The stub judge gained two optional markers, `S2_CLASH` / `S1_CLASH`, that a **possible**
+      persona may carry — without them the fixture only ever produced S3 and two thirds of the
+      tables would have shipped untested. The rows are serialised through `csv.DictWriter` rather
+      than asserted in memory, because the flatteners' contract is that every value is a scalar a
+      CSV cell can hold.)*
 - [x] Order-independence: judging A-then-B vs B-then-A yields byte-identical new artifacts.
 
 ### Manual Verification
@@ -471,26 +541,49 @@ consumer wired to it yet.
       is precisely the case the plan-only guard exists for — without it the pass would have topped
       up 4551 personas. The 51 combinations reconciled clean against the strict reader: 2235 clash
       rows, 5 unresolved, 2 header-only.)*
-- [ ] Confirm `severity_drivers_s3.csv` ranks `employment_status × employment_type` first for
+- [x] ~~Confirm `severity_drivers_s3.csv` ranks `employment_status × employment_type` first for
       `swedish_02_all_pick_v2_ollama_mistral_nemo_12b`, with `Student × Permanent Full-time` as its
-      top value row — the case verified by hand in `persona_00213.json`. *(Phase 3 owns the table.
-      The underlying rows are now on disk and were read directly: at S3 that combination has
-      `employment_status × employment_type` and `employment_status × income_source` **tied** at 12
-      rows each, so the plan's "first" depends on the declared tie-break (`n_personas` desc →
-      `attr_a` → `attr_b`), which does put `employment_type` ahead. Its value rows are
-      `Unemployed × Permanent Full-time` (6), then `Student × Permanent Full-time` (5) — so
-      `Student × …` is the second value row, not the first. Phase 3 should assert what the data
-      says, not the number recorded here from an earlier hand-check.)*
-- [ ] Read `severity_drivers_s1.csv` for a strong model and confirm the S1 drivers read as
-      tail-reach, not defects.
-- [ ] Confirm the SCB row (`real_swedish_02`) appears in all six tables as an ordinary competitor.
+      top value row~~ — **the emitted table was read, and the second half of this expectation is
+      wrong.** Corrected statement of what the data says (`--driver-top-n 5 --driver-min-count 3`):
+      the cell has exactly two S3 drivers, `employment_status × employment_type` and
+      `employment_status × income_source`, **tied at 12 personas each** (prevalence 0.12 over a
+      denominator of 100, matching the S3 heatmap cell and its `affected = 12` exactly — the same 12
+      personas carry both). The declared tie-break puts `employment_type` at rank 1. Its value rows
+      are `Unemployed × Permanent Full-time` (6) then `Student × Permanent Full-time` (5), so
+      `Student × …` is the **second** value row, not the first. The rank-2 pair's values are
+      `Unemployed × Wage / Business` (7) then `Student × Wage / Business` (5). The original
+      expectation came from a hand-check of a single persona and was never a claim about the ranking.
+- [x] Read `severity_drivers_s1.csv` for a strong model and confirm the S1 drivers read as
+      tail-reach, not defects. *(They do, and the sharper finding is what is **absent**:
+      `swedish_02_all_pick_v2_claude_sonnet` has no S1 driver clearing min-count at all, and
+      `..._claude_haiku` has one — `Upper Secondary ≤2 yrs × Middle Class`, 16% — while SCB itself
+      carries five, led by `civil_status × household_size` at 27% (`Married × 1-person household`,
+      `Owner-occupied villa × Poverty`). Every one of those is an unusual person, not an impossible
+      one, and the strong models producing **fewer** of them than the real population is the
+      mode-collapse concern Axis B exists for, seen from a second direction. 42 of the 52 competitors
+      have at least one S1 driver; the largest is 80/100 personas.)*
+- [x] ~~Confirm the SCB row (`real_swedish_02`) appears in all six tables as an ordinary competitor.~~
+      **Corrected:** SCB is *enumerated* in all six tables as an ordinary competitor — nothing holds
+      it out, and `_grid` places it by the same `is_real_reference` flag as everywhere else — but it
+      appears in four of them, because it has no driver to show in the other two. It carries **zero**
+      S3 clashes in the whole 100-persona sample and only 7 S2 clash rows, of which one pair
+      (`employment_status × income_source`, 3 personas) clears min-count and none of whose category
+      pairs do. So: 5 rows in `severity_drivers_s1.csv`, 14 in `severity_driver_values_s1.csv`, 1 in
+      `severity_drivers_s2.csv`, 0 in `severity_driver_values_s2.csv` and 0 in either S3 table. That
+      absence is a **measurement**, not an exclusion, and is arguably the most interesting single
+      number the tables produced: under this judge the chain-sampled reference population emitted no
+      hard contradiction at all, and 198 of its 205 clash rows are S1.
 
 ### Edge Cases
 - [x] A combination with zero clashes at every level (header-only file; the `drivers: []` cell is
       Phase 3).
 - [x] A persona with zero successful rounds (contributes no rows; still counted in the denominator).
-- [ ] A cell where every persona shares one clash (prevalence 1.0).
-- [ ] An unjudged `(model, method)` pair — `None`, never `0.0`, per `_grid`'s guarantee.
+- [x] A cell where every persona shares one clash (prevalence 1.0), at both grains.
+- [x] An unjudged `(model, method)` pair — `None`, never `0.0`, per `_grid`'s guarantee. Asserted
+      against the neighbouring case it must stay distinct from: a judged cell with no clash has
+      `drivers: []`, which claims "nothing drove this", while `None` claims nothing at all.
+- [x] A cell whose personas declare clashes but whose per-clash rows hold none — records a `_Skip`
+      naming `--rewrite-artifacts` rather than publishing an empty driver list as an answer.
 - [x] A judge-hallucinated attribute name → `unresolved` row, counted, run does not fail.
 - [x] `n_rounds > 1` (the current data is all `n_rounds: 1`; the round dimension must be exercised
       by a fabricated fixture).
@@ -499,20 +592,24 @@ consumer wired to it yet.
 
 ## Documentation Plan
 
-- [ ] `docs/development/persona-realism-judge.md:99-104` — add both files to the per-combination
+- [x] `docs/development/persona-realism-judge.md:99-104` — add both files to the per-combination
       artefact table; extend the `--rewrite-artifacts` section (`:106-127`) and the schema-version
-      note (`:172-175`).
-- [ ] `docs/architecture/commands.md:211-215` — the regeneration invocation and the two new ranking
-      flags.
-- [ ] `config/analysis/analysis_registry.yaml:171-220` — both task descriptions enumerate their
+      note (`:172-175`). *(Also: the ranking output table gains the six driver files, and a new
+      "severity drivers" section states the three properties a reader needs before reading one.)*
+- [x] `docs/architecture/commands.md:211-215` — the regeneration invocation and the two new ranking
+      flags. *(Plus the note that a pre-existing output base is skipped until regenerated.)*
+- [x] `config/analysis/analysis_registry.yaml:171-220` — both task descriptions enumerate their
       published outputs in prose; add the new files.
-- [ ] `CLAUDE.md` — the `persona_realism` / `realism_ranking` architecture paragraph gains the
+- [x] `CLAUDE.md` — the `persona_realism` / `realism_ranking` architecture paragraph gains the
       per-clash contract file.
-- [ ] New ADR — a second on-disk contract file on the same seam, plus the deliberate
+- [x] New ADR — a second on-disk contract file on the same seam, plus the deliberate
       no-denominator-on-the-row divergence. The existing ADR records two decisions together because
       the second only became expressible once the first was made; this is the same shape.
-- [ ] The counting-unit and non-additivity footnote must appear on every emitted table and in the
-      JSON block, not only in the docs.
+      → `docs/development/decisions/2026-08-07-per-clash-contract-and-severity-drivers.md`
+- [x] The counting-unit and non-additivity footnote must appear on every emitted table and in the
+      JSON block, not only in the docs. *(As the `counting_unit` / `non_additive` columns on every
+      row of all six tables, and as fields on the block — repeated per row deliberately: a CSV has
+      no footnote, and a column is the only place a caveat cannot be separated from its data.)*
 
 ---
 

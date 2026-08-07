@@ -16,6 +16,7 @@ The properties under test are the ones the split exists to guarantee:
 
 from __future__ import annotations
 
+import csv
 import json
 from typing import Any
 
@@ -33,6 +34,8 @@ from population_synthetic.analysis.persona_realism.runner import run_combo_judge
 from population_synthetic.analysis.realism_ranking.builder import (  # noqa: E402
     build_ranking,
     scb_contrast_rows,
+    severity_driver_rows,
+    severity_driver_value_rows,
     summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
@@ -77,12 +80,19 @@ def _cfg() -> JudgeConfig:
 
 
 def _population(attrs: list[str], *, n_impossible: int, n_possible: int, offset: int = 0):
-    """A tiny mapped population: *n_impossible* contradictory personas, then possible ones."""
+    """A tiny mapped population: *n_impossible* contradictory personas, then possible ones.
+
+    The possible personas alternate the stub judge's S2 / S1 clash markers, so every
+    severity level has something to attribute: the driver tables are per level, and a
+    fixture that only ever produced S3 would leave two thirds of them untested.
+    """
     marker = attrs[0]
     people: list[dict[str, Any]] = []
     for i in range(n_impossible + n_possible):
         person = {attr: f"val_{j}" for j, attr in enumerate(attrs)}
         person[marker] = "IMPOSSIBLE" if i < n_impossible else f"TYP{(i + offset) % 9 + 1}"
+        if i >= n_impossible:
+            person[attrs[1]] = "S2_CLASH" if (i - n_impossible) % 2 == 0 else "S1_CLASH"
         person["id"] = f"persona_{i:05d}"
         people.append(person)
     return people
@@ -101,6 +111,20 @@ def _judge(base, label, *, model, strategy, n_impossible, is_real=False, offset=
         out_dir, label, cfg=cfg, dpi=80, force=True,
         country=_COUNTRY, model=model, strategy=strategy, is_real_reference=is_real,
         expected_ids=list(summary.selected_ids), hard_rules=(), pricing=_PRICING,
+    )
+
+
+def _rank(records, **kwargs):
+    """``build_ranking`` with this fixture's driver bounds.
+
+    The bounds are required arguments -- the builder reads no config and the CLI owns
+    the defaults -- and this fixture's cells hold a handful of personas, so it ranks
+    from one persona up rather than from the CLI's production floor.
+    """
+    kwargs.setdefault("driver_top_n", 5)
+    kwargs.setdefault("driver_min_count", 1)
+    return build_ranking(
+        records, _COUNTRY, bootstrap=_cfg().bootstrap, variance_center="median", **kwargs
     )
 
 
@@ -138,8 +162,7 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
     assert skipped == []
     assert len(records) == 4
 
-    cfg = _cfg()
-    ranking = build_ranking(records, _COUNTRY, bootstrap=cfg.bootstrap, variance_center="median")
+    ranking = _rank(records)
     out_dir = tmp_path / "ranking" / _COUNTRY
     out_dir.mkdir(parents=True)
 
@@ -165,10 +188,56 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
         assert (out_dir / name).is_file(), name
 
 
+def test_ranking_emits_the_six_severity_driver_tables(judged_base, tmp_path):
+    """Judge -> rank on a fresh base produces both driver grains at all three levels.
+
+    Serialised through ``csv.DictWriter`` rather than asserted in memory, because the
+    flatteners' contract is that every value is a scalar a CSV cell can hold: a nested
+    list would round-trip as its ``repr`` and nobody would notice until the table was
+    read months later.
+    """
+    records, skipped = load_competitors(judged_base, axis_ids=_AXIS_IDS)
+    assert skipped == []
+    ranking = _rank(records)
+
+    out_dir = tmp_path / "drivers" / _COUNTRY
+    out_dir.mkdir(parents=True)
+    for level in ("S3", "S2", "S1"):
+        suffix = level.lower()
+        for name, rows in (
+            (f"severity_drivers_{suffix}.csv", severity_driver_rows(ranking, level)),
+            (f"severity_driver_values_{suffix}.csv", severity_driver_value_rows(ranking, level)),
+        ):
+            assert rows, name
+            with (out_dir / name).open("w", newline="", encoding="utf-8") as fh:
+                writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
+
+    written = sorted(p.name for p in out_dir.iterdir())
+    assert written == sorted(
+        [f"severity_drivers_s{n}.csv" for n in (1, 2, 3)]
+        + [f"severity_driver_values_s{n}.csv" for n in (1, 2, 3)]
+    )
+
+    # The stub judge's S3 clash is age_group x education_level, and the two contradictory
+    # personas of one combination are the cell it drove.
+    s3 = [row for row in severity_driver_rows(ranking, "S3")
+          if row["slug"] == "swedish_all_pick_dag_claude_haiku"]
+    assert [(row["attr_a"], row["attr_b"], row["n_personas"]) for row in s3] == [
+        ("age_group", "education_level", 2)
+    ]
+    assert s3[0]["denominator"] == 7 and s3[0]["penalised"] is True
+    # The real population is an ordinary competitor here too, and S1 is not a defect.
+    s1 = severity_driver_rows(ranking, "S1")
+    assert any(row["is_real_reference"] for row in s1)
+    assert all(row["penalised"] is False for row in s1)
+
+
 def test_ranking_json_satisfies_the_honesty_contract(judged_base):
     records, _ = load_competitors(judged_base, axis_ids=_AXIS_IDS)
     cfg = _cfg()
-    ranking = build_ranking(records, _COUNTRY, bootstrap=cfg.bootstrap, variance_center="median")
+    ranking = _rank(records)
 
     assert ranking["axis_a"]["correction"] == "holm"
     assert all(e["denominator"] is not None for e in ranking["axis_a"]["ranking"])
@@ -189,15 +258,14 @@ def test_ranking_json_satisfies_the_honesty_contract(judged_base):
 
 def test_ranking_is_reproducible_and_re_reads_without_re_judging(judged_base):
     """The aggregator is free to re-run: it reads files and touches no verdict cache."""
-    cfg = _cfg()
     caches = sorted(
         (analysis_output_dir("persona_realism", judged_base) / _COUNTRY).rglob("persona_[0-9]*.json")
     )
     before = {path: path.stat().st_mtime_ns for path in caches}
     assert before, "fixture should have produced verdict caches"
 
-    first = build_ranking(*_loaded(judged_base), bootstrap=cfg.bootstrap, variance_center="median")
-    second = build_ranking(*_loaded(judged_base), bootstrap=cfg.bootstrap, variance_center="median")
+    first = _rank(_loaded(judged_base)[0])
+    second = _rank(_loaded(judged_base)[0])
 
     assert first["axis_a"]["ranking"] == second["axis_a"]["ranking"]
     for path, mtime in before.items():

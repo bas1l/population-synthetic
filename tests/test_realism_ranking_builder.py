@@ -20,6 +20,8 @@ from population_synthetic.analysis.realism_ranking.builder import (  # noqa: E40
     CAVEATS,
     build_ranking,
     scb_contrast_rows,
+    severity_driver_rows,
+    severity_driver_value_rows,
     summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
@@ -29,6 +31,7 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_severity_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord  # noqa: E402
+from population_synthetic.analysis.utils.realism_clash_csv import RealismClashRow  # noqa: E402
 from population_synthetic.analysis.utils.realism_csv import RealismPersonaRow  # noqa: E402
 
 _BOOT = {"iterations": 200, "seed": 20260723, "ci_level": 0.95}
@@ -70,6 +73,10 @@ def _record(slug, *, n_impossible, typicalities, model="claude_haiku", strategy=
 
 
 def _build(records, **kwargs):
+    # The driver bounds are required arguments (the builder reads no config), so the
+    # helper pins permissive ones; the tests that are *about* them pass their own.
+    kwargs.setdefault("driver_top_n", 3)
+    kwargs.setdefault("driver_min_count", 1)
     return build_ranking(records, _COUNTRY, bootstrap=_BOOT, variance_center="median", **kwargs)
 
 
@@ -585,3 +592,324 @@ def test_charts_raise_rather_than_emitting_an_empty_figure():
         plot_headline_map(ranking)
     with pytest.raises(ValueError):
         plot_impossibility_forest(ranking)
+
+
+# --------------------------------------------------------------------------- #
+# severity drivers (what clashed -- reporting only, one grid per level)         #
+# --------------------------------------------------------------------------- #
+
+
+def _clash(record, persona_index, pair, values, severity, *, round_index=0, unresolved=False):
+    """One per-clash contract row for *record*'s persona at *persona_index*."""
+    persona = record.personas[persona_index]
+    return RealismClashRow(
+        persona_id=persona.persona_id, slug=record.slug, country=_COUNTRY,
+        model=record.model, strategy=record.strategy,
+        is_real_reference=record.is_real_reference, round_index=round_index,
+        attr_a=pair[0], attr_b=pair[1],
+        value_a="" if unresolved else values[0], value_b="" if unresolved else values[1],
+        severity=severity, unresolved=unresolved,
+    )
+
+
+def _with_clashes(record, clashes):
+    """Attach clash rows and derive the per-persona counts they imply.
+
+    Mirrors the loader's reconciliation invariant inside the fixture: the per-persona
+    ``clash_count_s{L}`` columns are the count of *distinct* ``(pair, severity)``
+    clashes per persona, so a fixture that set them independently could assert a
+    denominator agreement that only holds because both sides were hand-written.
+    """
+    distinct = {}
+    for row in clashes:
+        distinct.setdefault(row.persona_id, set()).add((row.attr_a, row.attr_b, row.severity))
+    personas = []
+    for persona in record.personas:
+        seen = distinct.get(persona.persona_id, set())
+        counts = {level: sum(1 for *_, s in seen if s == level) for level in ("S1", "S2", "S3")}
+        personas.append(dataclasses.replace(
+            persona, clash_count_s1=counts["S1"], clash_count_s2=counts["S2"],
+            clash_count_s3=counts["S3"], clash_count=sum(counts.values()),
+        ))
+    return dataclasses.replace(record, personas=tuple(personas), clashes=tuple(clashes))
+
+
+_AGE_EDU = ("age_group", "education_level")
+_CIVIL_HOUSEHOLD = ("civil_status", "household_size")
+_EMPLOYMENT = ("employment_status", "employment_type")
+
+
+def _driver_fixture():
+    """Four personas per competitor, with a hand-computable S3 driver ranking.
+
+    Competitor A's S3 clashes: ``age_group x education_level`` in personas 0, 1 and 2
+    (persona 0 in two rounds -- the round collapse), and ``civil_status x
+    household_size`` in persona 0 alone. Its S2 clash sits on persona 3, so the two
+    levels do not partition the personas.
+    """
+    a = _record("swedish_all_pick_claude_haiku", n_impossible=1, typicalities=[5.0] * 3,
+                model="claude_haiku", strategy="all_pick")
+    a = _with_clashes(a, [
+        _clash(a, 0, _AGE_EDU, ("16-19", "Doctorate"), "S3"),
+        _clash(a, 0, _AGE_EDU, ("16-19", "Doctorate"), "S3", round_index=1),
+        _clash(a, 1, _AGE_EDU, ("16-19", "Doctorate"), "S3"),
+        _clash(a, 2, _AGE_EDU, ("20-24", "Doctorate"), "S3"),
+        _clash(a, 0, _CIVIL_HOUSEHOLD, ("Married", "1"), "S3"),
+        _clash(a, 3, _EMPLOYMENT, ("Student", "Permanent Full-time"), "S2"),
+    ])
+    b = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0, typicalities=[5.0] * 4,
+                model="claude_sonnet", strategy="all_pick_dag")
+    b = _with_clashes(b, [])
+    real = _record("real_swedish", n_impossible=0, typicalities=[5.0] * 4,
+                   model="", strategy="", is_real=True)
+    real = _with_clashes(real, [
+        _clash(real, 0, ("civil_status", "housing_tenure"), ("Married", "Rented"), "S1"),
+        _clash(real, 1, ("civil_status", "housing_tenure"), ("Married", "Rented"), "S1"),
+    ])
+    return [a, b, real]
+
+
+def _cell(ranking, level, model="claude_haiku", method="all_pick"):
+    return ranking["severity_drivers"]["levels"][level]["grid"]["cells"][model][method]
+
+
+def test_drivers_rank_attribute_pairs_by_the_personas_that_exhibit_them():
+    cell = _cell(_build(_driver_fixture()), "S3")
+    assert cell["denominator"] == 4
+    assert [(d["rank"], d["attr_a"], d["attr_b"], d["n_personas"]) for d in cell["drivers"]] == [
+        (1, "age_group", "education_level", 3),
+        (2, "civil_status", "household_size", 1),
+    ]
+    assert cell["drivers"][0]["prevalence"] == pytest.approx(3 / 4)
+    assert cell["drivers"][1]["prevalence"] == pytest.approx(1 / 4)
+
+
+def test_a_clash_repeated_across_rounds_counts_its_persona_once():
+    """The counting unit is the persona; persona 0 raised the same pair in two rounds."""
+    cell = _cell(_build(_driver_fixture()), "S3")
+    top = cell["drivers"][0]
+    assert top["n_personas"] == 3          # not 4, which is the row count
+    assert cell["affected"] == 3
+
+
+def test_nested_category_pairs_are_ranked_under_their_attribute_pair():
+    top = _cell(_build(_driver_fixture()), "S3")["drivers"][0]
+    assert [(v["rank"], v["value_a"], v["value_b"], v["n_personas"]) for v in top["values"]] == [
+        (1, "16-19", "Doctorate", 2),
+        (2, "20-24", "Doctorate", 1),
+    ]
+    # Value prevalences share the cell's denominator, so they read against the heatmap.
+    assert top["values"][0]["prevalence"] == pytest.approx(2 / 4)
+
+
+def test_driver_denominators_equal_the_severity_grid_cell_denominators():
+    """The load-bearing agreement: a driver prevalence is readable against its heatmap.
+
+    If these two denominators could differ, a cell could report a driver prevalence
+    above its own severity rate -- arithmetically impossible for a subset, and a sure
+    sign the numerator and denominator came from different persona sets.
+    """
+    ranking = _build(_driver_fixture())
+    for level in ("S1", "S2", "S3"):
+        prevalence_grid = ranking["severity"]["levels"][level]["grid"]
+        driver_grid = ranking["severity_drivers"]["levels"][level]["grid"]
+        assert driver_grid["models"] == prevalence_grid["models"]
+        assert driver_grid["methods"] == prevalence_grid["methods"]
+        for model in driver_grid["models"]:
+            for method in driver_grid["methods"]:
+                left = prevalence_grid["cells"][model][method]
+                right = driver_grid["cells"][model][method]
+                assert (left is None) == (right is None), (level, model, method)
+                if left is None:
+                    continue
+                assert right["denominator"] == left["denominator"]
+                assert right["affected"] == left["affected"]
+        assert driver_grid["real"]["denominator"] == prevalence_grid["real"]["denominator"]
+        assert driver_grid["real"]["affected"] == prevalence_grid["real"]["affected"]
+
+
+def test_tie_break_is_total_so_equal_counts_always_rank_in_the_same_order():
+    """Two pairs at the same count must not swap between runs, or ranks are noise."""
+    record = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[5.0] * 2)
+    rows = [
+        _clash(record, 0, ("zebra_axis", "zulu_axis"), ("x", "y"), "S3"),
+        _clash(record, 1, ("zebra_axis", "zulu_axis"), ("x", "y"), "S3"),
+        _clash(record, 0, ("alpha_axis", "beta_axis"), ("p", "q"), "S3"),
+        _clash(record, 1, ("alpha_axis", "beta_axis"), ("p", "q"), "S3"),
+    ]
+    forward = _build([_with_clashes(record, rows)])
+    reverse = _build([_with_clashes(record, list(reversed(rows)))])
+
+    ranked = [(d["attr_a"], d["n_personas"]) for d in _cell(forward, "S3")["drivers"]]
+    assert ranked == [("alpha_axis", 2), ("zebra_axis", 2)]   # equal counts, name order
+    assert _cell(forward, "S3") == _cell(reverse, "S3")       # and order-independent
+
+
+def test_min_count_suppression_is_counted_rather_than_silently_dropped():
+    ranking = _build(_driver_fixture(), driver_min_count=2)
+    cell = _cell(ranking, "S3")
+    assert [d["attr_a"] for d in cell["drivers"]] == ["age_group"]   # the n=1 pair is gone
+    assert cell["n_distinct_pairs"] == 2
+    assert cell["n_suppressed"] == 1
+    assert ranking["severity_drivers"]["excluded"]["drivers_below_min_count"] >= 1
+    assert ranking["severity_drivers"]["min_count"] == 2
+
+
+def test_top_n_truncation_is_counted_separately_from_suppression():
+    ranking = _build(_driver_fixture(), driver_top_n=1, driver_min_count=1)
+    cell = _cell(ranking, "S3")
+    assert len(cell["drivers"]) == 1
+    assert cell["n_truncated"] == 1
+    assert cell["n_suppressed"] == 0
+    assert ranking["severity_drivers"]["excluded"]["drivers_below_top_n"] >= 1
+
+
+@pytest.mark.parametrize("kwargs", [{"driver_top_n": 0}, {"driver_min_count": 0}])
+def test_degenerate_driver_bounds_raise_rather_than_emitting_an_empty_table(kwargs):
+    with pytest.raises(ValueError):
+        _build(_driver_fixture(), **kwargs)
+
+
+def test_a_cell_every_persona_shares_a_clash_in_reaches_prevalence_one():
+    record = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[5.0] * 3)
+    record = _with_clashes(record, [
+        _clash(record, i, _EMPLOYMENT, ("Student", "Permanent Full-time"), "S3")
+        for i in range(3)
+    ])
+    cell = _cell(_build([record]), "S3")
+    assert cell["drivers"][0]["prevalence"] == pytest.approx(1.0)
+    assert cell["drivers"][0]["values"][0]["prevalence"] == pytest.approx(1.0)
+
+
+def test_a_clash_free_cell_has_an_empty_driver_list_and_no_skip():
+    ranking = _build(_driver_fixture())
+    cell = _cell(ranking, "S3", model="claude_sonnet", method="all_pick_dag")
+    assert cell["drivers"] == []
+    assert cell["affected"] == 0 and cell["denominator"] == 4
+    assert not [s for s in ranking["skipped_tests"] if s["test"].startswith("severity_drivers")]
+
+
+def test_unjudged_pair_is_none_in_the_driver_grid_not_an_empty_driver_list():
+    """An empty list means "judged, nothing drove it"; None means "never judged"."""
+    ranking = _build(_driver_fixture())
+    cells = ranking["severity_drivers"]["levels"]["S3"]["grid"]["cells"]
+    assert cells["claude_haiku"]["all_pick_dag"] is None
+    assert cells["claude_sonnet"]["all_pick"] is None
+
+
+def test_a_cell_whose_clash_rows_are_missing_records_a_skip_not_a_silent_zero():
+    """Personas declaring a clash with no per-clash row cannot be attributed."""
+    record = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[5.0] * 2)
+    record = _with_severities(record, [(0, 0, 1), (0, 0, 0)])   # counts, but no clash rows
+    ranking = _build([record])
+    cell = _cell(ranking, "S3")
+    assert cell["affected"] == 1 and cell["drivers"] == []
+    reasons = {s["test"]: s["reason"] for s in ranking["skipped_tests"]}
+    assert "severity_drivers[S3][swedish_all_pick_claude_haiku]" in reasons
+    assert "--rewrite-artifacts" in reasons["severity_drivers[S3][swedish_all_pick_claude_haiku]"]
+
+
+def test_unresolved_clashes_count_at_the_pair_grain_and_are_absent_from_the_values():
+    """The pair is known and the clash is real; only its category values are not."""
+    record = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[5.0] * 2)
+    record = _with_clashes(record, [
+        _clash(record, 0, _AGE_EDU, ("", ""), "S3", unresolved=True),
+        _clash(record, 1, _AGE_EDU, ("16-19", "Doctorate"), "S3"),
+    ])
+    ranking = _build([record], driver_min_count=1)
+    driver = _cell(ranking, "S3")["drivers"][0]
+    assert driver["n_personas"] == 2               # both personas exhibit the pair
+    assert driver["n_personas_unresolved"] == 1
+    assert [v["n_personas"] for v in driver["values"]] == [1]   # only the resolved one
+    assert ranking["severity_drivers"]["n_unresolved"] == 1
+    assert ranking["severity_drivers"]["excluded"]["clashes_unresolved"] == 1
+
+
+def test_driver_block_declares_itself_reporting_only_and_does_not_leak():
+    ranking = _build(_driver_fixture())
+    block = ranking["severity_drivers"]
+    assert "no ranking" in block["reporting_only"]
+    assert "not shares of a whole" in block["non_additive"]
+    assert "personas, not clashes" in block["counting_unit"]
+    # It must not have reached the ranking, the contrasts or the factor tests.
+    assert "severity_drivers" not in ranking["axis_a"]
+    assert all("severity_drivers" not in entry for entry in ranking["axis_a"]["ranking"])
+    assert all("severity_drivers" not in row for row in ranking["axis_a"]["scb_contrast"])
+    assert all("severity_drivers" not in row for row in ranking["axis_b"]["dispersion_contrast"])
+    assert "severity_drivers" not in ranking["factor_significance"]
+    assert all("severity_drivers" not in row for row in summary_rows(ranking))
+    assert all("severity_drivers" not in row for row in scb_contrast_rows(ranking))
+
+
+def test_drivers_change_no_number_the_ranking_already_published():
+    """Same records, tighter driver bounds: every published number must be identical."""
+    records = _driver_fixture()
+    loose = _build(records, driver_top_n=3, driver_min_count=1)
+    tight = _build(records, driver_top_n=1, driver_min_count=3)
+    for key in ("axis_a", "axis_b", "severity"):
+        assert loose[key] == tight[key], key
+    # The mixed model is excluded: its variational fit is not bit-reproducible between
+    # two calls, which is a property of the fitter and would mask, not reveal, a leak.
+    for factor in ("by_model", "by_method"):
+        assert loose["factor_significance"][factor] == tight["factor_significance"][factor]
+
+
+# --------------------------------------------------------------------------- #
+# severity driver CSV rows                                                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_driver_rows_carry_the_denominator_the_penalised_flag_and_the_counting_unit():
+    ranking = _build(_driver_fixture())
+    rows = severity_driver_rows(ranking, "S3")
+    assert rows, "the fixture has S3 drivers"
+    for row in rows:
+        assert row["level"] == "S3"
+        assert row["penalised"] is True
+        assert row["denominator"] == 4
+        assert "personas, not clashes" in row["counting_unit"]
+        assert "do not sum" in row["non_additive"]
+    top = rows[0]
+    assert (top["slug"], top["rank"], top["attr_a"]) == (
+        "swedish_all_pick_claude_haiku", 1, "age_group")
+    assert top["prevalence"] == pytest.approx(3 / 4)
+
+
+def test_driver_value_rows_carry_their_parent_pair():
+    rows = severity_driver_value_rows(_build(_driver_fixture()), "S3")
+    top = rows[0]
+    assert (top["attr_a"], top["attr_b"]) == _AGE_EDU
+    assert (top["pair_rank"], top["pair_n_personas"]) == (1, 3)
+    assert (top["value_a"], top["value_b"], top["n_personas"]) == ("16-19", "Doctorate", 2)
+    assert top["penalised"] is True
+
+
+def test_s1_driver_rows_declare_themselves_not_penalised():
+    """An S1 row read alone must not look like a defect row."""
+    rows = severity_driver_rows(_build(_driver_fixture()), "S1")
+    assert rows, "the real competitor carries an S1 clash"
+    assert all(row["penalised"] is False for row in rows)
+
+
+def test_the_real_population_appears_in_the_driver_tables_as_an_ordinary_competitor():
+    ranking = _build(_driver_fixture())
+    pair_rows = severity_driver_rows(ranking, "S1")
+    value_rows = severity_driver_value_rows(ranking, "S1")
+    real_pairs = [row for row in pair_rows if row["is_real_reference"]]
+    assert [row["slug"] for row in real_pairs] == ["real_swedish"]
+    assert real_pairs[0]["n_personas"] == 2 and real_pairs[0]["denominator"] == 4
+    assert real_pairs[0]["model"] == "" and real_pairs[0]["strategy"] == ""
+    assert any(row["is_real_reference"] and row["value_b"] == "Rented" for row in value_rows)
+
+
+def test_driver_rows_are_empty_rather_than_wrong_when_a_level_has_no_driver():
+    ranking = _build(_driver_fixture(), driver_min_count=5)
+    assert severity_driver_rows(ranking, "S3") == []
+    assert severity_driver_value_rows(ranking, "S3") == []
+
+
+def test_driver_flatteners_raise_on_an_unknown_level():
+    ranking = _build(_driver_fixture())
+    for flatten in (severity_driver_rows, severity_driver_value_rows):
+        with pytest.raises(KeyError, match="Unknown severity level"):
+            flatten(ranking, "S9")

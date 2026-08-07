@@ -62,9 +62,14 @@ __all__ = [
     "CAVEATS",
     "CORRECTION",
     "DISPERSION_MEASURES",
+    "DRIVER_COUNTING_UNIT",
+    "DRIVER_NON_ADDITIVE",
+    "SEVERITY_DIRECTIONS",
     "build_ranking",
     "summary_rows",
     "scb_contrast_rows",
+    "severity_driver_rows",
+    "severity_driver_value_rows",
 ]
 
 #: The multiple-comparison correction applied to every family of tests here. Stated
@@ -286,6 +291,62 @@ def _axis_a_grid(ranking: Sequence[dict[str, Any]]) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
+#: What each severity level *means* and which way it reads. Defined once and consumed
+#: by both severity blocks (the prevalence grids and the driver attribution), because
+#: the two describe the same three levels: a direction stated in one place and not the
+#: other is how S1 ends up read as a defect on one table and not on its sibling.
+SEVERITY_DIRECTIONS: dict[str, dict[str, Any]] = {
+    "S3": {
+        "meaning": "hard biological / legal / temporal contradiction",
+        "direction": "lower is better -- an S3 clash is a defect",
+        "penalised": True,
+    },
+    "S2": {
+        "meaning": "near-impossible attribute pairing",
+        "direction": "lower is better -- an S2 clash is a defect",
+        "penalised": True,
+    },
+    "S1": {
+        "meaning": "unusual but possible",
+        "direction": (
+            "neither better nor worse -- S1 is reported and never penalised. A higher "
+            "S1 rate plausibly indicates reach into the unusual-but-possible tail "
+            "rather than a defect, so this level must not be read as a score."
+        ),
+        "penalised": False,
+    },
+}
+
+
+def _grid_entries(records: Sequence[CompetitorRecord]) -> list[dict[str, Any]]:
+    """The per-competitor adapter dicts :func:`_grid` places, with a record back-pointer.
+
+    ``_grid`` reshapes *entries*, not records, so a block whose cell payload needs the
+    whole record hands it through under ``_record``. Built once here so every
+    record-backed grid places its competitors by exactly the same coordinates -- and so
+    the real competitor is recognised by the same ``is_real_reference`` flag in each.
+    """
+    return [
+        {
+            "slug": r.slug, "model": r.model, "strategy": r.strategy,
+            "is_real_reference": r.is_real_reference, "_record": r,
+        }
+        for r in records
+    ]
+
+
+def _affected_at(record: CompetitorRecord, level: str) -> int:
+    """How many of *record*'s personas carry at least one clash at *level*.
+
+    The numerator of the severity heatmap cell **and** the ``affected`` a driver
+    attribution reports, computed once here so the two can never disagree: the drivers
+    exist to explain this number, and explaining a different number would be worse than
+    not explaining it at all.
+    """
+    field = SEVERITY_COUNT_FIELDS[level]
+    return sum(1 for row in record.personas if getattr(row, field) > 0)
+
+
 def _severity_grids(records: Sequence[CompetitorRecord]) -> dict[str, Any]:
     """Per-severity clash prevalence, one model x method grid per level.
 
@@ -313,36 +374,13 @@ def _severity_grids(records: Sequence[CompetitorRecord]) -> dict[str, Any]:
     healthy reach into the tails rather than a problem. Presenting it on a
     lower-is-better ramp would assert that unusual people are defects.
     """
-    directions = {
-        "S3": {
-            "meaning": "hard biological / legal / temporal contradiction",
-            "direction": "lower is better -- an S3 clash is a defect",
-            "penalised": True,
-        },
-        "S2": {
-            "meaning": "near-impossible attribute pairing",
-            "direction": "lower is better -- an S2 clash is a defect",
-            "penalised": True,
-        },
-        "S1": {
-            "meaning": "unusual but possible",
-            "direction": (
-                "neither better nor worse -- S1 is reported and never penalised. A higher "
-                "S1 rate plausibly indicates reach into the unusual-but-possible tail "
-                "rather than a defect, so this level must not be read as a score."
-            ),
-            "penalised": False,
-        },
-    }
-
     levels: dict[str, Any] = {}
     for level in SEVERITY_LEVELS:
-        field = SEVERITY_COUNT_FIELDS[level]
 
-        def _cell(entry: dict[str, Any], _field: str = field) -> dict[str, Any]:
+        def _cell(entry: dict[str, Any], _level: str = level) -> dict[str, Any]:
             record: CompetitorRecord = entry["_record"]
             n = len(record.personas)
-            affected = sum(1 for row in record.personas if getattr(row, _field) > 0)
+            affected = _affected_at(record, _level)
             return {
                 "slug": record.slug,
                 # Denominator 0 is never used as a divisor: no persona, no rate.
@@ -352,15 +390,9 @@ def _severity_grids(records: Sequence[CompetitorRecord]) -> dict[str, Any]:
             }
 
         levels[level] = {
-            **directions[level],
+            **SEVERITY_DIRECTIONS[level],
             "grid": _grid(
-                [
-                    {
-                        "slug": r.slug, "model": r.model, "strategy": r.strategy,
-                        "is_real_reference": r.is_real_reference, "_record": r,
-                    }
-                    for r in records
-                ],
+                _grid_entries(records),
                 value_of=_cell,
                 note=(
                     f"A null cell means that model x method combination was not judged -- it is "
@@ -380,6 +412,297 @@ def _severity_grids(records: Sequence[CompetitorRecord]) -> dict[str, Any]:
             "Descriptive. This dimension feeds no ranking, no contrast and no significance "
             "test, and does not affect the binary can_exist impossibility rate."
         ),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Severity drivers -- WHAT clashed in each cell (reporting only)                #
+# --------------------------------------------------------------------------- #
+
+
+#: The unit every driver count is in. Carried as a data field on the block and on every
+#: emitted row rather than only in a docstring: the tables travel without the code, and
+#: a count whose unit has to be guessed is a count that gets misread as "clashes".
+DRIVER_COUNTING_UNIT = (
+    "personas, not clashes: a clash the judge raised in several rounds of one persona "
+    "counts that persona once, and the denominator is the cell's persona count"
+)
+
+#: Why these numbers do not add up to the cell they explain. A data field for the same
+#: reason: the failure mode is a reader summing them or drawing them as a whole.
+DRIVER_NON_ADDITIVE = (
+    "driver prevalences are not shares of a whole and do not sum to the cell's "
+    "severity rate: one persona may carry several distinct clashes, each clash names "
+    "two attributes, and the three severity levels are not a partition. Never render "
+    "these as a pie or a 100%-stacked bar."
+)
+
+#: Appended to a per-cell driver note. Ranks are positional, so equal counts are
+#: ordered by the declared tie-break rather than sharing a rank -- the equality is
+#: visible in ``n_personas``, which is the number to read, not the rank.
+_DRIVER_TIE_BREAK = (
+    "ties on n_personas are broken by attribute name (then category value) so the rank "
+    "order is deterministic; equal counts share no rank, so read n_personas, not rank"
+)
+
+
+def _clash_index(
+    record: CompetitorRecord, level: str
+) -> tuple[
+    dict[tuple[str, str], set[str]],
+    dict[tuple[str, str], dict[tuple[str, str], set[str]]],
+    dict[tuple[str, str], set[str]],
+]:
+    """Index one competitor's clashes at *level* by attribute pair and category pair.
+
+    Returns ``(personas_by_pair, personas_by_pair_and_values, unresolved_by_pair)``,
+    each mapping to a **set of persona ids** because the counting unit is the persona:
+    the per-clash rows are one per round, and a clash raised in three rounds of one
+    persona is one affected persona, not three.
+
+    An ``unresolved`` clash -- the judge named an attribute the persona does not carry,
+    or carries with no value -- is counted at the *pair* grain (the pair is known and
+    the clash is real) and excluded from the *value* grain, where it has nothing to
+    contribute. It is counted separately so a value list that under-covers its pair is
+    explained rather than merely short.
+    """
+    by_pair: dict[tuple[str, str], set[str]] = {}
+    by_values: dict[tuple[str, str], dict[tuple[str, str], set[str]]] = {}
+    unresolved: dict[tuple[str, str], set[str]] = {}
+    for row in record.clashes:
+        if row.severity != level:
+            continue
+        pair = (row.attr_a, row.attr_b)
+        by_pair.setdefault(pair, set()).add(row.persona_id)
+        if row.unresolved:
+            unresolved.setdefault(pair, set()).add(row.persona_id)
+            continue
+        values = (row.value_a, row.value_b)
+        by_values.setdefault(pair, {}).setdefault(values, set()).add(row.persona_id)
+    return by_pair, by_values, unresolved
+
+
+def _rank_by_personas(
+    counts: dict[tuple[str, str], set[str]],
+    *,
+    denominator: int,
+    top_n: int,
+    min_count: int,
+) -> tuple[list[tuple[int, tuple[str, str], int, float | None]], int, int]:
+    """Rank ``{pair: {persona ids}}`` into ``(entries, n_suppressed, n_truncated)``.
+
+    *entries* are ``(rank, pair, n_personas, prevalence)``, ordered by ``n_personas``
+    descending with the pair itself as a **total** tie-break, so the ranks are a
+    function of the counts alone and the emitted bytes do not depend on dict insertion
+    order anywhere upstream.
+
+    A pair below *min_count* is dropped and counted in *n_suppressed* rather than
+    published: a rank-1 driver seen in two personas is an anecdote, and printing it at
+    the top of a table asserts otherwise. What *top_n* leaves out is counted separately
+    in *n_truncated* -- those are real drivers, merely below the cut, and the two
+    exclusions must not be confusable.
+
+    ``prevalence`` is ``None`` when the denominator is zero; a cell with no personas
+    has no rate, and 0.0 would be a measurement.
+    """
+    ordered = sorted(
+        ((pair, len(personas)) for pair, personas in counts.items()),
+        key=lambda item: (-item[1], item[0]),
+    )
+    kept = [(pair, n) for pair, n in ordered if n >= min_count]
+    entries = [
+        (rank, pair, n, (n / denominator) if denominator else None)
+        for rank, (pair, n) in enumerate(kept[:top_n], start=1)
+    ]
+    return entries, len(ordered) - len(kept), max(0, len(kept) - top_n)
+
+
+def _driver_cell(
+    record: CompetitorRecord,
+    level: str,
+    *,
+    top_n: int,
+    min_count: int,
+    skips: list[_Skip],
+) -> dict[str, Any]:
+    """One competitor's ranked drivers at one severity level.
+
+    ``denominator`` and ``affected`` are the *same* numbers the severity heatmap cell
+    carries (both via :func:`_affected_at`), so a driver prevalence is always readable
+    against the cell it explains.
+
+    A competitor whose personas declare clashes at this level but whose per-clash rows
+    hold none cannot be explained; that records a :class:`_Skip` and yields an empty
+    driver list, never a silent zero -- an empty list would read as "nothing drove this
+    cell", which is a claim, and a false one.
+    """
+    denominator = len(record.personas)
+    affected = _affected_at(record, level)
+    by_pair, by_values, unresolved = _clash_index(record, level)
+
+    if affected and not by_pair:
+        skips.append(_Skip(
+            test=f"severity_drivers[{level}][{record.slug}]",
+            reason=(
+                f"{affected} persona(s) carry a {level} clash per {record.personas_csv_path}, "
+                "but the per-clash CSV holds no row for them, so the cell cannot be "
+                "attributed. Re-run scripts/analyze/analyze_persona_realism.py "
+                "--rewrite-artifacts for this combination."
+            ),
+        ))
+
+    ranked, n_suppressed, n_truncated = _rank_by_personas(
+        by_pair, denominator=denominator, top_n=top_n, min_count=min_count,
+    )
+    drivers: list[dict[str, Any]] = []
+    for rank, pair, n_personas, prevalence in ranked:
+        value_ranked, n_values_suppressed, n_values_truncated = _rank_by_personas(
+            by_values.get(pair, {}), denominator=denominator,
+            top_n=top_n, min_count=min_count,
+        )
+        drivers.append({
+            "rank": rank,
+            "attr_a": pair[0],
+            "attr_b": pair[1],
+            "n_personas": n_personas,
+            "prevalence": prevalence,
+            # Personas whose value join failed: counted at the pair grain, absent from
+            # the value grain, so a short value list is explained rather than puzzling.
+            "n_personas_unresolved": len(unresolved.get(pair, ())),
+            "values": [
+                {
+                    "rank": value_rank,
+                    "value_a": values[0],
+                    "value_b": values[1],
+                    "n_personas": value_n,
+                    "prevalence": value_prevalence,
+                }
+                for value_rank, values, value_n, value_prevalence in value_ranked
+            ],
+            "n_values_suppressed": n_values_suppressed,
+            "n_values_truncated": n_values_truncated,
+        })
+
+    return {
+        "slug": record.slug,
+        "model": record.model,
+        "strategy": record.strategy,
+        "is_real_reference": record.is_real_reference,
+        # Identical to the severity grid's cell, by construction (_affected_at).
+        "denominator": denominator,
+        "affected": affected,
+        "drivers": drivers,
+        "n_distinct_pairs": len(by_pair),
+        "n_suppressed": n_suppressed,
+        "n_truncated": n_truncated,
+        "n_unresolved": sum(len(personas) for personas in unresolved.values()),
+    }
+
+
+def _severity_drivers(
+    records: Sequence[CompetitorRecord],
+    skips: list[_Skip],
+    *,
+    top_n: int,
+    min_count: int,
+    skipped_combinations: Sequence[tuple[str, str]] = (),
+) -> dict[str, Any]:
+    """Which attribute pairs -- and which category pairs -- drove each severity cell.
+
+    **Descriptive only, exactly as the severity grids are.** It feeds no ranking, no
+    contrast and no significance test, and it changes no number already published: it
+    answers the question the heatmaps provoke and cannot answer, which is *what*
+    clashed in a cell that the heatmap only sizes.
+
+    One grid per level with the same layout as the prevalence grids, so a cell here
+    lines up with the cell there: same coordinates, same denominator, same ``affected``.
+    The real population is placed by :func:`_grid` exactly as it is everywhere else --
+    an ordinary competitor carried under ``real`` because it has no model x method
+    coordinate, never a grid row and never a reference.
+
+    Comparative claims are deliberately absent. Ranking driver prevalences *across*
+    cells would need a correction battery this block does not run, so it ranks only
+    *within* a cell and the tables stay descriptive.
+
+    *top_n* and *min_count* arrive as arguments (this module reads no config): the
+    first bounds how much of each cell's tail is published, the second is the count
+    below which a driver is suppressed-and-counted rather than ranked.
+    """
+    if top_n < 1:
+        raise ValueError(f"driver top_n must be >= 1, got {top_n!r}: a table of zero rows explains nothing.")
+    if min_count < 1:
+        raise ValueError(
+            f"driver min_count must be >= 1, got {min_count!r}: a driver exhibited by no "
+            "persona is not a driver."
+        )
+
+    # Computed per (competitor, level) up front so the grid closures below are pure
+    # lookups and the block-level aggregates are a second pass over finished cells --
+    # never an accumulator mutated from inside a closure, whose totals would depend on
+    # how many times _grid happened to call it.
+    cells = {
+        (record.slug, level): _driver_cell(
+            record, level, top_n=top_n, min_count=min_count, skips=skips,
+        )
+        for record in records
+        for level in SEVERITY_LEVELS
+    }
+
+    levels: dict[str, Any] = {}
+    for level in SEVERITY_LEVELS:
+
+        def _cell(entry: dict[str, Any], _level: str = level) -> dict[str, Any]:
+            return cells[(entry["_record"].slug, _level)]
+
+        levels[level] = {
+            **SEVERITY_DIRECTIONS[level],
+            "grid": _grid(
+                _grid_entries(records),
+                value_of=_cell,
+                note=(
+                    f"A null cell means that model x method combination was not judged -- it "
+                    f"is NOT an absence of {level} drivers. " + _DRIVER_TIE_BREAK
+                    + "." + _GRID_NOTE_SUFFIX
+                ),
+            ),
+        }
+
+    n_unresolved = sum(cell["n_unresolved"] for cell in cells.values())
+    return {
+        "levels": levels,
+        "metric": (
+            "share of a cell's personas exhibiting a given attribute-pair clash at this "
+            "severity, ranked within the cell"
+        ),
+        "counting_unit": DRIVER_COUNTING_UNIT,
+        "non_additive": DRIVER_NON_ADDITIVE,
+        "reporting_only": (
+            "Descriptive. This block feeds no ranking, no contrast and no significance "
+            "test, and changes no number already published -- it explains the severity "
+            "grids, it does not score them."
+        ),
+        "top_n": top_n,
+        "min_count": min_count,
+        "n_unresolved": n_unresolved,
+        "excluded": {
+            # Every exclusion this block is subject to, counted rather than left to be
+            # inferred from a short table (guide 03 sect. 6: report what was dropped).
+            "combinations_skipped": len(skipped_combinations),
+            "personas_without_a_successful_round": sum(record.n_failed for record in records),
+            "clashes_unresolved": n_unresolved,
+            "drivers_below_min_count": sum(cell["n_suppressed"] for cell in cells.values()),
+            "drivers_below_top_n": sum(cell["n_truncated"] for cell in cells.values()),
+            "note": (
+                "combinations_skipped are the units the loader could not consume (listed "
+                "with reasons under skipped_combinations); "
+                "personas_without_a_successful_round left no verdict and are outside every "
+                "denominator here; clashes_unresolved are (persona, pair) clashes whose "
+                "category values could not be joined -- counted at the attribute-pair grain "
+                "and absent from the category-pair grain; the two driver counts are pairs "
+                "ranked out of the published tables, below min_count and below top_n "
+                "respectively."
+            ),
+        },
     }
 
 
@@ -654,6 +977,8 @@ def build_ranking(
     *,
     bootstrap: dict[str, Any],
     variance_center: str,
+    driver_top_n: int,
+    driver_min_count: int,
     skipped_combinations: Sequence[tuple[str, str]] = (),
 ) -> dict[str, Any]:
     """Assemble one country's complete ranking document.
@@ -662,6 +987,10 @@ def build_ranking(
     completeness and homogeneity gates. *bootstrap* is the judge config's block
     (``iterations``/``seed``/``ci_level``), reused verbatim so the intervals here are
     seeded identically to the per-combination ones.
+
+    *driver_top_n* / *driver_min_count* bound the severity-driver tables. They are
+    required rather than defaulted because a default here would be a second source of
+    truth for a number the CLI already declares, and the two could silently disagree.
     """
     skips: list[_Skip] = []
     real = next((r for r in records if r.is_real_reference), None)
@@ -688,6 +1017,15 @@ def build_ranking(
     by_model = _factor_significance(synthetic, "model", skips)
     by_method = _factor_significance(synthetic, "strategy", skips)
     mixed = _mixed_logit_can_exist(synthetic, skips)
+
+    # Built before the document literal, not inside it: it appends to *skips*, which the
+    # literal also reads, and a block whose completeness depended on key order would be
+    # a trap for the next person to reorder the document.
+    drivers = _severity_drivers(
+        records, skips,
+        top_n=driver_top_n, min_count=driver_min_count,
+        skipped_combinations=skipped_combinations,
+    )
 
     provenance = dict(records[0].provenance) if records else {}
     return {
@@ -726,6 +1064,9 @@ def build_ranking(
         # A separate dimension from the binary can_exist, deliberately outside axis_a:
         # reporting only, and it changes no existing number.
         "severity": _severity_grids(records),
+        # The attribution half of that same dimension, and equally outside axis_a:
+        # reporting only, and it changes no existing number.
+        "severity_drivers": drivers,
         "factor_significance": {
             "by_model": by_model,
             "by_method": by_method,
@@ -774,6 +1115,115 @@ def summary_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
             "dist_entropy": distance.get("entropy"),
             "dist_tail_coverage": distance.get("tail_coverage"),
         })
+    return rows
+
+
+def _driver_cells(
+    ranking: dict[str, Any], level: str
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """One level's block and every competitor's cell in it, in slug order.
+
+    Flattens the grid back to a list: the model x method shape exists for the heatmaps,
+    and a table wants one row per competitor. The real population is carried under
+    ``real`` rather than as a grid row (it has no coordinate), so it is picked up here
+    explicitly -- it is an ordinary competitor in these tables, as it is everywhere else
+    on this axis, and omitting it would quietly answer "what does the real population
+    clash on?" with silence.
+    """
+    levels = ranking["severity_drivers"]["levels"]
+    if level not in levels:
+        raise KeyError(
+            f"Unknown severity level {level!r}: the judge emits {list(SEVERITY_LEVELS)}."
+        )
+    grid = levels[level]["grid"]
+    rows = [
+        cell
+        for model in grid["models"]
+        for cell in (grid["cells"][model][method] for method in grid["methods"])
+        if cell is not None            # an unjudged (model, method) pair is None, not empty
+    ]
+    if grid["real"] is not None:
+        rows.append(grid["real"])
+    return levels[level], sorted(rows, key=lambda cell: cell["slug"])
+
+
+def _driver_identity(cell: dict[str, Any], level: str, *, penalised: bool) -> dict[str, Any]:
+    """The columns every driver row carries whatever its grain.
+
+    ``penalised`` travels on every row because these tables are read one row at a time:
+    an S1 row that arrives without it is an unusual-but-possible pairing presented in
+    the same shape as a defect, which is exactly the misreading the level exists to
+    prevent. ``counting_unit`` and ``non_additive`` travel for the same reason -- the
+    file outlives the docstring.
+    """
+    return {
+        "level": level,
+        "penalised": penalised,
+        "slug": cell["slug"],
+        "model": cell["model"],
+        "strategy": cell["strategy"],
+        "is_real_reference": cell["is_real_reference"],
+    }
+
+
+def severity_driver_rows(ranking: dict[str, Any], level: str) -> list[dict[str, Any]]:
+    """Flatten one level's drivers into ``severity_drivers_s{n}.csv`` rows.
+
+    Attribute-pair grain: one row per ranked ``(competitor, attribute pair)``. Every
+    row carries the cell's ``denominator`` and ``affected`` beside its own count, so a
+    prevalence is never read without the base it was computed over, and the level's
+    ``penalised`` flag so the row cannot be mistaken for a defect when it is not one.
+    """
+    block, cells = _driver_cells(ranking, level)
+    penalised = bool(block["penalised"])
+    rows: list[dict[str, Any]] = []
+    for cell in cells:
+        for driver in cell["drivers"]:
+            rows.append({
+                **_driver_identity(cell, level, penalised=penalised),
+                "rank": driver["rank"],
+                "attr_a": driver["attr_a"],
+                "attr_b": driver["attr_b"],
+                "n_personas": driver["n_personas"],
+                "prevalence": driver["prevalence"],
+                "denominator": cell["denominator"],
+                "cell_affected": cell["affected"],
+                "n_personas_unresolved": driver["n_personas_unresolved"],
+                "counting_unit": DRIVER_COUNTING_UNIT,
+                "non_additive": DRIVER_NON_ADDITIVE,
+            })
+    return rows
+
+
+def severity_driver_value_rows(ranking: dict[str, Any], level: str) -> list[dict[str, Any]]:
+    """Flatten one level's drivers into ``severity_driver_values_s{n}.csv`` rows.
+
+    Category-pair grain: one row per ranked ``(competitor, attribute pair, category
+    pair)`` -- the finest published grain, and the one that names the actual finding
+    ("Student x Permanent Full-time") rather than only the axes it lives on. The parent
+    pair's rank and count travel on the row so the nesting survives the flattening.
+    """
+    block, cells = _driver_cells(ranking, level)
+    penalised = bool(block["penalised"])
+    rows: list[dict[str, Any]] = []
+    for cell in cells:
+        for driver in cell["drivers"]:
+            for value in driver["values"]:
+                rows.append({
+                    **_driver_identity(cell, level, penalised=penalised),
+                    "attr_a": driver["attr_a"],
+                    "attr_b": driver["attr_b"],
+                    "pair_rank": driver["rank"],
+                    "pair_n_personas": driver["n_personas"],
+                    "rank": value["rank"],
+                    "value_a": value["value_a"],
+                    "value_b": value["value_b"],
+                    "n_personas": value["n_personas"],
+                    "prevalence": value["prevalence"],
+                    "denominator": cell["denominator"],
+                    "counting_unit": DRIVER_COUNTING_UNIT,
+                    "non_additive": DRIVER_NON_ADDITIVE,
+                })
     return rows
 
 

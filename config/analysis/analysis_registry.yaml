@@ -177,7 +177,12 @@ processes:
       attribute-clash issues. Aggregates round -> persona -> combination into that
       combination's OWN impossibility rate (bootstrap CI), typicality dispersion,
       and judge self-reliability metric (ICC / Krippendorff's alpha across rounds),
-      plus a per-persona tidy CSV. Strictly per-combination: nothing is compared,
+      plus two tidy CSV contracts read by realism_ranking -- a per-persona one
+      ({combo}_personas.csv) and a per-clash one ({combo}_clashes.csv, one row per
+      persona x round x sorted attribute pair x severity, carrying that persona's own
+      category values) -- and a {combo}_clash_explanations.csv side file holding the
+      judge's free text at the same key, which nothing downstream reads.
+      Strictly per-combination: nothing is compared,
       ranked, or accumulated across combinations here, so each combination's output
       is reproducible in isolation and independent of processing order. The real
       API-sourced population is enumerated as an ORDINARY competitor with no
@@ -214,7 +219,15 @@ processes:
       least one clash at that level, counted independently so a persona with both an
       S3 and an S2 appears on both. It feeds no ranking or test and leaves the binary
       impossibility rate untouched; S3/S2 are defects (lower is better) while S1 is
-      unusual-but-possible and is reported, never penalised.
+      unusual-but-possible and is reported, never penalised. Alongside each heatmap it
+      emits the attribution the heatmap cannot give: severity_drivers_s{1,2,3}.csv ranks
+      the attribute pairs that drove each cell and severity_driver_values_s{1,2,3}.csv
+      the category pairs beneath them, over the same denominator as the heatmap cell.
+      Counts are PERSONAS, not clashes, and are NOT additive (a persona may carry several
+      clashes, each names two attributes, and the levels are not a partition), so every
+      row carries its counting unit, its denominator and the level's penalised flag.
+      --driver-top-n / --driver-min-count bound the tables; what falls below either is
+      counted, never silently dropped.
     folder: "realism_ranking"
     script: "scripts/analyze/rank_persona_realism.py"
     dispatch: "slugs"

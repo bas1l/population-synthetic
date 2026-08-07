@@ -17,6 +17,10 @@ import pytest
 
 from population_synthetic.analysis.realism_ranking.loader import load_competitors
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR
+from population_synthetic.analysis.utils.realism_clash_csv import (
+    RealismClashRow,
+    write_realism_clashes_csv,
+)
 from population_synthetic.analysis.utils.realism_csv import (
     RealismPersonaRow,
     write_realism_personas_csv,
@@ -55,12 +59,29 @@ def _persona_row(pid: str, slug: str, *, impossible: bool, typicality: float | N
         typicality_rounds=() if typicality is None else (int(typicality), int(typicality)),
         max_severity="S3" if impossible else "",
         clash_count=1 if impossible else 0,
+        clash_count_s3=1 if impossible else 0,
+    )
+
+
+def _clash_row(row: RealismPersonaRow) -> RealismClashRow:
+    """The one S3 clash the impossible personas above declare, as a contract row.
+
+    Kept in step with :func:`_persona_row` on purpose: the loader reconciles the two
+    files, so a fixture whose clash rows disagree with its ``clash_count_s3`` column
+    would fail every test for the wrong reason.
+    """
+    return RealismClashRow(
+        persona_id=row.persona_id, slug=row.slug, country=row.country, model=row.model,
+        strategy=row.strategy, is_real_reference=row.is_real_reference, round_index=0,
+        attr_a="age_group", attr_b="education_level",
+        value_a="16-19", value_b="Doctorate", severity="S3", unresolved=False,
     )
 
 
 def _write_combo(
     base, slug, *, n_impossible=1, n_possible=3, model="claude_haiku", strategy="all_pick",
-    is_real=False, provenance=None, report=True, personas_csv=True, n_personas_override=None,
+    is_real=False, provenance=None, report=True, personas_csv=True, clashes_csv=True,
+    n_personas_override=None,
 ):
     """Write one combination's judge artifacts under the registry-resolved folder."""
     combo_dir = analysis_output_dir("persona_realism", base) / _COUNTRY / slug
@@ -76,6 +97,11 @@ def _write_combo(
     ]
     if personas_csv:
         write_realism_personas_csv(rows, combo_dir / f"{slug}_personas.csv")
+    if clashes_csv:
+        write_realism_clashes_csv(
+            [_clash_row(row) for row in rows if row.clash_count_s3],
+            combo_dir / f"{slug}_clashes.csv",
+        )
     if report:
         payload = {
             "process": "persona_realism",
@@ -166,6 +192,52 @@ def test_missing_personas_csv_is_skipped_with_an_actionable_reason(tmp_path):
     _write_combo(base, _SLUG_A, personas_csv=False)
     _records, skipped = load_competitors(base, axis_ids=_AXIS_IDS)
     assert "--rewrite-artifacts" in dict(skipped)[_SLUG_A]
+
+
+def test_missing_clashes_csv_is_skipped_with_an_actionable_reason(tmp_path):
+    """The third contract file gates exactly as the second does.
+
+    An output base judged before the per-clash contract existed has every other
+    artifact in place, so nothing but this check distinguishes it from a complete one --
+    and consuming it would report every severity cell as having no drivers at all.
+    """
+    base = _base(tmp_path, [_SLUG_A])
+    _write_combo(base, _SLUG_A, clashes_csv=False)
+    _records, skipped = load_competitors(base, axis_ids=_AXIS_IDS)
+    reason = dict(skipped)[_SLUG_A]
+    assert "no per-clash CSV" in reason
+    assert "--rewrite-artifacts" in reason
+
+
+def test_missing_clashes_csv_raises_under_strict(tmp_path):
+    base = _base(tmp_path, [_SLUG_A])
+    _write_combo(base, _SLUG_A, clashes_csv=False)
+    with pytest.raises(RuntimeError, match="not consumable"):
+        load_competitors(base, axis_ids=_AXIS_IDS, strict=True)
+
+
+def test_clash_rows_are_reconciled_against_the_per_persona_counts(tmp_path):
+    """A clashes CSV written from a different state of the cache must raise.
+
+    The two files are joined on ``persona_id`` to produce a driver prevalence, so a
+    numerator from one state over a denominator from another is exactly the silently
+    plausible wrong number the gate exists for.
+    """
+    base = _base(tmp_path, [_SLUG_A])
+    combo_dir = _write_combo(base, _SLUG_A, n_impossible=2)
+    write_realism_clashes_csv([], combo_dir / f"{_SLUG_A}_clashes.csv")  # header only
+    with pytest.raises(ValueError, match="--rewrite-artifacts"):
+        load_competitors(base, axis_ids=_AXIS_IDS)
+
+
+def test_loaded_record_carries_its_clash_rows(tmp_path):
+    base = _base(tmp_path, [_SLUG_A])
+    _write_combo(base, _SLUG_A, n_impossible=2)
+    records, _ = load_competitors(base, axis_ids=_AXIS_IDS)
+    record = next(r for r in records if r.slug == _SLUG_A)
+    assert len(record.clashes) == 2
+    assert {row.severity for row in record.clashes} == {"S3"}
+    assert {row.attr_a for row in record.clashes} == {"age_group"}
 
 
 def test_row_count_disagreement_raises(tmp_path):

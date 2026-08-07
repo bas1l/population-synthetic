@@ -101,14 +101,24 @@ only** -- no country-level aggregate file is written here. Each combo directory 
 | `persona_XXXXX.jsonl` | that persona's token/timing telemetry (1:1 with the verdict cache) |
 | `{combo}.json` / `{combo}.csv` | this combination's own stats + cost + hard-rules validation |
 | `{combo}_personas.csv` | the per-persona tidy rows -- the `realism_ranking` contract |
+| `{combo}_clashes.csv` | the per-clash tidy rows (one per persona × round × sorted attribute pair × severity, with that persona's category values) -- the second `realism_ranking` contract file |
+| `{combo}_clash_explanations.csv` | the judge's free text at the same key. A side file: nothing downstream reads it, and no count depends on it |
 | `typicality.png/.svg`, `clash_taxonomy.png/.svg` | this combination's two figures |
+
+The two CSV contracts sit at different grains on purpose. A persona carries 0..N clashes, so putting
+them on the per-persona row would force either a repeating group whose width depends on the data or
+a lossy top-1 truncation. The per-clash row carries **no denominator** -- the base of any rate
+computed from it is a count of *personas*, which belongs to the sibling file -- and the loader reads
+both and reconciles them: the distinct `(persona, attribute-pair)` clashes at level *L* must equal
+the summed `clash_count_s{L}` of the per-persona file, or the run raises naming both files.
 
 ### Regenerating artifacts without re-judging
 
 `--force` **re-judges from scratch**: it truncates every verdict cache and pays the full LLM bill.
 That is almost never what you want after a code or schema change. Use `--rewrite-artifacts` instead --
-it rebuilds `{combo}.json`, `{combo}.csv`, `{combo}_personas.csv` and the figures from the verdict
-cache already on disk, at **zero LLM cost** on a fully-cached combination:
+it rebuilds `{combo}.json`, `{combo}.csv`, `{combo}_personas.csv`, `{combo}_clashes.csv`,
+`{combo}_clash_explanations.csv` and the figures from the verdict cache already on disk, at **zero
+LLM cost** on a fully-cached combination:
 
 ```bash
 python scripts/analyze/analyze_persona_realism.py --rewrite-artifacts
@@ -125,6 +135,10 @@ judging them.
 A run without either flag still consults the runner (its per-persona resume gate is the authority, and
 is cheap when everything is cached), and rewrites artifacts only if the cache changed or the report is
 missing.
+
+All five derived files are regenerated **as a set**, under one `force` gate, so an output base is
+never left mixed-generation -- half its combinations carrying a per-clash file and half not would
+make the ranking's consumption set depend on which combinations happened to be rewritten.
 
 ## Ranking the combinations -- `rank_persona_realism.py`
 
@@ -143,6 +157,8 @@ Outputs per country under `03_Analysis/realism_ranking/<country>/`:
 | `impossibility_forest.png/.svg` | every competitor's rate + bootstrap CI, rank order |
 | `impossibility_heatmap.png/.svg` | the rate as a model × method grid, with the real population as a separate band beneath it. Grey `n/a` = that pair was never judged, which is **not** a rate of zero |
 | `severity_heatmap_s3/s2/s1.png/.svg` | the same grid layout, one per clash severity — see below |
+| `severity_drivers_s3/s2/s1.csv` | **what** clashed in each cell: the attribute pairs ranked by how many of that cell's personas exhibit them — see below |
+| `severity_driver_values_s3/s2/s1.csv` | the same one grain finer: the category pairs (e.g. `Student × Permanent Full-time`) under each ranked attribute pair |
 
 ### The severity dimension (reporting only)
 
@@ -169,10 +185,39 @@ Colouring S1 on a lower-is-better ramp would assert that unusual people are defe
 the judge's own contract explicitly denies — the same class of error as treating SCB as the
 origin on Axis A.
 
-> **Schema v2.** The per-severity columns arrived with tidy-CSV schema v2. An output base
-> whose `{combo}_personas.csv` files predate it raises on read, naming
-> `--rewrite-artifacts`. Regenerating costs **zero LLM calls** — the clashes are already in
-> the verdict caches.
+> **Schema versions.** The per-severity columns arrived with per-persona tidy-CSV schema
+> **v2**; the per-clash file is its own contract at schema **v1**, versioned separately (both
+> numbers are stamped into `{combo}.json`'s provenance as `persona_csv_schema_version` and
+> `clash_csv_schema_version`, so a mismatch names the file it is about). An output base whose
+> `{combo}_personas.csv` predates v2 **raises** on read; one with no `{combo}_clashes.csv` at
+> all is **skipped** with a reason — an absent file is a pipeline-progress state, a
+> stale-schema one is corruption. Both remedies are the same command, and regenerating costs
+> **zero LLM calls** — the clashes are already in the verdict caches.
+
+### The severity drivers (also reporting only)
+
+The heatmaps size a cell; these tables say what is in it. Per `(model × method, level)` they rank
+the attribute pairs by **how many of that cell's personas exhibit them**, and beneath each pair the
+category pairs that carry it. Two grains, six files, and the same denominator as the heatmap cell —
+so `employment_status × employment_type` at `prevalence = 0.12` in a cell whose S3 rate is `0.12`
+says that pair accounts for the whole cell.
+
+Three properties worth knowing before reading one:
+
+- **The unit is personas, not clashes.** A clash the judge raised in three rounds of one persona
+  counts that persona once. Every row carries the unit as a column.
+- **The numbers are not additive and are not shares of a whole.** One persona may carry several
+  distinct clashes; each clash names two attributes; and the levels are not a partition. Never a
+  pie, never a 100%-stacked bar. Also a column on every row.
+- **S1 rows are not defects.** `penalised` travels on every row for the same reason the S1 heatmap
+  gets a neutral ramp. On the current Swedish data the S1 drivers read plainly as tail-reach: SCB's
+  own top S1 pairs are `Married × 1-person household` and `Owner-occupied villa × Poverty` —
+  unusual people, not impossible ones.
+
+`--driver-top-n` (default 5) bounds each cell's published tail; `--driver-min-count` (default 3) is
+the floor below which a driver is **suppressed and counted** rather than ranked. Both exclusion
+counts, plus unconsumable combinations, personas with no successful round, and clashes whose
+category values could not be joined, are reported in the JSON block and printed at the end of a run.
 
 Two gates run before any statistic, because both failure modes produce plausible-looking wrong
 numbers:

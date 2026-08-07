@@ -193,9 +193,13 @@ resolve their output dir via `analysis_output_dir(id, output_base)` rather than 
 
 `persona_realism` is **strictly per-combination**: judging one combination reads no other, and its
 artifacts are byte-reproducible in isolation. It writes `{combo}.json`, `{combo}.csv`, the two
-figures, and `{combo}_personas.csv` — the per-persona tidy CSV that is the inter-task contract
-(schema in `analysis/utils/realism_csv.py`). The real API-sourced population is enumerated as an
-**ordinary competitor** `real_{country}`, not as a reference.
+figures, and **two** tidy CSVs that together form the inter-task contract:
+`{combo}_personas.csv` (one row per persona; schema in `analysis/utils/realism_csv.py`) and
+`{combo}_clashes.csv` (one row per persona × round × sorted attribute pair × severity, carrying the
+persona's own category values; schema in `analysis/utils/realism_clash_csv.py`). A third file,
+`{combo}_clash_explanations.csv`, carries the judge's free text at the same key and is read by
+nothing downstream. The real API-sourced population is enumerated as an **ordinary competitor**
+`real_{country}`, not as a reference.
 
 `realism_ranking` consumes those files and owns every cross-combination claim. It performs **no LLM
 work**, so it is free to re-run. Two axes, opposite in direction: Axis A ranks impossibility rate
@@ -206,15 +210,33 @@ purely descriptive **severity** dimension: one model × method heatmap per clash
 counted independently so a persona with both an S3 and an S2 appears on both. It feeds no ranking or
 test; S3/S2 are defects, while S1 is unusual-but-possible and is reported, never penalised.
 
+Reading `{combo}_clashes.csv`, it also answers what the heatmaps cannot: **which** attribute pair —
+and which two category values — drove each cell. `severity_drivers_s{1,2,3}.csv` ranks the attribute
+pairs per cell and `severity_driver_values_s{1,2,3}.csv` the category pairs beneath them, both with
+the cell's own denominator, so a driver prevalence reads directly against its heatmap cell. The
+counts are **personas, not clashes**, and they are **not additive** — one persona may carry several
+clashes, each names two attributes, and the levels are not a partition — which is why every row
+carries its counting unit and the level's `penalised` flag.
+
 ```bash
 python scripts/analyze/analyze_persona_realism.py --slug swedish_02_all_pick_v2_claude_haiku
 python scripts/analyze/analyze_persona_realism.py --rewrite-artifacts   # rebuild artifacts, 0 LLM calls
 python scripts/analyze/rank_persona_realism.py --country swedish_02
+python scripts/analyze/rank_persona_realism.py --country swedish_02 --force \
+    --driver-top-n 5 --driver-min-count 3        # bounds on the driver tables
 ```
 
 `--rewrite-artifacts` regenerates the derived files from the verdict cache already on disk. It is
-the supported way to refresh artifacts after an output-schema change; **`--force` is not** — that
-truncates every verdict cache and re-judges from scratch, at full LLM cost.
+the supported way to refresh artifacts after an output-schema change — including after the per-clash
+contract was added, which every pre-existing output base needs before it can be ranked at all (the
+loader skips a combination whose `{combo}_clashes.csv` is absent, naming the flag). **`--force` is
+not** the way to do that — it truncates every verdict cache and re-judges from scratch, at full LLM
+cost.
+
+`--driver-top-n` (default 5) bounds how many drivers each cell publishes, and `--driver-min-count`
+(default 3) is the number of personas a driver needs before it is ranked rather than
+suppressed-and-counted — a rank-1 driver seen in two personas is an anecdote presented as a finding.
+Both exclusions are counted in the JSON block and printed at the end of the run.
 
 ## See also
 

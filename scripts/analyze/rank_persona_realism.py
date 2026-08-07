@@ -29,6 +29,16 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
     {country}/impossibility_heatmap.png/.svg model x method grid of the rate, with the real
                                           population as a separate band (grey = not judged,
                                           which is NOT a rate of zero)
+    {country}/severity_drivers_s3/s2/s1.csv       what clashed in each cell: the attribute
+                                          pairs ranked by how many of that cell's personas
+                                          exhibit them, with the cell's own denominator
+    {country}/severity_driver_values_s3/s2/s1.csv the same, one grain finer -- the category
+                                          pairs (e.g. Student x Permanent Full-time) under
+                                          each ranked attribute pair. Counts are PERSONAS
+                                          and are NOT additive: a persona may carry several
+                                          clashes, each names two attributes, and the levels
+                                          are not a partition -- never a pie, never a
+                                          100%-stacked bar.
     {country}/severity_heatmap_s3/s2/s1.png/.svg  same grid layout, one per clash severity:
                                           the share of a combination's personas carrying >=1
                                           clash at that level. Counted INDEPENDENTLY -- a
@@ -63,6 +73,9 @@ Usage:
 --force         Recompute a country even if its realism_ranking.json already exists
                 (default: skip that country if present).
 --min-combos    Minimum consumable competitors a country needs to be ranked. Default: 2.
+--driver-top-n  Severity drivers published per cell per level. Default: 5.
+--driver-min-count  Personas a driver needs before it is ranked rather than suppressed-and-
+                counted. Default: 3.
 --dpi           PNG render resolution. Default: 200.
 """
 
@@ -77,6 +90,8 @@ from population_synthetic.analysis.persona_realism.config import JudgeConfig
 from population_synthetic.analysis.realism_ranking.builder import (
     build_ranking,
     scb_contrast_rows,
+    severity_driver_rows,
+    severity_driver_value_rows,
     summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (
@@ -143,6 +158,18 @@ def _parse_args() -> argparse.Namespace:
         help="Minimum consumable competitors a country needs to be ranked. Default: 2 "
         "(a one-point ranking is not a ranking).",
     )
+    parser.add_argument(
+        "--driver-top-n", type=int, default=5, dest="driver_top_n",
+        help="Severity drivers published per cell per level (attribute pairs, and category "
+        "pairs within each). Default: 5. What falls below the cut is counted, not dropped "
+        "silently.",
+    )
+    parser.add_argument(
+        "--driver-min-count", type=int, default=3, dest="driver_min_count",
+        help="Personas a driver must be exhibited by before it is ranked. Default: 3. Below "
+        "it the driver is suppressed and counted -- publishing a rank-1 driver seen in two "
+        "personas presents an anecdote as a finding.",
+    )
     parser.add_argument("--dpi", type=int, default=200, help="PNG render resolution. Default: 200.")
     return parser.parse_args()
 
@@ -206,6 +233,21 @@ def _print_country_summary(ranking: dict) -> None:
                     if d.get("p_holm") is not None and d["p_holm"] < 0.05)
         print(f"{label:10s}: H={kw['H']:.2f}, p={kw['p']:.3g}  "
               f"({n_sig} significant pair(s), Holm-corrected)")
+
+    # What the driver tables do not show, on the same screen as what they do. A reader
+    # who sees only the top-5 rows would otherwise have no way to tell an exhaustive
+    # table from the visible tip of a long tail.
+    drivers = ranking["severity_drivers"]
+    excluded = drivers["excluded"]
+    print(
+        f"severity drivers: top {drivers['top_n']} per cell, ranked from "
+        f"{drivers['min_count']} persona(s) up. Excluded -- "
+        f"{excluded['combinations_skipped']} unconsumable combination(s), "
+        f"{excluded['personas_without_a_successful_round']} persona(s) with no successful "
+        f"round, {excluded['clashes_unresolved']} clash(es) with no category value to join, "
+        f"{excluded['drivers_below_min_count']} driver(s) below min-count, "
+        f"{excluded['drivers_below_top_n']} below the top-n cut."
+    )
 
     for skip in ranking["skipped_tests"]:
         print(f"SKIPPED TEST {skip['test']}: {skip['reason']}")
@@ -299,6 +341,7 @@ def main() -> None:
         ranking = build_ranking(
             country_records, country,
             bootstrap=cfg.bootstrap, variance_center=variance_center,
+            driver_top_n=args.driver_top_n, driver_min_count=args.driver_min_count,
             skipped_combinations=country_skipped,
         )
 
@@ -312,6 +355,25 @@ def main() -> None:
         else:
             print("No contrast CSV: there is no real competitor to contrast against "
                   "(recorded in skipped_tests).")
+
+        # Two grains per severity level: the attribute pairs that drove each cell, and
+        # the category pairs under them. An empty table is a real (and reportable)
+        # outcome -- no clash at that level cleared --driver-min-count anywhere -- so
+        # the absent file is explained rather than left as a gap in the output set.
+        for level in SEVERITY_LEVELS:
+            suffix = level.lower()
+            for name, rows, grain in (
+                (f"severity_drivers_{suffix}.csv",
+                 severity_driver_rows(ranking, level), "attribute pair"),
+                (f"severity_driver_values_{suffix}.csv",
+                 severity_driver_value_rows(ranking, level), "category pair"),
+            ):
+                written = _write_csv(rows, country_dir / name)
+                if written is not None:
+                    print(f"{level} driver CSV ({grain}) written to {written}")
+                else:
+                    print(f"No {name}: no {level} {grain} reached "
+                          f"--driver-min-count={args.driver_min_count} in any cell.")
 
         if not args.no_charts:
             charts = [

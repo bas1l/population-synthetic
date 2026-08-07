@@ -59,6 +59,10 @@ _PRICING = PricingTable(
     observed_date="2026-07-23", source="smoke-test", currency="USD",
 )
 _TYP_RE = re.compile(r"TYP(\d+)")
+#: Optional markers a *possible* persona may carry so a fixture can exercise the two
+#: non-fatal severity levels without touching the impossible verdict. A population that
+#: carries neither is judged exactly as before.
+_CLASH_MARKERS = {"S2_CLASH": "S2", "S1_CLASH": "S1"}
 
 
 # --------------------------------------------------------------------------- #
@@ -104,7 +108,11 @@ class _StubClient:
         return json.dumps({
             "can_exist": True,
             "typicality": typicality,
-            "issues": [],
+            "issues": [
+                {"attributes": ["age_group", "education_level"], "severity": severity,
+                 "explanation": f"{severity} marker clash"}
+                for marker, severity in _CLASH_MARKERS.items() if marker in user
+            ],
             "reasoning": "possible",
         })
 
