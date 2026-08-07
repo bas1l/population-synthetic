@@ -116,7 +116,7 @@ def test_shipped_workflow_ordering():
         "validate_raw", "mapping", "validate_mapped", "population_cap",
         "fidelity", "multivariate_fidelity", "consistency",
         "model_ranking", "method_significance", "pairwise_comparison", "real_population_stats",
-        "generation_metadata", "persona_realism",
+        "generation_metadata", "persona_realism", "realism_ranking",
     }
     # validate_raw is the DAG root; the validation gate is a linear chain
     # validate_raw -> mapping -> validate_mapped -> population_cap, and every
@@ -133,6 +133,9 @@ def test_shipped_workflow_ordering():
     assert order.index("population_cap") < order.index("persona_realism")
     assert order.index("fidelity") < order.index("model_ranking")
     assert order.index("fidelity") < order.index("method_significance")
+    # The cross-combination ranking consumes the per-combination judge output, so it
+    # can never be scheduled before it.
+    assert order.index("persona_realism") < order.index("realism_ranking")
 
 
 def test_shipped_workflow_ordering_deterministic():
