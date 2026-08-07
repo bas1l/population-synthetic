@@ -314,6 +314,21 @@ def _max_severity(persona: PersonaVerdict) -> str:
     return ""
 
 
+def _severity_counts(persona: PersonaVerdict) -> dict[str, int]:
+    """Distinct clashes per severity level for *persona*.
+
+    Counts ``ClashKey``s, not rounds -- the same unit ``clash_count`` uses, so the three
+    levels sum to it. This is what makes the severities independently countable: a
+    persona carrying both an S3 and an S2 is counted under both, where ``max_severity``
+    would file it under S3 alone and understate the S2 prevalence.
+    """
+    counts = {level: 0 for level in _SEVERITY_ORDER}
+    for key in persona.clash_frequency:
+        if key.severity in counts:
+            counts[key.severity] += 1
+    return counts
+
+
 def _persona_rows(
     personas: dict[str, PersonaVerdict],
     loaded: dict[str, LoadedPersona],
@@ -337,6 +352,7 @@ def _persona_rows(
     for persona_id in sorted(personas):
         pv = personas[persona_id]
         failed_rounds = loaded[persona_id].failed_rounds
+        severity_counts = _severity_counts(pv)
         rows.append(
             RealismPersonaRow(
                 persona_id=persona_id,
@@ -354,6 +370,9 @@ def _persona_rows(
                 typicality_rounds=pv.typicality_rounds,
                 max_severity=_max_severity(pv),
                 clash_count=len(pv.clash_frequency),
+                clash_count_s1=severity_counts["S1"],
+                clash_count_s2=severity_counts["S2"],
+                clash_count_s3=severity_counts["S3"],
             )
         )
     return rows

@@ -37,6 +37,9 @@ def _row(**overrides) -> RealismPersonaRow:
         typicality_rounds=(6, 7),
         max_severity="",
         clash_count=0,
+        clash_count_s1=0,
+        clash_count_s2=0,
+        clash_count_s3=0,
     )
     base.update(overrides)
     return RealismPersonaRow(**base)
@@ -139,3 +142,53 @@ def test_fieldnames_match_the_dataclass_field_order():
     import dataclasses
 
     assert FIELDNAMES == tuple(f.name for f in dataclasses.fields(RealismPersonaRow))
+
+
+# --------------------------------------------------------------------------- #
+# v2: per-severity clash counts                                                #
+# --------------------------------------------------------------------------- #
+
+
+def test_per_severity_counts_round_trip_as_ints(tmp_path):
+    row = _row(max_severity="S3", clash_count=4,
+               clash_count_s1=1, clash_count_s2=2, clash_count_s3=1)
+    path = write_realism_personas_csv([row], tmp_path / "c_personas.csv")
+    (back,) = read_realism_personas_csv(path)
+    assert (back.clash_count_s1, back.clash_count_s2, back.clash_count_s3) == (1, 2, 1)
+    assert all(isinstance(v, int) for v in
+               (back.clash_count_s1, back.clash_count_s2, back.clash_count_s3))
+    # The three levels partition the total.
+    assert back.clash_count_s1 + back.clash_count_s2 + back.clash_count_s3 == back.clash_count
+
+
+def test_per_severity_counts_let_one_persona_count_at_two_levels(tmp_path):
+    """The reason the columns exist: max_severity alone cannot express this.
+
+    A persona carrying both an S3 and an S2 must be countable under BOTH. Filing it
+    under its worst level only would make the S2 prevalence read as lower than it is.
+    """
+    row = _row(max_severity="S3", clash_count=2, clash_count_s2=1, clash_count_s3=1)
+    path = write_realism_personas_csv([row], tmp_path / "c_personas.csv")
+    (back,) = read_realism_personas_csv(path)
+    assert back.max_severity == "S3"           # the partition view still says S3
+    assert back.clash_count_s3 == 1 and back.clash_count_s2 == 1   # ... but both are countable
+    assert back.clash_count_s1 == 0
+
+
+def test_v1_file_without_the_severity_columns_raises_naming_rewrite_artifacts(tmp_path):
+    """A v1 CSV must raise, not be tolerated.
+
+    Tolerating it would report every S2/S3 prevalence as zero -- indistinguishable from
+    a genuinely clean combination, which is the worst possible failure mode here.
+    """
+    path = tmp_path / "c_personas.csv"
+    write_realism_personas_csv([_row()], path)
+    v1_fields = [f for f in FIELDNAMES if not f.startswith("clash_count_s")]
+    kept = [FIELDNAMES.index(f) for f in v1_fields]
+    lines = path.read_text(encoding="utf-8").splitlines()
+    path.write_text(
+        "\n".join(",".join(line.split(",")[i] for i in kept) for line in lines) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="--rewrite-artifacts"):
+        read_realism_personas_csv(path)

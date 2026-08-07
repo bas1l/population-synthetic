@@ -40,9 +40,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord
+from population_synthetic.analysis.utils.realism_csv import (
+    SEVERITY_COUNT_FIELDS,
+    SEVERITY_LEVELS,
+)
 from population_synthetic.analysis.utils.stats_tests import (
     bootstrap_ci,
     bootstrap_difference_ci,
@@ -171,23 +175,31 @@ def _axis_a_ranking(
     return entries
 
 
-def _axis_a_grid(ranking: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    """Reshape the Axis A ranking into a model x method grid plus the real population.
+def _grid(
+    entries: Sequence[dict[str, Any]],
+    *,
+    value_of: Callable[[dict[str, Any]], dict[str, Any] | None],
+    note: str,
+) -> dict[str, Any]:
+    """Shape any per-competitor scalar into a model x method grid plus the real population.
 
-    Built **from the ranking entries**, never recomputed, so the heatmap and the forest
-    plot cannot drift apart: both render the same numbers from the same objects.
+    *entries* are per-competitor dicts carrying at least ``slug``, ``model``,
+    ``strategy`` and ``is_real_reference``; *value_of* extracts the cell payload from
+    one entry (``None`` when that competitor has no defined value). One reshape serves
+    every heatmap the task emits, so the layout and the guards below cannot diverge
+    between them.
 
     Three properties the shape is chosen to guarantee:
 
-    * **An unjudged pair is ``None``, not ``0.0``.** A rate of zero is the best possible
-      result -- not one impossible persona -- so an absent cell rendered as zero would
-      report a combination that was never judged as the most coherent in the sweep. The
-      cell stays ``None`` here and the chart draws it as an explicit ``n/a``.
+    * **An unjudged pair is ``None``, not ``0.0``.** Zero is a real measurement -- the
+      best possible one for a defect rate -- so an absent cell rendered as zero would
+      report a combination that was never judged as the cleanest in the sweep. The cell
+      stays ``None`` here and the chart draws it as an explicit ``n/a``.
     * **The real population is not a grid cell.** It has no model and no method, so it
       has no coordinate; forcing it into a row would invent a factor level. It is carried
       separately under ``real`` and drawn as its own band -- the same reason the factor
       tests hold it out.
-    * **Every rate keeps its denominator**, so a cell is never read without the base it
+    * **Every value keeps its denominator**, so a cell is never read without the base it
       was computed over.
 
     Raises ``ValueError`` if two combinations claim the same ``(model, method)`` cell, or
@@ -202,15 +214,9 @@ def _axis_a_grid(ranking: Sequence[dict[str, Any]]) -> dict[str, Any]:
     placed: dict[tuple[str, str], str] = {}
     real: dict[str, Any] | None = None
 
-    for entry in ranking:
+    for entry in entries:
         if entry["is_real_reference"]:
-            real = {
-                "slug": entry["slug"],
-                "rate": entry["rate"],
-                "ci_lo": entry["ci_lo"],
-                "ci_hi": entry["ci_hi"],
-                "denominator": entry["denominator"],
-            }
+            real = value_of(entry)
             continue
         model, method = entry["model"], entry["strategy"]
         if not model or not method:
@@ -231,13 +237,7 @@ def _axis_a_grid(ranking: Sequence[dict[str, Any]]) -> dict[str, Any]:
             models.append(model)
         if method not in methods:
             methods.append(method)
-        cells.setdefault(model, {})[method] = {
-            "slug": entry["slug"],
-            "rate": entry["rate"],
-            "ci_lo": entry["ci_lo"],
-            "ci_hi": entry["ci_hi"],
-            "denominator": entry["denominator"],
-        }
+        cells.setdefault(model, {})[method] = value_of(entry)
 
     models.sort()
     methods.sort()
@@ -246,16 +246,139 @@ def _axis_a_grid(ranking: Sequence[dict[str, Any]]) -> dict[str, Any]:
     full = {model: {method: cells.get(model, {}).get(method) for method in methods}
             for model in models}
 
-    return {
-        "models": models,
-        "methods": methods,
-        "cells": full,
-        "real": real,
-        "note": (
+    return {"models": models, "methods": methods, "cells": full, "real": real, "note": note}
+
+
+_GRID_NOTE_SUFFIX = (
+    " The real population is carried under 'real' rather than as a grid row: it has no "
+    "model and no method, so it has no cell on this grid."
+)
+
+
+def _axis_a_grid(ranking: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Reshape the Axis A ranking into a model x method grid plus the real population.
+
+    Built **from the ranking entries**, never recomputed, so the heatmap and the forest
+    plot cannot drift apart: both render the same numbers from the same objects.
+    """
+    def _cell(entry: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "slug": entry["slug"],
+            "rate": entry["rate"],
+            "ci_lo": entry["ci_lo"],
+            "ci_hi": entry["ci_hi"],
+            "denominator": entry["denominator"],
+        }
+
+    return _grid(
+        ranking,
+        value_of=_cell,
+        note=(
             "A null cell means that model x method combination was not judged (or was not "
             "consumable) -- it is NOT an impossibility rate of zero, which would be the best "
-            "possible result. The real population is carried under 'real' rather than as a grid "
-            "row: it has no model and no method, so it has no cell on this grid."
+            "possible result." + _GRID_NOTE_SUFFIX
+        ),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Severity dimension -- reporting only, one grid per level                     #
+# --------------------------------------------------------------------------- #
+
+
+def _severity_grids(records: Sequence[CompetitorRecord]) -> dict[str, Any]:
+    """Per-severity clash prevalence, one model x method grid per level.
+
+    **Descriptive only.** Nothing here feeds the ranking, the contrasts or the factor
+    tests: this is a separate dimension from the binary ``can_exist``, reported so the
+    three severity levels can be inspected on their own, and it deliberately does not
+    change any existing number. ``severity_weights`` / ``impossibility_severities`` in
+    ``judge.yaml`` remain declared-but-unwired -- wiring them would move every
+    impossibility rate already published.
+
+    The metric per cell is **the share of that combination's personas exhibiting at
+    least one clash at that level**, with its denominator. Prevalence, not a count of
+    clashes: a persona with four S2 clashes is one persona with an S2 problem, and
+    counting clashes instead would let a single richly-annotated persona dominate a
+    combination's score.
+
+    The levels are counted **independently**, not as a partition. A persona carrying
+    both an S3 and an S2 appears in the S3 grid *and* the S2 grid, which is what makes
+    the three readable on their own -- ``max_severity`` alone would file that persona
+    under S3 and silently understate the S2 prevalence.
+
+    Direction is **not** uniform across the three, and the block says so per level.
+    S3 and S2 are defects, so lower is better. S1 is *unusual-but-possible*, which the
+    judge's own contract reports and never penalises: a high S1 rate plausibly means
+    healthy reach into the tails rather than a problem. Presenting it on a
+    lower-is-better ramp would assert that unusual people are defects.
+    """
+    directions = {
+        "S3": {
+            "meaning": "hard biological / legal / temporal contradiction",
+            "direction": "lower is better -- an S3 clash is a defect",
+            "penalised": True,
+        },
+        "S2": {
+            "meaning": "near-impossible attribute pairing",
+            "direction": "lower is better -- an S2 clash is a defect",
+            "penalised": True,
+        },
+        "S1": {
+            "meaning": "unusual but possible",
+            "direction": (
+                "neither better nor worse -- S1 is reported and never penalised. A higher "
+                "S1 rate plausibly indicates reach into the unusual-but-possible tail "
+                "rather than a defect, so this level must not be read as a score."
+            ),
+            "penalised": False,
+        },
+    }
+
+    levels: dict[str, Any] = {}
+    for level in SEVERITY_LEVELS:
+        field = SEVERITY_COUNT_FIELDS[level]
+
+        def _cell(entry: dict[str, Any], _field: str = field) -> dict[str, Any]:
+            record: CompetitorRecord = entry["_record"]
+            n = len(record.personas)
+            affected = sum(1 for row in record.personas if getattr(row, _field) > 0)
+            return {
+                "slug": record.slug,
+                # Denominator 0 is never used as a divisor: no persona, no rate.
+                "rate": (affected / n) if n else None,
+                "affected": affected,
+                "denominator": n,
+            }
+
+        levels[level] = {
+            **directions[level],
+            "grid": _grid(
+                [
+                    {
+                        "slug": r.slug, "model": r.model, "strategy": r.strategy,
+                        "is_real_reference": r.is_real_reference, "_record": r,
+                    }
+                    for r in records
+                ],
+                value_of=_cell,
+                note=(
+                    f"A null cell means that model x method combination was not judged -- it is "
+                    f"NOT an {level} prevalence of zero." + _GRID_NOTE_SUFFIX
+                ),
+            ),
+        }
+
+    return {
+        "levels": levels,
+        "metric": "share of a combination's personas exhibiting >=1 clash at this severity",
+        "independent_levels": (
+            "The three levels are counted independently, not as a partition: a persona "
+            "carrying both an S3 and an S2 clash is counted in both."
+        ),
+        "reporting_only": (
+            "Descriptive. This dimension feeds no ranking, no contrast and no significance "
+            "test, and does not affect the binary can_exist impossibility rate."
         ),
     }
 
@@ -600,6 +723,9 @@ def build_ranking(
             "measures": list(DISPERSION_MEASURES),
             "variance_center": variance_center,
         },
+        # A separate dimension from the binary can_exist, deliberately outside axis_a:
+        # reporting only, and it changes no existing number.
+        "severity": _severity_grids(records),
         "factor_significance": {
             "by_model": by_model,
             "by_method": by_method,

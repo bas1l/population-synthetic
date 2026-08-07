@@ -47,7 +47,19 @@ __all__ = [
 
 #: Bumped whenever a column is added, removed, or re-typed. Recorded by the producer
 #: in its combination report so a reader can name the mismatch instead of guessing.
-SCHEMA_VERSION = 1
+#:
+#: v2 added ``clash_count_s1``/``_s2``/``_s3``. ``max_severity`` alone can only
+#: *partition* personas -- each counted once, at its worst level -- which cannot answer
+#: "how many personas carry an S2 clash" once they also carry an S3. The per-severity
+#: counts make the three levels independently countable, so a persona holding both an
+#: S3 and an S2 is visible in both. The new columns are **required**, not optional: a
+#: reader that tolerated their absence would silently report every S2 prevalence as
+#: zero on a v1 file, which is indistinguishable from a genuinely clean combination.
+SCHEMA_VERSION = 2
+
+#: The severity levels the judge may tag a clash with, worst first. A protocol constant
+#: of the judge's output schema (see ``persona_realism/judge.py``), not a tunable.
+SEVERITY_LEVELS: tuple[str, ...] = ("S3", "S2", "S1")
 
 #: Separator for the per-round typicality series inside a single cell. Chosen because
 #: it never occurs in an integer rating and needs no CSV quoting.
@@ -75,6 +87,12 @@ class RealismPersonaRow:
     across all rounds (``S3`` > ``S2`` > ``S1``), empty when it raised none;
     ``clash_count`` is the number of *distinct* ``(attribute-pair, severity)`` clashes,
     not the number of rounds in which they appeared.
+
+    ``clash_count_s1``/``_s2``/``_s3`` break that total down by level, so the three
+    severities are countable **independently**: a persona carrying both an S3 and an S2
+    contributes to both, which ``max_severity`` alone cannot express (it would file that
+    persona under S3 only, making the S2 prevalence look lower than it is). They sum to
+    ``clash_count``.
     """
 
     persona_id: str
@@ -92,13 +110,24 @@ class RealismPersonaRow:
     typicality_rounds: tuple[int | None, ...]
     max_severity: str
     clash_count: int
+    clash_count_s1: int = 0
+    clash_count_s2: int = 0
+    clash_count_s3: int = 0
 
 
 #: Column order == :class:`RealismPersonaRow` field order (single source of truth).
 FIELDNAMES: tuple[str, ...] = tuple(f.name for f in fields(RealismPersonaRow))
 
+#: Per-severity count column for each level, in the fixed :data:`SEVERITY_LEVELS` order.
+SEVERITY_COUNT_FIELDS: dict[str, str] = {
+    level: f"clash_count_s{level[1:]}" for level in SEVERITY_LEVELS
+}
+
 _BOOL_FIELDS = ("is_real_reference", "can_exist_majority")
-_INT_FIELDS = ("n_rounds_attempted", "n_rounds_successful", "can_exist_true_votes", "clash_count")
+_INT_FIELDS = (
+    "n_rounds_attempted", "n_rounds_successful", "can_exist_true_votes", "clash_count",
+    *SEVERITY_COUNT_FIELDS.values(),
+)
 _OPTIONAL_FLOAT_FIELDS = ("typicality_mean", "typicality_sd")
 
 
@@ -214,7 +243,10 @@ def read_realism_personas_csv(path: Path, *, expected_rows: int | None = None) -
         if missing:
             raise ValueError(
                 f"{path}: per-persona realism CSV is missing required column(s) {missing}; "
-                f"header is {list(header)}. Expected schema v{SCHEMA_VERSION}: {list(FIELDNAMES)}."
+                f"header is {list(header)}. Expected schema v{SCHEMA_VERSION}: {list(FIELDNAMES)}. "
+                "The file predates the current schema -- regenerate it with "
+                "scripts/analyze/analyze_persona_realism.py --rewrite-artifacts (zero LLM "
+                "calls; the verdict caches already hold everything the new columns need)."
             )
         for record in reader:
             persona = record.get("persona_id") or "<unnamed>"

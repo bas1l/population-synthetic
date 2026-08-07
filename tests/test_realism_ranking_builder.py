@@ -9,6 +9,8 @@ test which cannot run leaves a recorded reason rather than nothing.
 
 from __future__ import annotations
 
+import dataclasses
+
 import matplotlib
 import pytest
 
@@ -24,6 +26,7 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_headline_map,
     plot_impossibility_forest,
     plot_impossibility_heatmap,
+    plot_severity_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord  # noqa: E402
 from population_synthetic.analysis.utils.realism_csv import RealismPersonaRow  # noqa: E402
@@ -451,6 +454,123 @@ def test_synthetic_competitor_without_a_coordinate_raises():
                      model="", strategy="")
     with pytest.raises(ValueError, match="missing its model/method coordinate"):
         _build([orphan])
+
+
+# --------------------------------------------------------------------------- #
+# severity dimension (reporting only, one grid per level)                      #
+# --------------------------------------------------------------------------- #
+
+
+def _with_severities(record, per_persona):
+    """Stamp per-persona (s1, s2, s3) distinct-clash counts onto a fixture record."""
+    rows = tuple(
+        dataclasses.replace(row, clash_count_s1=s1, clash_count_s2=s2, clash_count_s3=s3,
+                            clash_count=s1 + s2 + s3)
+        for row, (s1, s2, s3) in zip(record.personas, per_persona)
+    )
+    return dataclasses.replace(record, personas=rows)
+
+
+def _severity_fixture():
+    """Four personas per combination, with a deliberate S3+S2 double-carrier."""
+    a = _record("swedish_all_pick_claude_haiku", n_impossible=1, typicalities=[5.0] * 3,
+                model="claude_haiku", strategy="all_pick")
+    # persona 0 carries an S3 AND an S2; persona 1 carries an S1; personas 2-3 are clean.
+    a = _with_severities(a, [(0, 1, 1), (1, 0, 0), (0, 0, 0), (0, 0, 0)])
+    b = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0, typicalities=[5.0] * 4,
+                model="claude_sonnet", strategy="all_pick_dag")
+    b = _with_severities(b, [(0, 0, 0)] * 4)
+    real = _record("real_swedish", n_impossible=0, typicalities=[5.0] * 4,
+                   model="", strategy="", is_real=True)
+    real = _with_severities(real, [(1, 0, 0), (0, 1, 0), (0, 0, 0), (0, 0, 0)])
+    return [a, b, real]
+
+
+def test_severity_levels_are_counted_independently_not_as_a_partition():
+    """The load-bearing property: a persona with both an S3 and an S2 is in BOTH grids.
+
+    A ``max_severity``-based implementation would file that persona under S3 alone, so
+    the S2 grid would report 0.0 -- indistinguishable from a combination with no
+    near-impossible pairings at all.
+    """
+    ranking = _build(_severity_fixture())
+    levels = ranking["severity"]["levels"]
+
+    s3 = levels["S3"]["grid"]["cells"]["claude_haiku"]["all_pick"]
+    s2 = levels["S2"]["grid"]["cells"]["claude_haiku"]["all_pick"]
+    # One of four personas carries an S3; the SAME persona also carries an S2.
+    assert s3["affected"] == 1 and s3["rate"] == pytest.approx(0.25) and s3["denominator"] == 4
+    assert s2["affected"] == 1 and s2["rate"] == pytest.approx(0.25) and s2["denominator"] == 4
+
+    s1 = levels["S1"]["grid"]["cells"]["claude_haiku"]["all_pick"]
+    assert s1["affected"] == 1 and s1["rate"] == pytest.approx(0.25)
+
+
+def test_persona_with_no_clash_appears_in_no_severity_grid():
+    ranking = _build(_severity_fixture())
+    for level in ("S1", "S2", "S3"):
+        cell = ranking["severity"]["levels"][level]["grid"]["cells"]["claude_sonnet"]["all_pick_dag"]
+        assert cell["affected"] == 0
+        assert cell["rate"] == pytest.approx(0.0)   # a real, measured zero
+        assert cell["denominator"] == 4
+
+
+def test_severity_grid_unjudged_pair_is_none_not_zero():
+    ranking = _build(_severity_fixture())
+    for level in ("S1", "S2", "S3"):
+        cells = ranking["severity"]["levels"][level]["grid"]["cells"]
+        assert cells["claude_haiku"]["all_pick_dag"] is None
+        assert cells["claude_sonnet"]["all_pick"] is None
+        assert f"NOT an {level} prevalence of zero" in \
+            ranking["severity"]["levels"][level]["grid"]["note"]
+
+
+def test_severity_real_population_is_a_separate_entry_not_a_grid_cell():
+    ranking = _build(_severity_fixture())
+    for level, expected in (("S1", 0.25), ("S2", 0.25), ("S3", 0.0)):
+        grid = ranking["severity"]["levels"][level]["grid"]
+        assert grid["real"]["slug"] == "real_swedish"
+        assert grid["real"]["rate"] == pytest.approx(expected)
+        assert "real_swedish" not in grid["models"]
+
+
+def test_s1_is_declared_not_penalised_while_s2_and_s3_are():
+    """Direction is per level. Colouring S1 as a defect would assert unusual == wrong."""
+    levels = _build(_severity_fixture())["severity"]["levels"]
+    assert levels["S1"]["penalised"] is False
+    assert "never penalised" in levels["S1"]["direction"]
+    for level in ("S2", "S3"):
+        assert levels[level]["penalised"] is True
+        assert "lower is better" in levels[level]["direction"]
+
+
+def test_severity_block_declares_itself_reporting_only():
+    ranking = _build(_severity_fixture())
+    block = ranking["severity"]
+    assert "no ranking" in block["reporting_only"]
+    assert "independently" in block["independent_levels"]
+    # It must not have leaked into the ranking, the contrasts or the factor tests.
+    assert "severity" not in ranking["axis_a"]
+    assert all("severity" not in entry for entry in ranking["axis_a"]["ranking"])
+
+
+def test_severity_charts_render_and_raise_on_an_empty_ranking():
+    ranking = _build(_severity_fixture())
+    for level in ("S1", "S2", "S3"):
+        assert plot_severity_heatmap(ranking, level) is not None
+    with pytest.raises(KeyError, match="Unknown severity level"):
+        plot_severity_heatmap(ranking, "S9")
+
+    empty = CompetitorRecord(
+        slug="dead", country=_COUNTRY, model="m", strategy="s", is_real_reference=False,
+        n_personas=0, n_failed=1, personas=(), impossibility={"rate": None},
+        dispersion={}, reliability={}, provenance=dict(_PROVENANCE),
+        report_path="/fake/dead.json", personas_csv_path="/fake/dead_personas.csv",
+    )
+    dead = _build([empty])
+    for level in ("S1", "S2", "S3"):
+        with pytest.raises(ValueError):
+            plot_severity_heatmap(dead, level)
 
 
 def test_charts_raise_rather_than_emitting_an_empty_figure():

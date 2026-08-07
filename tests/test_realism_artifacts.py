@@ -337,6 +337,44 @@ def test_personas_csv_marks_the_real_competitor_without_model_or_strategy(tmp_pa
     assert all(r.model == "" and r.strategy == "" for r in rows)
 
 
+def test_personas_csv_carries_per_severity_counts_from_the_verdict_cache(tmp_path):
+    """The severity dimension's input, sourced from the cached clashes -- no re-judging.
+
+    The persona below carries an S3 *and* an S2 in the same round, so it must be
+    countable at both levels; ``max_severity`` alone would file it under S3 and hide the
+    S2 entirely.
+    """
+    out_dir = tmp_path / "combo_x"
+    attrs = {"age_group": "25-34", "education_level": "Upper-Secondary"}
+    both = _impossible(issues=(
+        Issue(("age_group", "education_level"), "S3", "hard"),
+        Issue(("income_bracket", "occupation"), "S2", "near"),
+    ))
+    _write_cache(out_dir, "persona_00000", attrs, [both, both])
+    _write_cache(out_dir, "persona_00001", attrs,
+                 [_possible(7, issues=(Issue(("a", "b"), "S1", "unusual"),))] * 2)
+    _write_cache(out_dir, "persona_00002", attrs, [_possible(8), _possible(8)])
+    _write_jsonl(out_dir, ["persona_00000", "persona_00001", "persona_00002"])
+
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    rows = {r.persona_id: r
+            for r in read_realism_personas_csv(out_dir / "combo_x_personas.csv")}
+
+    double = rows["persona_00000"]
+    assert double.max_severity == "S3"                       # the partition view
+    assert double.clash_count_s3 == 1 and double.clash_count_s2 == 1   # both countable
+    assert double.clash_count_s1 == 0
+    assert double.clash_count == 2
+
+    assert rows["persona_00001"].clash_count_s1 == 1
+    assert rows["persona_00001"].clash_count_s2 == 0
+    # A clean persona is at zero on every level.
+    clean = rows["persona_00002"]
+    assert (clean.clash_count_s1, clean.clash_count_s2, clean.clash_count_s3) == (0, 0, 0)
+    assert clean.max_severity == ""
+
+
 def test_personas_csv_row_count_mismatch_raises(tmp_path):
     out_dir = _seed_combo_dir(tmp_path)
     A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,

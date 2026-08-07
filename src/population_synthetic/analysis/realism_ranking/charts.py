@@ -8,6 +8,10 @@ Three figures:
   bootstrap CI, in rank order.
 * :func:`plot_impossibility_heatmap` -- Axis A reshaped as a model x method grid, with
   the real population as a separate band beneath it.
+* :func:`plot_severity_heatmap` -- the same grid layout for one clash-severity level
+  (S3 / S2 / S1). S3 and S2 are defects and use the lower-is-better ramp; S1 is
+  reported-but-never-penalised and uses a neutral ramp, because colouring it as a
+  defect would assert that unusual people are errors.
 
 **The real population is drawn as an ordinary competitor.** The previous version of the
 map pinned it to ``y = 0`` and marked it with a reference star, which encoded *the real
@@ -31,20 +35,33 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["plot_headline_map", "plot_impossibility_forest", "plot_impossibility_heatmap"]
+__all__ = [
+    "plot_headline_map",
+    "plot_impossibility_forest",
+    "plot_impossibility_heatmap",
+    "plot_severity_heatmap",
+]
 
 _COMPETITOR_COLOR = "#4878CF"
 _REAL_COLOR = "#C44E52"
 _CI_COLOR = "#8C8C8C"
 
-# Sequential ramp for the impossibility heatmap. Sequential, not diverging: the
-# quantity has a true zero (no impossible persona) and no meaningful midpoint, so a
-# diverging map would invent one and split the combinations into "good" and "bad"
-# sides at an arbitrary rate. Pale = few impossible personas = good.
-_HEATMAP_CMAP = "Reds"
+# Sequential ramp for a quantity where MORE IS WORSE (the impossibility rate, and the
+# S3/S2 clash prevalences). Sequential, not diverging: these quantities have a true
+# zero and no meaningful midpoint, so a diverging map would invent one and split the
+# combinations into "good" and "bad" sides at an arbitrary value. Red carries the
+# defect reading intentionally -- pale means few, dark means many, and many is bad.
+_DEFECT_CMAP = "Reds"
 
-# Fill for a model x method pair that was never judged. Deliberately outside the ramp
-# so it can never be mistaken for its pale (good) end.
+# Sequential ramp for a quantity that is REPORTED BUT NOT PENALISED -- the S1
+# (unusual-but-possible) prevalence. It still encodes magnitude, but in a hue that
+# carries no defect connotation, because a high S1 rate plausibly means healthy reach
+# into the tails. Rendering S1 on the red ramp would silently assert that unusual
+# people are defects, which the judge's own contract explicitly denies.
+_NEUTRAL_CMAP = "Blues"
+
+# Fill for a model x method pair that was never judged. Deliberately outside both ramps
+# so it can never be mistaken for their pale (few / none) end.
 _MISSING_COLOR = "#DDDDDD"
 
 #: Axis-B measure the headline map's y-axis uses. A presentation choice, not a
@@ -194,41 +211,46 @@ def plot_impossibility_forest(ranking: dict[str, Any]):
     fig.tight_layout()
     return fig
 
+def _render_grid_heatmap(
+    grid: dict[str, Any],
+    *,
+    title: str,
+    cbar_label: str,
+    cmap_name: str,
+    caption: str,
+    error_context: str,
+):
+    """Render one ``{models, methods, cells, real}`` grid as a heatmap.
 
-def plot_impossibility_heatmap(ranking: dict[str, Any]):
-    """Render Axis A as a model x method grid, with the real population as its own band.
-
-    The forest plot answers "who is most coherent"; this one answers "does incoherence
-    track the model, the method, or neither" -- the same question the Kruskal-Wallis
-    tests answer numerically, in a form that shows the pattern rather than a p-value.
-    Every number arrives pre-computed in ``axis_a.grid``; nothing is calculated here.
+    The single implementation behind every heatmap this task emits, so the layout and
+    the guards below cannot diverge between them. Computes nothing: each cell payload
+    already carries its ``rate`` and ``denominator``.
 
     Three rendering decisions carry meaning:
 
-    * **The ramp is sequential and anchored at a true zero.** ``vmin=0`` because zero
-      impossible personas is a real floor, not the bottom of the observed range, so a
-      pale cell always means "few", never "fewest in this particular sweep". A diverging
-      map is wrong here: it would invent a midpoint and sort combinations into good and
-      bad halves at an arbitrary rate.
+    * **The ramp is sequential and anchored at a true zero.** ``vmin=0`` because zero is
+      a real floor, not the bottom of the observed range, so a pale cell always means
+      "few", never "fewest in this particular sweep". A diverging map would be wrong:
+      the quantity has no meaningful midpoint, so a diverging map would invent one and
+      sort combinations into good and bad halves at an arbitrary value.
     * **An unjudged cell is grey and labelled ``n/a``**, drawn outside the ramp entirely.
       Rendering it at the pale end would show a combination that was never judged as the
-      most coherent in the sweep -- the single most damaging misreading this figure could
+      cleanest in the sweep -- the single most damaging misreading these figures could
       produce.
     * **The real population is a separated band, not a grid row.** It has no model and no
       method; giving it a row would present it as a factor level, which is exactly what
-      the ranking's factor tests hold it out of being. A white rule and a gap keep it
-      visually apart, and its rate spans the full width because it is not decomposed by
+      the ranking's factor tests hold it out of being. A white rule and a caption keep it
+      visually apart, and its value spans the full width because it is not decomposed by
       method.
 
-    Returns the ``Figure`` unsaved and open. Raises ``ValueError`` when the grid has no
-    cell with a defined rate (nothing to shade), matching the sibling charts.
+    Returns the ``Figure`` unsaved and open. Raises ``ValueError`` when nothing has a
+    defined value, matching the sibling charts.
     """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
-    grid = ranking["axis_a"]["grid"]
     models: list[str] = list(grid["models"])
     methods: list[str] = list(grid["methods"])
     real = grid.get("real")
@@ -237,17 +259,15 @@ def plot_impossibility_heatmap(ranking: dict[str, Any]):
     for i, model in enumerate(models):
         for j, method in enumerate(methods):
             cell = grid["cells"].get(model, {}).get(method)
-            if cell is not None and cell["rate"] is not None:
+            if cell is not None and cell.get("rate") is not None:
                 values[i, j] = float(cell["rate"])
 
     real_rate = None if real is None else real.get("rate")
     if not np.any(np.isfinite(values)) and real_rate is None:
-        raise ValueError(
-            "plot_impossibility_heatmap requires at least one competitor with a defined rate"
-        )
+        raise ValueError(f"{error_context} requires at least one competitor with a defined value")
 
     # The real band is appended as an extra row so it shares the colour scale -- the
-    # point of putting it on this figure at all is that its rate is comparable with the
+    # point of putting it on this figure at all is that its value is comparable with the
     # grid's. The separating rule below keeps it from reading as another model.
     n_rows = len(models) + (1 if real_rate is not None else 0)
     plotted = np.full((n_rows, max(len(methods), 1)), np.nan)
@@ -258,12 +278,12 @@ def plot_impossibility_heatmap(ranking: dict[str, Any]):
     finite = plotted[np.isfinite(plotted)]
     vmax = float(finite.max()) if finite.size else 1.0
     if vmax <= 0.0:
-        vmax = 1.0   # every rate is 0: keep a valid range instead of a degenerate one
+        vmax = 1.0   # every value is 0: keep a valid range instead of a degenerate one
 
     fig, ax = plt.subplots(
-        figsize=(max(7.0, len(methods) * 1.5 + 3.5), max(3.2, n_rows * 0.55 + 2.2))
+        figsize=(max(7.0, len(methods) * 1.5 + 3.5), max(3.2, n_rows * 0.55 + 2.4))
     )
-    cmap = plt.get_cmap(_HEATMAP_CMAP).copy()
+    cmap = plt.get_cmap(cmap_name).copy()
     cmap.set_bad(color=_MISSING_COLOR)
     im = ax.imshow(np.ma.masked_invalid(plotted), aspect="auto", cmap=cmap, vmin=0.0, vmax=vmax)
 
@@ -275,12 +295,12 @@ def plot_impossibility_heatmap(ranking: dict[str, Any]):
     ax.set_yticks(range(n_rows))
     ax.set_yticklabels(row_labels, fontsize=8)
 
-    # Annotate each cell with its rate and denominator; grey cells say so explicitly.
+    # Annotate each cell with its value and denominator; grey cells say so explicitly.
     threshold = vmax * 0.6   # dark fill -> white text
     for i, model in enumerate(models):
         for j, method in enumerate(methods):
             cell = grid["cells"].get(model, {}).get(method)
-            if cell is None or cell["rate"] is None:
+            if cell is None or cell.get("rate") is None:
                 ax.text(j, i, "n/a", ha="center", va="center", fontsize=7.5,
                         color="#666666", style="italic")
                 continue
@@ -291,7 +311,6 @@ def plot_impossibility_heatmap(ranking: dict[str, Any]):
                 color="white" if value > threshold else "black",
             )
 
-    caption = ""
     if real_rate is not None:
         row = n_rows - 1
         # A thick white rule + the band's own label: this row is not a model.
@@ -302,27 +321,99 @@ def plot_impossibility_heatmap(ranking: dict[str, Any]):
             ha="center", va="center", fontsize=7.5,
             color="white" if float(real_rate) > threshold else "black",
         )
-        caption = (
-            "The real population spans the full width because it has no method: it is not a "
-            "model x method cell, and the factor tests hold it out."
-        )
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
-    cbar.set_label("Impossibility rate -- lower is better", fontsize=8)
+    cbar.set_label(cbar_label, fontsize=8)
     cbar.ax.tick_params(labelsize=7)
 
     ax.set_xlabel("Method (strategy)", fontsize=9)
     ax.set_ylabel("Model", fontsize=9)
-    ax.set_title(
-        "Axis A -- impossibility rate by model x method\n"
-        "(grey = not judged, which is not a rate of zero)",
-        fontsize=12, fontweight="bold",
-    )
-    if caption:
+    ax.set_title(title, fontsize=12, fontweight="bold")
+
+    footnotes = [caption] if caption else []
+    if real_rate is not None:
+        footnotes.append(
+            "The real population spans the full width because it has no method: it is not "
+            "a model x method cell, and the factor tests hold it out."
+        )
+    text = "\n".join(footnotes)
+    if text:
         # Reserve a strip first, then place the caption inside it: an artist dropped
         # below the axes without reserved space collides with the rotated tick labels.
-        fig.tight_layout(rect=(0.0, 0.07, 1.0, 1.0))
-        fig.text(0.5, 0.02, caption, ha="center", va="bottom", fontsize=7, color="#555555")
+        reserved = 0.07 + 0.035 * text.count("\n")
+        fig.tight_layout(rect=(0.0, reserved, 1.0, 1.0))
+        fig.text(0.5, 0.015, text, ha="center", va="bottom", fontsize=7, color="#555555")
     else:
         fig.tight_layout()
     return fig
+
+
+def plot_impossibility_heatmap(ranking: dict[str, Any]):
+    """Render Axis A as a model x method grid, with the real population as its own band.
+
+    The forest plot answers "who is most coherent"; this one answers "does incoherence
+    track the model, the method, or neither" -- the same question the Kruskal-Wallis
+    tests answer numerically, in a form that shows the pattern rather than a p-value.
+    Every number arrives pre-computed in ``axis_a.grid``.
+    """
+    return _render_grid_heatmap(
+        ranking["axis_a"]["grid"],
+        title=(
+            "Axis A -- impossibility rate by model x method\n"
+            "(grey = not judged, which is not a rate of zero)"
+        ),
+        cbar_label="Impossibility rate -- lower is better",
+        cmap_name=_DEFECT_CMAP,
+        caption="",
+        error_context="plot_impossibility_heatmap",
+    )
+
+
+def plot_severity_heatmap(ranking: dict[str, Any], severity: str):
+    """Render one severity level's clash prevalence as a model x method grid.
+
+    *severity* is one of ``S3`` / ``S2`` / ``S1``. The value shown is the share of a
+    combination's personas exhibiting at least one clash at that level; the three levels
+    are counted independently, so a persona carrying both an S3 and an S2 appears on
+    both figures.
+
+    **The three levels are not rendered alike, and that is deliberate.** S3 and S2 are
+    defects and get the lower-is-better ramp. S1 is *unusual but possible* -- the judge's
+    own contract reports it and never penalises it, and a high S1 rate plausibly means
+    healthy reach into the tails rather than a problem. Putting it on a lower-is-better
+    ramp would silently assert that unusual people are defects, so it gets a neutral
+    ramp and a caption saying so. The distinction is drawn in the figure, not only in
+    this docstring, because the figure travels without the code.
+
+    Raises ``KeyError`` on an unknown severity level.
+    """
+    block = ranking["severity"]["levels"]
+    if severity not in block:
+        raise KeyError(
+            f"Unknown severity level {severity!r}: known levels are {sorted(block)}."
+        )
+    level = block[severity]
+    penalised = bool(level["penalised"])
+
+    if penalised:
+        cbar_label = f"{severity} prevalence -- lower is better"
+        caption = ""
+    else:
+        cbar_label = f"{severity} prevalence (not penalised)"
+        caption = (
+            f"{severity} is unusual-but-possible: it is reported and never penalised, and a "
+            "higher value is not worse. It may indicate reach into the unusual-but-possible "
+            "tail rather than a defect -- do not read this figure as a score."
+        )
+
+    return _render_grid_heatmap(
+        level["grid"],
+        title=(
+            f"Severity {severity} -- share of personas with >=1 {severity} clash\n"
+            f"({level['meaning']}; grey = not judged, not a prevalence of zero)"
+        ),
+        cbar_label=cbar_label,
+        cmap_name=_DEFECT_CMAP if penalised else _NEUTRAL_CMAP,
+        caption=caption,
+        error_context=f"plot_severity_heatmap({severity})",
+    )

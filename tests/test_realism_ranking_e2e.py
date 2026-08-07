@@ -39,6 +39,7 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_headline_map,
     plot_impossibility_forest,
     plot_impossibility_heatmap,
+    plot_severity_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors  # noqa: E402
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
@@ -150,11 +151,17 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
     save_figure(plot_headline_map(ranking), out_dir / "headline_map.png", dpi=80)
     save_figure(plot_impossibility_forest(ranking), out_dir / "impossibility_forest.png", dpi=80)
     save_figure(plot_impossibility_heatmap(ranking), out_dir / "impossibility_heatmap.png", dpi=80)
+    for level in ("S1", "S2", "S3"):
+        save_figure(plot_severity_heatmap(ranking, level),
+                    out_dir / f"severity_heatmap_{level.lower()}.png", dpi=80)
 
     for name in ("realism_ranking.json", "realism_summary.csv", "scb_contrast.csv",
                  "headline_map.png", "headline_map.svg",
                  "impossibility_forest.png", "impossibility_forest.svg",
-                 "impossibility_heatmap.png", "impossibility_heatmap.svg"):
+                 "impossibility_heatmap.png", "impossibility_heatmap.svg",
+                 "severity_heatmap_s1.png", "severity_heatmap_s1.svg",
+                 "severity_heatmap_s2.png", "severity_heatmap_s2.svg",
+                 "severity_heatmap_s3.png", "severity_heatmap_s3.svg"):
         assert (out_dir / name).is_file(), name
 
 

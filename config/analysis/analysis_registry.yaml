@@ -208,7 +208,13 @@ processes:
       judge_model / prompt hash / n_rounds across the consumption set. Emits
       realism_ranking.json, realism_summary.csv, scb_contrast.csv, headline_map
       impossibility_forest and impossibility_heatmap (model x method, with the real
-      population as a separate band) figures per country.
+      population as a separate band) figures per country. Also reports a separate,
+      purely descriptive SEVERITY dimension: one model x method heatmap per clash
+      level (S3 / S2 / S1) showing the share of a combination's personas carrying at
+      least one clash at that level, counted independently so a persona with both an
+      S3 and an S2 appears on both. It feeds no ranking or test and leaves the binary
+      impossibility rate untouched; S3/S2 are defects (lower is better) while S1 is
+      unusual-but-possible and is reported, never penalised.
     folder: "realism_ranking"
     script: "scripts/analyze/rank_persona_realism.py"
     dispatch: "slugs"

@@ -201,7 +201,10 @@ figures, and `{combo}_personas.csv` — the per-persona tidy CSV that is the int
 work**, so it is free to re-run. Two axes, opposite in direction: Axis A ranks impossibility rate
 with the real population as an ordinary ranked competitor (lower is better, for everyone); Axis B
 contrasts typicality dispersion against the real population **as the target** (distance near zero is
-better — the failure mode being guarded against is mode collapse).
+better — the failure mode being guarded against is mode collapse). Alongside them it reports a
+purely descriptive **severity** dimension: one model × method heatmap per clash level (S3 / S2 / S1),
+counted independently so a persona with both an S3 and an S2 appears on both. It feeds no ranking or
+test; S3/S2 are defects, while S1 is unusual-but-possible and is reported, never penalised.
 
 ```bash
 python scripts/analyze/analyze_persona_realism.py --slug swedish_02_all_pick_v2_claude_haiku

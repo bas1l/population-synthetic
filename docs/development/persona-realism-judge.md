@@ -142,6 +142,37 @@ Outputs per country under `03_Analysis/realism_ranking/<country>/`:
 | `headline_map.png/.svg` | Axis A x Axis B; the real population is a plotted competitor, **not** pinned to the origin |
 | `impossibility_forest.png/.svg` | every competitor's rate + bootstrap CI, rank order |
 | `impossibility_heatmap.png/.svg` | the rate as a model × method grid, with the real population as a separate band beneath it. Grey `n/a` = that pair was never judged, which is **not** a rate of zero |
+| `severity_heatmap_s3/s2/s1.png/.svg` | the same grid layout, one per clash severity — see below |
+
+### The severity dimension (reporting only)
+
+Three extra heatmaps, one per clash level, showing **the share of a combination's personas
+carrying at least one clash at that level**. Purely descriptive: it feeds no ranking, no
+contrast and no significance test, and the binary `can_exist` impossibility rate is
+unchanged. `severity_weights` / `impossibility_severities` stay declared-but-unwired —
+wiring them would move every impossibility rate already published.
+
+The three levels are counted **independently, not as a partition**: a persona carrying both
+an S3 and an S2 appears on both figures. That is why the tidy CSV needed
+`clash_count_s1/_s2/_s3` — `max_severity` alone files each persona at its worst level only,
+which would silently understate every S2 prevalence.
+
+**Direction is not uniform, and the figures say so:**
+
+| Level | Meaning | Direction |
+|---|---|---|
+| **S3** | hard contradiction | defect — lower is better, red ramp |
+| **S2** | near-impossible | defect — lower is better, red ramp |
+| **S1** | unusual but possible | **reported, never penalised** — neutral ramp; a higher value may mean healthy reach into the tails, not a problem |
+
+Colouring S1 on a lower-is-better ramp would assert that unusual people are defects, which
+the judge's own contract explicitly denies — the same class of error as treating SCB as the
+origin on Axis A.
+
+> **Schema v2.** The per-severity columns arrived with tidy-CSV schema v2. An output base
+> whose `{combo}_personas.csv` files predate it raises on read, naming
+> `--rewrite-artifacts`. Regenerating costs **zero LLM calls** — the clashes are already in
+> the verdict caches.
 
 Two gates run before any statistic, because both failure modes produce plausible-looking wrong
 numbers:

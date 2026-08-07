@@ -29,6 +29,14 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
     {country}/impossibility_heatmap.png/.svg model x method grid of the rate, with the real
                                           population as a separate band (grey = not judged,
                                           which is NOT a rate of zero)
+    {country}/severity_heatmap_s3/s2/s1.png/.svg  same grid layout, one per clash severity:
+                                          the share of a combination's personas carrying >=1
+                                          clash at that level. Counted INDEPENDENTLY -- a
+                                          persona with both an S3 and an S2 appears on both.
+                                          Reporting only: no ranking, no test, and the binary
+                                          impossibility rate is unaffected. S3/S2 are defects
+                                          (lower is better); S1 is unusual-but-possible and is
+                                          reported, never penalised, so it uses a neutral ramp.
 
 Two gates run before any statistic (both failure modes produce plausible-looking wrong
 numbers, so neither is a warning): a combination is consumed only if its report, its
@@ -75,9 +83,11 @@ from population_synthetic.analysis.realism_ranking.charts import (
     plot_headline_map,
     plot_impossibility_forest,
     plot_impossibility_heatmap,
+    plot_severity_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.realism_csv import SEVERITY_LEVELS
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -304,11 +314,19 @@ def main() -> None:
                   "(recorded in skipped_tests).")
 
         if not args.no_charts:
-            for name, build in (
+            charts = [
                 ("headline_map", lambda: plot_headline_map(ranking)),
                 ("impossibility_forest", lambda: plot_impossibility_forest(ranking)),
                 ("impossibility_heatmap", lambda: plot_impossibility_heatmap(ranking)),
-            ):
+            ]
+            # One heatmap per severity level, same layout. `level=level` binds the loop
+            # variable at definition time; a bare closure would render S1 three times.
+            charts += [
+                (f"severity_heatmap_{level.lower()}",
+                 lambda level=level: plot_severity_heatmap(ranking, level))
+                for level in SEVERITY_LEVELS
+            ]
+            for name, build in charts:
                 try:
                     saved = save_figure(build(), country_dir / f"{name}.png", dpi=args.dpi)
                 except ValueError as exc:
