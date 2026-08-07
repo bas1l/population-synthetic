@@ -68,6 +68,8 @@ from population_synthetic.analysis.utils.realism_csv import (
     SCHEMA_VERSION as PERSONA_CSV_SCHEMA_VERSION,
 )
 from population_synthetic.analysis.utils.realism_csv import (
+    SEVERITY_LEVELS,
+    SEVERITY_RANK,
     RealismPersonaRow,
     write_realism_personas_csv,
 )
@@ -80,9 +82,6 @@ __all__ = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
-
-# Severity ordering for the per-persona ``max_severity`` column (worst first).
-_SEVERITY_ORDER: tuple[str, ...] = ("S3", "S2", "S1")
 
 
 @dataclass(frozen=True)
@@ -268,10 +267,9 @@ def _combo_cost(
 
 def _serialise_clash_taxonomy(clash_taxonomy: dict[ClashKey, int]) -> list[dict[str, Any]]:
     """Convert the ``{ClashKey: count}`` taxonomy to a serialisable, ranked list."""
-    severity_rank = {"S3": 0, "S2": 1, "S1": 2}
     items = sorted(
         clash_taxonomy.items(),
-        key=lambda kv: (-kv[1], severity_rank.get(kv[0].severity, 9), kv[0].pair),
+        key=lambda kv: (-kv[1], SEVERITY_RANK.get(kv[0].severity, len(SEVERITY_LEVELS)), kv[0].pair),
     )
     return [
         {"pair": list(key.pair), "severity": key.severity, "n_personas": count}
@@ -308,7 +306,7 @@ def _build_row(stats: RealismStats, cost: dict[str, Any], validation: dict[str, 
 def _max_severity(persona: PersonaVerdict) -> str:
     """Worst clash severity the judge raised for *persona* (``""`` when none)."""
     severities = {key.severity for key in persona.clash_frequency}
-    for level in _SEVERITY_ORDER:
+    for level in SEVERITY_LEVELS:
         if level in severities:
             return level
     return ""
@@ -322,7 +320,7 @@ def _severity_counts(persona: PersonaVerdict) -> dict[str, int]:
     persona carrying both an S3 and an S2 is counted under both, where ``max_severity``
     would file it under S3 alone and understate the S2 prevalence.
     """
-    counts = {level: 0 for level in _SEVERITY_ORDER}
+    counts = {level: 0 for level in SEVERITY_LEVELS}
     for key in persona.clash_frequency:
         if key.severity in counts:
             counts[key.severity] += 1

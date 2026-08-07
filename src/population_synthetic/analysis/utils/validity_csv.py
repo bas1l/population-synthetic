@@ -8,6 +8,10 @@ format -- that agreement lives here.
 
 The helpers are deliberately format-only: they know nothing about *what* makes a persona
 valid, only how a validity verdict is serialized and how the passing ids are read back.
+The cell/header/whole-file primitives they are built on are shared with the other tidy
+CSV contracts in :mod:`population_synthetic.analysis.utils.tidy_csv`; what stays here is
+this format's own rule -- the ``persona_id, passed`` prefix and the lenient truth test
+its two independent writers require.
 """
 
 from __future__ import annotations
@@ -16,11 +20,14 @@ import csv
 from pathlib import Path
 from typing import Sequence
 
+from population_synthetic.analysis.utils.tidy_csv import is_truthy, missing_columns, write_rows
+
 # Every validity CSV starts with these two columns; detail columns follow.
 PERSONA_ID_COLUMN = "persona_id"
 PASSED_COLUMN = "passed"
 
-_TRUE_TOKENS = ("true", "1", "yes")
+# The columns the shared reader needs, whatever detail columns a task appends.
+_REQUIRED_COLUMNS = (PERSONA_ID_COLUMN, PASSED_COLUMN)
 
 
 def write_validity_csv(
@@ -33,17 +40,12 @@ def write_validity_csv(
     ``header`` must begin with ``persona_id, passed`` so the shared reader can locate the
     verdict regardless of the task's detail columns.
     """
-    if list(header[:2]) != [PERSONA_ID_COLUMN, PASSED_COLUMN]:
+    if list(header[:2]) != list(_REQUIRED_COLUMNS):
         raise ValueError(
             f"Validity CSV header must start with {PERSONA_ID_COLUMN!r}, {PASSED_COLUMN!r}; "
             f"got {list(header)!r}."
         )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(list(header))
-        for row in rows:
-            writer.writerow(list(row))
+    write_rows(out_path, header, rows)
 
 
 def read_passed_ids(csv_path: Path) -> set[str]:
@@ -63,13 +65,13 @@ def read_passed_ids(csv_path: Path) -> set[str]:
     with open(csv_path, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         fields = reader.fieldnames or []
-        if PERSONA_ID_COLUMN not in fields or PASSED_COLUMN not in fields:
+        if missing_columns(fields, _REQUIRED_COLUMNS):
             raise ValueError(
                 f"Validity CSV {csv_path} missing required column(s) "
                 f"{PERSONA_ID_COLUMN!r}/{PASSED_COLUMN!r}; header is {fields!r}."
             )
         for row in reader:
-            if str(row[PASSED_COLUMN]).strip().lower() in _TRUE_TOKENS:
+            if is_truthy(row[PASSED_COLUMN]):
                 passed.add(row[PERSONA_ID_COLUMN])
     return passed
 
@@ -102,8 +104,4 @@ def upsert_summary_row(
     else:
         rows.append(new_row)
     rows.sort(key=lambda r: r[0])
-    summary_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(summary_path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(list(header))
-        writer.writerows(rows)
+    write_rows(summary_path, header, rows)
