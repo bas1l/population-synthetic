@@ -75,17 +75,17 @@ actionable fact the judge produces, and it is currently unreachable.
 
 ## Success Criteria
 
-- [ ] `{combo}_clashes.csv` and `{combo}_clash_explanations.csv` are written for all 51 `swedish_02`
+- [x] `{combo}_clashes.csv` and `{combo}_clash_explanations.csv` are written for all 51 `swedish_02`
       combinations by `analyze_persona_realism.py --rewrite-artifacts`, with **zero LLM calls**
       (asserted by the `plan_only is True` / `force is False` test triple).
-- [ ] Running `--rewrite-artifacts` twice produces **byte-identical** files for both new artifacts.
-- [ ] Judging combo A then B produces byte-identical artifacts to judging B then A (existing
+- [x] Running `--rewrite-artifacts` twice produces **byte-identical** files for both new artifacts.
+- [x] Judging combo A then B produces byte-identical artifacts to judging B then A (existing
       order-independence test extended to the two new files).
-- [ ] The reconciliation invariant holds for every combination: the count of distinct
+- [x] The reconciliation invariant holds for every combination: the count of distinct
       `(persona_id, attr_a, attr_b, severity)` tuples at level *L* in `{combo}_clashes.csv` equals
       the sum of `clash_count_s{L}` over that combination's `{combo}_personas.csv` rows. A violation
       raises, naming both files and `--rewrite-artifacts`.
-- [ ] A combination with no clashes at all produces a **header-only** `{combo}_clashes.csv`, not an
+- [x] A combination with no clashes at all produces a **header-only** `{combo}_clashes.csv`, not an
       absent file; the reader accepts it and raises only on a genuinely absent file.
 - [ ] `realism_ranking.json` contains a `severity_drivers` block whose per-cell denominators are
       identical to the corresponding `severity.levels.{L}.grid` cell denominators.
@@ -319,26 +319,68 @@ consumer wired to it yet.
 ### Phase 2: Producer — derive and emit
 **Goal:** All 51 combinations carry both new files, regenerated at zero cost.
 
-- [ ] 2.1 — Add a pure `clash_rows(persona_realism, attributes, slug_fields)` function to
+**Started:** 2026-08-07
+**Completed:** 2026-08-07
+
+- [x] 2.1 — Add a pure `clash_rows(persona_realism, attributes, slug_fields)` function to
       `reduce.py` returning `list[RealismClashRow]`: iterate rounds, dedupe within a round using the
       same `seen` convention as `reduce_persona`, sort the attribute pair, join each name against
       the persona's `attributes` map, set `unresolved` + empty values on a failed join.
-- [ ] 2.2 — Add the parallel explanations-row derivation, keyed identically.
-- [ ] 2.3 — Extract an `_emit_csv(path, build_rows, force, logger)` helper in `artifacts.py`,
+- [x] 2.2 — Add the parallel explanations-row derivation, keyed identically.
+- [x] 2.3 — Extract an `_emit_csv(path, build_rows, force, logger)` helper in `artifacts.py`,
       mirroring the existing `_emit_figure`, and route the personas CSV plus both new files through
       it — `write_combo_artifacts` otherwise gains a fourth and fifth near-identical block on an
       already-long function.
-- [ ] 2.4 — Wire both new writes into `write_combo_artifacts` under the same `force` gate as the
+- [x] 2.4 — Wire both new writes into `write_combo_artifacts` under the same `force` gate as the
       other artifacts, so `--rewrite-artifacts` regenerates the **set**, never a mixed-generation
       tree.
-- [ ] 2.5 — Stamp `clash_csv_schema_version` into `_provenance_meta` (`artifacts.py:146`) beside the
+- [x] 2.5 — Stamp `clash_csv_schema_version` into `_provenance_meta` (`artifacts.py:146`) beside the
       existing `persona_csv_schema_version`, as a separate key.
-- [ ] 2.6 — Run `analyze_persona_realism.py --rewrite-artifacts` over all 51 `swedish_02`
+- [x] 2.6 — Run `analyze_persona_realism.py --rewrite-artifacts` over all 51 `swedish_02`
       combinations. Verify zero LLM calls and byte-identical output on a second run.
+
+**Implementation notes (deviations worth a reviewer's attention):**
+
+- **`clash_rows` takes the whole `LoadedPersona`**, not `(persona_realism, attributes, slug_fields)`
+  as three arguments. The rounds and the attributes map must describe the *same* persona; passing
+  them apart makes a silent mis-pairing — one persona's clashes joined against another's values —
+  expressible, and the result would look entirely plausible. The slug fields stay as the same five
+  keyword arguments `_persona_rows` already takes.
+- **The within-round dedupe is now one function, not two implementations.** `_round_clashes(verdict)`
+  returns the round's distinct `ClashKey`s mapped to the judge's (first) explanation for each, and is
+  read by `reduce_persona`, `clash_rows` and `clash_explanation_rows` alike. The plan's stated risk
+  ("the dedupe convention diverges from `reduce.py`") is therefore structurally impossible rather
+  than test-guarded; the test asserting the two agree is retained as a regression check on the
+  reconciliation arithmetic.
+- **A new module, `persona_realism/clash_explanations_csv.py`,** holds the side file's row DTO and
+  writer. It is deliberately *not* in `analysis/utils/`: that package is cross-process shared infra,
+  and this file is read by no other process (nor by a human tool) — putting it beside the contract
+  module would imply a promise to a reader it does not have. It carries no `SCHEMA_VERSION` for the
+  same reason. `reduce.py` imports only its DTO, exactly as it imports only `RealismClashRow`.
+- **`unresolved` covers three failure modes, not one.** The plan defines it as "the attribute name
+  does not appear in the persona's `attributes` map"; the implementation also marks a key present but
+  holding `None`, or holding a value that renders empty. All three mean "no category value to
+  attribute this clash to", and the alternative for the second is writing the literal string
+  `'None'` into `value_a` — a fabricated category. This keeps the contract's stated *iff* (values are
+  empty exactly when the join failed) true rather than approximately true.
+- **A partial join is unresolved as a whole.** The contract (Phase 1) rejects an `unresolved` row
+  carrying values, so a clash where one name resolves and the other does not is written with both
+  values empty. The row's claim is about a *pair*; half of one is not a weaker version of it.
+  *The regeneration pass justified the broadened rule empirically:* all 5 unresolved rows in the
+  51-combination corpus are `age_group × employment_status` on personas whose cached `age_group` is
+  `null` (a mapped record with neither `age` nor `age_group`) — not a hallucinated name at all. Under
+  the narrow key-presence rule those rows would have carried the literal string `"None"` as a
+  category value, and Phase 3 would have ranked `None × Retired` as a driver.
+- **`_emit_csv` took the combination summary CSV too**, not only the three files the task named. It
+  is the same exists-else-write shape, so leaving it as the one un-extracted duplicate would have
+  been the worse reading. All four writers share `(rows, path) -> Path`, so the helper never learns a
+  column name; the skip log line now names the file (which begins with the combo label) rather than
+  repeating the label separately.
 
 **Files Modified:**
 - `src/population_synthetic/analysis/persona_realism/reduce.py` — pure row derivation
 - `src/population_synthetic/analysis/persona_realism/artifacts.py` — `_emit_csv`, two new writes, provenance key
+- `src/population_synthetic/analysis/persona_realism/clash_explanations_csv.py` — new, the side-file schema + writer
 
 **Dependencies:** Phase 1
 
@@ -384,10 +426,10 @@ consumer wired to it yet.
       `test_realism_csv.py:112-115` pattern), asserting the message names `--rewrite-artifacts`.
 - [x] Absent file raises `FileNotFoundError`; header-only file returns `[]`.
 - [x] `unresolved=True` rows keep `value_a`/`value_b` empty and are never coerced to a value.
-- [ ] Pair canonicalisation: an issue emitted as `(b, a)` produces the same row as `(a, b)`.
+- [x] Pair canonicalisation: an issue emitted as `(b, a)` produces the same row as `(a, b)`.
       *(Phase 2 — `reduce.py` owns the canonicalisation; Phase 1 only enforces the sorted pair at
       the contract boundary, tested there.)*
-- [ ] Within-round dedupe matches `reduce_persona`'s `seen` convention. *(Phase 2.)*
+- [x] Within-round dedupe matches `reduce_persona`'s `seen` convention. *(Phase 2.)*
 - [x] Byte-determinism: write the same rows twice, compare bytes; and shuffle the input order,
       confirm identical output.
 - [x] Reconciliation mismatch raises, naming both files and `--rewrite-artifacts` (unit level,
@@ -400,37 +442,57 @@ consumer wired to it yet.
       `test_realism_ranking_builder.py:553-556`.
 
 ### Integration Tests
-- [ ] **Reconciliation** — distinct `(persona, pair, severity)` count per level equals the summed
+- [x] **Reconciliation** — distinct `(persona, pair, severity)` count per level equals the summed
       `clash_count_s*` from the personas CSV. This is simultaneously the completeness invariant and
-      the regression test; a deliberately corrupted pair must raise.
+      the regression test; a deliberately corrupted pair must raise. *(Two corruptions are covered:
+      dropping a clash breaks the count and raises the reconciliation error; swapping a pair into
+      unsorted order raises the row-level invariant. A pair **renamed** without changing the count is
+      by construction invisible to a count-based invariant — noted so a reader does not read the
+      check as stronger than it is.)*
 - [ ] Loader gate: a combination directory missing `{combo}_clashes.csv` yields the skip reason under
       default and raises under `strict`, using the `_write_combo(..., clashes_csv=False)` switch
       added to `test_realism_ranking_loader.py:61-105`.
 - [ ] Denominator agreement: every `severity_drivers` cell denominator equals the corresponding
       `severity.levels.{L}.grid` cell denominator.
-- [ ] `--rewrite-artifacts` CLI dispatch triple, extending
+- [x] `--rewrite-artifacts` CLI dispatch triple, extending
       `test_persona_realism_smoke.py:495-542`: `artifacts_force is True`, `force is False`,
-      `plan_only is True`.
+      `plan_only is True`. *(Already asserted verbatim by
+      `test_cli_combo_dispatch_skips_rewrite_when_nothing_changed`; no extension was needed, and it
+      now covers the two new files because they sit under the same `force` gate.)*
 - [ ] e2e in `test_realism_ranking_e2e.py`: judge → rank on a `tmp_path` base produces all six CSVs.
-- [ ] Order-independence: judging A-then-B vs B-then-A yields byte-identical new artifacts.
+- [x] Order-independence: judging A-then-B vs B-then-A yields byte-identical new artifacts.
 
 ### Manual Verification
-- [ ] Run the full `--rewrite-artifacts` pass over the 51 `swedish_02` combinations; confirm the run
-      reports zero LLM calls and zero cost.
+- [x] Run the full `--rewrite-artifacts` pass over the 51 `swedish_02` combinations; confirm the run
+      reports zero LLM calls and zero cost. *(Run twice, 2026-08-07. Verified structurally rather
+      than by reading a cost line: all **9102** verdict-cache + telemetry files (4551 personas × 2)
+      were unchanged in size and mtime across both passes, and the runner logged "no LLM call made"
+      for every combination. The config sits at `n_rounds: 3` while the cache holds 1, so this run
+      is precisely the case the plan-only guard exists for — without it the pass would have topped
+      up 4551 personas. The 51 combinations reconciled clean against the strict reader: 2235 clash
+      rows, 5 unresolved, 2 header-only.)*
 - [ ] Confirm `severity_drivers_s3.csv` ranks `employment_status × employment_type` first for
       `swedish_02_all_pick_v2_ollama_mistral_nemo_12b`, with `Student × Permanent Full-time` as its
-      top value row — the case verified by hand in `persona_00213.json`.
+      top value row — the case verified by hand in `persona_00213.json`. *(Phase 3 owns the table.
+      The underlying rows are now on disk and were read directly: at S3 that combination has
+      `employment_status × employment_type` and `employment_status × income_source` **tied** at 12
+      rows each, so the plan's "first" depends on the declared tie-break (`n_personas` desc →
+      `attr_a` → `attr_b`), which does put `employment_type` ahead. Its value rows are
+      `Unemployed × Permanent Full-time` (6), then `Student × Permanent Full-time` (5) — so
+      `Student × …` is the second value row, not the first. Phase 3 should assert what the data
+      says, not the number recorded here from an earlier hand-check.)*
 - [ ] Read `severity_drivers_s1.csv` for a strong model and confirm the S1 drivers read as
       tail-reach, not defects.
 - [ ] Confirm the SCB row (`real_swedish_02`) appears in all six tables as an ordinary competitor.
 
 ### Edge Cases
-- [ ] A combination with zero clashes at every level (header-only file, cell with `drivers: []`).
-- [ ] A persona with zero successful rounds (contributes no rows; still counted in the denominator).
+- [x] A combination with zero clashes at every level (header-only file; the `drivers: []` cell is
+      Phase 3).
+- [x] A persona with zero successful rounds (contributes no rows; still counted in the denominator).
 - [ ] A cell where every persona shares one clash (prevalence 1.0).
 - [ ] An unjudged `(model, method)` pair — `None`, never `0.0`, per `_grid`'s guarantee.
-- [ ] A judge-hallucinated attribute name → `unresolved` row, counted, run does not fail.
-- [ ] `n_rounds > 1` (the current data is all `n_rounds: 1`; the round dimension must be exercised
+- [x] A judge-hallucinated attribute name → `unresolved` row, counted, run does not fail.
+- [x] `n_rounds > 1` (the current data is all `n_rounds: 1`; the round dimension must be exercised
       by a fabricated fixture).
 
 ---

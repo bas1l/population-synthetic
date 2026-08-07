@@ -320,6 +320,8 @@ from population_synthetic.analysis.persona_realism.judge import Issue, RoundVerd
 from population_synthetic.analysis.persona_realism.reduce import (  # noqa: E402
     ClashKey,
     LoadedPersona,
+    clash_explanation_rows,
+    clash_rows,
     load_combo_verdicts,
     load_persona_verdicts,
     reduce_combo,
@@ -428,6 +430,134 @@ def test_reduce_combo_all_failed_is_empty_base():
     assert combo.impossibility_rate is None
     assert combo.impossible_indicators == ()
     assert combo.typicality_means == ()
+
+
+# --------------------------------------------------------------------------- #
+# clash_rows / clash_explanation_rows (the per-clash expansion)                #
+# --------------------------------------------------------------------------- #
+
+
+def _loaded_persona(rounds, *, attributes=None, persona_id="persona_00001"):
+    """A :class:`LoadedPersona` straight from round DTOs (no cache file, no judge)."""
+    return LoadedPersona(
+        persona_id=persona_id,
+        attributes=dict(attributes if attributes is not None else {"a": "A", "b": "B"}),
+        rounds=tuple(rounds),
+        failed_rounds=0,
+    )
+
+
+def test_clash_rows_canonicalise_the_attribute_pair():
+    """An issue named ``(b, a)`` must produce exactly the row ``(a, b)`` produces.
+
+    Otherwise one driver splits into two ranks downstream under two spellings.
+    """
+    attrs = {"age_group": "25-34", "income": "Low"}
+    forward = _loaded_persona([_possible(7, [Issue(("age_group", "income"), "S1", "x")])], attributes=attrs)
+    backward = _loaded_persona([_possible(7, [Issue(("income", "age_group"), "S1", "x")])], attributes=attrs)
+    assert clash_rows(forward, slug="combo_x") == clash_rows(backward, slug="combo_x")
+    (row,) = clash_rows(backward, slug="combo_x")
+    assert (row.attr_a, row.attr_b) == ("age_group", "income")
+    assert (row.value_a, row.value_b) == ("25-34", "Low")
+
+
+def test_clash_rows_dedupe_within_a_round_matches_reduce_persona():
+    """The row grain and ``clash_frequency`` must count the same thing.
+
+    Both read ``_round_clashes``: a clash repeated inside one round is one row and
+    one round-hit, so rows per (pair, severity) == that key's clash_frequency. This
+    is the equality the reconciliation invariant is built on.
+    """
+    rounds = [
+        _possible(7, [
+            Issue(("a", "b"), "S1", "first"),
+            Issue(("b", "a"), "S1", "the same clash, said twice"),
+            Issue(("a", "b"), "S2", "a different severity is a different clash"),
+        ]),
+        _possible(6, [Issue(("a", "b"), "S1", "again, in the next round")]),
+    ]
+    rows = clash_rows(_loaded_persona(rounds), slug="combo_x")
+    assert [(r.round_index, r.attr_a, r.attr_b, r.severity) for r in rows] == [
+        (0, "a", "b", "S1"), (0, "a", "b", "S2"), (1, "a", "b", "S1"),
+    ]
+    pv = reduce_persona(rounds, persona_id="persona_00001")
+    for key, frequency in pv.clash_frequency.items():
+        n_rows = sum(
+            1 for r in rows if (r.attr_a, r.attr_b) == key.pair and r.severity == key.severity
+        )
+        assert n_rows == frequency, key
+
+
+def test_clash_rows_carry_the_round_index_over_several_rounds():
+    """The round dimension: the real data is all ``n_rounds: 1``, so it is fabricated here."""
+    rounds = [_possible(7, [Issue(("a", "b"), "S2", f"round {i}")]) for i in range(3)]
+    rows = clash_rows(_loaded_persona(rounds), slug="combo_x")
+    assert [r.round_index for r in rows] == [0, 1, 2]
+
+
+def test_clash_rows_flag_a_hallucinated_attribute_unresolved_without_failing():
+    """``judge.py`` validates an issue's shape, never its attribute names.
+
+    A name the persona does not carry is a real clash with unknown values, so it is
+    written as an ``unresolved`` row (and stays countable), never dropped and never
+    given a fabricated value.
+    """
+    attrs = {"age_group": "25-34", "employment_status": "Student"}
+    persona = _loaded_persona(
+        [_possible(5, [
+            Issue(("age_group", "employment_status"), "S2", "joins"),
+            Issue(("employment_status", "zodiac_sign"), "S3", "invented axis"),
+        ])],
+        attributes=attrs,
+    )
+    rows = {(r.attr_a, r.attr_b): r for r in clash_rows(persona, slug="combo_x")}
+    joined = rows[("age_group", "employment_status")]
+    assert joined.unresolved is False
+    assert (joined.value_a, joined.value_b) == ("25-34", "Student")
+    hallucinated = rows[("employment_status", "zodiac_sign")]
+    assert hallucinated.unresolved is True
+    assert (hallucinated.value_a, hallucinated.value_b) == ("", "")
+
+
+def test_clash_rows_treat_a_valueless_attribute_as_unresolved():
+    """A key present but holding no value is a failed join, not the string ``'None'``."""
+    persona = _loaded_persona(
+        [_possible(5, [Issue(("a", "b"), "S1", "x")])],
+        attributes={"a": "A", "b": None},
+    )
+    (row,) = clash_rows(persona, slug="combo_x")
+    assert row.unresolved is True
+    assert (row.value_a, row.value_b) == ("", "")
+
+
+def test_clash_rows_carry_the_combination_identity_and_are_empty_without_clashes():
+    persona = _loaded_persona([_possible(9), _possible(8)])
+    assert clash_rows(persona, slug="combo_x") == []
+    with_clash = _loaded_persona([_possible(9, [Issue(("a", "b"), "S1", "x")])])
+    (row,) = clash_rows(
+        with_clash, slug="swedish_02_all_pick_v2_claude_haiku",
+        country="swedish_02", model="claude_haiku", strategy="all_pick_v2",
+    )
+    assert row.slug == "swedish_02_all_pick_v2_claude_haiku"
+    assert (row.country, row.model, row.strategy) == ("swedish_02", "claude_haiku", "all_pick_v2")
+    assert row.is_real_reference is False
+
+
+def test_clash_explanation_rows_are_keyed_like_the_clash_rows():
+    """The two derivations must agree key-for-key, or the side file cannot be joined."""
+    rounds = [
+        _possible(7, [
+            Issue(("a", "b"), "S1", "the first explanation wins"),
+            Issue(("b", "a"), "S1", "the repeat is dropped with its text"),
+        ]),
+        _possible(6, [Issue(("a", "b"), "S1", "round two")]),
+    ]
+    persona = _loaded_persona(rounds)
+    key = ("persona_id", "round_index", "attr_a", "attr_b", "severity")
+    clashes = [tuple(getattr(r, f) for f in key) for r in clash_rows(persona, slug="combo_x")]
+    explanations = clash_explanation_rows(persona)
+    assert [tuple(getattr(r, f) for f in key) for r in explanations] == clashes
+    assert [r.explanation for r in explanations] == ["the first explanation wins", "round two"]
 
 
 # --------------------------------------------------------------------------- #

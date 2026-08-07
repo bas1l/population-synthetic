@@ -23,7 +23,21 @@ from population_synthetic.analysis.persona_realism.reduce import reduce_combo, r
 from population_synthetic.analysis.persona_realism.config import JudgeConfig
 from population_synthetic.analysis.persona_realism.report import write_combo_report
 from population_synthetic.analysis.persona_realism.stats import compute_realism_stats
-from population_synthetic.analysis.utils.realism_csv import read_realism_personas_csv
+from population_synthetic.analysis.persona_realism.clash_explanations_csv import (
+    FIELDNAMES as EXPLANATION_FIELDNAMES,
+)
+from population_synthetic.analysis.utils.realism_clash_csv import (
+    FIELDNAMES as CLASH_FIELDNAMES,
+)
+from population_synthetic.analysis.utils.realism_clash_csv import (
+    SCHEMA_VERSION as CLASH_CSV_SCHEMA_VERSION,
+)
+from population_synthetic.analysis.utils.realism_clash_csv import read_realism_clashes_csv
+from population_synthetic.analysis.utils.realism_csv import (
+    SEVERITY_COUNT_FIELDS,
+    SEVERITY_LEVELS,
+    read_realism_personas_csv,
+)
 
 _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
 _BOOT = {"iterations": 200, "seed": 20260723, "ci_level": 0.95}
@@ -219,6 +233,7 @@ def test_write_combo_artifacts_writes_all_and_is_idempotent(tmp_path):
     )
     expected = {
         out_dir / "combo_x.csv", out_dir / "combo_x.json", out_dir / "combo_x_personas.csv",
+        out_dir / "combo_x_clashes.csv", out_dir / "combo_x_clash_explanations.csv",
         out_dir / "typicality.png", out_dir / "typicality.svg",
         out_dir / "clash_taxonomy.png", out_dir / "clash_taxonomy.svg",
     }
@@ -298,7 +313,8 @@ def test_combo_artifacts_are_byte_identical_regardless_of_order(tmp_path):
     A.write_combo_artifacts(second, "combo_x", cfg=cfg, dpi=80, force=True,
                             hard_rules=(), pricing=_PRICING)
 
-    for name in ("combo_x.json", "combo_x.csv", "combo_x_personas.csv"):
+    for name in ("combo_x.json", "combo_x.csv", "combo_x_personas.csv",
+                 "combo_x_clashes.csv", "combo_x_clash_explanations.csv"):
         assert (first / name).read_bytes() == (second / name).read_bytes(), name
 
 
@@ -381,3 +397,178 @@ def test_personas_csv_row_count_mismatch_raises(tmp_path):
                             hard_rules=(), pricing=_PRICING)
     with pytest.raises(ValueError, match="n_personas=99"):
         read_realism_personas_csv(out_dir / "combo_x_personas.csv", expected_rows=99)
+
+
+# --------------------------------------------------------------------------- #
+# per-clash CSV + explanation side file                                        #
+# --------------------------------------------------------------------------- #
+
+#: Attributes covering every axis the clash fixtures below name, so a value join
+#: succeeds unless a test deliberately makes it fail.
+_CLASH_ATTRS = {
+    "age_group": "25-34", "education_level": "Upper-Secondary",
+    "income_bracket": "Low", "occupation": "Student",
+}
+
+
+def _seed_clash_combo_dir(tmp_path):
+    """Three personas x two rounds: one with two clashes, one with one, one clean."""
+    out_dir = tmp_path / "combo_x"
+    both = _impossible(issues=(
+        Issue(("age_group", "education_level"), "S3", "hard, with a comma"),
+        Issue(("income_bracket", "occupation"), "S2", "near"),
+    ))
+    _write_cache(out_dir, "persona_00000", _CLASH_ATTRS, [both, both])
+    _write_cache(out_dir, "persona_00001", _CLASH_ATTRS,
+                 [_possible(7, issues=(Issue(("occupation", "age_group"), "S1", "unusual"),))] * 2)
+    _write_cache(out_dir, "persona_00002", _CLASH_ATTRS, [_possible(8), _possible(8)])
+    _write_jsonl(out_dir, ["persona_00000", "persona_00001", "persona_00002"])
+    return out_dir
+
+
+def _expected_clash_counts(personas_csv):
+    """The per-level distinct-clash totals the personas CSV declares."""
+    rows = read_realism_personas_csv(personas_csv)
+    return {
+        level: sum(getattr(r, SEVERITY_COUNT_FIELDS[level]) for r in rows)
+        for level in SEVERITY_LEVELS
+    }
+
+
+def test_clashes_csv_reconciles_with_the_personas_csv(tmp_path):
+    """The completeness invariant: the same quantity, counted from two files.
+
+    Distinct ``(persona, pair, severity)`` per level in ``{combo}_clashes.csv`` must
+    equal the summed ``clash_count_s{L}`` of ``{combo}_personas.csv``. Both are
+    written from one pass over one verdict cache, so a disagreement means the tree
+    holds two generations of the same combination.
+    """
+    out_dir = _seed_clash_combo_dir(tmp_path)
+    A.write_combo_artifacts(
+        out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+        country="swedish_02", model="claude_haiku", strategy="all_pick_v2",
+        hard_rules=(), pricing=_PRICING,
+    )
+    personas_csv = out_dir / "combo_x_personas.csv"
+    expected = _expected_clash_counts(personas_csv)
+    assert expected == {"S3": 1, "S2": 1, "S1": 1}
+
+    rows = read_realism_clashes_csv(
+        out_dir / "combo_x_clashes.csv",
+        expected_counts=expected, expected_counts_source=personas_csv,
+    )
+    # 2 clashes x 2 rounds for the first persona, 1 x 2 for the second, none for the third.
+    assert len(rows) == 6
+    assert sorted({r.round_index for r in rows}) == [0, 1]      # the round dimension survives
+    assert all(r.slug == "combo_x" and r.model == "claude_haiku" for r in rows)
+    joined = {(r.attr_a, r.attr_b): r for r in rows}
+    assert joined[("age_group", "education_level")].value_a == "25-34"
+    assert joined[("age_group", "education_level")].value_b == "Upper-Secondary"
+    # The judge named (occupation, age_group); the row carries the sorted pair.
+    assert ("age_group", "occupation") in joined
+    assert not any(r.unresolved for r in rows)
+
+
+def test_clashes_csv_reconciliation_raises_on_a_corrupted_file(tmp_path):
+    """Deleting a clash from the file must be caught, naming both files and the fix."""
+    out_dir = _seed_clash_combo_dir(tmp_path)
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    clashes_csv = out_dir / "combo_x_clashes.csv"
+    personas_csv = out_dir / "combo_x_personas.csv"
+    kept = [ln for ln in clashes_csv.read_text(encoding="utf-8").splitlines() if ",S1," not in ln]
+    clashes_csv.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="rewrite-artifacts"):
+        read_realism_clashes_csv(
+            clashes_csv,
+            expected_counts=_expected_clash_counts(personas_csv),
+            expected_counts_source=personas_csv,
+        )
+
+
+def test_clashes_csv_rejects_an_uncanonical_attribute_pair(tmp_path):
+    """A pair written the other way round would rank one driver twice."""
+    out_dir = _seed_clash_combo_dir(tmp_path)
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    clashes_csv = out_dir / "combo_x_clashes.csv"
+    swapped = clashes_csv.read_text(encoding="utf-8").replace(
+        "age_group,education_level", "education_level,age_group",
+    )
+    clashes_csv.write_text(swapped, encoding="utf-8")
+    with pytest.raises(ValueError, match="unsorted"):
+        read_realism_clashes_csv(clashes_csv)
+
+
+def test_clashes_csv_is_header_only_when_no_clash_was_raised(tmp_path):
+    """"No clashes" must stay distinguishable from "never processed"."""
+    out_dir = tmp_path / "combo_clean"
+    _write_cache(out_dir, "persona_00000", _CLASH_ATTRS, [_possible(8), _possible(9)])
+    _write_cache(out_dir, "persona_00001", _CLASH_ATTRS, [_possible(6), _possible(7)])
+    _write_jsonl(out_dir, ["persona_00000", "persona_00001"])
+    A.write_combo_artifacts(out_dir, "combo_clean", cfg=_cfg(), dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+
+    clashes_csv = out_dir / "combo_clean_clashes.csv"
+    explanations_csv = out_dir / "combo_clean_clash_explanations.csv"
+    assert clashes_csv.read_text(encoding="utf-8").splitlines() == [",".join(CLASH_FIELDNAMES)]
+    assert explanations_csv.read_text(encoding="utf-8").splitlines() == [
+        ",".join(EXPLANATION_FIELDNAMES)
+    ]
+    assert read_realism_clashes_csv(clashes_csv, expected_counts={}) == []
+
+
+def test_a_persona_with_no_successful_round_contributes_no_clash_rows(tmp_path):
+    """It is uncached by construction: absent from these rows, present in n_failed."""
+    out_dir = _seed_clash_combo_dir(tmp_path)
+    roster = ["persona_00000", "persona_00001", "persona_00002", "persona_00003"]
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+                            expected_ids=roster, hard_rules=(), pricing=_PRICING)
+    report = json.loads((out_dir / "combo_x.json").read_text(encoding="utf-8"))
+    assert report["n_failed"] == 1 and report["n_personas"] == 3
+    rows = read_realism_clashes_csv(out_dir / "combo_x_clashes.csv")
+    assert "persona_00003" not in {r.persona_id for r in rows}
+
+
+def test_a_hallucinated_attribute_is_written_unresolved_and_does_not_fail_the_run(tmp_path):
+    out_dir = tmp_path / "combo_x"
+    _write_cache(out_dir, "persona_00000", _CLASH_ATTRS,
+                 [_possible(7, issues=(Issue(("age_group", "zodiac_sign"), "S2", "invented"),))])
+    _write_jsonl(out_dir, ["persona_00000"])
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    (row,) = read_realism_clashes_csv(out_dir / "combo_x_clashes.csv")
+    assert row.unresolved is True
+    assert (row.value_a, row.value_b) == ("", "")
+    # It is still a counted clash: the personas CSV declares it, and the two reconcile.
+    read_realism_clashes_csv(
+        out_dir / "combo_x_clashes.csv",
+        expected_counts=_expected_clash_counts(out_dir / "combo_x_personas.csv"),
+    )
+
+
+def test_clash_explanations_side_file_joins_row_for_row(tmp_path):
+    out_dir = _seed_clash_combo_dir(tmp_path)
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    clashes = read_realism_clashes_csv(out_dir / "combo_x_clashes.csv")
+    with open(out_dir / "combo_x_clash_explanations.csv", newline="", encoding="utf-8") as fh:
+        explanations = list(csv.DictReader(fh))
+    key = ("persona_id", "round_index", "attr_a", "attr_b", "severity")
+    assert [tuple(str(getattr(r, f)) for f in key) for r in clashes] == [
+        tuple(e[f] for f in key) for e in explanations
+    ]
+    # The free text survives its comma intact (quoted, not split across columns).
+    texts = {e["explanation"] for e in explanations}
+    assert "hard, with a comma" in texts
+
+
+def test_clash_csv_schema_version_is_stamped_beside_the_persona_one(tmp_path):
+    out_dir = _seed_clash_combo_dir(tmp_path)
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    provenance = json.loads((out_dir / "combo_x.json").read_text(encoding="utf-8"))["provenance"]
+    assert provenance["clash_csv_schema_version"] == CLASH_CSV_SCHEMA_VERSION
+    # Two independently versioned contracts -> two keys, never one folded number.
+    assert "persona_csv_schema_version" in provenance
