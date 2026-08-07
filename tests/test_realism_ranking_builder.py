@@ -32,7 +32,11 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
 )
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord  # noqa: E402
 from population_synthetic.analysis.utils.realism_clash_csv import RealismClashRow  # noqa: E402
-from population_synthetic.analysis.utils.realism_csv import RealismPersonaRow  # noqa: E402
+from population_synthetic.analysis.utils.realism_csv import (  # noqa: E402
+    SEVERITY_LEVELS,
+    SEVERITY_RANK,
+    RealismPersonaRow,
+)
 
 _BOOT = {"iterations": 200, "seed": 20260723, "ci_level": 0.95}
 _COUNTRY = "swedish"
@@ -861,10 +865,9 @@ def test_drivers_change_no_number_the_ranking_already_published():
 
 def test_driver_rows_carry_the_denominator_the_penalised_flag_and_the_counting_unit():
     ranking = _build(_driver_fixture())
-    rows = severity_driver_rows(ranking, "S3")
+    rows = [row for row in severity_driver_rows(ranking) if row["severity"] == "S3"]
     assert rows, "the fixture has S3 drivers"
     for row in rows:
-        assert row["level"] == "S3"
         assert row["penalised"] is True
         assert row["denominator"] == 4
         assert "personas, not clashes" in row["counting_unit"]
@@ -876,7 +879,8 @@ def test_driver_rows_carry_the_denominator_the_penalised_flag_and_the_counting_u
 
 
 def test_driver_value_rows_carry_their_parent_pair():
-    rows = severity_driver_value_rows(_build(_driver_fixture()), "S3")
+    rows = [row for row in severity_driver_value_rows(_build(_driver_fixture()))
+            if row["severity"] == "S3"]
     top = rows[0]
     assert (top["attr_a"], top["attr_b"]) == _AGE_EDU
     assert (top["pair_rank"], top["pair_n_personas"]) == (1, 3)
@@ -885,31 +889,78 @@ def test_driver_value_rows_carry_their_parent_pair():
 
 
 def test_s1_driver_rows_declare_themselves_not_penalised():
-    """An S1 row read alone must not look like a defect row."""
-    rows = severity_driver_rows(_build(_driver_fixture()), "S1")
-    assert rows, "the real competitor carries an S1 clash"
-    assert all(row["penalised"] is False for row in rows)
+    """An S1 row read alone must not look like a defect row.
+
+    Load-bearing in the merged table: S1 rows sit beside S3 rows in the same file, and
+    ``penalised`` is the only column that tells a defect from an unusual-but-possible
+    pairing.
+    """
+    rows = severity_driver_rows(_build(_driver_fixture()))
+    s1 = [row for row in rows if row["severity"] == "S1"]
+    assert s1, "the real competitor carries an S1 clash"
+    assert all(row["penalised"] is False for row in s1)
+    assert all(row["penalised"] is True for row in rows if row["severity"] in ("S2", "S3"))
+
+
+def test_driver_tables_hold_every_level_in_one_file_with_severity_as_a_column():
+    """One table per grain, not one per level: all three levels are present, in rank order."""
+    ranking = _build(_driver_fixture())
+    for rows in (severity_driver_rows(ranking), severity_driver_value_rows(ranking)):
+        assert {row["severity"] for row in rows} == set(SEVERITY_LEVELS)
+        # `severity` is an identity column: it precedes every number on the row.
+        keys = list(rows[0])
+        assert keys[:6] == [
+            "slug", "model", "strategy", "is_real_reference", "severity", "penalised"]
+        # Every row carries the same columns, so the merged file is a rectangle.
+        assert all(list(row) == keys for row in rows)
+
+
+def test_driver_row_order_is_total_and_deterministic():
+    """Byte-stability: the same ranking flattens to the same row sequence, twice."""
+    ranking = _build(_driver_fixture())
+    for flatten, key in (
+        (severity_driver_rows, lambda r: (r["slug"], SEVERITY_RANK[r["severity"]], r["rank"])),
+        (severity_driver_value_rows,
+         lambda r: (r["slug"], SEVERITY_RANK[r["severity"]], r["pair_rank"], r["rank"])),
+    ):
+        rows = flatten(ranking)
+        assert flatten(ranking) == rows
+        keys = [key(row) for row in rows]
+        assert keys == sorted(keys), "rows must be sorted by (slug, severity rank, rank)"
+        assert len(set(keys)) == len(keys), "the sort key must leave no residual tie"
+
+
+def test_driver_ranks_stay_within_their_level_and_are_not_renumbered():
+    """A rank-1 S2 driver and a rank-1 S3 driver are both rank 1 in the merged table."""
+    rows = severity_driver_rows(_build(_driver_fixture()))
+    haiku = [row for row in rows if row["slug"] == "swedish_all_pick_claude_haiku"]
+    by_level = {}
+    for row in haiku:
+        by_level.setdefault(row["severity"], []).append(row["rank"])
+    assert by_level == {"S3": [1, 2], "S2": [1]}
 
 
 def test_the_real_population_appears_in_the_driver_tables_as_an_ordinary_competitor():
     ranking = _build(_driver_fixture())
-    pair_rows = severity_driver_rows(ranking, "S1")
-    value_rows = severity_driver_value_rows(ranking, "S1")
+    pair_rows = severity_driver_rows(ranking)
+    value_rows = severity_driver_value_rows(ranking)
     real_pairs = [row for row in pair_rows if row["is_real_reference"]]
-    assert [row["slug"] for row in real_pairs] == ["real_swedish"]
+    assert [(row["slug"], row["severity"]) for row in real_pairs] == [("real_swedish", "S1")]
     assert real_pairs[0]["n_personas"] == 2 and real_pairs[0]["denominator"] == 4
     assert real_pairs[0]["model"] == "" and real_pairs[0]["strategy"] == ""
     assert any(row["is_real_reference"] and row["value_b"] == "Rented" for row in value_rows)
 
 
-def test_driver_rows_are_empty_rather_than_wrong_when_a_level_has_no_driver():
+def test_driver_rows_are_empty_rather_than_wrong_when_no_level_has_a_driver():
     ranking = _build(_driver_fixture(), driver_min_count=5)
-    assert severity_driver_rows(ranking, "S3") == []
-    assert severity_driver_value_rows(ranking, "S3") == []
+    assert severity_driver_rows(ranking) == []
+    assert severity_driver_value_rows(ranking) == []
 
 
-def test_driver_flatteners_raise_on_an_unknown_level():
+def test_driver_flatteners_raise_when_the_block_is_missing_a_level():
+    """A block built without one of the levels is malformed, not a table with a gap."""
     ranking = _build(_driver_fixture())
+    del ranking["severity_drivers"]["levels"]["S1"]
     for flatten in (severity_driver_rows, severity_driver_value_rows):
         with pytest.raises(KeyError, match="Unknown severity level"):
-            flatten(ranking, "S9")
+            flatten(ranking)

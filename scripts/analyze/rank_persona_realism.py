@@ -29,10 +29,14 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
     {country}/impossibility_heatmap.png/.svg model x method grid of the rate, with the real
                                           population as a separate band (grey = not judged,
                                           which is NOT a rate of zero)
-    {country}/severity_drivers_s3/s2/s1.csv       what clashed in each cell: the attribute
-                                          pairs ranked by how many of that cell's personas
-                                          exhibit them, with the cell's own denominator
-    {country}/severity_driver_values_s3/s2/s1.csv the same, one grain finer -- the category
+    {country}/severity_drivers.csv        what clashed in each cell: the attribute pairs
+                                          ranked by how many of that cell's personas
+                                          exhibit them, with the cell's own denominator.
+                                          All three levels in ONE table, with `severity`
+                                          as a column beside `penalised` -- ranks stay
+                                          within (competitor, severity) and are never
+                                          renumbered across levels.
+    {country}/severity_driver_values.csv  the same, one grain finer -- the category
                                           pairs (e.g. Student x Permanent Full-time) under
                                           each ranked attribute pair. Counts are PERSONAS
                                           and are NOT additive: a persona may carry several
@@ -356,24 +360,27 @@ def main() -> None:
             print("No contrast CSV: there is no real competitor to contrast against "
                   "(recorded in skipped_tests).")
 
-        # Two grains per severity level: the attribute pairs that drove each cell, and
-        # the category pairs under them. An empty table is a real (and reportable)
-        # outcome -- no clash at that level cleared --driver-min-count anywhere -- so
-        # the absent file is explained rather than left as a gap in the output set.
-        for level in SEVERITY_LEVELS:
-            suffix = level.lower()
-            for name, rows, grain in (
-                (f"severity_drivers_{suffix}.csv",
-                 severity_driver_rows(ranking, level), "attribute pair"),
-                (f"severity_driver_values_{suffix}.csv",
-                 severity_driver_value_rows(ranking, level), "category pair"),
-            ):
-                written = _write_csv(rows, country_dir / name)
-                if written is not None:
-                    print(f"{level} driver CSV ({grain}) written to {written}")
-                else:
-                    print(f"No {name}: no {level} {grain} reached "
-                          f"--driver-min-count={args.driver_min_count} in any cell.")
+        # Two grains, one table each: the attribute pairs that drove each cell, and the
+        # category pairs under them. All three severity levels live in the same file
+        # with `severity` as a column -- one scannable table per grain rather than one
+        # per level, which left a reader diffing three files to compare a competitor
+        # against itself. An empty table is a real (and reportable) outcome -- no clash
+        # cleared --driver-min-count anywhere at any level -- so the absent file is
+        # explained rather than left as a gap in the output set.
+        for name, rows, grain in (
+            ("severity_drivers.csv", severity_driver_rows(ranking), "attribute pair"),
+            ("severity_driver_values.csv", severity_driver_value_rows(ranking), "category pair"),
+        ):
+            written = _write_csv(rows, country_dir / name)
+            if written is not None:
+                levels = sorted({row["severity"] for row in rows},
+                                key=lambda level: SEVERITY_LEVELS.index(level))
+                print(f"Driver CSV ({grain}) written to {written} "
+                      f"-- {len(rows)} row(s) across {'/'.join(levels)}")
+            else:
+                print(f"No {name}: no {grain} reached "
+                      f"--driver-min-count={args.driver_min_count} in any cell at any "
+                      "severity level.")
 
         if not args.no_charts:
             charts = [

@@ -53,8 +53,13 @@ actionable fact the judge produces, and it is currently unreachable.
    directory, carrying the judge's free text keyed to the same rows. Not read by the loader.
 3. A `severity_drivers` block in `realism_ranking`, reporting-only, ranking attribute pairs and
    nested category pairs per `(model, method, severity level)`, with SCB as an ordinary competitor.
-4. Six flat output tables beside the existing heatmaps: `severity_drivers_s{1,2,3}.csv`
-   (attribute-pair grain) and `severity_driver_values_s{1,2,3}.csv` (category-pair grain).
+4. ~~Six flat output tables beside the existing heatmaps: `severity_drivers_s{1,2,3}.csv`
+   (attribute-pair grain) and `severity_driver_values_s{1,2,3}.csv` (category-pair grain).~~
+   **Revised post-implementation (2026-08-07, operator request): two flat output tables,
+   `severity_drivers.csv` and `severity_driver_values.csv`, each covering all three severity levels
+   with `severity` as a column** — one scannable table per grain rather than a three-file diff to
+   compare a competitor against itself. The heatmaps stay one figure per level, and the JSON block
+   keeps its `levels.{S3,S2,S1}` nesting. See the ADR amendment.
 5. Extraction of the shared CSV-contract primitives now that this is the third case
    (`realism_csv`, `validity_csv`, `realism_clash_csv`).
 6. Regeneration of the 51 existing `swedish_02` combinations via `--rewrite-artifacts`.
@@ -90,7 +95,8 @@ actionable fact the judge produces, and it is currently unreachable.
 - [x] `realism_ranking.json` contains a `severity_drivers` block whose per-cell denominators are
       identical to the corresponding `severity.levels.{L}.grid` cell denominators — guaranteed by
       construction (one `_affected_at` / one `len(record.personas)`) and asserted cell by cell.
-- [x] `severity_drivers_s3.csv` for `swedish_02_all_pick_v2_ollama_mistral_nemo_12b` ranks
+- [x] The `S3` rows of `severity_drivers.csv` for `swedish_02_all_pick_v2_ollama_mistral_nemo_12b`
+      rank
       `employment_status × employment_type` first, ~~and its nested value row names
       `Student × Permanent Full-time`~~ **and its nested value rows name
       `Unemployed × Permanent Full-time` (6) then `Student × Permanent Full-time` (5)**. The rank-1
@@ -183,7 +189,7 @@ into them the tempting shortcut; the ADR names it and forbids it.
 | `persona_realism/artifacts.py` *(extended)* | Emit the two new files under the existing `force` gate | `ComboRealism` + out_dir + force → files on disk | Ranking, cross-combination anything |
 | `realism_ranking/loader.py` *(extended)* | Read the new file into `CompetitorRecord`; gate on it | combination dir → `CompetitorRecord.clashes` | Verdict caches, `reduce.py`, judge internals |
 | `realism_ranking/builder.py` *(extended)* | Pure computation of the `severity_drivers` block | `Sequence[CompetitorRecord]` + top_n + min_count → dict | Paths, figures, config files (values arrive as arguments) |
-| `scripts/analyze/rank_persona_realism.py` *(extended)* | Resolve config at the edge; flatten and write the six CSVs | ranking dict → CSV files | How drivers are computed |
+| `scripts/analyze/rank_persona_realism.py` *(extended)* | Resolve config at the edge; flatten and write the driver CSVs (two after the 2026-08-07 revision, six as first shipped) | ranking dict → CSV files | How drivers are computed |
 
 Directory delta, per combination:
 
@@ -197,9 +203,14 @@ Directory delta, per combination:
     persona_*.json / persona_*.jsonl    (unchanged, read-only inputs)
 
 03_Analysis/realism_ranking/{country}/
-    severity_drivers_s{1,2,3}.csv       NEW  — attribute-pair grain
-    severity_driver_values_s{1,2,3}.csv NEW  — category-pair grain
+    severity_drivers.csv                NEW  — attribute-pair grain, all three levels
+    severity_driver_values.csv          NEW  — category-pair grain, all three levels
 ```
+
+*(Revised 2026-08-07, post-implementation: these first shipped as
+`severity_drivers_s{1,2,3}.csv` / `severity_driver_values_s{1,2,3}.csv`, six files. The operator
+asked for one file per grain with `severity` as a column; the six `_s*` files are obsolete and were
+deleted from the output base. The heatmap PNGs are unaffected.)*
 
 Both new files live **inside** the combination directory. Country-level files under
 `persona_realism/{country}/` are declared orphans by the ADR.
@@ -395,7 +406,7 @@ consumer wired to it yet.
 **Dependencies:** Phase 1
 
 ### Phase 3: Consumer — load, rank, emit
-**Goal:** `severity_drivers` in the JSON and six CSVs beside the heatmaps.
+**Goal:** `severity_drivers` in the JSON and the flat driver CSVs beside the heatmaps.
 
 **Started:** 2026-08-07
 **Completed:** 2026-08-07
@@ -416,8 +427,9 @@ consumer wired to it yet.
 - [x] 3.5 — Add two module-level flatteners returning `list[dict]`, keyed by slug like
       `summary_rows` / `scb_contrast_rows`, and add both to `__all__`.
 - [x] 3.6 — `rank_persona_realism.py`: add `--driver-top-n` and `--driver-min-count`, resolved at the
-      edge and passed as arguments (the builder docstring forbids it reading config); six
-      `_write_csv` calls with their `None`-message branches.
+      edge and passed as arguments (the builder docstring forbids it reading config); the
+      `_write_csv` calls with their `None`-message branches (six as first shipped, two after the
+      2026-08-07 revision below).
 - [x] 3.7 — Report exclusions: combinations skipped, personas with zero successful rounds, and the
       `n_unresolved` total, all surfaced in the block and on stdout.
 
@@ -454,13 +466,37 @@ consumer wired to it yet.
   The tie-break is total and declared, the equality stays visible in `n_personas`, and every grid
   note says to read the count rather than the rank.
 
+**Post-implementation revision — 2026-08-07: the flat tables consolidate onto a `severity` column.**
+
+*Reason: operator preference for a single scannable table per grain — the six-file layout mirrored
+the heatmaps, but a heatmap can only show one grid while a table has columns, so comparing a
+competitor's S3 drivers against its S2 drivers was a three-file diff over a sortable column.*
+
+- The two flatteners lose their `level` parameter and iterate `SEVERITY_LEVELS` internally, emitting
+  one combined list. `severity` becomes an identity column (renamed from `level`, and moved to sit
+  after `slug`/`model`/`strategy`/`is_real_reference` and immediately before `penalised`), so a
+  reader sees which level a row belongs to before any number on it.
+- Row order is total and stated in the code: `slug` → severity by `SEVERITY_RANK` (the existing
+  single ordering definition — S3, S2, S1, never alphabetical) → the existing within-cell `rank`,
+  extended through `pair_rank` at the finer grain. No residual tie, asserted by test.
+- **Ranks stay within `(competitor, severity)`** and are not renumbered across the merged file.
+  Two rank-1 rows at different levels are not ambiguous once `severity` precedes `rank` on the row
+  and the sort keeps a competitor's levels contiguous; renumbering across levels would have been a
+  semantic change (ordering a hard contradiction against an unusual-but-possible pairing) and was
+  rejected rather than made silently.
+- Scope held to the flattening: the JSON block keeps `severity_drivers.levels.{S3,S2,S1}` nested,
+  the heatmaps stay one PNG per level, and no producer artifact or computed number is touched — so
+  no `--rewrite-artifacts` pass was needed.
+- The six obsolete `severity_drivers_s*.csv` / `severity_driver_values_s*.csv` were deleted from the
+  `swedish_02` output base; a stale file under the old name is worse than none.
+
 **Files Modified:**
 - `src/population_synthetic/analysis/realism_ranking/loader.py` — third contract file, new record field
 - `src/population_synthetic/analysis/realism_ranking/builder.py` — `_severity_drivers`, flatteners, `__all__`
-- `scripts/analyze/rank_persona_realism.py` — two CLI flags, six CSV writes
+- `scripts/analyze/rank_persona_realism.py` — two CLI flags, the driver CSV writes
 - `tests/test_realism_ranking_loader.py` — `clashes_csv` switch + the new gate/reconciliation tests
 - `tests/test_realism_ranking_builder.py` — the `_with_clashes` fixture mutator + the driver suite
-- `tests/test_realism_ranking_e2e.py` — the six-table end-to-end
+- `tests/test_realism_ranking_e2e.py` — the driver-table end-to-end
 - `tests/test_persona_realism_smoke.py` — optional S2/S1 clash markers on the stub judge
 
 **Dependencies:** Phase 2
@@ -524,7 +560,9 @@ consumer wired to it yet.
       `plan_only is True`. *(Already asserted verbatim by
       `test_cli_combo_dispatch_skips_rewrite_when_nothing_changed`; no extension was needed, and it
       now covers the two new files because they sit under the same `force` gate.)*
-- [x] e2e in `test_realism_ranking_e2e.py`: judge → rank on a `tmp_path` base produces all six CSVs.
+- [x] e2e in `test_realism_ranking_e2e.py`: judge → rank on a `tmp_path` base produces all the driver
+      CSVs — six as first written, **two after the 2026-08-07 revision**, each asserted to carry all
+      three levels and to be byte-stable across two writes.
       *(The stub judge gained two optional markers, `S2_CLASH` / `S1_CLASH`, that a **possible**
       persona may carry — without them the fixture only ever produced S3 and two thirds of the
       tables would have shipped untested. The rows are serialised through `csv.DictWriter` rather
@@ -553,7 +591,7 @@ consumer wired to it yet.
       `Student × …` is the **second** value row, not the first. The rank-2 pair's values are
       `Unemployed × Wage / Business` (7) then `Student × Wage / Business` (5). The original
       expectation came from a hand-check of a single persona and was never a claim about the ranking.
-- [x] Read `severity_drivers_s1.csv` for a strong model and confirm the S1 drivers read as
+- [x] Read the `S1` rows of `severity_drivers.csv` for a strong model and confirm the S1 drivers read as
       tail-reach, not defects. *(They do, and the sharper finding is what is **absent**:
       `swedish_02_all_pick_v2_claude_sonnet` has no S1 driver clearing min-count at all, and
       `..._claude_haiku` has one — `Upper Secondary ≤2 yrs × Middle Class`, 16% — while SCB itself
@@ -568,8 +606,9 @@ consumer wired to it yet.
       appears in four of them, because it has no driver to show in the other two. It carries **zero**
       S3 clashes in the whole 100-persona sample and only 7 S2 clash rows, of which one pair
       (`employment_status × income_source`, 3 personas) clears min-count and none of whose category
-      pairs do. So: 5 rows in `severity_drivers_s1.csv`, 14 in `severity_driver_values_s1.csv`, 1 in
-      `severity_drivers_s2.csv`, 0 in `severity_driver_values_s2.csv` and 0 in either S3 table. That
+      pairs do. So (counted in the consolidated tables): 5 SCB rows at S1 and 1 at S2 in
+      `severity_drivers.csv`, 14 SCB rows at S1 and none at S2 in `severity_driver_values.csv`, and
+      no SCB row at S3 in either. That
       absence is a **measurement**, not an exclusion, and is arguably the most interesting single
       number the tables produced: under this judge the chain-sampled reference population emitted no
       hard contradiction at all, and 198 of its 205 clash rows are S1.
@@ -594,7 +633,7 @@ consumer wired to it yet.
 
 - [x] `docs/development/persona-realism-judge.md:99-104` — add both files to the per-combination
       artefact table; extend the `--rewrite-artifacts` section (`:106-127`) and the schema-version
-      note (`:172-175`). *(Also: the ranking output table gains the six driver files, and a new
+      note (`:172-175`). *(Also: the ranking output table gains the driver tables, and a new
       "severity drivers" section states the three properties a reader needs before reading one.)*
 - [x] `docs/architecture/commands.md:211-215` — the regeneration invocation and the two new ranking
       flags. *(Plus the note that a pre-existing output base is skipped until regenerated.)*
@@ -608,7 +647,7 @@ consumer wired to it yet.
       → `docs/development/decisions/2026-08-07-per-clash-contract-and-severity-drivers.md`
 - [x] The counting-unit and non-additivity footnote must appear on every emitted table and in the
       JSON block, not only in the docs. *(As the `counting_unit` / `non_additive` columns on every
-      row of all six tables, and as fields on the block — repeated per row deliberately: a CSV has
+      row of every emitted table, and as fields on the block — repeated per row deliberately: a CSV has
       no footnote, and a column is the only place a caveat cannot be separated from its data.)*
 
 ---

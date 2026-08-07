@@ -211,12 +211,15 @@ counted independently so a persona with both an S3 and an S2 appears on both. It
 test; S3/S2 are defects, while S1 is unusual-but-possible and is reported, never penalised.
 
 Reading `{combo}_clashes.csv`, it also answers what the heatmaps cannot: **which** attribute pair —
-and which two category values — drove each cell. `severity_drivers_s{1,2,3}.csv` ranks the attribute
-pairs per cell and `severity_driver_values_s{1,2,3}.csv` the category pairs beneath them, both with
-the cell's own denominator, so a driver prevalence reads directly against its heatmap cell. The
-counts are **personas, not clashes**, and they are **not additive** — one persona may carry several
-clashes, each names two attributes, and the levels are not a partition — which is why every row
-carries its counting unit and the level's `penalised` flag.
+and which two category values — drove each cell. `severity_drivers.csv` ranks the attribute
+pairs per cell and `severity_driver_values.csv` the category pairs beneath them, both with
+the cell's own denominator, so a driver prevalence reads directly against its heatmap cell. Each is
+**one table covering all three severity levels**, with `severity` as a column beside `penalised`
+(the heatmaps stay one file per level; the tables do not). Ranks are **within** `(competitor,
+severity)` and are never renumbered across levels — a rank-1 S2 driver and a rank-1 S3 driver are
+both rank 1. The counts are **personas, not clashes**, and they are **not additive** — one persona
+may carry several clashes, each names two attributes, and the levels are not a partition — which is
+why every row carries its counting unit and the level's `penalised` flag.
 
 ```bash
 python scripts/analyze/analyze_persona_realism.py --slug swedish_02_all_pick_v2_claude_haiku

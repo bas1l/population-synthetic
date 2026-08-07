@@ -157,8 +157,8 @@ Outputs per country under `03_Analysis/realism_ranking/<country>/`:
 | `impossibility_forest.png/.svg` | every competitor's rate + bootstrap CI, rank order |
 | `impossibility_heatmap.png/.svg` | the rate as a model × method grid, with the real population as a separate band beneath it. Grey `n/a` = that pair was never judged, which is **not** a rate of zero |
 | `severity_heatmap_s3/s2/s1.png/.svg` | the same grid layout, one per clash severity — see below |
-| `severity_drivers_s3/s2/s1.csv` | **what** clashed in each cell: the attribute pairs ranked by how many of that cell's personas exhibit them — see below |
-| `severity_driver_values_s3/s2/s1.csv` | the same one grain finer: the category pairs (e.g. `Student × Permanent Full-time`) under each ranked attribute pair |
+| `severity_drivers.csv` | **what** clashed in each cell: the attribute pairs ranked by how many of that cell's personas exhibit them, all three levels in one table with `severity` as a column — see below |
+| `severity_driver_values.csv` | the same one grain finer: the category pairs (e.g. `Student × Permanent Full-time`) under each ranked attribute pair, likewise one table for all three levels |
 
 ### The severity dimension (reporting only)
 
@@ -198,11 +198,19 @@ origin on Axis A.
 
 The heatmaps size a cell; these tables say what is in it. Per `(model × method, level)` they rank
 the attribute pairs by **how many of that cell's personas exhibit them**, and beneath each pair the
-category pairs that carry it. Two grains, six files, and the same denominator as the heatmap cell —
-so `employment_status × employment_type` at `prevalence = 0.12` in a cell whose S3 rate is `0.12`
-says that pair accounts for the whole cell.
+category pairs that carry it. Two grains, **two files** — one per grain, all three levels in each,
+carrying `severity` as a column — and the same denominator as the heatmap cell, so
+`employment_status × employment_type` at `prevalence = 0.12` in a cell whose S3 rate is `0.12` says
+that pair accounts for the whole cell. (The *heatmaps* remain one file per level: a figure can show
+one grid, a table can hold a column.)
 
-Three properties worth knowing before reading one:
+Four properties worth knowing before reading one:
+
+- **`rank` is within `(competitor, severity)`.** Levels are interleaved in one file but never
+  renumbered across it: a rank-1 S2 driver and a rank-1 S3 driver are both rank 1, because ranking
+  them against each other would put a hard contradiction on one scale with an unusual-but-possible
+  pairing. Rows are ordered `slug` → severity (S3, S2, S1) → `rank`, so a competitor's three levels
+  arrive as one contiguous block. Read `n_personas`, not `rank`, when comparing anything.
 
 - **The unit is personas, not clashes.** A clash the judge raised in three rounds of one persona
   counts that persona once. Every row carries the unit as a column.
@@ -210,7 +218,9 @@ Three properties worth knowing before reading one:
   distinct clashes; each clash names two attributes; and the levels are not a partition. Never a
   pie, never a 100%-stacked bar. Also a column on every row.
 - **S1 rows are not defects.** `penalised` travels on every row for the same reason the S1 heatmap
-  gets a neutral ramp. On the current Swedish data the S1 drivers read plainly as tail-reach: SCB's
+  gets a neutral ramp — and it is now the *only* thing on a row that distinguishes an
+  unusual-but-possible pairing from a defect, since the two sit in the same file. On the current
+  Swedish data the S1 drivers read plainly as tail-reach: SCB's
   own top S1 pairs are `Married × 1-person household` and `Owner-occupied villa × Poverty` —
   unusual people, not impossible ones.
 

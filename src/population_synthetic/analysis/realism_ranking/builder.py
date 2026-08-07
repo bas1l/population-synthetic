@@ -46,6 +46,7 @@ from population_synthetic.analysis.realism_ranking.loader import CompetitorRecor
 from population_synthetic.analysis.utils.realism_csv import (
     SEVERITY_COUNT_FIELDS,
     SEVERITY_LEVELS,
+    SEVERITY_RANK,
 )
 from population_synthetic.analysis.utils.stats_tests import (
     bootstrap_ci,
@@ -1150,80 +1151,107 @@ def _driver_cells(
 def _driver_identity(cell: dict[str, Any], level: str, *, penalised: bool) -> dict[str, Any]:
     """The columns every driver row carries whatever its grain.
 
-    ``penalised`` travels on every row because these tables are read one row at a time:
-    an S1 row that arrives without it is an unusual-but-possible pairing presented in
-    the same shape as a defect, which is exactly the misreading the level exists to
-    prevent. ``counting_unit`` and ``non_additive`` travel for the same reason -- the
-    file outlives the docstring.
+    ``severity`` sits with the identity columns rather than beside the numbers: the
+    three levels are interleaved in one table, so which level a row belongs to is part
+    of naming the row, not part of describing it. ``penalised`` follows it immediately
+    and travels on every row because these tables are read one row at a time -- an S1
+    row that arrives without it is an unusual-but-possible pairing presented in the same
+    shape as a defect, which is exactly the misreading the level exists to prevent, and
+    the merge makes it the *only* thing on the row that tells the two apart.
+    ``counting_unit`` and ``non_additive`` travel for the same reason -- the file
+    outlives the docstring.
     """
     return {
-        "level": level,
-        "penalised": penalised,
         "slug": cell["slug"],
         "model": cell["model"],
         "strategy": cell["strategy"],
         "is_real_reference": cell["is_real_reference"],
+        "severity": level,
+        "penalised": penalised,
     }
 
 
-def severity_driver_rows(ranking: dict[str, Any], level: str) -> list[dict[str, Any]]:
-    """Flatten one level's drivers into ``severity_drivers_s{n}.csv`` rows.
+def severity_driver_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten every level's drivers into ``severity_drivers.csv`` rows.
 
-    Attribute-pair grain: one row per ranked ``(competitor, attribute pair)``. Every
-    row carries the cell's ``denominator`` and ``affected`` beside its own count, so a
-    prevalence is never read without the base it was computed over, and the level's
-    ``penalised`` flag so the row cannot be mistaken for a defect when it is not one.
+    Attribute-pair grain: one row per ranked ``(competitor, severity, attribute pair)``,
+    all three levels in one table with ``severity`` as a column. Every row carries the
+    cell's ``denominator`` and ``affected`` beside its own count, so a prevalence is
+    never read without the base it was computed over, and the level's ``penalised`` flag
+    so the row cannot be mistaken for a defect when it is not one.
+
+    ``rank`` stays **within** ``(slug, severity)`` -- a rank-1 S2 driver and a rank-1 S3
+    driver are both rank 1, because ranking across levels would compare a hard
+    contradiction against an unusual-but-possible pairing on one scale, which the
+    severity dimension exists to refuse. The sort key below makes that readable by
+    keeping a competitor's levels contiguous and ordered.
     """
-    block, cells = _driver_cells(ranking, level)
-    penalised = bool(block["penalised"])
     rows: list[dict[str, Any]] = []
-    for cell in cells:
-        for driver in cell["drivers"]:
-            rows.append({
-                **_driver_identity(cell, level, penalised=penalised),
-                "rank": driver["rank"],
-                "attr_a": driver["attr_a"],
-                "attr_b": driver["attr_b"],
-                "n_personas": driver["n_personas"],
-                "prevalence": driver["prevalence"],
-                "denominator": cell["denominator"],
-                "cell_affected": cell["affected"],
-                "n_personas_unresolved": driver["n_personas_unresolved"],
-                "counting_unit": DRIVER_COUNTING_UNIT,
-                "non_additive": DRIVER_NON_ADDITIVE,
-            })
-    return rows
-
-
-def severity_driver_value_rows(ranking: dict[str, Any], level: str) -> list[dict[str, Any]]:
-    """Flatten one level's drivers into ``severity_driver_values_s{n}.csv`` rows.
-
-    Category-pair grain: one row per ranked ``(competitor, attribute pair, category
-    pair)`` -- the finest published grain, and the one that names the actual finding
-    ("Student x Permanent Full-time") rather than only the axes it lives on. The parent
-    pair's rank and count travel on the row so the nesting survives the flattening.
-    """
-    block, cells = _driver_cells(ranking, level)
-    penalised = bool(block["penalised"])
-    rows: list[dict[str, Any]] = []
-    for cell in cells:
-        for driver in cell["drivers"]:
-            for value in driver["values"]:
+    for level in SEVERITY_LEVELS:
+        block, cells = _driver_cells(ranking, level)
+        penalised = bool(block["penalised"])
+        for cell in cells:
+            for driver in cell["drivers"]:
                 rows.append({
                     **_driver_identity(cell, level, penalised=penalised),
+                    "rank": driver["rank"],
                     "attr_a": driver["attr_a"],
                     "attr_b": driver["attr_b"],
-                    "pair_rank": driver["rank"],
-                    "pair_n_personas": driver["n_personas"],
-                    "rank": value["rank"],
-                    "value_a": value["value_a"],
-                    "value_b": value["value_b"],
-                    "n_personas": value["n_personas"],
-                    "prevalence": value["prevalence"],
+                    "n_personas": driver["n_personas"],
+                    "prevalence": driver["prevalence"],
                     "denominator": cell["denominator"],
+                    "cell_affected": cell["affected"],
+                    "n_personas_unresolved": driver["n_personas_unresolved"],
                     "counting_unit": DRIVER_COUNTING_UNIT,
                     "non_additive": DRIVER_NON_ADDITIVE,
                 })
+    # Total order, no residual tie: the competitor identifies the block of rows, severity
+    # orders the levels by SEVERITY_RANK (S3, S2, S1 -- worst first, and never
+    # alphabetically, which would put the mildest level at the top), and `rank` is already
+    # total within a (slug, severity) cell via the declared tie-break. Sorted after the
+    # build rather than during it so the emitted bytes never depend on record order.
+    rows.sort(key=lambda row: (row["slug"], SEVERITY_RANK[row["severity"]], row["rank"]))
+    return rows
+
+
+def severity_driver_value_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten every level's drivers into ``severity_driver_values.csv`` rows.
+
+    Category-pair grain: one row per ranked ``(competitor, severity, attribute pair,
+    category pair)`` -- the finest published grain, and the one that names the actual
+    finding ("Student x Permanent Full-time") rather than only the axes it lives on. The
+    parent pair's rank and count travel on the row so the nesting survives the
+    flattening, and ``rank`` is within its parent pair exactly as ``pair_rank`` is within
+    ``(slug, severity)``.
+    """
+    rows: list[dict[str, Any]] = []
+    for level in SEVERITY_LEVELS:
+        block, cells = _driver_cells(ranking, level)
+        penalised = bool(block["penalised"])
+        for cell in cells:
+            for driver in cell["drivers"]:
+                for value in driver["values"]:
+                    rows.append({
+                        **_driver_identity(cell, level, penalised=penalised),
+                        "attr_a": driver["attr_a"],
+                        "attr_b": driver["attr_b"],
+                        "pair_rank": driver["rank"],
+                        "pair_n_personas": driver["n_personas"],
+                        "rank": value["rank"],
+                        "value_a": value["value_a"],
+                        "value_b": value["value_b"],
+                        "n_personas": value["n_personas"],
+                        "prevalence": value["prevalence"],
+                        "denominator": cell["denominator"],
+                        "counting_unit": DRIVER_COUNTING_UNIT,
+                        "non_additive": DRIVER_NON_ADDITIVE,
+                    })
+    # Same key as the coarser grain, extended through the nesting: (competitor, severity
+    # by SEVERITY_RANK, parent pair by its rank, category pair by its own rank). Both
+    # ranks are total within their scope, so no residual tie survives.
+    rows.sort(key=lambda row: (
+        row["slug"], SEVERITY_RANK[row["severity"]], row["pair_rank"], row["rank"],
+    ))
     return rows
 
 

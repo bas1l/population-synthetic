@@ -188,13 +188,14 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
         assert (out_dir / name).is_file(), name
 
 
-def test_ranking_emits_the_six_severity_driver_tables(judged_base, tmp_path):
-    """Judge -> rank on a fresh base produces both driver grains at all three levels.
+def test_ranking_emits_the_two_severity_driver_tables(judged_base, tmp_path):
+    """Judge -> rank on a fresh base produces both driver grains, all levels in one file.
 
     Serialised through ``csv.DictWriter`` rather than asserted in memory, because the
     flatteners' contract is that every value is a scalar a CSV cell can hold: a nested
     list would round-trip as its ``repr`` and nobody would notice until the table was
-    read months later.
+    read months later. Written twice to the same bytes, because the merged tables carry
+    their level as data and an unstable sort would only show up as a churning diff.
     """
     records, skipped = load_competitors(judged_base, axis_ids=_AXIS_IDS)
     assert skipped == []
@@ -202,36 +203,40 @@ def test_ranking_emits_the_six_severity_driver_tables(judged_base, tmp_path):
 
     out_dir = tmp_path / "drivers" / _COUNTRY
     out_dir.mkdir(parents=True)
-    for level in ("S3", "S2", "S1"):
-        suffix = level.lower()
-        for name, rows in (
-            (f"severity_drivers_{suffix}.csv", severity_driver_rows(ranking, level)),
-            (f"severity_driver_values_{suffix}.csv", severity_driver_value_rows(ranking, level)),
-        ):
-            assert rows, name
-            with (out_dir / name).open("w", newline="", encoding="utf-8") as fh:
+    for name, rows in (
+        ("severity_drivers.csv", severity_driver_rows(ranking)),
+        ("severity_driver_values.csv", severity_driver_value_rows(ranking)),
+    ):
+        assert rows, name
+        assert {row["severity"] for row in rows} == {"S3", "S2", "S1"}, name
+        path = out_dir / name
+        for _ in range(2):
+            written_before = path.read_bytes() if path.exists() else None
+            with path.open("w", newline="", encoding="utf-8") as fh:
                 writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
                 writer.writeheader()
                 writer.writerows(rows)
+            if written_before is not None:
+                assert path.read_bytes() == written_before, f"{name} is not byte-stable"
 
-    written = sorted(p.name for p in out_dir.iterdir())
-    assert written == sorted(
-        [f"severity_drivers_s{n}.csv" for n in (1, 2, 3)]
-        + [f"severity_driver_values_s{n}.csv" for n in (1, 2, 3)]
-    )
+    assert sorted(p.name for p in out_dir.iterdir()) == [
+        "severity_driver_values.csv", "severity_drivers.csv"]
 
     # The stub judge's S3 clash is age_group x education_level, and the two contradictory
     # personas of one combination are the cell it drove.
-    s3 = [row for row in severity_driver_rows(ranking, "S3")
-          if row["slug"] == "swedish_all_pick_dag_claude_haiku"]
+    pair_rows = severity_driver_rows(ranking)
+    s3 = [row for row in pair_rows
+          if row["severity"] == "S3" and row["slug"] == "swedish_all_pick_dag_claude_haiku"]
     assert [(row["attr_a"], row["attr_b"], row["n_personas"]) for row in s3] == [
         ("age_group", "education_level", 2)
     ]
     assert s3[0]["denominator"] == 7 and s3[0]["penalised"] is True
-    # The real population is an ordinary competitor here too, and S1 is not a defect.
-    s1 = severity_driver_rows(ranking, "S1")
+    # The real population is an ordinary competitor here too, and S1 is not a defect --
+    # the one column that keeps an S1 row from reading as one now that they share a file.
+    s1 = [row for row in pair_rows if row["severity"] == "S1"]
     assert any(row["is_real_reference"] for row in s1)
     assert all(row["penalised"] is False for row in s1)
+    assert all(row["penalised"] is True for row in pair_rows if row["severity"] != "S1")
 
 
 def test_ranking_json_satisfies_the_honesty_contract(judged_base):

@@ -220,12 +220,15 @@ processes:
       S3 and an S2 appears on both. It feeds no ranking or test and leaves the binary
       impossibility rate untouched; S3/S2 are defects (lower is better) while S1 is
       unusual-but-possible and is reported, never penalised. Alongside each heatmap it
-      emits the attribution the heatmap cannot give: severity_drivers_s{1,2,3}.csv ranks
-      the attribute pairs that drove each cell and severity_driver_values_s{1,2,3}.csv
-      the category pairs beneath them, over the same denominator as the heatmap cell.
-      Counts are PERSONAS, not clashes, and are NOT additive (a persona may carry several
-      clashes, each names two attributes, and the levels are not a partition), so every
-      row carries its counting unit, its denominator and the level's penalised flag.
+      emits the attribution the heatmap cannot give: severity_drivers.csv ranks the
+      attribute pairs that drove each cell and severity_driver_values.csv the category
+      pairs beneath them, over the same denominator as the heatmap cell. One table per
+      grain covering all three levels, with severity as a column beside penalised (the
+      heatmaps stay one figure per level); ranks are within (competitor, severity) and
+      are never renumbered across levels. Counts are PERSONAS, not clashes, and are NOT
+      additive (a persona may carry several clashes, each names two attributes, and the
+      levels are not a partition), so every row carries its counting unit, its
+      denominator and the level's penalised flag.
       --driver-top-n / --driver-min-count bound the tables; what falls below either is
       counted, never silently dropped.
     folder: "realism_ranking"

@@ -137,3 +137,38 @@ the next reader finds the reasoning where they would look for the rule.
 - Ranks are positional with a total tie-break (`n_personas` desc → `attr_a` → `attr_b`, and → value
   names at the finer grain), so the emitted bytes are a function of the counts alone. Equal counts
   therefore share no rank; `n_personas` is the number to read, which the block says on every grid.
+
+---
+
+## Amendment — one flat table per grain, not one per severity level
+
+**Date:** 2026-08-07 (post-implementation, operator-requested)
+
+The attribution first shipped as six flat tables, `severity_drivers_s{1,2,3}.csv` and
+`severity_driver_values_s{1,2,3}.csv` — one file per grain per level, mirroring the heatmaps' file
+layout. That mirroring was never itself a decision, only an inherited shape, and it does not survive
+the difference between a figure and a table: a heatmap can show one grid at a time, so one file per
+level is the only way to draw three; a table has columns, so the level is data. Splitting it across
+files made the commonest reading — compare a competitor's S3 drivers against its S2 drivers — a
+three-file diff over a column that could have been sorted on.
+
+The tables are therefore consolidated into `severity_drivers.csv` and `severity_driver_values.csv`,
+each covering all three levels with `severity` as an identity column. **The heatmaps are unchanged**
+— one per level, as decided in the preceding commit.
+
+Nothing computed changes: the JSON block keeps its `levels.{S3,S2,S1}` nesting (natural in a format
+that has nesting, and consumers read it), no number moves, and the flattening is the only thing
+touched.
+
+Two properties become load-bearing that were previously merely present:
+
+- **`penalised` is now the only thing on a row separating an S1 driver from a defect**, since S1 and
+  S3 rows sit in the same file. It was already on every row for exactly this reason; the merge
+  removes the filename as a redundant second signal, so the column carries the claim alone.
+- **Ranks stay within `(competitor, severity)` and are not renumbered across the merged file.** A
+  rank-1 S2 driver and a rank-1 S3 driver are both rank 1. Renumbering across levels would impose a
+  single order on a hard contradiction and an unusual-but-possible pairing, which is precisely what
+  the severity dimension exists to refuse. The row order is total —
+  `slug` → severity by `SEVERITY_RANK` (S3, S2, S1, never alphabetical) → `rank` — so a competitor's
+  three levels arrive contiguous and worst-first, and the repeated `1` is legible as a per-level
+  rank rather than a duplicate.
