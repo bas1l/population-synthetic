@@ -147,6 +147,7 @@ WORKFLOW_YAML = """\
 tasks:
   mapping:
     enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # force checkbox comment
     force: false
     options:
@@ -155,6 +156,7 @@ tasks:
 
   fidelity:
     enabled: true
+    bypass: false
     min_combos: 2
     options:
       no-charts: false
@@ -181,6 +183,8 @@ def test_task_accessors(model):
     assert model.get_task_names() == ["mapping", "fidelity"]
     assert model.is_task_enabled("fidelity") is True
     assert model.get_task_force("mapping") is False
+    assert model.get_task_bypass("mapping") is False
+    assert model.get_task_bypass("fidelity") is False
     assert model.get_task_options("fidelity") == {"no-charts": False, "workers": 4}
     assert model.get_task_dependencies("fidelity") == ["mapping"]
     assert model.get_task_dependencies("mapping") == []
@@ -237,6 +241,7 @@ def test_mutations_mark_dirty(model):
 def test_round_trip_preserves_comments_order_and_types(model):
     model.set_task_enabled("fidelity", False)
     model.set_task_force("mapping", True)
+    model.set_task_bypass("fidelity", True)
     model.set_task_option("fidelity", "workers", 8)
     model.set_task_option("mapping", "output-base", "out/mapped")
     model.save()
@@ -245,6 +250,7 @@ def test_round_trip_preserves_comments_order_and_types(model):
     text = model.path.read_text(encoding="utf-8")
     assert "# Workflow header comment (must survive save)." in text
     assert "# force checkbox comment" in text
+    assert "# assume already done -> unlock dependents, run nothing" in text
     assert "# blank = script default" in text
     # Key order preserved: mapping still authored before fidelity.
     assert text.index("mapping:") < text.index("fidelity:")
@@ -252,6 +258,7 @@ def test_round_trip_preserves_comments_order_and_types(model):
     reloaded = WorkflowConfigModel(model.path)
     assert reloaded.is_task_enabled("fidelity") is False
     assert reloaded.get_task_force("mapping") is True
+    assert reloaded.get_task_bypass("fidelity") is True
     options = reloaded.get_task_options("fidelity")
     assert options["workers"] == 8
     assert type(options["workers"]) is int  # not the string "8"

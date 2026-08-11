@@ -8,7 +8,8 @@ flow YAML, and supports zoom / middle-click pan / ``Ctrl+0`` fit.
 
 Bound to a
 :class:`~population_synthetic.gui.workflow_config_model.WorkflowConfigModel`.
-Checkbox toggles re-emit as :attr:`enabled_changed` / :attr:`force_changed`
+Checkbox toggles re-emit as :attr:`enabled_changed` / :attr:`bypass_changed` /
+:attr:`force_changed`
 (the window writes them through the model); :meth:`set_task_status` drives the
 per-node run-state overlay so the graph doubles as the live run report.
 """
@@ -53,11 +54,13 @@ class WorkflowGraphView(QGraphicsView):
     -------
     node_clicked(name)
     enabled_changed(name, new_value)
+    bypass_changed(name, new_value)
     force_changed(name, new_value)
     """
 
     node_clicked = pyqtSignal(str)
     enabled_changed = pyqtSignal(str, bool)
+    bypass_changed = pyqtSignal(str, bool)
     force_changed = pyqtSignal(str, bool)
 
     def __init__(self, parent=None) -> None:
@@ -145,6 +148,7 @@ class WorkflowGraphView(QGraphicsView):
 
             node.signals.node_clicked.connect(self.node_clicked)
             node.signals.enabled_changed.connect(self.enabled_changed)
+            node.signals.bypass_changed.connect(self.bypass_changed)
             node.signals.force_changed.connect(self.force_changed)
             node.signals.position_changed.connect(self._on_node_moved)
 

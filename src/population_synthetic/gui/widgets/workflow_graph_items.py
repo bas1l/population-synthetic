@@ -2,17 +2,22 @@
 
 Port of the reference AnalysisRunnerGUI ``dag_graph_items.py``
 (``social-touch-semi-controlled-analysis``): a :class:`WorkflowTaskNode`
-(``QGraphicsRectItem``) carrying embedded ``Enabled`` / ``Force`` checkbox
-:class:`QGraphicsProxyWidget`s, drawn gray @ 0.55 opacity when disabled, plus a
-directed :class:`WorkflowEdge`. New over the reference: a
+(``QGraphicsRectItem``) carrying embedded ``Enabled`` / ``Bypass`` / ``Force``
+checkbox :class:`QGraphicsProxyWidget`s, drawn gray @ 0.55 opacity when disabled,
+plus a directed :class:`WorkflowEdge`. New over the reference: a
 :meth:`WorkflowTaskNode.set_status` run-state overlay
 (:class:`~population_synthetic.gui.workflow_state.TaskStatus`) so the graph
 doubles as the live run report.
 
 The ``Force`` checkbox is present only for tasks whose YAML declares
-``supports_force: true``; the ``Enabled`` checkbox is always present. Checkbox
-toggles emit ``enabled_changed`` / ``force_changed`` for the view to write
-through :class:`~population_synthetic.gui.workflow_config_model.WorkflowConfigModel`.
+``supports_force: true`` (``--force`` is a *script* capability); the ``Enabled``
+and ``Bypass`` checkboxes are always present, bypass being uniform GUI
+orchestration rather than anything a script knows about. The two interlocks grey
+a box but never clear it: ``Bypass`` is greyed while ``Enabled`` is off (the
+master switch wins) and ``Force`` is greyed while ``Bypass`` is on (a bypassed
+task runs nothing to force). Checkbox toggles emit ``enabled_changed`` /
+``bypass_changed`` / ``force_changed`` for the view to write through
+:class:`~population_synthetic.gui.workflow_config_model.WorkflowConfigModel`.
 """
 
 from __future__ import annotations
@@ -66,6 +71,9 @@ _STATUS_OVERLAY: dict[TaskStatus, tuple[QColor | None, QColor, float, bool, str]
     TaskStatus.PENDING:          (None, _COLOR_BORDER_ENABLED, 1.5, False, ""),
     TaskStatus.RUNNING:          (None, QColor("#1565c0"), 3.0, False, "▶"),
     TaskStatus.COMPLETED:        (None, QColor("#2e7d32"), 2.5, False, "✓"),
+    # Violet, undimmed: a bypassed node ran nothing, but it is accounted for
+    # (it unlocks its dependents), so it must read as neither green nor skipped.
+    TaskStatus.BYPASSED:         (QColor("#e3e0f0"), QColor("#5c4b99"), 2.0, False, "»"),
     TaskStatus.FAILED:           (None, QColor("#c62828"), 2.5, False, "✗"),
     TaskStatus.SKIPPED_DISABLED: (QColor("#f0e0c0"), QColor("#aa6600"), 1.5, True, "–"),
     TaskStatus.SKIPPED_DEP:      (QColor("#f0e0c0"), QColor("#aa6600"), 1.5, True, "–"),
@@ -75,11 +83,12 @@ _STATUS_OVERLAY: dict[TaskStatus, tuple[QColor | None, QColor, float, bool, str]
 
 
 class WorkflowTaskNode(QGraphicsRectItem):
-    """Graph node for one workflow task, with Enabled/Force checkboxes."""
+    """Graph node for one workflow task, with Enabled/Bypass/Force checkboxes."""
 
     class _Signals(QObject):
         node_clicked = pyqtSignal(str)
         enabled_changed = pyqtSignal(str, bool)
+        bypass_changed = pyqtSignal(str, bool)
         force_changed = pyqtSignal(str, bool)
         position_changed = pyqtSignal(str, float, float)  # name, x, y
 
@@ -136,6 +145,11 @@ class WorkflowTaskNode(QGraphicsRectItem):
         self._cb_enabled.stateChanged.connect(self._on_enabled_changed)
         cb_layout.addWidget(self._cb_enabled)
 
+        self._cb_bypass = QCheckBox("Bypass")
+        self._cb_bypass.setChecked(model.get_task_bypass(task_name))
+        self._cb_bypass.stateChanged.connect(self._on_bypass_changed)
+        cb_layout.addWidget(self._cb_bypass)
+
         self._cb_force: QCheckBox | None = None
         if self._has_force:
             self._cb_force = QCheckBox("Force")
@@ -145,6 +159,15 @@ class WorkflowTaskNode(QGraphicsRectItem):
 
         cb_layout.addStretch()
         inner_layout.addWidget(cb_row)
+
+        self._apply_interlocks()
+
+        # The checkbox row can be wider than the label, so the label-derived width
+        # above is only a floor: re-measure the assembled widget now that it exists
+        # and grow the rect to fit, otherwise a node clips a control it owns.
+        node_w = max(node_w, inner.sizeHint().width() + 2 * _INSET)
+        self.prepareGeometryChange()
+        self.setRect(0, 0, node_w, _NODE_H)
 
         proxy = QGraphicsProxyWidget(self)
         proxy.setWidget(inner)
@@ -248,14 +271,37 @@ class WorkflowTaskNode(QGraphicsRectItem):
     # Checkbox handlers
     # ------------------------------------------------------------------
 
+    def _apply_interlocks(self) -> None:
+        """Grey the dependent checkboxes for the current state — never clear them.
+
+        ``Enabled`` is the master switch, so ``Bypass`` is meaningless while it is
+        off; a bypassed task executes nothing, so ``Force`` is meaningless while it
+        is on. Both boxes keep their value while greyed, so a persisted flag on an
+        inert task survives untouched on disk.
+        """
+        self._cb_bypass.setEnabled(self._enabled)
+        if self._cb_force is not None:
+            self._cb_force.setEnabled(not self._cb_bypass.isChecked())
+
     def _on_enabled_changed(self, _state: int) -> None:
         if self._updating:
             return
         self._updating = True
         try:
             self._enabled = self._cb_enabled.isChecked()
+            self._apply_interlocks()
             self.update()  # repaint gray/colored (no re-layout needed)
             self.signals.enabled_changed.emit(self._task_name, self._enabled)
+        finally:
+            self._updating = False
+
+    def _on_bypass_changed(self, _state: int) -> None:
+        if self._updating:
+            return
+        self._updating = True
+        try:
+            self._apply_interlocks()
+            self.signals.bypass_changed.emit(self._task_name, self._cb_bypass.isChecked())
         finally:
             self._updating = False
 

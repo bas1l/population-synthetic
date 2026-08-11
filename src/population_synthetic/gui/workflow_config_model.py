@@ -54,7 +54,7 @@ class WorkflowConfigModel(FlowConfigModel):
         return [str(name) for name in self._tasks_block()]
 
     # ------------------------------------------------------------------
-    # Enabled / force (the two node checkboxes)
+    # Enabled / bypass / force (the three node checkboxes)
     # ------------------------------------------------------------------
 
     def is_task_enabled(self, name: str) -> bool:
@@ -71,6 +71,23 @@ class WorkflowConfigModel(FlowConfigModel):
         if "enabled" not in task:
             raise KeyError(f"Workflow config {self._path}: task '{name}' has no 'enabled' key")
         task["enabled"] = bool(enabled)
+        self._dirty = True
+
+    def get_task_bypass(self, name: str) -> bool:
+        """Return the task's ``bypass`` value (a required key on every task)."""
+        task = self._task(name)
+        if "bypass" not in task:
+            raise KeyError(f"Workflow config {self._path}: task '{name}' has no 'bypass' key")
+        value = task["bypass"]
+        if not isinstance(value, bool):
+            raise ValueError(f"Workflow config {self._path}: task '{name}' 'bypass' must be a boolean, got {value!r}")
+        return bool(value)
+
+    def set_task_bypass(self, name: str, bypass: bool) -> None:
+        task = self._task(name)
+        if "bypass" not in task:
+            raise KeyError(f"Workflow config {self._path}: task '{name}' has no 'bypass' key")
+        task["bypass"] = bool(bypass)
         self._dirty = True
 
     def get_task_force(self, name: str) -> bool:

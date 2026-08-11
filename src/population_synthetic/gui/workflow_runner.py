@@ -15,9 +15,14 @@ the workflow YAML (there is no ``--flow-config`` argument; do not add one).
 Execution semantics (per task, in :meth:`WorkflowState.ordered_tasks` order):
 
 1. disabled          -> ``SKIPPED_DISABLED``, ``-- SKIP <name> (disabled)``.
-2. dep not completed  -> ``SKIPPED_DEP``, names the first unmet dependency.
-3. combo-count guard  -> ``SKIPPED_GUARD``, LOUD ``!! SKIP <name>: <message>``.
-4. run                -> per-task banner; ``per_combo`` runs one subprocess per
+2. bypassed           -> ``BYPASSED``, LOUD banner; nothing runs, yet the task
+   enters ``completed_tasks`` so its dependents unlock. Enabled is the master
+   switch (1 before 2), and a bypass asserts something about the DISK, not
+   about this run — so it precedes both the dependency gate and the combo
+   guard, and NOTHING is verified (no filesystem access on this path).
+3. dep not completed  -> ``SKIPPED_DEP``, names the first unmet dependency.
+4. combo-count guard  -> ``SKIPPED_GUARD``, LOUD ``!! SKIP <name>: <message>``.
+5. run                -> per-task banner; ``per_combo`` runs one subprocess per
    combo (first nonzero exit fails the whole task, remaining combos skipped);
    ``per_country`` collapses the combos to their distinct country ids and runs
    one subprocess per country (model/strategy ignored); ``slugs`` runs one
@@ -177,6 +182,17 @@ def execute_workflow(
     total = len(ordered)
     n_combos = len(combos)
 
+    bypassed = [task.name for task in ordered if task.enabled and task.bypass]
+    if bypassed:
+        emit(
+            ConsoleLine(
+                f"{_BANNER_RULE}\n"
+                f"  BYPASS: {len(bypassed)} task(s) will NOT run — {', '.join(bypassed)}\n"
+                f"  Their outputs are ASSUMED to exist; nothing is checked.\n"
+                f"{_BANNER_RULE}"
+            )
+        )
+
     for idx, task in enumerate(ordered, start=1):
         name = task.name
 
@@ -185,14 +201,29 @@ def execute_workflow(
             emit(TaskFinished(name, TaskStatus.ABORTED))
             continue
 
-        # 1. Disabled — skip, do not complete.
+        # 1. Disabled — skip, do not complete (the master switch: a disabled
+        #    task's bypass is inert and its value is never touched).
         if not task.enabled:
             state.status[name] = TaskStatus.SKIPPED_DISABLED
             emit(ConsoleLine(f"-- SKIP {name} (disabled)"))
             emit(TaskFinished(name, TaskStatus.SKIPPED_DISABLED))
             continue
 
-        # 2. A dependency did not complete — skip, name the first unmet dep.
+        # 2. Bypassed — LOUD, run nothing, but unlock dependents. No TaskStarted
+        #    (nothing starts) and no verification whatsoever.
+        if task.bypass:
+            state.mark_bypassed(name)  # sets BYPASSED
+            emit(
+                ConsoleLine(
+                    f"{_BANNER_RULE}\n"
+                    f"!! BYPASS {name}: not run — outputs assumed present, nothing verified\n"
+                    f"{_BANNER_RULE}"
+                )
+            )
+            emit(TaskFinished(name, TaskStatus.BYPASSED))
+            continue
+
+        # 3. A dependency did not complete — skip, name the first unmet dep.
         if not state.can_run(name):
             unmet = next((dep for dep in task.depends_on if dep not in state.completed_tasks), None)
             state.status[name] = TaskStatus.SKIPPED_DEP
@@ -200,7 +231,7 @@ def execute_workflow(
             emit(TaskFinished(name, TaskStatus.SKIPPED_DEP))
             continue
 
-        # 3. Combo-count guard — LOUD skip, run continues.
+        # 4. Combo-count guard — LOUD skip, run continues.
         violation = state.guard_violation(name, n_combos)
         if violation is not None:
             state.status[name] = TaskStatus.SKIPPED_GUARD
@@ -208,7 +239,7 @@ def execute_workflow(
             emit(TaskFinished(name, TaskStatus.SKIPPED_GUARD))
             continue
 
-        # 4. Run.
+        # 5. Run.
         state.status[name] = TaskStatus.RUNNING
         emit(TaskStarted(idx, total, name))
         emit(ConsoleLine(_task_banner(idx, total, task, combos)))
