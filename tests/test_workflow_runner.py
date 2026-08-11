@@ -13,7 +13,10 @@ so the DAG-walking logic takes injected callables:
 Covered: (a) map failure dep-skips its dependents while an enabled island
 still runs; (b) a min/max-combo guard yields a loud ``!! SKIP`` and the run
 continues; (c) the happy path completes the main chain in dependency order;
-plus an abort marking the running + pending tasks ``ABORTED``.
+(d) the ladder placement of ``bypass`` (after the enabled master switch,
+before the dependency gate and the combo guard) and its zero-subprocess,
+dependents-unlocked contract; plus an abort marking the running + pending
+tasks ``ABORTED``.
 """
 
 from __future__ import annotations
@@ -34,12 +37,13 @@ COMBO_C = ("gemini_flash", "all_pick", "swedish")
 
 
 def _task(script: str, dispatch: str = "per_combo", enabled: bool = True,
-          depends_on: list[str] | None = None, **extra) -> dict:
+          depends_on: list[str] | None = None, bypass: bool = False, **extra) -> dict:
     task = {
         "label": script,
         "script": script,
         "dispatch": dispatch,
         "enabled": enabled,
+        "bypass": bypass,
         "options": {},
         "depends_on": depends_on if depends_on is not None else [],
     }
@@ -169,6 +173,120 @@ def test_guard_violation_loud_skip_and_run_continues():
     assert fin["map"] is TaskStatus.COMPLETED
     assert fin["compare"] is TaskStatus.COMPLETED
     assert rec.script_calls("compare_pops.py") == 0  # never invoked
+
+
+# ---------------------------------------------------------------------------
+# Bypass — ladder row 2: nothing runs, dependents unlock, nothing is verified
+# ---------------------------------------------------------------------------
+
+def test_bypassed_task_runs_nothing_and_unlocks_its_dependent():
+    snapshot = _main_chain_snapshot()
+    snapshot["tasks"]["map"]["bypass"] = True
+    state = WorkflowState(snapshot, PROJECT_ROOT)
+    rec = _Recorder()
+
+    execute_workflow(state, [COMBO_A, COMBO_B], rec.run_cmd, rec.emit)
+
+    fin = rec.finished()
+    assert fin["map"] is TaskStatus.BYPASSED
+    assert rec.script_calls("map.py") == 0  # zero subprocesses
+    assert "map" in state.completed_tasks  # counts as completed for gating
+    assert fin["compare"] is TaskStatus.COMPLETED  # dependent actually ran
+    assert rec.script_calls("compare.py") == 1
+
+
+def test_bypassed_task_emits_no_task_started():
+    snapshot = _main_chain_snapshot()
+    snapshot["tasks"]["map"]["bypass"] = True
+    state = WorkflowState(snapshot, PROJECT_ROOT)
+    rec = _Recorder()
+
+    execute_workflow(state, [COMBO_A], rec.run_cmd, rec.emit)
+
+    assert "map" not in rec.started_order()  # nothing started
+    assert "compare" in rec.started_order()
+
+
+def test_disabled_beats_bypass_and_dependents_still_dep_skip():
+    snapshot = _main_chain_snapshot(map=False)
+    snapshot["tasks"]["map"]["bypass"] = True  # inert: enabled is the master switch
+    state = WorkflowState(snapshot, PROJECT_ROOT)
+    rec = _Recorder()
+
+    execute_workflow(state, [COMBO_A], rec.run_cmd, rec.emit)
+
+    fin = rec.finished()
+    assert fin["map"] is TaskStatus.SKIPPED_DISABLED
+    assert fin["compare"] is TaskStatus.SKIPPED_DEP
+    assert "map" not in state.completed_tasks
+
+
+def test_bypass_survives_a_failed_upstream_and_releases_its_own_dependent():
+    snapshot = _main_chain_snapshot()
+    snapshot["tasks"]["compare"]["bypass"] = True
+    state = WorkflowState(snapshot, PROJECT_ROOT)
+    rec = _Recorder(fail_substrings=("map.py",))
+
+    execute_workflow(state, [COMBO_A], rec.run_cmd, rec.emit)
+
+    fin = rec.finished()
+    assert fin["map"] is TaskStatus.FAILED
+    # A bypass asserts something about the disk, not about this run — so it is
+    # immune to the upstream failure and its own dependent proceeds.
+    assert fin["compare"] is TaskStatus.BYPASSED
+    assert fin["perf"] is TaskStatus.COMPLETED
+    assert rec.script_calls("compare.py") == 0
+
+
+def test_bypass_precedes_the_combo_guard():
+    snapshot = _main_chain_snapshot()
+    snapshot["tasks"]["compare_pops"] = _task(
+        "scripts/compare_pops.py", dispatch="slugs", enabled=True,
+        depends_on=["map"], bypass=True, min_combos=2,
+    )
+    state = WorkflowState(snapshot, PROJECT_ROOT)
+    rec = _Recorder()
+
+    execute_workflow(state, [COMBO_A], rec.run_cmd, rec.emit)  # 1 combo violates min_combos=2
+
+    assert rec.finished()["compare_pops"] is TaskStatus.BYPASSED
+    assert not any(line.startswith("!! SKIP") for text in rec.lines() for line in text.splitlines())
+
+
+def test_run_opening_summary_names_every_enabled_bypassed_task():
+    snapshot = _main_chain_snapshot(llm=True)
+    snapshot["tasks"]["map"]["bypass"] = True
+    snapshot["tasks"]["llm"]["bypass"] = True
+    snapshot["tasks"]["perf"]["enabled"] = False
+    snapshot["tasks"]["perf"]["bypass"] = True  # disabled -> inert, not announced
+    state = WorkflowState(snapshot, PROJECT_ROOT)
+    rec = _Recorder()
+
+    execute_workflow(state, [COMBO_A], rec.run_cmd, rec.emit)
+
+    summary = next(text for text in rec.lines() if "BYPASS: " in text)
+    assert "map" in summary and "llm" in summary
+    assert "perf" not in summary
+    assert "2 task(s)" in summary
+
+
+def test_abort_beats_bypass():
+    snapshot = _main_chain_snapshot()
+    snapshot["tasks"]["compare"]["bypass"] = True
+    state = WorkflowState(snapshot, PROJECT_ROOT)
+    rec = _Recorder()
+    flag = {"aborted": False}
+
+    def run_cmd(cmd: list[str]) -> int:
+        rec.commands.append(cmd)
+        flag["aborted"] = True  # user aborts while map runs; compare is still pending
+        return 1
+
+    execute_workflow(state, [COMBO_A], run_cmd, rec.emit, is_aborted=lambda: flag["aborted"])
+
+    fin = rec.finished()
+    assert fin["compare"] is TaskStatus.ABORTED  # row 0 wins over row 2
+    assert "compare" not in state.completed_tasks
 
 
 # ---------------------------------------------------------------------------
