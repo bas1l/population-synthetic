@@ -43,6 +43,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Sequence
 
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.realism_csv import (
     SEVERITY_COUNT_FIELDS,
     SEVERITY_LEVELS,
@@ -209,6 +210,11 @@ def _grid(
       tests hold it out.
     * **Every value keeps its denominator**, so a cell is never read without the base it
       was computed over.
+    * **The method axis is the complexity axis.** ``methods`` comes back ordered by
+      :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order`, not
+      sorted, so every grid this task emits reads simplest-method-first like the rest of
+      the analysis layer. The charts take their axis from this list verbatim, which is
+      what keeps the JSON block and the figures from ordering the same grid differently.
 
     Raises ``ValueError`` if two combinations claim the same ``(model, method)`` cell, or
     if a synthetic competitor is missing either coordinate. Slugs are
@@ -248,7 +254,15 @@ def _grid(
         cells.setdefault(model, {})[method] = value_of(entry)
 
     models.sort()
-    methods.sort()
+    # The method axis is ordered by pipeline complexity, simplest first -- the order
+    # `_families.yaml` declares and every other analysis process publishes, so a heatmap
+    # here can be read beside a fidelity or method-significance figure. Alphabetical is
+    # not merely a different convention on this axis: every `all_generate_*` family sorts
+    # ahead of `all_pick*`, so it very nearly *inverts* complexity and puts the most
+    # elaborate method leftmost. An id the strategy-axis config does not know raises here
+    # rather than sorting last, for the reason the resolver states: an axis that quietly
+    # lost its order is indistinguishable from one that kept it.
+    methods = strategy_complexity_order(methods)
     # Materialise the full rectangle so an unjudged pair is an explicit None rather than a
     # missing key a reader has to notice the absence of.
     full = {model: {method: cells.get(model, {}).get(method) for method in methods}
@@ -1034,6 +1048,19 @@ def _factor_groups(
     return {key: values for key, values in groups.items() if values}
 
 
+def _factor_level_order(levels: Sequence[str], factor: str) -> list[str]:
+    """The published order of one factor's levels.
+
+    The method factor is ordered by pipeline complexity, exactly as the grids are; the
+    model factor has no declared order and stays alphabetical. Applied to the group
+    mapping *before* the tests run, so the group listing, the Kruskal input and the Dunn
+    pair list all present the levels in one order rather than three.
+    """
+    if factor == "strategy":
+        return strategy_complexity_order(sorted(levels))
+    return sorted(levels)
+
+
 def _factor_significance(
     records: Sequence[CompetitorRecord], factor: str, skips: list[_Skip]
 ) -> dict[str, Any]:
@@ -1052,10 +1079,11 @@ def _factor_significance(
         ))
         return {"kruskal": None, "dunn": [], "groups": {}, "correction": CORRECTION}
 
+    usable = {key: usable[key] for key in _factor_level_order(list(usable), factor)}
     return {
         "kruskal": kruskal_test(usable),
         "dunn": dunn_posthoc(usable),
-        "groups": {key: summarize(values) for key, values in sorted(usable.items())},
+        "groups": {key: summarize(values) for key, values in usable.items()},
         "correction": CORRECTION,
         "unit": "per-persona mean typicality over the can_exist subset",
     }
@@ -1338,6 +1366,38 @@ def _driver_cells(
     return levels[level], sorted(rows, key=lambda cell: cell["slug"])
 
 
+def _competitor_position(
+    rows: Sequence[dict[str, Any]]
+) -> Callable[[dict[str, Any]], tuple[int, int, str]]:
+    """Build the leading sort key of the flat driver tables: method, then model.
+
+    A slug is ``{country}_{strategy}_{model}``, so ordering the tables on it walked the
+    methods **alphabetically** -- which on this axis is close to reverse complexity order,
+    and left a table disagreeing with its own heatmap about which method comes first.
+    Ordering on the decomposed coordinates fixes that while keeping the two properties the
+    slug key was chosen for: a competitor's rows stay contiguous (within one country a
+    ``(strategy, model)`` pair identifies the slug), and the order stays total.
+
+    The real population sorts after every synthetic competitor rather than among them. It
+    has no coordinate on either axis, so the grids carry it beside the cells instead of in
+    them; giving it a position on the method axis here would be the fabricated rank they
+    refuse.
+    """
+    method_rank = {
+        method: rank
+        for rank, method in enumerate(strategy_complexity_order(sorted(
+            {row["strategy"] for row in rows if not row["is_real_reference"]}
+        )))
+    }
+
+    def position(row: dict[str, Any]) -> tuple[int, int, str]:
+        if row["is_real_reference"]:
+            return (1, 0, row["slug"])
+        return (0, method_rank[row["strategy"]], row["model"])
+
+    return position
+
+
 def _driver_identity(cell: dict[str, Any], level: str, *, penalised: bool) -> dict[str, Any]:
     """The columns every driver row carries whatever its grain.
 
@@ -1395,12 +1455,14 @@ def severity_driver_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
                     "counting_unit": DRIVER_COUNTING_UNIT,
                     "non_additive": DRIVER_NON_ADDITIVE,
                 })
-    # Total order, no residual tie: the competitor identifies the block of rows, severity
-    # orders the levels by SEVERITY_RANK (S3, S2, S1 -- worst first, and never
+    # Total order, no residual tie: the competitor identifies the block of rows and is
+    # placed on the method-then-model axes rather than by slug (see _competitor_position),
+    # severity orders the levels by SEVERITY_RANK (S3, S2, S1 -- worst first, and never
     # alphabetically, which would put the mildest level at the top), and `rank` is already
     # total within a (slug, severity) cell via the declared tie-break. Sorted after the
     # build rather than during it so the emitted bytes never depend on record order.
-    rows.sort(key=lambda row: (row["slug"], SEVERITY_RANK[row["severity"]], row["rank"]))
+    position = _competitor_position(rows)
+    rows.sort(key=lambda row: (*position(row), SEVERITY_RANK[row["severity"]], row["rank"]))
     return rows
 
 
@@ -1436,11 +1498,12 @@ def severity_driver_value_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
                         "counting_unit": DRIVER_COUNTING_UNIT,
                         "non_additive": DRIVER_NON_ADDITIVE,
                     })
-    # Same key as the coarser grain, extended through the nesting: (competitor, severity
-    # by SEVERITY_RANK, parent pair by its rank, category pair by its own rank). Both
-    # ranks are total within their scope, so no residual tie survives.
+    # Same key as the coarser grain, extended through the nesting: (competitor by method
+    # then model, severity by SEVERITY_RANK, parent pair by its rank, category pair by its
+    # own rank). Both ranks are total within their scope, so no residual tie survives.
+    position = _competitor_position(rows)
     rows.sort(key=lambda row: (
-        row["slug"], SEVERITY_RANK[row["severity"]], row["pair_rank"], row["rank"],
+        *position(row), SEVERITY_RANK[row["severity"]], row["pair_rank"], row["rank"],
     ))
     return rows
 

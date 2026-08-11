@@ -33,6 +33,7 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_severity_pair_summary,
 )
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord  # noqa: E402
+from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from population_synthetic.analysis.utils.realism_clash_csv import RealismClashRow  # noqa: E402
 from population_synthetic.analysis.utils.realism_csv import (  # noqa: E402
     SEVERITY_LEVELS,
@@ -384,6 +385,55 @@ def test_grid_places_each_combination_at_its_model_method_coordinate():
             assert cell["rate"] == pytest.approx(1 / 5)
 
 
+def _complexity_fixture():
+    """Three methods whose complexity order and alphabetical order genuinely differ."""
+    return [
+        _record(f"swedish_{strategy}_claude_haiku", n_impossible=1,
+                typicalities=[5.0, 6.0, 7.0, 8.0], model="claude_haiku", strategy=strategy)
+        for strategy in ("all_pick", "all_generate_pick", "all_pick_dag")
+    ]
+
+
+def test_method_axis_is_ordered_by_complexity_not_alphabetically():
+    """Every grid this task emits reads simplest-method-first, like the rest of the layer.
+
+    Alphabetical is not a harmless second convention on this axis: `all_generate_*` sorts
+    ahead of `all_pick*`, so it very nearly inverts the complexity order and puts the most
+    elaborate method leftmost -- while the fidelity, model-ranking and method-significance
+    figures beside it put the simplest one there.
+    """
+    expected = ["all_pick", "all_pick_dag", "all_generate_pick"]
+    ranking = _build(_complexity_fixture())
+
+    assert ranking["axis_a"]["grid"]["methods"] == expected
+    assert expected != sorted(expected), "the fixture must discriminate the two orders"
+    # One reshape serves every grid, so the severity and driver grids inherit it.
+    for level in SEVERITY_LEVELS:
+        assert ranking["severity"]["levels"][level]["grid"]["methods"] == expected
+        assert ranking["severity_drivers"]["levels"][level]["grid"]["methods"] == expected
+
+
+def test_method_factor_lists_its_levels_in_complexity_order():
+    """The factor block's group listing follows the same axis its heatmaps do."""
+    ranking = _build(_complexity_fixture())
+    assert list(ranking["factor_significance"]["by_method"]["groups"]) == [
+        "all_pick", "all_pick_dag", "all_generate_pick"]
+    # The model factor has no declared order and stays alphabetical.
+    by_model = _build(_factor_fixture())["factor_significance"]["by_model"]["groups"]
+    assert list(by_model) == sorted(by_model)
+
+
+def test_an_unknown_method_raises_rather_than_sorting_last():
+    """An axis-naming drift must not hide behind a plausible-looking chart."""
+    records = [
+        _record("swedish_all_pick_claude_haiku", n_impossible=1, typicalities=[5.0, 6.0]),
+        _record("swedish_not_a_strategy_claude_haiku", n_impossible=1, typicalities=[5.0, 6.0],
+                strategy="not_a_strategy"),
+    ]
+    with pytest.raises(ValueError, match="not_a_strategy"):
+        _build(records)
+
+
 def test_grid_rates_equal_the_ranking_rates():
     """The heatmap and the forest plot can never disagree: one source, not two."""
     ranking = _build(_factor_fixture())
@@ -445,7 +495,10 @@ def test_grid_real_is_none_without_a_real_competitor_and_the_heatmap_still_rende
 
 def test_heatmap_raises_rather_than_emitting_an_empty_figure():
     empty = CompetitorRecord(
-        slug="dead", country=_COUNTRY, model="m", strategy="s", is_real_reference=False,
+        # A real strategy id: the method axis is resolved through the strategy config, so
+        # an invented one would raise in the builder and this test would pass on the wrong
+        # exception -- it is about the *chart* refusing to draw an empty grid.
+        slug="dead", country=_COUNTRY, model="m", strategy="all_pick", is_real_reference=False,
         n_personas=0, n_failed=1, personas=(), impossibility={"rate": None},
         dispersion={}, reliability={}, provenance=dict(_PROVENANCE),
         report_path="/fake/dead.json", personas_csv_path="/fake/dead_personas.csv",
@@ -575,7 +628,10 @@ def test_severity_charts_render_and_raise_on_an_empty_ranking():
         plot_severity_heatmap(ranking, "S9")
 
     empty = CompetitorRecord(
-        slug="dead", country=_COUNTRY, model="m", strategy="s", is_real_reference=False,
+        # A real strategy id: the method axis is resolved through the strategy config, so
+        # an invented one would raise in the builder and this test would pass on the wrong
+        # exception -- it is about the *chart* refusing to draw an empty grid.
+        slug="dead", country=_COUNTRY, model="m", strategy="all_pick", is_real_reference=False,
         n_personas=0, n_failed=1, personas=(), impossibility={"rate": None},
         dispersion={}, reliability={}, provenance=dict(_PROVENANCE),
         report_path="/fake/dead.json", personas_csv_path="/fake/dead_personas.csv",
@@ -588,7 +644,10 @@ def test_severity_charts_render_and_raise_on_an_empty_ranking():
 
 def test_charts_raise_rather_than_emitting_an_empty_figure():
     empty = CompetitorRecord(
-        slug="dead", country=_COUNTRY, model="m", strategy="s", is_real_reference=False,
+        # A real strategy id: the method axis is resolved through the strategy config, so
+        # an invented one would raise in the builder and this test would pass on the wrong
+        # exception -- it is about the *chart* refusing to draw an empty grid.
+        slug="dead", country=_COUNTRY, model="m", strategy="all_pick", is_real_reference=False,
         n_personas=0, n_failed=1, personas=(), impossibility={"rate": None},
         dispersion={}, reliability={}, provenance=dict(_PROVENANCE),
         report_path="/fake/dead.json", personas_csv_path="/fake/dead_personas.csv",
@@ -920,15 +979,30 @@ def test_driver_tables_hold_every_level_in_one_file_with_severity_as_a_column():
 def test_driver_row_order_is_total_and_deterministic():
     """Byte-stability: the same ranking flattens to the same row sequence, twice."""
     ranking = _build(_driver_fixture())
+    method_rank = {
+        method: rank for rank, method in enumerate(strategy_complexity_order(sorted(
+            {row["strategy"] for row in severity_driver_rows(ranking)
+             if not row["is_real_reference"]}
+        )))
+    }
+
+    def competitor(row):
+        # Method axis first, then model -- NOT the slug, which walks the methods
+        # alphabetically. The real population has no coordinate and sorts last.
+        if row["is_real_reference"]:
+            return (1, 0, row["slug"])
+        return (0, method_rank[row["strategy"]], row["model"])
+
     for flatten, key in (
-        (severity_driver_rows, lambda r: (r["slug"], SEVERITY_RANK[r["severity"]], r["rank"])),
+        (severity_driver_rows,
+         lambda r: (*competitor(r), SEVERITY_RANK[r["severity"]], r["rank"])),
         (severity_driver_value_rows,
-         lambda r: (r["slug"], SEVERITY_RANK[r["severity"]], r["pair_rank"], r["rank"])),
+         lambda r: (*competitor(r), SEVERITY_RANK[r["severity"]], r["pair_rank"], r["rank"])),
     ):
         rows = flatten(ranking)
         assert flatten(ranking) == rows
         keys = [key(row) for row in rows]
-        assert keys == sorted(keys), "rows must be sorted by (slug, severity rank, rank)"
+        assert keys == sorted(keys), "rows must be sorted by (method, model, severity, rank)"
         assert len(set(keys)) == len(keys), "the sort key must leave no residual tie"
 
 
