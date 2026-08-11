@@ -340,12 +340,13 @@ def test_real_population_stats_registry_dispatch_is_per_country():
 
 
 def _workflow_task(script: str = "task.py", dispatch: str = "per_country", enabled: bool = True,
-                    depends_on: list[str] | None = None) -> dict:
+                    depends_on: list[str] | None = None, bypass: bool = False) -> dict:
     return {
         "label": "T",
         "script": script,
         "dispatch": dispatch,
         "enabled": enabled,
+        "bypass": bypass,
         "options": {},
         "depends_on": depends_on if depends_on is not None else [],
     }

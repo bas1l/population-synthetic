@@ -3,8 +3,9 @@
 Covers fail-fast validation (unknown dep, cycles, missing script, bad
 dispatch, min>max), deterministic Kahn ordering for the shipped
 ``analysis_workflow.yaml``, DagConfigHandler-mirror gating
-(enabled ∧ deps ⊆ completed), and min/max-combo guard messages.
-No Qt required.
+(enabled ∧ deps ⊆ completed), the ``bypass`` key (required, boolean) and
+``mark_bypassed`` as the second writer of ``completed_tasks``, and
+min/max-combo guard messages. No Qt required.
 """
 
 from __future__ import annotations
@@ -19,12 +20,13 @@ SHIPPED_WORKFLOW = PROJECT_ROOT / "config" / "gui" / "flows" / "analysis_workflo
 
 
 def _task(script: str = "task.py", dispatch: str = "per_combo", enabled: bool = True,
-          depends_on: list[str] | None = None, **extra) -> dict:
+          depends_on: list[str] | None = None, bypass: bool = False, **extra) -> dict:
     task = {
         "label": "T",
         "script": script,
         "dispatch": dispatch,
         "enabled": enabled,
+        "bypass": bypass,
         "options": {},
         "depends_on": depends_on if depends_on is not None else [],
     }
@@ -100,6 +102,24 @@ def test_parse_unknown_key_raises(root):
 def test_parse_empty_tasks_raises(root):
     with pytest.raises(ValueError, match="non-empty 'tasks:'"):
         WorkflowState({"tasks": {}}, root)
+
+
+def test_parse_missing_bypass_raises_naming_the_key(root):
+    """'bypass' is required (no supports_ gate, so an absent key is a config error)."""
+    task = _task()
+    del task["bypass"]
+    with pytest.raises(ValueError, match=r"missing required key\(s\).*bypass"):
+        WorkflowState({"tasks": {"a": task}}, root)
+
+
+def test_parse_non_boolean_bypass_raises(root):
+    with pytest.raises(ValueError, match="'bypass' must be a boolean"):
+        WorkflowState({"tasks": {"a": _task(bypass="yes")}}, root)
+
+
+def test_validate_accepts_disabled_and_bypassed(root):
+    """enabled: false + bypass: true is legal and inert, not a config error."""
+    WorkflowState({"tasks": {"a": _task(enabled=False, bypass=True)}}, root).validate()
 
 
 # ---------------------------------------------------------------------------
@@ -205,12 +225,29 @@ def test_status_lifecycle():
     assert state.status["fidelity"] is TaskStatus.PENDING
 
 
+def test_mark_bypassed_completes_without_the_completed_status():
+    state = _shipped_state()
+    state.mark_bypassed("mapping")
+    assert "mapping" in state.completed_tasks  # counts as completed for gating
+    assert state.status["mapping"] is TaskStatus.BYPASSED  # but stays distinct
+
+
+def test_mark_bypassed_unlocks_dependents():
+    state = _shipped_state()
+    assert not state.can_run("validate_mapped")  # depends on mapping
+    state.mark_bypassed("validate_raw")
+    state.mark_bypassed("mapping")
+    assert state.can_run("validate_mapped")
+
+
 def test_unknown_task_name_raises():
     state = _shipped_state()
     with pytest.raises(KeyError, match="ghost"):
         state.can_run("ghost")
     with pytest.raises(KeyError, match="ghost"):
         state.mark_completed("ghost")
+    with pytest.raises(KeyError, match="ghost"):
+        state.mark_bypassed("ghost")
     with pytest.raises(KeyError, match="ghost"):
         state.guard_violation("ghost", 2)
 

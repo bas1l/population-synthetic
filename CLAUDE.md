@@ -143,7 +143,10 @@ persona-dir mirror and `03_Analysis/population_cap/_mapped/`; `generation_metada
 mirror's telemetry via `analysis/utils/capped_source.py` and the mapped-file consumers read
 `_mapped/` via `resolve_mapped_dir` (fail-fast, no `01_Raw`/`mapping/` fallback). One process is
 itself chained further: `realism_ranking` declares `depends_on: [persona_realism]` — the only
-analysis node whose upstream is another analysis node rather than the gate.
+analysis node whose upstream is another analysis node rather than the gate. A workflow task's
+per-node **`bypass`** flag is GUI-only orchestration that is invisible to every script and emits no
+CLI flag: it runs nothing yet still unlocks the dependents, asserting with **zero** verification
+that the task's outputs are already on disk — so it is confirmed by an unskippable pre-run modal.
 
 | Topic | Page |
 |-------|------|
