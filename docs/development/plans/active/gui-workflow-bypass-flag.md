@@ -234,26 +234,26 @@ legal, inert combination, not a config error (the GUI simply greys the box).
 ### Phase 2: Graph node + write-back
 **Goal:** the flag is reachable, visible, and persisted from the GUI.
 
-- [ ] 2.1 — Third `QCheckBox("Bypass")` in `WorkflowTaskNode`, always present (no
+- [x] 2.1 — Third `QCheckBox("Bypass")` in `WorkflowTaskNode`, always present (no
       `supports_` gate), initialised from `model.get_task_bypass`, emitting
       `bypass_changed(name, bool)`.
-- [ ] 2.2 — Node width: the current width comes from the label only
+- [x] 2.2 — Node width: the current width comes from the label only
       (`workflow_graph_items.py:98`) and three checkboxes will overflow `_MIN_NODE_W`.
       After building `inner`, measure `inner.sizeHint().width()`, then
       `prepareGeometryChange()` + `self.setRect(0, 0, node_w, _NODE_H)` and resize the
       proxy to match, where
       `node_w = max(_MIN_NODE_W, label_w + _H_PADDING, inner.sizeHint().width() + 2*_INSET)`.
-- [ ] 2.3 — Enabled → Bypass interlock: `self._cb_bypass.setEnabled(self._enabled)` at
+- [x] 2.3 — Enabled → Bypass interlock: `self._cb_bypass.setEnabled(self._enabled)` at
       construction and inside `_on_enabled_changed`. Grey only — never clear the value.
-- [ ] 2.4 — Bypass → Force interlock: grey Force while Bypass is checked (nothing runs, so
+- [x] 2.4 — Bypass → Force interlock: grey Force while Bypass is checked (nothing runs, so
       Force is meaningless). Value untouched. *Reviewer note: this is the one addition
       beyond the four agreed decisions; drop it if unwanted.*
-- [ ] 2.5 — `_STATUS_OVERLAY[TaskStatus.BYPASSED]` — fill `#e3e0f0`, border `#5c4b99`,
+- [x] 2.5 — `_STATUS_OVERLAY[TaskStatus.BYPASSED]` — fill `#e3e0f0`, border `#5c4b99`,
       width 2.0, `dim=False`, glyph `»`. Distinct from green `COMPLETED` and amber
       `SKIPPED_*`; undimmed, because a bypassed node is *accounted for*, not skipped.
-- [ ] 2.6 — `bypass_changed` signal on `WorkflowGraphView` + node connection
+- [x] 2.6 — `bypass_changed` signal on `WorkflowGraphView` + node connection
       (`workflow_graph_view.py:56-61,148`).
-- [ ] 2.7 — `main_window._on_task_bypass_changed` mirroring `:572-577`
+- [x] 2.7 — `main_window._on_task_bypass_changed` mirroring `:572-577`
       (`set_task_bypass` + `_refresh_title`), wired at `:221`.
 
 **Files Modified:**
@@ -312,7 +312,7 @@ legal, inert combination, not a config error (the GUI simply greys the box).
 
 `tests/test_workflow_graph_items.py` (new, or a `pytest.importorskip("PyQt5")` guard in
 an existing GUI test module):
-- [ ] Every `TaskStatus` member has an `_STATUS_OVERLAY` entry — guards the bare dict
+- [x] Every `TaskStatus` member has an `_STATUS_OVERLAY` entry — guards the bare dict
       lookup at `workflow_graph_items.py:169` against a `KeyError` at paint time.
 
 ### Integration Tests

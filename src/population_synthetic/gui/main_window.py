@@ -218,6 +218,7 @@ class FlowRunnerWindow(QMainWindow):
         self._workflow_graph = WorkflowGraphView()
         self._workflow_graph.node_clicked.connect(self._on_workflow_node_clicked)
         self._workflow_graph.enabled_changed.connect(self._on_task_enabled_changed)
+        self._workflow_graph.bypass_changed.connect(self._on_task_bypass_changed)
         self._workflow_graph.force_changed.connect(self._on_task_force_changed)
         self._workflow_page: QWidget = self._workflow_graph
         self._center_stack.addWidget(self._workflow_page)
@@ -567,6 +568,13 @@ class FlowRunnerWindow(QMainWindow):
         if not isinstance(self._model, WorkflowConfigModel):
             return
         self._model.set_task_enabled(name, enabled)
+        self._refresh_title()
+
+    def _on_task_bypass_changed(self, name: str, bypass: bool) -> None:
+        """Node Bypass checkbox → WorkflowConfigModel (dirty ``*``)."""
+        if not isinstance(self._model, WorkflowConfigModel):
+            return
+        self._model.set_task_bypass(name, bypass)
         self._refresh_title()
 
     def _on_task_force_changed(self, name: str, force: bool) -> None:
