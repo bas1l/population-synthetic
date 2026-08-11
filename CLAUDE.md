@@ -121,7 +121,10 @@ validation gate: `validate_raw` (**root**) → `mapping` (reads the full `01_Raw
 per-combo validity CSVs, seeded-caps `--n` clean personas, and materializes both the capped
 persona-dir mirror and `03_Analysis/population_cap/_mapped/`; `generation_metadata` reads the
 mirror's telemetry via `analysis/utils/capped_source.py` and the mapped-file consumers read
-`_mapped/` via `resolve_mapped_dir` (fail-fast, no `01_Raw`/`mapping/` fallback).
+`_mapped/` via `resolve_mapped_dir` (fail-fast, no `01_Raw`/`mapping/` fallback). A workflow task's
+per-node **`bypass`** flag is GUI-only orchestration that is invisible to every script and emits no
+CLI flag: it runs nothing yet still unlocks the dependents, asserting with **zero** verification
+that the task's outputs are already on disk — so it is confirmed by an unskippable pre-run modal.
 
 | Topic | Page |
 |-------|------|

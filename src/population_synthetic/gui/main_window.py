@@ -702,6 +702,12 @@ class FlowRunnerWindow(QMainWindow):
         :meth:`WorkflowConfigModel.to_plain` snapshot so the run is isolated
         from concurrent GUI edits; ``validate()`` surfaces a bad DAG loudly in
         the console and aborts the run without crashing the GUI.
+
+        A bypass is never applied silently: any task that is both enabled and
+        bypassed is listed in a confirmation modal (defaulting to Cancel)
+        before anything else happens. Cancelling returns before the node
+        statuses are reset and before a runner exists, so the previous run
+        report stays on screen intact.
         """
         assert isinstance(self._model, WorkflowConfigModel)
         combos = self._axis_selector.checked_combos()
@@ -720,6 +726,9 @@ class FlowRunnerWindow(QMainWindow):
             QMessageBox.critical(self, "Workflow validation failed", str(exc))
             return
 
+        if not self._confirm_bypasses(state):
+            return
+
         self._workflow_graph.reset_statuses()
         runner = WorkflowRunner(state, combos, PROJECT_ROOT)
         runner.task_started.connect(self._on_task_started)
@@ -731,6 +740,36 @@ class FlowRunnerWindow(QMainWindow):
         self._abort_requested = False
         self._set_running(True)
         runner.start()
+
+    def _confirm_bypasses(self, state: WorkflowState) -> bool:
+        """Ask before honouring any bypass; ``False`` means the user cancelled.
+
+        Only tasks that are BOTH enabled and bypassed are listed: on a disabled
+        task the flag is inert (the Enabled master switch is evaluated first in
+        the runner ladder), so listing it would warn about nothing.
+
+        NOTHING is verified here — no output directory is looked at, no file is
+        read. The modal states exactly that, and defaults to Cancel, because a
+        forgotten ``bypass: true`` is this feature's one dangerous failure mode.
+        """
+        bypassed = [task for task in state.ordered_tasks() if task.enabled and task.bypass]
+        if not bypassed:
+            return True
+        # Registry-owned labels (WorkflowState carries the label merged in by
+        # WorkflowConfigModel.to_plain), so each line names a node as drawn.
+        listing = "\n".join(f"  » {task.label}  ({task.name})" for task in bypassed)
+        choice = QMessageBox.warning(
+            self,
+            "Bypassed tasks",
+            f"{len(bypassed)} task(s) will be BYPASSED — not run at all:\n\n{listing}\n\n"
+            "Their outputs are assumed to already exist on disk. Nothing is checked: "
+            "no file, no folder, no timestamp. Each one is marked as completed so its "
+            "dependents run against whatever is currently there, however stale.\n\n"
+            "Run the workflow anyway?",
+            QMessageBox.Ok | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        return choice == QMessageBox.Ok
 
     def _on_task_started(self, idx: int, total: int, name: str) -> None:
         self.statusBar().showMessage(f"TASK {idx}/{total}: {name}")

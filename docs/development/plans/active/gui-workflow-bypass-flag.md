@@ -266,16 +266,16 @@ legal, inert combination, not a config error (the GUI simply greys the box).
 ### Phase 3: Pre-run confirmation + docs
 **Goal:** a bypass can never be applied silently.
 
-- [ ] 3.1 — In `main_window._run_workflow`, after `state.validate()` and before
+- [x] 3.1 — In `main_window._run_workflow`, after `state.validate()` and before
       `reset_statuses()`: collect `[t.name for t in state.ordered_tasks() if t.enabled and t.bypass]`.
       If non-empty, `QMessageBox.warning` with `Ok | Cancel`, **default Cancel**, listing
       the task labels and stating plainly that nothing is checked and their outputs are
       assumed present. `Cancel` → `return` before any runner is constructed.
-- [ ] 3.2 — Disabled tasks are excluded from that list (their bypass is inert).
-- [ ] 3.3 — `docs/development/gui.md`: add Bypass to the orchestration-field lists
+- [x] 3.2 — Disabled tasks are excluded from that list (their bypass is inert).
+- [x] 3.3 — `docs/development/gui.md`: add Bypass to the orchestration-field lists
       (`:120-122`, `:142`) and insert the ladder entry into the `WorkflowRunner` bullet
       list (`:150-163`), stating the ordering and the zero-verification contract.
-- [ ] 3.4 — `CLAUDE.md`: extend the GUI/workflow description to name the bypass flag as a
+- [x] 3.4 — `CLAUDE.md`: extend the GUI/workflow description to name the bypass flag as a
       GUI-only orchestration concept invisible to every script.
 
 **Files Modified:**
@@ -345,14 +345,14 @@ an existing GUI test module):
 
 ## Documentation Plan
 
-- [ ] `docs/development/gui.md` — orchestration-field lists + the `WorkflowRunner` ladder,
+- [x] `docs/development/gui.md` — orchestration-field lists + the `WorkflowRunner` ladder,
       including the "no verification" contract and the ordering rationale.
-- [ ] `CLAUDE.md` — one line in the GUI/workflow paragraph: bypass is GUI-only and emits
+- [x] `CLAUDE.md` — one line in the GUI/workflow paragraph: bypass is GUI-only and emits
       no CLI flag.
-- [ ] `config/gui/flows/analysis_workflow.yaml` — header comment + per-task inline comment.
-- [ ] Module docstrings in `workflow_runner.py` / `workflow_state.py` /
+- [x] `config/gui/flows/analysis_workflow.yaml` — header comment + per-task inline comment.
+- [x] Module docstrings in `workflow_runner.py` / `workflow_state.py` /
       `workflow_graph_items.py` (each currently enumerates "Enabled / Force").
-- [ ] No `docs/guides/` page and no changelog entry — this is a GUI affordance, not a
+- [x] No `docs/guides/` page and no changelog entry — this is a GUI affordance, not a
       pipeline capability.
 
 ---
