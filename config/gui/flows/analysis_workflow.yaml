@@ -141,7 +141,7 @@ tasks:
       real-sample: '100'          # --real-sample (blank = config default 100; caps the real_{country} competitor)
       rounds: '1'                 # --rounds (blank = config default n_rounds, currently 3)
       workers: '1'                # --workers (blank = config default fan-out width)
-      rewrite-artifacts: false    # --rewrite-artifacts: rebuild the derived files from the
+      rewrite-artifacts: true     # --rewrite-artifacts: rebuild the derived files from the
                                   # EXISTING verdict cache, zero LLM calls. This -- not Force --
                                   # is how to regenerate artifacts after an output-schema change.
       output-base:                # --output-base (blank = script default)
