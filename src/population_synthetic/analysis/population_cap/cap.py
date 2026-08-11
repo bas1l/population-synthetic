@@ -34,6 +34,7 @@ import shutil
 from pathlib import Path
 from typing import Any, TypedDict
 
+from population_synthetic.analysis.utils.fs import clear_readonly_tree, rmtree_resilient
 from population_synthetic.analysis.utils.sampling import select_indices
 from population_synthetic.analysis.utils.validity_csv import read_passed_ids
 
@@ -166,7 +167,7 @@ def cap_combo(
                 f"Capped mirror already exists for combo {slug!r}: {dest_dir} "
                 f"(pass force=True to overwrite)."
             )
-        shutil.rmtree(dest_dir)
+        rmtree_resilient(dest_dir)
 
     # --- Intersect the two validity gates to the clean persona ids.
     raw_passed = read_passed_ids(validate_raw_csv)
@@ -214,6 +215,11 @@ def cap_combo(
         else:
             shutil.copy2(source, target)
 
+    # The synced source pool marks dehydrated (OneDrive placeholder) entries read-only and
+    # ``copytree``/``copy2`` carry that mode over, which would leave THIS mirror undeletable
+    # on the next --force run. Clear it on what we just wrote.
+    clear_readonly_tree(dest_dir)
+
     # --- 2) Capped mapped file + copied real reference (for the mapped-file consumers).
     synthetic_name = f"{slug}.json"
     mapped_n = _write_capped_mapped(
@@ -224,7 +230,11 @@ def cap_combo(
     real_src = mapping_dir / real_name
     if real_src.is_file():
         mapped_dest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(real_src, mapped_dest_dir / real_name)
+        real_dest = mapped_dest_dir / real_name
+        shutil.copy2(real_src, real_dest)
+        # Same reason as the mirror above -- a read-only copy would make the NEXT run's
+        # ``copy2`` onto it fail with WinError 5 before it ever reached the rmtree.
+        clear_readonly_tree(real_dest)
     else:
         logger.warning(
             "population_cap: real reference %s not found under %s; the capped mapped dir "

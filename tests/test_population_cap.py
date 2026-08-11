@@ -12,7 +12,8 @@ N) into ``_mapped/``.
                                             consistency with ``subsample_population``.
 - ``population_cap.cap_combo``            -- over/under-generation, ancillary copy,
                                             ``force`` semantics, 0-clean edge, seed 0,
-                                            and the capped mapped file's exact-N guarantee.
+                                            the capped mapped file's exact-N guarantee, and
+                                            read-only (synced-placeholder) sources/mirrors.
 - ``utils.capped_source`` resolvers       -- return the mirror when present; **raise
                                             ``FileNotFoundError`` when absent, with NO
                                             fallback to ``01_Raw``**.
@@ -30,6 +31,8 @@ layout the cap reads and mirrors.
 from __future__ import annotations
 
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -365,6 +368,60 @@ def test_cap_combo_seed_zero_is_honored_not_unset(tmp_path: Path):
 
     assert s0a["selected_ids"] == s0b["selected_ids"]      # seed 0 is reproducible
     assert s0a["selected_ids"] != s9["selected_ids"]       # and not a no-op / "unset"
+
+
+# --------------------------------------------------------------------------- #
+# (b2) read-only (OneDrive placeholder) sources and mirrors
+# --------------------------------------------------------------------------- #
+
+
+def _set_writable(path: Path, writable: bool) -> None:
+    """Toggle the owner write bit on *path* (Windows: the ReadOnly attribute)."""
+    mode = os.stat(path).st_mode
+    os.chmod(path, mode | stat.S_IWRITE if writable else mode & ~stat.S_IWRITE)
+
+
+def test_cap_combo_force_replaces_readonly_mirror(tmp_path: Path):
+    # A previous mirror copied out of a OneDrive-dehydrated source carries the source's
+    # read-only bit. `shutil.rmtree` cannot remove such a tree (WinError 5 on rmdir), so
+    # the force path must clear the bit and retry rather than crash.
+    raw = _make_raw_combo(tmp_path, _SLUG, m=8, with_ancillary=True)
+    dest = _cap_stage(tmp_path) / _SLUG
+    _cap(tmp_path, raw, 5, 0, dest)
+
+    read_only = [dest / "logs", *(dest / name for name in _persona_dirs(dest))]
+    for path in read_only:
+        _set_writable(path, False)
+    try:
+        summary = _cap(tmp_path, raw, 3, 1, dest, force=True)
+    finally:
+        for path in read_only:
+            if path.exists():
+                _set_writable(path, True)
+
+    assert len(_persona_dirs(dest)) == 3
+    assert _persona_dirs(dest) == sorted(summary["selected_ids"])
+
+
+def test_cap_combo_does_not_leave_the_mirror_readonly(tmp_path: Path):
+    # copytree/copy2 propagate a read-only source mode to the copy, which would make the
+    # mirror we just wrote undeletable on the next run. The cap clears it on its own output.
+    raw = _make_raw_combo(tmp_path, _SLUG, m=4, with_ancillary=True)
+    sources = [raw / "logs", *(raw / name for name in _persona_dirs(raw))]
+    for path in sources:
+        _set_writable(path, False)
+    dest = _cap_stage(tmp_path) / _SLUG
+    try:
+        _cap(tmp_path, raw, 2, 0, dest)
+    finally:
+        for path in sources:
+            _set_writable(path, True)
+
+    for path in [dest, dest / "logs", *(dest / name for name in _persona_dirs(dest))]:
+        assert os.access(path, os.W_OK), f"capped mirror left read-only: {path}"
+    # The real reference is copied with copy2 from the same synced pool: a read-only copy
+    # would break the NEXT run's copy2 before it ever reached the rmtree.
+    assert os.access(_mapped_dest(tmp_path) / f"real_{_COUNTRY}.json", os.W_OK)
 
 
 # --------------------------------------------------------------------------- #
