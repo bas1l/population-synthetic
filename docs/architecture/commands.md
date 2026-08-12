@@ -242,10 +242,11 @@ strictly increasing relabelling of the 0–10 levels). It replaces nothing;
 `denominator`, the personas carrying a typicality, vs `n_personas` — the `under_powered`/`boundary`
 flags, and a secondary `P(typicality ≤ k0)` column with a Wilson interval), `typicality_histogram.csv`
 (one row per competitor × level over the full scale, the published object the scalar summarises),
-`typicality_heatmap` (the model × method grid on a **diverging** ramp whose midpoint is the real
-population's own value read from the document — the optimum is interior, so the ends are
-more-collapsed-than-real and more-dispersed-than-real; with no real population it degrades to the
-neutral sequential ramp and prints the reason) and `typicality_by_method` (methods on x in complexity
+`typicality_heatmap` (the model × method grid on the shared sequential ramp, which orders cells by
+**magnitude only** — the optimum is interior, so the real population's value read from the document
+is marked by a colourbar rule and by a **signed delta printed in every cell**, and the side is
+readable from that sign and from nothing else; with no real population both markings drop and the
+figure prints the reason) and `typicality_by_method` (methods on x in complexity
 order, one mark per model, the real population as a horizontal reference line — the only figure here
 that draws it as a reference rather than a series, because this axis ranks nothing). See the
 [ADR](../development/decisions/2026-08-12-self-contained-typicality-axis.md) for why the statistic is

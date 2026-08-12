@@ -128,9 +128,13 @@ instead: one statistic per competitor computed from that competitor's own scores
 (`analysis/utils/ordinal.py`, default Berry-Mielke IOV, ordinal-valid, `--typicality-metric mean`
 the interval-assuming alternative whose caveat then travels as a column on every row), over the
 `can_exist`-survivor denominator that is never `n_personas` (both counts on every row), carrying
-`"direction": null` because the optimum is interior — direction enters only at render time via a
-diverging ramp centred on SCB's own value, degrading to the neutral ramp with a printed reason when
-SCB is absent — so it feeds no ranking, no contrast and no test and does **not** replace
+`"direction": null` because the optimum is interior — direction enters only at render time as a
+**signed distance to SCB's own value**, printed in every cell and ruled onto the colourbar, both
+dropped with a printed reason when SCB is absent. Every heatmap in the analysis layer, this one
+included, draws on the single house ramp in `analysis/utils/palette.py` (`inferno`, matching the
+published manuscript tables), which orders cells by **magnitude only**: a two-sided quantity must
+therefore carry its side in the annotations, never in the hue — so it feeds no ranking, no contrast
+and no test and does **not** replace
 `axis_b.dispersion_contrast`, which remains the only *tested* SCB typicality contrast; it gates on
 completeness and on one judge model / prompt hash across the consumption set, plus **either** one
 `n_rounds` **or** an explicit `--rounds N` cap that re-derives every competitor from its

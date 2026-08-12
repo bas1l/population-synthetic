@@ -178,8 +178,10 @@ consumers + `generation_metadata`:
   the **typicality axis** — one *self-contained* statistic per competitor (`_typicality_axis`, over
   `analysis/utils/ordinal.py`; default Berry-Mielke IOV, ordinal-valid), a function of that
   competitor's own scores alone, carrying `"direction": null` because the optimum is interior.
-  Direction enters only at render time, through a diverging ramp centred on the real population's own
-  value; the axis does **not** replace `axis_b.dispersion_contrast`, which stays the tested contrast.
+  Direction enters only at render time, as a signed distance to the real population's own value
+  printed in every cell (the house ramp is sequential and orders by magnitude only, so the *side*
+  is in the annotations, never in the hue); the axis does **not** replace
+  `axis_b.dispersion_contrast`, which stays the tested contrast.
   It performs **no LLM work** — re-running it is free and touches no verdict cache.
 - **`utils/`** -- cross-process shared infra:
   - `realism_csv.py` -- the per-persona tidy schema shared by the two persona-realism tasks
@@ -216,6 +218,21 @@ consumers + `generation_metadata`:
     opposite directions. Degenerate input **raises** rather than returning a sentinel -- unlike
     `stats_tests.py`, which reports skipped-with-a-reason: this is the arithmetic underneath, and the
     "unmeasurable" decision belongs to the caller that knows what an absent measurement means
+  - `palette.py` -- the one colour vocabulary every analysis heatmap draws from: `HEATMAP_CMAP`
+    (`inferno`, matching the published `{country}_models_table` manuscript figures), `MISSING_COLOR`
+    for the off-ramp "never measured" fill, `heatmap_cmap()` (a private copy with `set_bad`, because
+    matplotlib hands every caller the same registry object), and `text_color_on(im, value)`, which
+    picks white/black annotation text from the colour the mappable *actually painted*, by relative
+    luminance. That derivation is the point: a hand-tuned "white above 60% of the range" rule encodes
+    one ramp's luminance profile and silently produces unreadable text when the ramp changes. The ramp
+    is **sequential** and every heatmap in the layer now uses it, including the two whose quantity is
+    two-sided (`realism_ranking`'s typicality statistic, read against the real population's value, and
+    `method_significance`'s trend slope, read against zero). Both previously used diverging ramps; a
+    sequential ramp orders by **magnitude alone**, so those two renderers pay the cost back explicitly
+    -- a signed number in every cell plus a rule across the colourbar at the reference, and a printed
+    caption saying the side is not in the colour. A future two-sided heatmap does the same or keeps
+    its own diverging ramp; adopting this one and leaving the sign implicit produces a figure that
+    looks complete while having dropped half its content
   - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected) for generation_metadata /
     model_ranking, plus the repeated-measures family for `method_significance` (Friedman +
     Iman-Davenport + Kendall's W, Page's L trend, Nemenyi post-hoc + CD, Benjamini-Hochberg FDR,
