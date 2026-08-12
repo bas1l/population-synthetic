@@ -37,10 +37,23 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any, Sequence
 
+from population_synthetic.analysis.utils.tidy_csv import (
+    encode_bool,
+    missing_columns,
+    parse_bool,
+    parse_int,
+    parse_optional_float,
+    stale_schema_error,
+    write_rows,
+)
+
 __all__ = [
     "FIELDNAMES",
     "RealismPersonaRow",
     "SCHEMA_VERSION",
+    "SEVERITY_COUNT_FIELDS",
+    "SEVERITY_LEVELS",
+    "SEVERITY_RANK",
     "read_realism_personas_csv",
     "write_realism_personas_csv",
 ]
@@ -58,15 +71,34 @@ __all__ = [
 SCHEMA_VERSION = 2
 
 #: The severity levels the judge may tag a clash with, worst first. A protocol constant
-#: of the judge's output schema (see ``persona_realism/judge.py``), not a tunable.
+#: of the judge's output schema (see ``persona_realism/judge.py``), not a tunable. The
+#: **single** definition: the producer's per-persona reduction, the per-clash contract,
+#: the ranking builder and the charts all order severities from here, so a level can
+#: never be added in one place and missed in another.
 SEVERITY_LEVELS: tuple[str, ...] = ("S3", "S2", "S1")
+
+#: Sort rank of each level, worst first (``0`` == worst). Unknown levels sort last via
+#: ``SEVERITY_RANK.get(level, len(SEVERITY_LEVELS))`` -- a judge that invented a label
+#: must not silently outrank a real one.
+SEVERITY_RANK: dict[str, int] = {level: rank for rank, level in enumerate(SEVERITY_LEVELS)}
 
 #: Separator for the per-round typicality series inside a single cell. Chosen because
 #: it never occurs in an integer rating and needs no CSV quoting.
 _ROUND_SEP = "|"
 
-_TRUE = "true"
-_FALSE = "false"
+#: Appended to a malformed-cell error: this file is a derived artifact, so the fix is
+#: always to rewrite it from the verdict cache rather than to hand-edit it.
+_MALFORMED_REMEDY = (
+    "The file is malformed; re-run the persona_realism judge for this combination to "
+    "rewrite it."
+)
+
+#: Appended to the stale-schema error: the command that rewrites the file, and why it
+#: is free (the verdict caches already hold everything a new column needs).
+_STALE_SCHEMA_REMEDY = (
+    "scripts/analyze/analyze_persona_realism.py --rewrite-artifacts (zero LLM calls; "
+    "the verdict caches already hold everything the new columns need)."
+)
 
 
 @dataclass(frozen=True)
@@ -136,7 +168,7 @@ def _encode(field_name: str, value: Any) -> str:
     if field_name == "typicality_rounds":
         return _ROUND_SEP.join("" if t is None else str(int(t)) for t in value)
     if field_name in _BOOL_FIELDS:
-        return _TRUE if value else _FALSE
+        return encode_bool(value)
     if value is None:
         return ""
     return str(value)
@@ -150,51 +182,11 @@ def write_realism_personas_csv(rows: Sequence[RealismPersonaRow], path: Path) ->
     row-count check depends on. Rows are emitted in the given order; the producer sorts
     by ``persona_id`` so two runs over the same cache produce byte-identical files.
     """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(FIELDNAMES)
-        for row in rows:
-            record = asdict(row)
-            writer.writerow([_encode(name, record[name]) for name in FIELDNAMES])
-    return path
-
-
-def _parse_int(raw: str, *, column: str, path: Path, persona: str) -> int:
-    try:
-        return int(raw)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"{path}: persona {persona!r} column {column!r} is {raw!r}, which is not an "
-            "integer count. The file is malformed; re-run the persona_realism judge for "
-            "this combination to rewrite it."
-        ) from exc
-
-
-def _parse_bool(raw: str, *, column: str, path: Path, persona: str) -> bool:
-    token = str(raw).strip().lower()
-    if token == _TRUE:
-        return True
-    if token == _FALSE:
-        return False
-    raise ValueError(
-        f"{path}: persona {persona!r} column {column!r} is {raw!r}, which is neither "
-        f"{_TRUE!r} nor {_FALSE!r}."
-    )
-
-
-def _parse_optional_float(raw: str, *, column: str, path: Path, persona: str) -> float | None:
-    """Empty -> ``None`` (the metric is undefined), never ``0.0``."""
-    if raw == "":
-        return None
-    try:
-        return float(raw)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"{path}: persona {persona!r} column {column!r} is {raw!r}, which is neither "
-            "empty (undefined) nor a number."
-        ) from exc
+    encoded = []
+    for row in rows:
+        record = asdict(row)
+        encoded.append([_encode(name, record[name]) for name in FIELDNAMES])
+    return write_rows(path, FIELDNAMES, encoded)
 
 
 def _parse_rounds(raw: str, *, path: Path, persona: str) -> tuple[int | None, ...]:
@@ -239,17 +231,20 @@ def read_realism_personas_csv(path: Path, *, expected_rows: int | None = None) -
     with open(path, "r", newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         header = tuple(reader.fieldnames or ())
-        missing = [name for name in FIELDNAMES if name not in header]
+        missing = missing_columns(header, FIELDNAMES)
         if missing:
-            raise ValueError(
-                f"{path}: per-persona realism CSV is missing required column(s) {missing}; "
-                f"header is {list(header)}. Expected schema v{SCHEMA_VERSION}: {list(FIELDNAMES)}. "
-                "The file predates the current schema -- regenerate it with "
-                "scripts/analyze/analyze_persona_realism.py --rewrite-artifacts (zero LLM "
-                "calls; the verdict caches already hold everything the new columns need)."
+            raise stale_schema_error(
+                path,
+                label="per-persona realism CSV",
+                missing=missing,
+                header=header,
+                schema_version=SCHEMA_VERSION,
+                fieldnames=FIELDNAMES,
+                remedy=_STALE_SCHEMA_REMEDY,
             )
         for record in reader:
             persona = record.get("persona_id") or "<unnamed>"
+            unit = f"persona {persona!r}"
             values: dict[str, Any] = {
                 "persona_id": persona,
                 "slug": record["slug"],
@@ -260,12 +255,15 @@ def read_realism_personas_csv(path: Path, *, expected_rows: int | None = None) -
                 "typicality_rounds": _parse_rounds(record["typicality_rounds"], path=path, persona=persona),
             }
             for column in _BOOL_FIELDS:
-                values[column] = _parse_bool(record[column], column=column, path=path, persona=persona)
+                values[column] = parse_bool(record[column], column=column, path=path, unit=unit)
             for column in _INT_FIELDS:
-                values[column] = _parse_int(record[column], column=column, path=path, persona=persona)
+                values[column] = parse_int(
+                    record[column], column=column, path=path, unit=unit,
+                    remedy=_MALFORMED_REMEDY,
+                )
             for column in _OPTIONAL_FLOAT_FIELDS:
-                values[column] = _parse_optional_float(
-                    record[column], column=column, path=path, persona=persona
+                values[column] = parse_optional_float(
+                    record[column], column=column, path=path, unit=unit
                 )
             rows.append(RealismPersonaRow(**values))
 

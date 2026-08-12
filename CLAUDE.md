@@ -106,15 +106,24 @@ per-combination**: it emits no field that depends on another unit, so its artifa
 byte-reproducible in isolation and order-independent, and the SCB real population is enumerated as
 an **ordinary competitor** `real_{country}` with no reference role; judge model + params
 config-driven in `config/analysis/persona_realism/`, cost via `model_pricing.yaml`,
-`realism_ranking/` the cross-combination half — consumes the per-persona tidy CSVs
-(`analysis/utils/realism_csv.py`, the inter-task contract) and owns every cross-unit claim with **no
+`realism_ranking/` the cross-combination half — consumes **two** tidy CSV contracts, the per-persona
+`{combo}_personas.csv` (`analysis/utils/realism_csv.py`) and the per-clash `{combo}_clashes.csv`
+(`analysis/utils/realism_clash_csv.py`, one row per persona × round × sorted attribute pair ×
+severity with that persona's category values, independently versioned and reconciled against its
+sibling at read time) — and owns every cross-unit claim with **no
 LLM work at all**: Axis A ranks impossibility rate with SCB as an ordinary ranked competitor (lower
 is better for everyone — so "is the chain-sampled population itself incoherent?" is asked, not
 assumed), Axis B contrasts typicality dispersion against SCB **as the target** (near zero is better;
 the failure mode guarded against is mode collapse), plus Holm-corrected SCB contrasts with effect
 sizes, Kruskal-Wallis + Dunn/Holm on the model and method factors (SCB held out) and a logit mixed
-model on `can_exist`; it gates on completeness and on one judge model / prompt hash / `n_rounds`
-across the consumption set,
+model on `can_exist`; alongside them a **reporting-only** severity dimension — one prevalence heatmap
+per level, the driver attribution that says what clashed in each cell (attribute pairs, and the
+category pairs beneath them, over the heatmap's own denominator; counts are personas and are
+non-additive, S1 is never a defect), *and* one `severity_pair_summary_s{3,2,1}` figure per level
+ranking those pairs country-wide, computed from the **full** per-clash series rather than from the
+per-cell-truncated driver tables and drawing SCB as its own series over its own denominator rather
+than pooling it into the bars; it gates on completeness and on one judge model / prompt hash /
+`n_rounds` across the consumption set,
 and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 

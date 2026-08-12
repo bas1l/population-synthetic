@@ -9,9 +9,20 @@ no ``raw/`` subdir) -- and reduces them in two nested steps:
     list[RoundVerdict]      -> PersonaVerdict     (per-persona)
     list[PersonaVerdict|None] -> ComboRealism     (per-combination)
 
+It also carries the one derivation that deliberately does **not** reduce:
+:func:`clash_rows` (and its free-text twin :func:`clash_explanation_rows`) expand a
+loaded persona into one record per clash, keeping the round index, the attribute
+pair and the persona's own category values that the reductions above collapse. Both
+are pure functions of a :class:`LoadedPersona`, and both share
+:func:`_round_clashes` with :func:`reduce_persona`, so the within-round dedupe is one
+piece of knowledge held in one place rather than two implementations kept in step by
+test.
+
 Both reductions are total functions of their inputs with no side effects. This
 module must NOT know about the CLI, the LLM client, matplotlib, paths, or the
-analysis registry. The one disk touch is :func:`load_combo_verdicts`, a thin
+analysis registry. It names the two per-clash **row DTOs** it builds, which are
+defined by their schema modules; it knows nothing about how or where those rows are
+serialised. The one disk touch is :func:`load_combo_verdicts`, a thin
 pure read of the cache the runner wrote, assigned to this input-boundary layer
 (it round-trips Phase 2's ``dataclasses.asdict`` back through the *same*
 ``judge.parse_round_verdict`` validation boundary, so a corrupted cache fails
@@ -39,16 +50,20 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
+from population_synthetic.analysis.persona_realism.clash_explanations_csv import ClashExplanationRow
 from population_synthetic.analysis.persona_realism.judge import RoundVerdict, parse_round_verdict
 from population_synthetic.analysis.utils import _stats
+from population_synthetic.analysis.utils.realism_clash_csv import RealismClashRow
 
 __all__ = [
     "ClashKey",
     "PersonaVerdict",
     "ComboRealism",
     "LoadedPersona",
+    "clash_explanation_rows",
+    "clash_rows",
     "reduce_persona",
     "reduce_combo",
     "load_persona_verdicts",
@@ -169,6 +184,28 @@ class LoadedPersona:
     failed_rounds: int
 
 
+def _round_clashes(verdict: RoundVerdict) -> dict[ClashKey, str]:
+    """One round's **distinct** clashes, mapped to the judge's explanation for each.
+
+    The single definition of the within-round dedupe: an issue becomes a
+    :class:`ClashKey` (attribute pair sorted, so ``(a, b)`` and ``(b, a)`` are one
+    clash), and a key the judge raised more than once inside the same round collapses
+    to one entry. Both the per-round clash *frequency* in :func:`reduce_persona` and
+    the per-clash *rows* in :func:`clash_rows` read this, so the row grain and the
+    counts they are reconciled against can never drift apart.
+
+    Insertion order is the judge's own issue order and the **first** explanation wins
+    a repeated key, so the text is a deterministic function of the cached verdict
+    rather than of iteration luck.
+    """
+    clashes: dict[ClashKey, str] = {}
+    for issue in verdict.issues:
+        key = ClashKey(pair=tuple(sorted(issue.attributes)), severity=issue.severity)
+        if key not in clashes:
+            clashes[key] = issue.explanation
+    return clashes
+
+
 def reduce_persona(rounds: list[RoundVerdict] | tuple[RoundVerdict, ...], *, persona_id: str = "") -> PersonaVerdict:
     """Reduce one persona's successful rounds into a :class:`PersonaVerdict`.
 
@@ -196,13 +233,10 @@ def reduce_persona(rounds: list[RoundVerdict] | tuple[RoundVerdict, ...], *, per
 
     # Per-round clash detection frequency: count the rounds in which each
     # (sorted-pair, severity) clash appeared at least once (a clash repeated
-    # within one round still counts that round once).
+    # within one round still counts that round once -- _round_clashes dedupes it).
     clash_frequency: dict[ClashKey, int] = {}
     for r in rounds:
-        seen: set[ClashKey] = set()
-        for issue in r.issues:
-            seen.add(ClashKey(pair=tuple(sorted(issue.attributes)), severity=issue.severity))
-        for key in seen:
+        for key in _round_clashes(r):
             clash_frequency[key] = clash_frequency.get(key, 0) + 1
 
     return PersonaVerdict(
@@ -264,6 +298,111 @@ def reduce_combo(personas: list[PersonaVerdict | None], combo_label: str) -> Com
         can_exist_rounds_by_persona=tuple(pv.can_exist_rounds for pv in present),
         typicality_rounds_by_persona=tuple(pv.typicality_rounds for pv in present),
     )
+
+
+# --------------------------------------------------------------------------- #
+# Per-clash expansion (the derivation that does not reduce)                    #
+# --------------------------------------------------------------------------- #
+
+
+def _attribute_value(attributes: Mapping[str, Any], name: str) -> str | None:
+    """The persona's category value for axis *name* as text, or ``None`` if it has none.
+
+    ``None`` is the *failed join* marker, and it covers all three ways the join can
+    fail: the judge named an axis the persona does not carry (a hallucinated name --
+    ``judge.py`` validates the issue's shape, never its attribute names against the
+    persona), the axis is present but holds no value, or its value renders empty.
+    All three mean "there is no category value to attribute this clash to", and the
+    caller marks the row ``unresolved`` rather than writing ``'None'`` or an empty
+    string that would read as a real, and false, category.
+    """
+    if name not in attributes:
+        return None
+    raw = attributes[name]
+    if raw is None:
+        return None
+    return str(raw) or None
+
+
+def clash_rows(
+    persona: LoadedPersona,
+    *,
+    slug: str,
+    country: str = "",
+    model: str = "",
+    strategy: str = "",
+    is_real_reference: bool = False,
+) -> list[RealismClashRow]:
+    """Expand one loaded persona into its per-clash contract rows.
+
+    One row per ``(round_index, sorted attribute pair, severity)``, with the pair's
+    values joined from *persona*'s own ``attributes`` map. ``round_index`` is the
+    0-based position among the persona's **successful** rounds (the only ones the
+    cache holds), so it indexes the same series the per-persona CSV's
+    ``typicality_rounds`` does.
+
+    Takes the whole :class:`LoadedPersona` rather than its rounds and attributes
+    separately because the two must describe the same persona: passing them apart
+    would make a silent mis-pairing -- one persona's clashes joined against another's
+    values -- expressible, and the result would look entirely plausible.
+
+    A persona with zero clashes returns ``[]``; a clash whose value join fails is
+    returned as an ``unresolved`` row with empty values, never dropped -- the clash is
+    real and is counted, only its values are unknown. A partial join (one name
+    resolves, the other does not) is unresolved as a whole: the row's claim is about
+    a *pair* of values, and half of one is not a weaker version of it.
+    """
+    rows: list[RealismClashRow] = []
+    for round_index, verdict in enumerate(persona.rounds):
+        for key in _round_clashes(verdict):
+            attr_a, attr_b = key.pair
+            value_a = _attribute_value(persona.attributes, attr_a)
+            value_b = _attribute_value(persona.attributes, attr_b)
+            unresolved = value_a is None or value_b is None
+            rows.append(
+                RealismClashRow(
+                    persona_id=persona.persona_id,
+                    slug=slug,
+                    country=country,
+                    model=model,
+                    strategy=strategy,
+                    is_real_reference=is_real_reference,
+                    round_index=round_index,
+                    attr_a=attr_a,
+                    attr_b=attr_b,
+                    value_a="" if unresolved else str(value_a),
+                    value_b="" if unresolved else str(value_b),
+                    severity=key.severity,
+                    unresolved=unresolved,
+                )
+            )
+    return rows
+
+
+def clash_explanation_rows(persona: LoadedPersona) -> list[ClashExplanationRow]:
+    """Expand one loaded persona into its per-clash **explanation** rows.
+
+    Keyed identically to :func:`clash_rows` -- same rounds, same dedupe, same sorted
+    pair -- so the two outputs join row-for-row on
+    ``(persona_id, round_index, attr_a, attr_b, severity)``. It carries no values and
+    no combination identity: this is the judge's free text and nothing else, held out
+    of the contract row so no downstream count can accidentally depend on it.
+    """
+    rows: list[ClashExplanationRow] = []
+    for round_index, verdict in enumerate(persona.rounds):
+        for key, explanation in _round_clashes(verdict).items():
+            attr_a, attr_b = key.pair
+            rows.append(
+                ClashExplanationRow(
+                    persona_id=persona.persona_id,
+                    round_index=round_index,
+                    attr_a=attr_a,
+                    attr_b=attr_b,
+                    severity=key.severity,
+                    explanation=explanation,
+                )
+            )
+    return rows
 
 
 # --------------------------------------------------------------------------- #

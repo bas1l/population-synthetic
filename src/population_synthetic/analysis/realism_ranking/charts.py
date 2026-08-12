@@ -12,6 +12,9 @@ Three figures:
   (S3 / S2 / S1). S3 and S2 are defects and use the lower-is-better ramp; S1 is
   reported-but-never-penalised and uses a neutral ramp, because colouring it as a
   defect would assert that unusual people are errors.
+* :func:`plot_severity_pair_summary` -- the complement of that heatmap at one level: the
+  attribute pairs that clashed, ranked country-wide, with the real population as its own
+  series rather than pooled into the bars.
 
 **The real population is drawn as an ordinary competitor.** The previous version of the
 map pinned it to ``y = 0`` and marked it with a reference star, which encoded *the real
@@ -33,6 +36,7 @@ this module never touches a display.
 
 from __future__ import annotations
 
+import textwrap
 from typing import Any
 
 __all__ = [
@@ -40,6 +44,7 @@ __all__ = [
     "plot_impossibility_forest",
     "plot_impossibility_heatmap",
     "plot_severity_heatmap",
+    "plot_severity_pair_summary",
 ]
 
 _COMPETITOR_COLOR = "#4878CF"
@@ -417,3 +422,267 @@ def plot_severity_heatmap(ranking: dict[str, Any], severity: str):
         caption=caption,
         error_context=f"plot_severity_heatmap({severity})",
     )
+
+
+#: Wrap width for the footnote block, in characters. Chosen for reading comfort rather
+#: than for the figure's physical width: at 7pt the frame would hold well over 200
+#: characters per line, which is past the point where the eye loses the line return.
+_FOOTNOTE_WRAP = 140
+
+#: Gap between the axes' lowest decoration and the first footnote line, in inches.
+_FOOTNOTE_GAP_IN = 0.22
+
+
+def _place_footnote(fig, ax, sentences: list[str]) -> None:
+    """Hang the wrapped footnote directly under *ax*'s lowest decoration.
+
+    Anchored to the axes' measured tight bounding box rather than to a reserved fraction
+    of the figure: this figure's height grows with the number of bars, so any fixed
+    fraction is simultaneously too much on one level and too little on another, and the
+    first version of it left a hand's width of white space under the six-bar S3 chart.
+
+    The text may extend below the figure canvas. That is deliberate and safe here --
+    ``utils/figures.save_figure`` writes with ``bbox_inches="tight"``, which unions every
+    artist's bounds (including those outside the canvas) and grows the output to fit. The
+    caveats are the reason this figure can travel without its docstring, so they must
+    never be the thing that gets cropped.
+    """
+    text = "\n".join(textwrap.fill(sentence, width=_FOOTNOTE_WRAP) for sentence in sentences)
+    fig.tight_layout()
+    fig.canvas.draw()   # the tight bbox below is only defined once a renderer exists
+    box = ax.get_tightbbox(fig.canvas.get_renderer()).transformed(fig.transFigure.inverted())
+    fig.text(
+        0.5, box.y0 - _FOOTNOTE_GAP_IN / fig.get_figheight(), text,
+        ha="center", va="top", fontsize=7, color="#555555",
+    )
+
+
+def _pair_summary_footnotes(summary: dict[str, Any]) -> list[str]:
+    """The caveats that must travel *on* the figure, in reading order.
+
+    Denominator first (a share is unreadable without it), then how the numbers were
+    counted, then why they do not add up, then where they came from, then what was cut.
+    Each caveat's *wording* is read from the payload (``counting_unit`` /
+    ``non_additive`` / ``provenance`` / the level's ``direction``) rather than restated
+    here, so the figure and the block it renders cannot disagree about what the bars mean.
+    """
+    real_slug, real_denominator = summary["real_slug"], summary["real_denominator"]
+    lines = [
+        f"Denominator: {summary['denominator']} personas pooled over "
+        f"{summary['n_synthetic_competitors']} synthetic combination(s) -- the same "
+        "population the severity heatmap divides its cells by. "
+        + (
+            f"{real_slug} is counted separately over its own {real_denominator} personas "
+            "and is never pooled into the bars."
+            if real_slug is not None
+            else "No real population was consumable, so no second series is drawn."
+        ),
+        f"Counted in {summary['counting_unit']}.",
+        f"Not additive: {summary['non_additive']}",
+        f"Provenance: {summary['provenance']}.",
+    ]
+    if summary["n_pairs_hidden"]:
+        cut = (
+            f"Showing the top {summary['n_pairs_shown']} of {summary['n_pairs_total']} "
+            f"distinct pair(s) at this level; {summary['n_pairs_hidden']} are below the cut "
+            "and are counted here rather than dropped silently"
+        )
+        if summary["n_pairs_real_only"]:
+            cut += (
+                f", of which {summary['n_pairs_real_only']} were raised only by the real "
+                "population (they rank at zero synthetic personas)"
+            )
+        lines.append(cut + ".")
+    if not summary["penalised"]:
+        lines.append(f"{summary['severity']} is {summary['direction']}")
+    return lines
+
+
+#: Horizontal offsets, in points from the right spine, of the two numeric columns that sit
+#: beside the ranked bars. The values live outside the plot rather than at each bar's end
+#: because the two series overlap: on the Swedish S1 data the real population's marker lands
+#: on top of the bar-end label on a third of the rows, and a value hidden under a mark is
+#: worse than a value in a column. Aligned columns also free the x-axis of the label
+#: headroom the in-plot labels needed, so the bars keep the width the ranking is read from.
+_COLUMN_SYNTHETIC_PT = 10
+_COLUMN_REAL_PT = 82
+
+#: Data-space row the column headers sit on -- above the first bar, and reserved by the
+#: y-limit so nothing is drawn into it.
+_HEADER_ROW = -1.0
+
+
+def _column(ax, row: float, offset_pt: int, text: str, color: str, *, bold: bool = False) -> None:
+    """Write one cell of the numeric columns beside the axes, at *row*.
+
+    Positioned in mixed coordinates -- x pinned to the right spine in axes fraction, y in
+    data space -- so the columns stay aligned however the x-scale ends up, and stay locked
+    to their bar however tall the figure grows. ``annotation_clip=False`` keeps the cells
+    from being clipped at the spine; the tight bounding box at save time grows the canvas
+    to include them.
+    """
+    ax.annotate(
+        text, xy=(1.0, row), xycoords=("axes fraction", "data"),
+        xytext=(offset_pt, 0), textcoords="offset points",
+        ha="left", va="center", fontsize=7, color=color,
+        fontweight="bold" if bold else "normal", annotation_clip=False,
+    )
+
+
+def _empty_pair_summary(summary: dict[str, Any], title: str):
+    """The figure a level with nothing to rank gets -- an explanation, not empty axes.
+
+    "No pair clashed at this level in any competitor" is a measurement, and a strong one:
+    the neighbouring case on the current Swedish data, where the real population raises no
+    S3 clash while the synthetic ones do, is the sharpest single number these figures
+    produce. Emitting nothing here would make the strong result indistinguishable from a
+    crashed render, and emitting a blank axis would make it look like a rendering bug; the
+    figure says which it is, and the denominators still travel with it.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(11, 4.2))
+    ax.axis("off")
+    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.text(
+        0.5, 0.55,
+        f"No {summary['severity']} clash was raised by any consumed competitor.\n"
+        "There is nothing to rank at this level -- this is a measured absence, "
+        "not a missing figure.",
+        transform=ax.transAxes, ha="center", va="center", fontsize=10, color="#333333",
+    )
+    _place_footnote(fig, ax, _pair_summary_footnotes(summary))
+    return fig
+
+
+def plot_severity_pair_summary(summary: dict[str, Any]):
+    """Render one severity level's clashing attribute pairs, ranked country-wide.
+
+    The complement of :func:`plot_severity_heatmap`. The heatmap answers "which model x
+    method cells have a high rate at this level" and structurally cannot answer "what
+    clashed"; this figure answers exactly that, at the attribute-pair grain, pooled across
+    competitors. *summary* arrives fully computed from
+    ``builder.severity_pair_summary`` -- this function derives no statistic.
+
+    **Form.** A horizontal bar chart sorted descending: the job is comparing magnitudes
+    across nominal categories whose names are long (``education_level x
+    industry_sector``), which is the case horizontal bars exist for -- vertical columns
+    would force rotated, colliding tick labels. Both series' numbers are written in
+    aligned columns to the right of the axes rather than at each bar's end, because the
+    two series overlap in x and an in-plot label lands under the other series' marker on a
+    third of the Swedish S1 rows.
+
+    **The real population is a second series, not a pooled contribution.** It gets the
+    same encoding it already has on the forest plot -- a red diamond against the synthetic
+    blue -- so the reader learns one mapping for the whole folder, and identity is carried
+    by shape as well as hue rather than by colour alone. Pooling it into the bars would
+    destroy the contrast these numbers exist to show (a population that raises no S3 clash
+    at all would vanish inside a 4500-persona synthetic total), and averaging it in would
+    let its contribution be misread as the synthetic population's.
+
+    **Colour is constant across the three levels**, unlike the heatmaps, and deliberately:
+    here the two colours encode *identity* (which population), not magnitude, so
+    repainting them per level would break the one mapping the figure asks the reader to
+    learn. The S1-is-not-a-defect signal is carried instead by the caption, taken from the
+    same ``SEVERITY_DIRECTIONS`` entry the heatmap's neutral ramp is chosen from.
+
+    Returns the ``Figure`` unsaved and open. A level with no clash at all returns the
+    explaining figure rather than raising, so the artifact set is never silently short.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+
+    severity = summary["severity"]
+    # Deliberately short: who is pooled and who is not is carried by the legend and by the
+    # first footnote line, and a title wide enough to say it again runs into the axes.
+    title = (
+        f"Severity {severity} -- which attribute pairs clashed, ranked ({summary['country']})\n"
+        f"({summary['meaning']})"
+    )
+    pairs = summary["pairs"]
+    if not pairs:
+        return _empty_pair_summary(summary, title)
+
+    labels = [f"{pair['attr_a']} x {pair['attr_b']}" for pair in pairs]
+    values = [0.0 if pair["prevalence"] is None else float(pair["prevalence"]) for pair in pairs]
+    positions = list(range(len(pairs)))
+
+    fig, ax = plt.subplots(figsize=(12, max(3.6, len(pairs) * 0.42 + 2.6)))
+    ax.barh(
+        positions, values, height=0.62, color=_COMPETITOR_COLOR,
+        edgecolor="white", linewidth=0.4, zorder=2,
+        label=f"synthetic combinations pooled (n={summary['denominator']})",
+    )
+
+    real_slug = summary["real_slug"]
+    real_values = [pair["real_prevalence"] for pair in pairs]
+    drawn = [(pos, v) for pos, v in zip(positions, real_values) if v is not None]
+    if real_slug is not None and drawn:
+        ax.scatter(
+            [v for _, v in drawn], [pos for pos, _ in drawn],
+            marker="D", s=52, color=_REAL_COLOR, edgecolor="black", linewidth=0.6,
+            zorder=4, label=f"{real_slug} (n={summary['real_denominator']})",
+        )
+
+    headroom = max([*values, *(v for v in real_values if v is not None), 0.0]) or 1.0
+    # The left edge sits just below zero so a marker at exactly 0.000 -- which is a
+    # measurement, and the most informative one the real population makes at S3 -- renders
+    # whole instead of being bisected by the spine. The right edge needs almost no
+    # headroom, because the values are read off the columns beside the axes rather than
+    # off labels inside it.
+    ax.set_xlim(-0.03 * headroom, headroom * 1.04)
+
+    for pos, pair, value in zip(positions, pairs, values):
+        share = "n/a" if pair["prevalence"] is None else f"{value:.4f}"
+        _column(ax, pos, _COLUMN_SYNTHETIC_PT, f"{share}   n={pair['n_personas']}", "#333333")
+        if pair["real_prevalence"] is not None:
+            _column(
+                ax, pos, _COLUMN_REAL_PT,
+                f"{float(pair['real_prevalence']):.4f}   n={pair['real_n_personas']}",
+                _REAL_COLOR,
+            )
+    _column(ax, _HEADER_ROW, _COLUMN_SYNTHETIC_PT, "synthetic", _COMPETITOR_COLOR, bold=True)
+    if real_slug is not None:
+        _column(ax, _HEADER_ROW, _COLUMN_REAL_PT, "real", _REAL_COLOR, bold=True)
+
+    ax.set_yticks(positions)
+    ax.set_yticklabels(labels, fontsize=8)
+    # Top-down (most-affected first) with room above row 0 for the column headers. Set
+    # directly rather than via invert_yaxis(), which would flip the reserved strip to the
+    # bottom of the figure where the headers would sit under the columns they name.
+    ax.set_ylim(len(pairs) - 0.5, _HEADER_ROW - 0.4)
+    ax.set_xlabel(
+        f"Share of personas exhibiting the pair at {severity} "
+        "(each series over its own denominator)",
+        fontsize=9,
+    )
+    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.tick_params(axis="x", labelsize=8)
+    ax.grid(axis="x", linestyle=":", linewidth=0.5, alpha=0.6, zorder=0)
+    ax.set_axisbelow(True)
+    handles, legend_labels = ax.get_legend_handles_labels()
+    if real_slug is not None and not drawn:
+        # Every listed pair happens to be absent from the real population: keep the series
+        # in the legend anyway, at zero, so "SCB raised none of these" reads as a result
+        # rather than as a series that was never drawn.
+        handles.append(Line2D(
+            [], [], linestyle="none", marker="D", markersize=6, color=_REAL_COLOR,
+            markeredgecolor="black", markeredgewidth=0.6,
+        ))
+        legend_labels.append(
+            f"{real_slug} (n={summary['real_denominator']}) -- none of these pairs"
+        )
+    if handles:
+        # Bars first, the real series second: the bars are what the ranking is over, and
+        # matplotlib's collection-before-patch ordering would otherwise lead with the
+        # series that is deliberately not pooled into it.
+        order = sorted(range(len(handles)), key=lambda i: legend_labels[i].startswith("synthetic"),
+                       reverse=True)
+        ax.legend([handles[i] for i in order], [legend_labels[i] for i in order],
+                  fontsize=8, loc="best", framealpha=0.92)
+    _place_footnote(fig, ax, _pair_summary_footnotes(summary))
+    return fig

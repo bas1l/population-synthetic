@@ -154,7 +154,7 @@ tasks:
       real-sample: '100'          # --real-sample (blank = config default 100; caps the real_{country} competitor)
       rounds: '1'                 # --rounds (blank = config default n_rounds, currently 3)
       workers: '1'                # --workers (blank = config default fan-out width)
-      rewrite-artifacts: false    # --rewrite-artifacts: rebuild the derived files from the
+      rewrite-artifacts: true     # --rewrite-artifacts: rebuild the derived files from the
                                   # EXISTING verdict cache, zero LLM calls. This -- not Force --
                                   # is how to regenerate artifacts after an output-schema change.
       output-base:                # --output-base (blank = script default)
@@ -162,6 +162,7 @@ tasks:
 
   realism_ranking:                # slugs dispatch -- cross-combination ranking, no LLM work
     enabled: true                 # opt-in: needs >= 2 judged competitors to rank
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     min_combos: 2
     supports_force: true          # node shows a Force checkbox -> --force (recompute a country)
     force: false

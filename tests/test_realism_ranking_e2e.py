@@ -16,7 +16,10 @@ The properties under test are the ones the split exists to guarantee:
 
 from __future__ import annotations
 
+import csv
 import json
+import subprocess
+import sys
 from typing import Any
 
 import matplotlib
@@ -33,6 +36,9 @@ from population_synthetic.analysis.persona_realism.runner import run_combo_judge
 from population_synthetic.analysis.realism_ranking.builder import (  # noqa: E402
     build_ranking,
     scb_contrast_rows,
+    severity_driver_rows,
+    severity_driver_value_rows,
+    severity_pair_summary,
     summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
@@ -40,6 +46,7 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_impossibility_forest,
     plot_impossibility_heatmap,
     plot_severity_heatmap,
+    plot_severity_pair_summary,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors  # noqa: E402
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
@@ -77,12 +84,19 @@ def _cfg() -> JudgeConfig:
 
 
 def _population(attrs: list[str], *, n_impossible: int, n_possible: int, offset: int = 0):
-    """A tiny mapped population: *n_impossible* contradictory personas, then possible ones."""
+    """A tiny mapped population: *n_impossible* contradictory personas, then possible ones.
+
+    The possible personas alternate the stub judge's S2 / S1 clash markers, so every
+    severity level has something to attribute: the driver tables are per level, and a
+    fixture that only ever produced S3 would leave two thirds of them untested.
+    """
     marker = attrs[0]
     people: list[dict[str, Any]] = []
     for i in range(n_impossible + n_possible):
         person = {attr: f"val_{j}" for j, attr in enumerate(attrs)}
         person[marker] = "IMPOSSIBLE" if i < n_impossible else f"TYP{(i + offset) % 9 + 1}"
+        if i >= n_impossible:
+            person[attrs[1]] = "S2_CLASH" if (i - n_impossible) % 2 == 0 else "S1_CLASH"
         person["id"] = f"persona_{i:05d}"
         people.append(person)
     return people
@@ -101,6 +115,20 @@ def _judge(base, label, *, model, strategy, n_impossible, is_real=False, offset=
         out_dir, label, cfg=cfg, dpi=80, force=True,
         country=_COUNTRY, model=model, strategy=strategy, is_real_reference=is_real,
         expected_ids=list(summary.selected_ids), hard_rules=(), pricing=_PRICING,
+    )
+
+
+def _rank(records, **kwargs):
+    """``build_ranking`` with this fixture's driver bounds.
+
+    The bounds are required arguments -- the builder reads no config and the CLI owns
+    the defaults -- and this fixture's cells hold a handful of personas, so it ranks
+    from one persona up rather than from the CLI's production floor.
+    """
+    kwargs.setdefault("driver_top_n", 5)
+    kwargs.setdefault("driver_min_count", 1)
+    return build_ranking(
+        records, _COUNTRY, bootstrap=_cfg().bootstrap, variance_center="median", **kwargs
     )
 
 
@@ -138,8 +166,7 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
     assert skipped == []
     assert len(records) == 4
 
-    cfg = _cfg()
-    ranking = build_ranking(records, _COUNTRY, bootstrap=cfg.bootstrap, variance_center="median")
+    ranking = _rank(records)
     out_dir = tmp_path / "ranking" / _COUNTRY
     out_dir.mkdir(parents=True)
 
@@ -154,6 +181,10 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
     for level in ("S1", "S2", "S3"):
         save_figure(plot_severity_heatmap(ranking, level),
                     out_dir / f"severity_heatmap_{level.lower()}.png", dpi=80)
+        # The heatmap's complement, computed from the records rather than the ranking --
+        # it must see the full per-clash series, not the per-cell-truncated driver block.
+        save_figure(plot_severity_pair_summary(severity_pair_summary(records, level, top_n=15)),
+                    out_dir / f"severity_pair_summary_{level.lower()}.png", dpi=80)
 
     for name in ("realism_ranking.json", "realism_summary.csv", "scb_contrast.csv",
                  "headline_map.png", "headline_map.svg",
@@ -161,14 +192,68 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
                  "impossibility_heatmap.png", "impossibility_heatmap.svg",
                  "severity_heatmap_s1.png", "severity_heatmap_s1.svg",
                  "severity_heatmap_s2.png", "severity_heatmap_s2.svg",
-                 "severity_heatmap_s3.png", "severity_heatmap_s3.svg"):
+                 "severity_heatmap_s3.png", "severity_heatmap_s3.svg",
+                 "severity_pair_summary_s1.png", "severity_pair_summary_s1.svg",
+                 "severity_pair_summary_s2.png", "severity_pair_summary_s2.svg",
+                 "severity_pair_summary_s3.png", "severity_pair_summary_s3.svg"):
         assert (out_dir / name).is_file(), name
+
+
+def test_ranking_emits_the_two_severity_driver_tables(judged_base, tmp_path):
+    """Judge -> rank on a fresh base produces both driver grains, all levels in one file.
+
+    Serialised through ``csv.DictWriter`` rather than asserted in memory, because the
+    flatteners' contract is that every value is a scalar a CSV cell can hold: a nested
+    list would round-trip as its ``repr`` and nobody would notice until the table was
+    read months later. Written twice to the same bytes, because the merged tables carry
+    their level as data and an unstable sort would only show up as a churning diff.
+    """
+    records, skipped = load_competitors(judged_base, axis_ids=_AXIS_IDS)
+    assert skipped == []
+    ranking = _rank(records)
+
+    out_dir = tmp_path / "drivers" / _COUNTRY
+    out_dir.mkdir(parents=True)
+    for name, rows in (
+        ("severity_drivers.csv", severity_driver_rows(ranking)),
+        ("severity_driver_values.csv", severity_driver_value_rows(ranking)),
+    ):
+        assert rows, name
+        assert {row["severity"] for row in rows} == {"S3", "S2", "S1"}, name
+        path = out_dir / name
+        for _ in range(2):
+            written_before = path.read_bytes() if path.exists() else None
+            with path.open("w", newline="", encoding="utf-8") as fh:
+                writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
+            if written_before is not None:
+                assert path.read_bytes() == written_before, f"{name} is not byte-stable"
+
+    assert sorted(p.name for p in out_dir.iterdir()) == [
+        "severity_driver_values.csv", "severity_drivers.csv"]
+
+    # The stub judge's S3 clash is age_group x education_level, and the two contradictory
+    # personas of one combination are the cell it drove.
+    pair_rows = severity_driver_rows(ranking)
+    s3 = [row for row in pair_rows
+          if row["severity"] == "S3" and row["slug"] == "swedish_all_pick_dag_claude_haiku"]
+    assert [(row["attr_a"], row["attr_b"], row["n_personas"]) for row in s3] == [
+        ("age_group", "education_level", 2)
+    ]
+    assert s3[0]["denominator"] == 7 and s3[0]["penalised"] is True
+    # The real population is an ordinary competitor here too, and S1 is not a defect --
+    # the one column that keeps an S1 row from reading as one now that they share a file.
+    s1 = [row for row in pair_rows if row["severity"] == "S1"]
+    assert any(row["is_real_reference"] for row in s1)
+    assert all(row["penalised"] is False for row in s1)
+    assert all(row["penalised"] is True for row in pair_rows if row["severity"] != "S1")
 
 
 def test_ranking_json_satisfies_the_honesty_contract(judged_base):
     records, _ = load_competitors(judged_base, axis_ids=_AXIS_IDS)
     cfg = _cfg()
-    ranking = build_ranking(records, _COUNTRY, bootstrap=cfg.bootstrap, variance_center="median")
+    ranking = _rank(records)
 
     assert ranking["axis_a"]["correction"] == "holm"
     assert all(e["denominator"] is not None for e in ranking["axis_a"]["ranking"])
@@ -189,15 +274,14 @@ def test_ranking_json_satisfies_the_honesty_contract(judged_base):
 
 def test_ranking_is_reproducible_and_re_reads_without_re_judging(judged_base):
     """The aggregator is free to re-run: it reads files and touches no verdict cache."""
-    cfg = _cfg()
     caches = sorted(
         (analysis_output_dir("persona_realism", judged_base) / _COUNTRY).rglob("persona_[0-9]*.json")
     )
     before = {path: path.stat().st_mtime_ns for path in caches}
     assert before, "fixture should have produced verdict caches"
 
-    first = build_ranking(*_loaded(judged_base), bootstrap=cfg.bootstrap, variance_center="median")
-    second = build_ranking(*_loaded(judged_base), bootstrap=cfg.bootstrap, variance_center="median")
+    first = _rank(_loaded(judged_base)[0])
+    second = _rank(_loaded(judged_base)[0])
 
     assert first["axis_a"]["ranking"] == second["axis_a"]["ranking"]
     for path, mtime in before.items():
@@ -225,6 +309,41 @@ def test_judging_order_does_not_change_a_combination_s_bytes(tmp_path):
     root = lambda base: analysis_output_dir("persona_realism", base) / _COUNTRY / slug_a  # noqa: E731
     for name in (f"{slug_a}.json", f"{slug_a}.csv", f"{slug_a}_personas.csv"):
         assert (root(forward) / name).read_bytes() == (root(reverse) / name).read_bytes(), name
+
+
+_SCRIPT = PROJECT_ROOT / "scripts" / "analyze" / "rank_persona_realism.py"
+_PAIR_SUMMARIES = tuple(f"severity_pair_summary_s{n}" for n in (1, 2, 3))
+
+
+def _run_ranking_script(base, *extra):
+    """Drive the real CLI on *base* and return the country's output directory.
+
+    A subprocess rather than an in-process call to ``main``: the flags, the argument
+    resolution at the edge and the chart wiring are exactly what this test is about, and
+    calling the builder directly would assert the test's own emulation of them.
+    """
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--country", _COUNTRY,
+         "--output-base", str(base), "--force", *extra],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return analysis_output_dir("realism_ranking", base) / _COUNTRY
+
+
+def test_the_driver_script_emits_the_pair_summaries_and_honours_no_charts(judged_base):
+    """The three figures are wired to the CLI, and ``--no-charts`` really skips them."""
+    out_dir = _run_ranking_script(judged_base, "--no-charts")
+    assert (out_dir / "realism_ranking.json").is_file()
+    assert sorted(p.name for p in out_dir.glob("*.png")) == []
+    assert sorted(p.name for p in out_dir.glob("*.svg")) == []
+
+    out_dir = _run_ranking_script(judged_base)
+    for name in _PAIR_SUMMARIES:
+        assert (out_dir / f"{name}.png").is_file(), name
+        assert (out_dir / f"{name}.svg").is_file(), name
+    # Beside the heatmaps they complement, in the registry-resolved folder.
+    assert all((out_dir / f"severity_heatmap_s{n}.png").is_file() for n in (1, 2, 3))
 
 
 def test_a_single_slug_judged_alone_produces_its_complete_artifact_set(tmp_path):

@@ -27,11 +27,14 @@ from __future__ import annotations
 from typing import Sequence
 
 from population_synthetic.analysis.persona_realism.reduce import ClashKey
+from population_synthetic.analysis.utils.realism_csv import SEVERITY_LEVELS, SEVERITY_RANK
 
-# Severity -> bar colour for the clash taxonomy (S3 hard contradiction reddest).
-# These are protocol-fixed severity labels (see judge.py), so the mapping is a
-# structural presentation constant, not a tunable.
+# Severity -> bar colour / legend caption for the clash taxonomy (S3 hard
+# contradiction reddest). These are protocol-fixed severity labels (see judge.py),
+# so the mappings are structural presentation constants, not tunables; the *order*
+# they are drawn in comes from SEVERITY_LEVELS, the one definition of it.
 _SEVERITY_COLORS: dict[str, str] = {"S3": "#C44E52", "S2": "#DD8452", "S1": "#8C8C8C"}
+_SEVERITY_CAPTIONS: dict[str, str] = {"S3": "S3 (hard)", "S2": "S2 (near)", "S1": "S1 (unusual)"}
 _TYPICALITY_COLOR = "#4878CF"
 _TAIL_COLOR = "#C44E52"
 
@@ -104,10 +107,11 @@ def plot_clash_taxonomy(clash_taxonomy: dict[ClashKey, int], combo_label: str):
     import matplotlib.pyplot as plt
 
     # Rank by persona-count desc, then S3>S2>S1, then label for a stable order.
-    severity_rank = {"S3": 0, "S2": 1, "S1": 2}
     items = sorted(
         clash_taxonomy.items(),
-        key=lambda kv: (-kv[1], severity_rank.get(kv[0].severity, 9), _clash_label(kv[0])),
+        key=lambda kv: (
+            -kv[1], SEVERITY_RANK.get(kv[0].severity, len(SEVERITY_LEVELS)), _clash_label(kv[0])
+        ),
     )
     labels = [_clash_label(k) for k, _ in items]
     counts = [v for _, v in items]
@@ -124,7 +128,7 @@ def plot_clash_taxonomy(clash_taxonomy: dict[ClashKey, int], combo_label: str):
     ax.set_title(f"{combo_label} -- attribute-clash taxonomy", fontsize=11, fontweight="bold")
     ax.tick_params(axis="x", labelsize=8)
 
-    handles = [plt.Rectangle((0, 0), 1, 1, color=_SEVERITY_COLORS[s]) for s in ("S3", "S2", "S1")]
-    ax.legend(handles, ["S3 (hard)", "S2 (near)", "S1 (unusual)"], fontsize=8, loc="lower right")
+    handles = [plt.Rectangle((0, 0), 1, 1, color=_SEVERITY_COLORS[s]) for s in SEVERITY_LEVELS]
+    ax.legend(handles, [_SEVERITY_CAPTIONS[s] for s in SEVERITY_LEVELS], fontsize=8, loc="lower right")
     fig.tight_layout()
     return fig

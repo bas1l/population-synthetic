@@ -17,7 +17,10 @@ depend on the existence, content, or processing order of any other combination. 
 is what makes ``{combo}.json`` and ``{combo}.csv`` byte-reproducible in isolation and
 identical no matter which slug was judged first. The cross-combination sinks (the
 headline map, the combined summary CSV, the run report) moved to the ``realism_ranking``
-process, which consumes the ``{combo}_personas.csv`` tidy contract this module writes.
+process, which consumes the two tidy contracts this module writes:
+``{combo}_personas.csv`` (one row per persona) and ``{combo}_clashes.csv`` (one row per
+clash). The third file, ``{combo}_clash_explanations.csv``, is a side file carrying the
+judge's free text at the same key; nothing downstream reads it.
 
 Boundary (02-architecture guide sect. 2/9): this module owns output paths, the
 per-unit skip decision, and the cost aggregation; it must NOT know how the
@@ -45,6 +48,10 @@ from population_synthetic.analysis.persona_realism.charts import (
     plot_clash_taxonomy,
     plot_typicality_distribution,
 )
+from population_synthetic.analysis.persona_realism.clash_explanations_csv import (
+    ClashExplanationRow,
+    write_clash_explanations_csv,
+)
 from population_synthetic.analysis.persona_realism.config import JudgeConfig
 from population_synthetic.analysis.persona_realism.csv_writer import RealismRow, write_realism_csv
 from population_synthetic.analysis.persona_realism.reduce import (
@@ -52,6 +59,8 @@ from population_synthetic.analysis.persona_realism.reduce import (
     ComboRealism,
     LoadedPersona,
     PersonaVerdict,
+    clash_explanation_rows,
+    clash_rows,
     load_combo_verdicts,
     reduce_combo,
     reduce_persona,
@@ -64,10 +73,19 @@ from population_synthetic.analysis.persona_realism.validation import (
     validate_against_hard_rules,
 )
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.realism_clash_csv import (
+    SCHEMA_VERSION as CLASH_CSV_SCHEMA_VERSION,
+)
+from population_synthetic.analysis.utils.realism_clash_csv import (
+    RealismClashRow,
+    write_realism_clashes_csv,
+)
 from population_synthetic.analysis.utils.realism_csv import (
     SCHEMA_VERSION as PERSONA_CSV_SCHEMA_VERSION,
 )
 from population_synthetic.analysis.utils.realism_csv import (
+    SEVERITY_LEVELS,
+    SEVERITY_RANK,
     RealismPersonaRow,
     write_realism_personas_csv,
 )
@@ -80,9 +98,6 @@ __all__ = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
-
-# Severity ordering for the per-persona ``max_severity`` column (worst first).
-_SEVERITY_ORDER: tuple[str, ...] = ("S3", "S2", "S1")
 
 
 @dataclass(frozen=True)
@@ -144,6 +159,10 @@ def _provenance_meta(cfg: JudgeConfig) -> dict[str, Any]:
         "prompt_template": str(cfg.prompt_template),
         "prompt_template_sha256": _prompt_template_hash(cfg.prompt_template),
         "persona_csv_schema_version": PERSONA_CSV_SCHEMA_VERSION,
+        # A separate key, not a bump of the one above: the two tidy CSVs are
+        # independently versioned contracts, and folding them into one number would
+        # make a reader unable to tell which file its mismatch is about.
+        "clash_csv_schema_version": CLASH_CSV_SCHEMA_VERSION,
         "config_dir": str(cfg.config_dir),
     }
 
@@ -268,10 +287,9 @@ def _combo_cost(
 
 def _serialise_clash_taxonomy(clash_taxonomy: dict[ClashKey, int]) -> list[dict[str, Any]]:
     """Convert the ``{ClashKey: count}`` taxonomy to a serialisable, ranked list."""
-    severity_rank = {"S3": 0, "S2": 1, "S1": 2}
     items = sorted(
         clash_taxonomy.items(),
-        key=lambda kv: (-kv[1], severity_rank.get(kv[0].severity, 9), kv[0].pair),
+        key=lambda kv: (-kv[1], SEVERITY_RANK.get(kv[0].severity, len(SEVERITY_LEVELS)), kv[0].pair),
     )
     return [
         {"pair": list(key.pair), "severity": key.severity, "n_personas": count}
@@ -308,7 +326,7 @@ def _build_row(stats: RealismStats, cost: dict[str, Any], validation: dict[str, 
 def _max_severity(persona: PersonaVerdict) -> str:
     """Worst clash severity the judge raised for *persona* (``""`` when none)."""
     severities = {key.severity for key in persona.clash_frequency}
-    for level in _SEVERITY_ORDER:
+    for level in SEVERITY_LEVELS:
         if level in severities:
             return level
     return ""
@@ -322,7 +340,7 @@ def _severity_counts(persona: PersonaVerdict) -> dict[str, int]:
     persona carrying both an S3 and an S2 is counted under both, where ``max_severity``
     would file it under S3 alone and understate the S2 prevalence.
     """
-    counts = {level: 0 for level in _SEVERITY_ORDER}
+    counts = {level: 0 for level in SEVERITY_LEVELS}
     for key in persona.clash_frequency:
         if key.severity in counts:
             counts[key.severity] += 1
@@ -375,6 +393,42 @@ def _persona_rows(
                 clash_count_s3=severity_counts["S3"],
             )
         )
+    return rows
+
+
+def _combo_clash_rows(
+    present: list[LoadedPersona],
+    *,
+    combo_label: str,
+    country: str,
+    model: str,
+    strategy: str,
+    is_real_reference: bool,
+) -> list[RealismClashRow]:
+    """Build the combination's per-clash rows -- the finer-grained contract file.
+
+    Concatenates each loaded persona's expansion (see
+    :func:`~population_synthetic.analysis.persona_realism.reduce.clash_rows`) in
+    persona-id order. A persona with no clash contributes nothing, and a combination
+    with no clash at all yields ``[]`` -- written as a header-only file, which is a
+    different fact from an absent one.
+    """
+    rows: list[RealismClashRow] = []
+    for lp in sorted(present, key=lambda p: p.persona_id):
+        rows.extend(
+            clash_rows(
+                lp, slug=combo_label, country=country, model=model,
+                strategy=strategy, is_real_reference=is_real_reference,
+            )
+        )
+    return rows
+
+
+def _combo_explanation_rows(present: list[LoadedPersona]) -> list[ClashExplanationRow]:
+    """Build the combination's clash-explanation side-file rows (same key, same order)."""
+    rows: list[ClashExplanationRow] = []
+    for lp in sorted(present, key=lambda p: p.persona_id):
+        rows.extend(clash_explanation_rows(lp))
     return rows
 
 
@@ -435,9 +489,10 @@ def write_combo_artifacts(
     combo-root cache, computes the combo's cost by summing the per-persona
     ``<out_dir>/persona_XXXXX.jsonl`` telemetry logs (fail-fast if the judge model's
     pricing row is absent), and writes ``{combo}.csv``, ``{combo}.json``,
-    ``{combo}_personas.csv``, ``typicality.png/.svg`` and ``clash_taxonomy.png/.svg``.
-    The idempotent skip keys on those specific output filenames, so the sibling
-    ``persona_*.json/.jsonl`` files never confuse it.
+    ``{combo}_personas.csv``, ``{combo}_clashes.csv``,
+    ``{combo}_clash_explanations.csv``, ``typicality.png/.svg`` and
+    ``clash_taxonomy.png/.svg``. The idempotent skip keys on those specific output
+    filenames, so the sibling ``persona_*.json/.jsonl`` files never confuse it.
 
     Nothing written here depends on any other combination: judging this slug on an
     empty output base produces the complete artifact set, and judging it before or
@@ -502,12 +557,14 @@ def write_combo_artifacts(
     paths: list[Path] = []
 
     # --- CSV (single-combo row) ------------------------------------------------ #
-    csv_path = out_dir / f"{combo_label}.csv"
-    if force or not csv_path.exists():
-        paths.append(write_realism_csv([row], csv_path))
-    else:
-        logger.info("combo %s: %s exists; skipping (force=False)", combo_label, csv_path.name)
-        paths.append(csv_path)
+    paths.append(
+        _emit_csv(
+            out_dir / f"{combo_label}.csv",
+            build_rows=lambda: [row],
+            write=write_realism_csv,
+            force=force, logger=logger,
+        )
+    )
 
     # --- JSON report ----------------------------------------------------------- #
     json_path = out_dir / f"{combo_label}.json"
@@ -532,27 +589,51 @@ def write_combo_artifacts(
     # Written whole (never appended), so N runs are equivalent to one and its row
     # count keeps matching the report's n_personas -- the completeness marker the
     # aggregator gates on.
-    personas_csv_path = out_dir / f"{combo_label}_personas.csv"
-    if force or not personas_csv_path.exists():
+    def _build_persona_rows() -> list[RealismPersonaRow]:
         loaded_by_id = {lp.persona_id: lp for lp in present}
         reduced_by_id = {
             pid: reduce_persona(lp.rounds, persona_id=pid) for pid, lp in loaded_by_id.items()
         }
-        paths.append(
-            write_realism_personas_csv(
-                _persona_rows(
-                    reduced_by_id, loaded_by_id,
-                    combo_label=combo_label, country=country, model=model,
-                    strategy=strategy, is_real_reference=is_real_reference,
-                ),
-                personas_csv_path,
-            )
+        return _persona_rows(
+            reduced_by_id, loaded_by_id,
+            combo_label=combo_label, country=country, model=model,
+            strategy=strategy, is_real_reference=is_real_reference,
         )
-    else:
-        logger.info(
-            "combo %s: %s exists; skipping (force=False)", combo_label, personas_csv_path.name,
+
+    paths.append(
+        _emit_csv(
+            out_dir / f"{combo_label}_personas.csv",
+            build_rows=_build_persona_rows,
+            write=write_realism_personas_csv,
+            force=force, logger=logger,
         )
-        paths.append(personas_csv_path)
+    )
+
+    # --- per-clash tidy CSV + its explanation side file ------------------------ #
+    # Both derive from the same verdict cache in the same pass and sit under the same
+    # force gate as everything above, so --rewrite-artifacts regenerates the whole
+    # SET: a tree can never hold a clashes file from one generation beside a personas
+    # file from another, which is exactly what the reconciliation check would then
+    # report as corruption.
+    paths.append(
+        _emit_csv(
+            out_dir / f"{combo_label}_clashes.csv",
+            build_rows=lambda: _combo_clash_rows(
+                present, combo_label=combo_label, country=country, model=model,
+                strategy=strategy, is_real_reference=is_real_reference,
+            ),
+            write=write_realism_clashes_csv,
+            force=force, logger=logger,
+        )
+    )
+    paths.append(
+        _emit_csv(
+            out_dir / f"{combo_label}_clash_explanations.csv",
+            build_rows=lambda: _combo_explanation_rows(present),
+            write=write_clash_explanations_csv,
+            force=force, logger=logger,
+        )
+    )
 
     # --- typicality distribution figure (skip only when genuinely empty) ------- #
     paths.extend(
@@ -579,6 +660,30 @@ def write_combo_artifacts(
     )
 
     return ComboArtifacts(stats=stats, combo=combo, row=row, cost_coverage=cost_coverage, paths=paths)
+
+
+def _emit_csv(csv_path, *, build_rows, write, force, logger) -> Path:
+    """Write (or skip) one tidy CSV, returning the path it owns.
+
+    The file-sink counterpart of :func:`_emit_figure`, and the reason
+    :func:`write_combo_artifacts` does not carry four near-identical
+    exists-else-write blocks. Every writer routed through here shares the
+    ``(rows, path) -> Path`` shape, so the schema stays with the module that owns it
+    and this helper never learns a column name.
+
+    *build_rows* is called **only** when the file is actually written, so a skipped
+    unit costs no derivation -- which is what keeps the per-persona re-reduction and
+    the per-clash expansion off the idempotent no-op path.
+
+    Unlike a figure there is no emptiness gate: an empty result is written as a
+    header-only file, so "this combination has nothing to report" stays
+    distinguishable from "this combination was never processed".
+    """
+    csv_path = Path(csv_path)
+    if not force and csv_path.exists():
+        logger.info("%s exists; skipping (force=False)", csv_path.name)
+        return csv_path
+    return write(build_rows(), csv_path)
 
 
 def _emit_figure(png_path, *, present, build, empty_msg, dpi, force, logger) -> list[Path]:

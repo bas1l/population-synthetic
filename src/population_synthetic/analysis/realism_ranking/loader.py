@@ -3,20 +3,21 @@
 Owns the data contract of the cross-combination process: the per-competitor
 :class:`CompetitorRecord` DTO and the discovery walk that welds the capped mapped
 index to the per-combination artifacts ``persona_realism`` wrote. It reads only the
-published on-disk contract -- ``{combo}.json`` plus ``{combo}_personas.csv`` -- and
-never reaches into the judge's reduction internals, so the judging half can change
-freely as long as those two files keep their shape.
+published on-disk contract -- ``{combo}.json`` plus ``{combo}_personas.csv`` plus
+``{combo}_clashes.csv`` -- and never reaches into the judge's reduction internals, so
+the judging half can change freely as long as those three files keep their shape.
 
 Two gates run before any statistic is computed, because both failure modes produce
 numbers that look perfectly reasonable and are wrong:
 
-**Completeness.** A *consumable* combination has a report, has a per-persona CSV, and
-the CSV's row count equals the report's ``n_personas``. Anything else is a partial
-directory -- a run that was interrupted after caching verdicts but before writing
-artifacts, of which several exist on any real output base. Such a directory is skipped
-with a machine-readable reason (or raises under ``strict``); it is never silently
-ranked, because a combination missing half its personas would simply appear to have an
-unusually clean impossibility rate.
+**Completeness.** A *consumable* combination has a report, has a per-persona CSV, has
+a per-clash CSV, and the two CSVs agree with the report (row count == ``n_personas``;
+distinct clashes per level == the summed ``clash_count_s{L}``). Anything else is a
+partial directory -- a run that was interrupted after caching verdicts but before
+writing artifacts, of which several exist on any real output base. Such a directory is
+skipped with a machine-readable reason (or raises under ``strict``); it is never
+silently ranked, because a combination missing half its personas would simply appear
+to have an unusually clean impossibility rate.
 
 **Homogeneity.** Every consumed combination must share the same ``judge_model``,
 ``prompt_template_sha256`` and ``n_rounds``. Ranking units judged by different judges,
@@ -44,7 +45,13 @@ from typing import Any
 
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
 from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
+from population_synthetic.analysis.utils.realism_clash_csv import (
+    RealismClashRow,
+    read_realism_clashes_csv,
+)
 from population_synthetic.analysis.utils.realism_csv import (
+    SEVERITY_COUNT_FIELDS,
+    SEVERITY_LEVELS,
     RealismPersonaRow,
     read_realism_personas_csv,
 )
@@ -71,6 +78,15 @@ class CompetitorRecord:
     the single-combination blocks lifted verbatim from the report, so the aggregator
     never recomputes what the per-combination task already published.
 
+    ``clashes`` is the finer per-clash series (one row per persona x round x sorted
+    attribute pair x severity) read from the sibling ``{combo}_clashes.csv``. It is
+    what makes a severity cell explainable -- *which* attributes clashed, and with
+    which category values -- and it is reconciled against ``personas`` at read time, so
+    the two are always two views of one verdict cache rather than two states of it. It
+    defaults to empty for hand-built records in tests; the loader always sets it, and a
+    genuinely clash-free combination is legitimately empty (a header-only file, which
+    is a different fact from an absent one and is why the file's absence is a skip).
+
     ``is_real_reference`` marks the real population. It carries **no** privilege on
     Axis A (it is ranked like anything else) and is the target on Axis B; it is held
     out of the model x method factor tests because it is not a model x method cell and
@@ -91,6 +107,7 @@ class CompetitorRecord:
     provenance: dict[str, Any]
     report_path: Path
     personas_csv_path: Path
+    clashes: tuple[RealismClashRow, ...] = ()
 
     @property
     def impossible_indicators(self) -> tuple[int, ...]:
@@ -142,6 +159,21 @@ def _read_report(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _distinct_clash_counts(rows: list[RealismPersonaRow]) -> dict[str, int]:
+    """Per severity level, the distinct clashes the per-persona rows declare.
+
+    The reconciliation baseline for the per-clash file: each row's ``clash_count_s{L}``
+    is that persona's number of distinct ``(attribute-pair, severity)`` clashes at
+    level *L*, so the sum over the combination is the same quantity the per-clash file
+    counts one row per round of. Derived from the rows already read rather than from
+    the report, which carries no per-level breakdown.
+    """
+    return {
+        level: sum(getattr(row, SEVERITY_COUNT_FIELDS[level]) for row in rows)
+        for level in SEVERITY_LEVELS
+    }
+
+
 def _load_one(
     combo_dir: Path,
     label: str,
@@ -158,11 +190,17 @@ def _load_one(
     """
     report_path = combo_dir / f"{label}.json"
     personas_csv_path = combo_dir / f"{label}_personas.csv"
+    clashes_csv_path = combo_dir / f"{label}_clashes.csv"
     if not report_path.is_file():
         return "no combination report (judge has not completed this combination)"
     if not personas_csv_path.is_file():
         return (
             "no per-persona CSV (judged before the tidy-CSV contract existed) -- re-run "
+            "analyze_persona_realism.py --rewrite-artifacts for this combination"
+        )
+    if not clashes_csv_path.is_file():
+        return (
+            "no per-clash CSV (judged before the per-clash contract existed) -- re-run "
             "analyze_persona_realism.py --rewrite-artifacts for this combination"
         )
 
@@ -171,6 +209,15 @@ def _load_one(
     # Raises on a row-count disagreement: the CSV and the report would then describe
     # different persona sets, and every rate below would be over the wrong base.
     rows = read_realism_personas_csv(personas_csv_path, expected_rows=n_personas)
+    # Same guard one grain finer, and computed from the rows just read rather than from
+    # the report: the per-clash file must describe the *same* personas, or a driver
+    # prevalence would be a numerator from one state of the cache over a denominator
+    # from another.
+    clashes = read_realism_clashes_csv(
+        clashes_csv_path,
+        expected_counts=_distinct_clash_counts(rows),
+        expected_counts_source=personas_csv_path,
+    )
 
     return CompetitorRecord(
         slug=label,
@@ -187,6 +234,7 @@ def _load_one(
         provenance=dict(report["provenance"]),
         report_path=report_path,
         personas_csv_path=personas_csv_path,
+        clashes=tuple(clashes),
     )
 
 
