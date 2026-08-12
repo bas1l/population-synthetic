@@ -172,6 +172,47 @@ Outputs per country under `03_Analysis/realism_ranking/<country>/`:
 | `typicality_heatmap.png/.svg` | that statistic as a model × method grid on a **diverging** ramp whose midpoint is the real population's own value. Four distinct fills: a value, an under-powered value (hatched), a judged competitor with no typicality-bearing persona (white, cross-hatched), an unjudged pair (grey) |
 | `typicality_by_method.png/.svg` | the same statistic with methods on x in complexity order, one mark per model, and the real population as a horizontal reference line — the only figure in this task that draws it as a reference rather than a series |
 
+### Ranking a sweep that is still topping up -- `--rounds`
+
+The ranking refuses a consumption set judged at different round counts: both the impossibility rate
+and the typicality dispersion move with N, so ranking a 5-round combination against a 2-round one
+measures the judge rather than the combinations. Mid-sweep that is a hard stop -- while a deeper
+`n_rounds` is being applied combination by combination, the set is heterogeneous *by construction*,
+and the only other escapes are to wait for the whole sweep or to narrow the ranking with
+`--slug` / `--model` / `--strategy`, i.e. to stop ranking the thing you wanted ranked.
+
+`--rounds N` states the depth instead of inferring it. Every competitor is re-derived over its
+**first N** cached rounds, so they are compared at one depth again:
+
+```bash
+python scripts/analyze/rank_persona_realism.py --country swedish_02 --rounds 2
+```
+
+* **It never re-judges.** The cap reads the verdict caches through the judge's own reducers and
+  re-runs the judge's own statistics function -- zero LLM calls, and nothing is written under
+  `persona_realism/`. The two tidy CSVs are bypassed rather than filtered: their row grain has
+  already summed each persona's votes over *all* its cached rounds, so it cannot express a cap.
+* **The judge identity is not relaxed.** `judge_model` and `prompt_template_sha256` are still
+  compared exactly; no round cap repairs a different judge or a different prompt.
+* **The round count becomes a capacity requirement.** A persona holding fewer than N cached rounds
+  fails the run, naming the combination, the persona and both counts. It is never ranked short --
+  consuming the 3 rounds a persona happens to hold against a cap of 5 is exactly the mixed-depth
+  comparison the gate exists to refuse, and it would be invisible in the output.
+* **Blank is still the default path.** A set that agrees on `n_rounds` is read from the published
+  artifacts exactly as before. One that differs on `n_rounds` *alone* is re-consumed at the
+  shallowest cached depth, with a warning naming that depth and every trimmed combination.
+* **The result says which of the three it was.** `realism_ranking.json` carries
+  `provenance.n_rounds` (the consumed count) and `provenance.n_rounds_source` -- `report`, `cap` or
+  `auto`. **Pin `--rounds` for anything you publish**: an auto-derived depth moves as the sweep tops
+  up, so two runs of the same command can rank at different depths.
+
+Because the derived depth is the minimum over the set, one combination stuck at a single round drags
+everything down to it. The warning names it; the pinned form then refuses that set outright via the
+capacity check, which is the honest answer -- top that combination up rather than rank around it.
+
+The flag is exposed in the GUI as the `rounds` option on the `realism_ranking` node of
+`config/gui/flows/analysis_workflow.yaml` (blank = no cap).
+
 ### The severity dimension (reporting only)
 
 Three extra heatmaps, one per clash level, showing **the share of a combination's personas

@@ -132,7 +132,13 @@ the interval-assuming alternative whose caveat then travels as a column on every
 diverging ramp centred on SCB's own value, degrading to the neutral ramp with a printed reason when
 SCB is absent — so it feeds no ranking, no contrast and no test and does **not** replace
 `axis_b.dispersion_contrast`, which remains the only *tested* SCB typicality contrast; it gates on
-completeness and on one judge model / prompt hash / `n_rounds` across the consumption set,
+completeness and on one judge model / prompt hash across the consumption set, plus **either** one
+`n_rounds` **or** an explicit `--rounds N` cap that re-derives every competitor from its
+`persona_realism` verdict cache over its first N rounds (zero LLM calls, nothing written upstream)
+and turns the round count into a per-persona **capacity** check — a persona holding fewer than N
+fails the run rather than being ranked short — with a blank `--rounds` on a set differing on
+`n_rounds` alone doing the same at the shallowest cached depth, loudly; which of the three it was
+travels as `provenance.n_rounds_source` (`report` | `cap` | `auto`),
 and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 

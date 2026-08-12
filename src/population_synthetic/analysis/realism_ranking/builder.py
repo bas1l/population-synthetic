@@ -1861,6 +1861,11 @@ def build_ranking(
             "judge_model": provenance.get("judge_model"),
             "prompt_template_sha256": provenance.get("prompt_template_sha256"),
             "n_rounds": provenance.get("n_rounds"),
+            # Where that count came from: "report" (read from the published artifacts),
+            # "cap" (pinned with --rounds) or "auto" (the shallowest cached depth of a
+            # set that agreed on everything else). A capped ranking is otherwise
+            # indistinguishable from a full one.
+            "n_rounds_source": provenance.get("n_rounds_source"),
             "consumed_artifacts": [str(record.report_path) for record in records],
         },
     }

@@ -261,6 +261,7 @@ python scripts/analyze/rank_persona_realism.py --country swedish_02 --force \
     --typicality-metric iov \                    # or `mean` (location, interval assumption)
     --typicality-min-n 30 \                      # below it a cell is flagged, never dropped
     --typicality-tail-threshold 5                # k0 of the secondary P(typicality <= k0) column
+python scripts/analyze/rank_persona_realism.py --country swedish_02 --rounds 2   # rank a mid-top-up sweep
 ```
 
 `--rewrite-artifacts` regenerates the derived files from the verdict cache already on disk. It is
@@ -287,6 +288,18 @@ the per-combination chart's 3.0) bound the typicality axis.
 
 All six are resolved at the CLI edge — the builder reads no config — and `--no-charts` skips the
 figures while still writing the JSON and the CSVs.
+
+`--rounds N` pins how many judge rounds the **ranking** consumes per persona, so a sweep still being
+topped up can be ranked at one depth instead of being refused as heterogeneous. Blank (the default)
+reads the published per-combination artifacts; a set differing on its round count *alone* is then
+re-consumed at the shallowest cached depth with a warning naming it. Set, every competitor is
+re-derived from its verdict cache over its first N rounds, and a persona holding fewer than N fails
+the run rather than being ranked short — the round count becomes a capacity requirement, while
+`judge_model` and `prompt_template_sha256` are still compared exactly. **Nothing is re-judged either
+way**: the cap reads caches, makes zero LLM calls and writes nothing under `persona_realism/`.
+`realism_ranking.json` carries the consumed count as `provenance.n_rounds` and where it came from as
+`provenance.n_rounds_source` (`report` / `cap` / `auto`); pin `--rounds` for anything published,
+since an auto-derived depth moves as the sweep tops up.
 
 ## See also
 

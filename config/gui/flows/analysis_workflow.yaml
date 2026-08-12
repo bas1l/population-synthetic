@@ -169,6 +169,9 @@ tasks:
     options:
       strict: false               # --strict (fail instead of skipping a non-consumable combo)
       min-combos: '2'             # --min-combos (a one-point ranking is not a ranking)
+      rounds:                     # --rounds (blank = the published artifacts, or the shallowest
+                                  # cached depth when the set differs only on its round count; N
+                                  # re-reduces every competitor over its first N cached rounds)
       no-charts: false            # --no-charts (flag when true; charts default ON)
       output-base:                # --output-base (blank = script default)
     depends_on: [persona_realism]

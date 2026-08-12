@@ -131,6 +131,40 @@ def test_slugs_with_force_inserts_flag():
     assert cmd.index("--force") < cmd.index("--slug")
 
 
+def test_slugs_round_cap_translates_to_a_flag_and_a_blank_omits_it():
+    """``realism_ranking``'s ``rounds`` option reaches the script as ``--rounds <n>``.
+
+    Blank must emit nothing rather than an empty flag: "no cap" is a state the CLI
+    expresses by the flag's absence, and an emitted ``--rounds ''`` would fail argparse
+    instead of falling through to the published-artifact path.
+    """
+    cmd = build_slugs_cmd(SCRIPT, COMBOS[:1], {"rounds": "2"}, force=False)
+    assert cmd[-2:] == ["--rounds", "2"]
+
+    blank = build_slugs_cmd(SCRIPT, COMBOS[:1], {"rounds": None}, force=False)
+    assert "--rounds" not in blank
+
+
+def test_analysis_flow_declares_the_realism_ranking_round_cap():
+    """The shipped flow declares ``rounds`` on the ranking node.
+
+    Read from the real ``config/gui/flows/analysis_workflow.yaml`` rather than a
+    literal, because the GUI can only edit an option the flow already declares
+    (``set_task_option`` raises on an unknown key): a missing key silently removes the
+    cap from the GUI altogether, with no error anywhere.
+
+    Only the key's *presence* is pinned. Its value is operator state -- the GUI writes
+    whatever depth the last run selected straight back into this file -- so asserting a
+    blank default would fail the suite for anyone who has used the option.
+    """
+    flow = yaml.safe_load(
+        (PROJECT_ROOT / "config" / "gui" / "flows" / "analysis_workflow.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert "rounds" in flow["tasks"]["realism_ranking"]["options"]
+
+
 def test_slugs_empty_combos_raises():
     with pytest.raises(ValueError, match="no combos"):
         build_slugs_cmd(SCRIPT, [], {}, force=False)
