@@ -118,7 +118,7 @@ registry **key** in `config/analysis/analysis_registry.yaml`, and the
 can never drift because they are the same string.
 
 The flow YAML now carries **orchestration only** — per task: `depends_on`,
-`options`, `enabled`, and the force/combo guards (`supports_force`,
+`options`, `enabled`, `bypass`, and the force/combo guards (`supports_force`,
 `min_combos`/`max_combos`). It no longer carries `label`, `description`,
 `script`, or `dispatch`: those four are **owned by the registry** and merged in
 at read time by `WorkflowConfigModel.get_task_meta` (via `get_process(id)`),
@@ -139,7 +139,7 @@ See the canonical id → label → folder → script table in
 
 The **Analysis Workflow** flow (`config/gui/flows/analysis_workflow.yaml`) is
 a DAG of tasks whose node ids are the canonical ids above; each task carries the
-orchestration fields (`{enabled, options, depends_on, min/max_combos, force}`),
+orchestration fields (`{enabled, bypass, options, depends_on, min/max_combos, force}`),
 while `script`/`dispatch` are resolved from the registry.
 Ordering is **derived from `depends_on`** by topological sort (Kahn, YAML
 authoring order as the deterministic tie-break) — there is no hardcoded Python
@@ -151,6 +151,20 @@ stage list. `WorkflowState.validate()` fails loudly at flow load on: unknown
 enabled chain GUI-side:
 
 - **Disabled** task → `SKIPPED_DISABLED`, not completed.
+- **Bypassed** task (`bypass: true`, and still enabled) → `BYPASSED` with a
+  **loud** console banner: zero subprocesses, yet the task **is** entered into
+  `completed_tasks`, so its dependents unlock and run. The branch sits between
+  the two above — **after** the Enabled master switch (a disabled task is
+  disabled, whatever its `bypass`, which is then inert) and **before** both the
+  dependency gate and the combo guard, because a bypass asserts something about
+  the **disk**, not about this run: it therefore holds even when an upstream
+  task failed this run and even when the checked-combo count violates
+  `min_combos`/`max_combos`. **Nothing is verified** — no directory, file,
+  timestamp or combo coverage is inspected, by contract; the flag records only
+  the user's assertion that the outputs are already there, and the run proceeds
+  against whatever is on disk, however stale. Bypass is GUI-side orchestration
+  and emits **no** CLI flag. Pressing Run with ≥1 enabled+bypassed task first
+  raises a confirmation modal listing them, defaulting to **Cancel**.
 - **Dependency did not complete** → `SKIPPED_DEP`.
 - **Guard violated** (checked-combo count vs `min_combos`/`max_combos`) →
   `SKIPPED_GUARD` with a **loud** console banner; the run continues.

@@ -8,6 +8,14 @@ dependents. On top of that mirror this adds fail-fast validation (the
 reference silently skips unknown tasks — we raise), a deterministic
 topological order, per-run task statuses, and min/max-combo guard checks.
 
+``completed_tasks`` — the set the dependency gate tests against — has two
+writers: :meth:`WorkflowState.mark_completed` (the task ran and every
+invocation exited 0) and :meth:`WorkflowState.mark_bypassed` (the task did
+NOT run; the user asserted via the ``bypass`` flag that its outputs are
+already on disk, so its dependents unlock). Nothing is verified for a
+bypass — no filesystem access of any kind — and the two are kept apart by
+their statuses, ``COMPLETED`` vs ``BYPASSED``.
+
 This module is deliberately Qt-free so the whole engine is unit-testable
 headlessly; the Phase-7 ``WorkflowRunner`` (QThread) drives it.
 
@@ -27,7 +35,7 @@ from typing import Any
 
 _VALID_DISPATCH = ("per_combo", "slugs", "per_country")
 
-_REQUIRED_TASK_KEYS = ("label", "script", "dispatch", "enabled", "options", "depends_on")
+_REQUIRED_TASK_KEYS = ("label", "script", "dispatch", "enabled", "bypass", "options", "depends_on")
 _OPTIONAL_TASK_KEYS = ("supports_force", "force", "min_combos", "max_combos")
 
 
@@ -37,6 +45,7 @@ class TaskStatus(Enum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
+    BYPASSED = "bypassed"  # not executed; user-asserted complete (nothing verified)
     FAILED = "failed"
     SKIPPED_DISABLED = "skipped_disabled"
     SKIPPED_DEP = "skipped_dep"
@@ -53,6 +62,7 @@ class WorkflowTask:
     script: Path  # resolved against the project root
     dispatch: str  # 'per_combo' | 'slugs' | 'per_country'
     enabled: bool
+    bypass: bool  # do not run, but count as completed — no default, required YAML key
     supports_force: bool
     force: bool
     options: dict[str, Any]
@@ -123,6 +133,7 @@ class WorkflowState:
             script=self._project_root / str(raw["script"]),
             dispatch=str(raw["dispatch"]),
             enabled=_bool("enabled"),
+            bypass=_bool("bypass"),
             supports_force=_bool("supports_force", default=False),
             force=_bool("force", default=False),
             options=dict(options),
@@ -206,11 +217,23 @@ class WorkflowState:
         """Mark a task completed (status ``COMPLETED``), unlocking dependents.
 
         Only called on success (all invocations exited 0) — skipped or failed
-        tasks are never marked, so their dependents stay dep-blocked.
+        tasks are never marked, so their dependents stay dep-blocked. The one
+        other writer of ``completed_tasks`` is :meth:`mark_bypassed`, which
+        unlocks dependents without the task having run.
         """
         self._task(name)
         self.completed_tasks.add(name)
         self.status[name] = TaskStatus.COMPLETED
+
+    def mark_bypassed(self, name: str) -> None:
+        """Enter *name* into ``completed_tasks`` with status ``BYPASSED``.
+
+        The task was NOT executed and NOTHING was verified — this records the
+        user's assertion that its outputs already exist, so dependents unlock.
+        """
+        self._task(name)
+        self.completed_tasks.add(name)
+        self.status[name] = TaskStatus.BYPASSED
 
     # ------------------------------------------------------------------
     # Combo-count guards

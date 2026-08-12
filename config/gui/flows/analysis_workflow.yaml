@@ -3,7 +3,7 @@
 # Task keys are the canonical analysis-registry ids: the label, description,
 # script and dispatch are OWNED by config/analysis/analysis_registry.yaml and
 # resolved through WorkflowConfigModel.get_task_meta -- they are NOT duplicated
-# here. This file carries only GUI orchestration (enabled/force, options,
+# here. This file carries only GUI orchestration (enabled/bypass/force, options,
 # depends_on, combo guards).
 # dispatch (from the registry):
 #   per_combo   -- one invocation per checked combo: --model-id/--strategy-id/--country-id
@@ -13,6 +13,7 @@
 tasks:
   validate_raw:                   # pipeline root -- per-combo raw-persona completeness check
     enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force (overwrite CSV)
     force: false
     options:
@@ -21,6 +22,7 @@ tasks:
 
   mapping:                        # map the full validated raw pool (reads 01_Raw, not the cap)
     enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options:
@@ -29,6 +31,7 @@ tasks:
 
   validate_mapped:                # per-combo mapped-persona check (unmapped-value detection)
     enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force (overwrite CSV)
     force: false
     options:
@@ -37,6 +40,7 @@ tasks:
 
   population_cap:                 # seeded cap of each combo to N VALIDATED personas (runs last of the gate)
     enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force (overwrite mirror)
     force: false
     options:
@@ -47,6 +51,7 @@ tasks:
 
   fidelity:
     enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options:
@@ -59,6 +64,7 @@ tasks:
 
   multivariate_fidelity:
     enabled: false
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options:
@@ -70,6 +76,7 @@ tasks:
 
   consistency:
     enabled: false
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true
     force: false
     options:
@@ -79,6 +86,7 @@ tasks:
 
   model_ranking:
     enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     min_combos: 2                 # guard: loud skip below 2 checked combos
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
@@ -91,6 +99,7 @@ tasks:
 
   method_significance:
     enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     min_combos: 2                 # guard: loud skip below 2 checked combos
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
@@ -102,6 +111,7 @@ tasks:
 
   pairwise_comparison:
     enabled: false                # opt-in: needs EXACTLY 2 combos
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     min_combos: 2
     max_combos: 2
     supports_force: true          # node shows a Force checkbox -> --force
@@ -113,6 +123,7 @@ tasks:
 
   real_population_stats:          # per_country dispatch -- real population only, ignores model/strategy
     enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options: {}
@@ -120,6 +131,7 @@ tasks:
 
   generation_metadata:            # independent -- isolated node (slugs dispatch)
     enabled: false
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options:
@@ -133,6 +145,7 @@ tasks:
                                   # invocation also enumerates its country's real_{country}
                                   # competitor (cheap once cached); the cross-combination
                                   # ranking is the separate realism_ranking node below.
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force (re-judge + re-write)
     force: false
     options:
