@@ -17,6 +17,7 @@ from population_synthetic.analysis.fidelity.evaluator import attr_value
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.figures import save_figure
 from population_synthetic.analysis.utils.marginals import compute_proportions
+from population_synthetic.analysis.utils.palette import heatmap_cmap, text_color_on
 
 # ------------------------------------------------------------------
 # Chart styling constants
@@ -335,12 +336,9 @@ def plot_association_heatmap(
     if masked.count() == 0:
         return None
 
-    cmap = plt.get_cmap("Reds").copy()
-    cmap.set_bad(color="#DDDDDD")
-
     fig, ax = plt.subplots(figsize=(max(6.0, n * 0.7 + 2.5), max(5.0, n * 0.7 + 2.0)))
     vmax = max(float(masked.max()), 1e-6)
-    im = ax.imshow(masked, cmap=cmap, vmin=0.0, vmax=vmax)
+    im = ax.imshow(masked, cmap=heatmap_cmap(), vmin=0.0, vmax=vmax)
 
     ax.set_xticks(range(n))
     ax.set_xticklabels(attrs, rotation=40, ha="right", fontsize=7)
@@ -350,14 +348,13 @@ def plot_association_heatmap(
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
     cbar.set_label("|Delta V|  (Cramer's V: real vs synthetic)", fontsize=8)
 
-    threshold = vmax / 2.0
     for i in range(n):
         for j in range(n):
             v = grid[i, j]
             if np.isnan(v):
                 continue
-            color = "white" if v > threshold else "black"
-            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=6, color=color)
+            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=6,
+                    color=text_color_on(im, v))
 
     title = "Pairwise association fidelity  |Delta V|"
     if prefix:

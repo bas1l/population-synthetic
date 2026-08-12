@@ -44,11 +44,14 @@ from typing import Any
 import numpy as np
 
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.palette import (
+    MISSING_COLOR,
+    heatmap_cmap,
+    text_color_for_rgb,
+)
 
-_GREY = "#DDDDDD"
 _BOX_EDGE = "#111111"
 _ANNOT_FONTSIZE = 7.0
-_CMAP_NAME = "inferno"
 
 # Colourblind-safe categorical hues for the provenance side-marker (figure) and
 # the LaTeX ``Host`` column swatch. These encode *category* (hosting class), not
@@ -64,13 +67,6 @@ _HOST_LABELS = {"hosted": "hosted (API)", "local": "local (Ollama)"}
 def _overall_divider(ax, n_attributes: int) -> None:
     """Draw the white vertical divider separating the axes from the Overall column."""
     ax.axvline(n_attributes - 0.5, color="white", linewidth=2.5)
-
-
-def _text_color_for_rgb(rgb) -> str:
-    """Pick white/black annotation text by the cell colour's relative luminance."""
-    r, g, b = float(rgb[0]), float(rgb[1]), float(rgb[2])
-    luminance = 0.299 * r + 0.587 * g + 0.114 * b
-    return "white" if luminance < 0.5 else "black"
 
 
 def _best_cells_per_column(values: np.ndarray) -> set[tuple[int, int]]:
@@ -112,7 +108,7 @@ def _annotate_and_box(ax, values: np.ndarray, cmap, norm, best_cells: set[tuple[
             ax.text(
                 j, i, f"{v * 100:.1f}",
                 ha="center", va="center", fontsize=_ANNOT_FONTSIZE,
-                color=_text_color_for_rgb(cmap(norm(v))),
+                color=text_color_for_rgb(cmap(norm(v))),
                 fontweight="bold" if is_best else "normal",
             )
             if is_best:
@@ -134,12 +130,13 @@ def _categories_on_top(ax, attributes: list[str]) -> None:
 
 
 def _inferno_cmap():
-    """The shared inferno colormap with a grey ``set_bad`` for NaN cells."""
-    import matplotlib.pyplot as plt
+    """The house heatmap ramp with a grey ``set_bad`` for NaN cells.
 
-    cmap = plt.get_cmap(_CMAP_NAME).copy()
-    cmap.set_bad(_GREY)
-    return cmap
+    A one-line pass-through kept as a named local, because these tables' four call
+    sites read as "the same ramp every time" and the shared helper takes arguments
+    the tables never vary.
+    """
+    return heatmap_cmap()
 
 
 def _add_percentage_colorbar(fig, im, ax, label: str):
@@ -415,7 +412,7 @@ def _latex_number(v: float, cmap, norm, is_best: bool) -> str:
     import matplotlib.colors as mcolors
 
     if np.isnan(v):
-        return "\\cellcolor[HTML]{DDDDDD} --"
+        return f"\\cellcolor[HTML]{{{MISSING_COLOR.lstrip('#').upper()}}} --"
     rgba = cmap(norm(v))
     hex6 = mcolors.to_hex(rgba).lstrip("#").upper()
     # Displayed value is the 0--100 percentage (one decimal); the cell colour is
@@ -423,7 +420,7 @@ def _latex_number(v: float, cmap, norm, is_best: bool) -> str:
     num = f"{v * 100:.1f}"
     if is_best:
         num = f"\\textbf{{{num}}}"
-    if _text_color_for_rgb(rgba) == "white":
+    if text_color_for_rgb(rgba) == "white":
         num = f"\\textcolor{{white}}{{{num}}}"
     return f"\\cellcolor[HTML]{{{hex6}}} {num}"
 

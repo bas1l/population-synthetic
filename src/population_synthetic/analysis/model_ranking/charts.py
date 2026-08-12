@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
+from population_synthetic.analysis.utils.palette import heatmap_cmap, text_color_on
 
 _COLOR_SERIES = (
     "#4878CF",
@@ -79,9 +80,7 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
         figsize=(max(8.0, (len(attributes) + 1) * 0.8 + 3.0), max(4.0, len(ranking) * 0.45 + 2.5))
     )
     masked = np.ma.masked_invalid(values)
-    cmap = plt.get_cmap("viridis").copy()
-    cmap.set_bad(color="#DDDDDD")
-    im = ax.imshow(masked, aspect="auto", cmap=cmap)
+    im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap())
 
     ax.set_xticks(range(len(attributes) + 1))
     ax.set_xticklabels(attributes + ["overall"], rotation=40, ha="right", fontsize=8)
@@ -92,15 +91,13 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
     cbar.set_label("TV-similarity (1 - TV distance)", fontsize=8)
 
-    finite = masked.compressed()
-    threshold = (finite.max() + finite.min()) / 2.0 if finite.size else 0.0
     for i in range(values.shape[0]):
         for j in range(values.shape[1]):
             v = values[i, j]
             if np.isnan(v):
                 continue
-            color = "white" if v < threshold else "black"
-            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=6.5, color=color)
+            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=6.5,
+                    color=text_color_on(im, v))
 
     country = result["metadata"]["country"]
     ax.set_title(

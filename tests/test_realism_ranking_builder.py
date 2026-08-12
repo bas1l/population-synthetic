@@ -38,6 +38,7 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
 )
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord  # noqa: E402
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
+from population_synthetic.analysis.utils.palette import HEATMAP_CMAP  # noqa: E402
 from population_synthetic.analysis.utils.realism_clash_csv import RealismClashRow  # noqa: E402
 from population_synthetic.analysis.utils.realism_csv import (  # noqa: E402
     SEVERITY_LEVELS,
@@ -1409,13 +1410,13 @@ def test_reference_value_is_the_real_populations_own_statistic_or_null_with_a_re
     assert block["reference_slug"] == "real_swedish"
     assert block["reference_value"] == pytest.approx(0.1)
     assert block["reference_value"] == block["grid"]["real"]["value"]
-    assert "midpoint" in block["reference_note"]
+    assert "colourbar rule" in block["reference_note"]
     # It is an ordinary competitor: no grid coordinate, no privilege in any cell.
     assert "real_swedish" not in block["grid"]["models"]
 
     without = _build(_typicality_fixture())["typicality"]
     assert without["reference_slug"] is None and without["reference_value"] is None
-    assert "neutral sequential ramp" in without["reference_note"]
+    assert "nothing to measure a distance against" in without["reference_note"]
 
 
 def test_typicality_block_publishes_its_orientation_and_no_direction():
@@ -1592,7 +1593,7 @@ def test_typicality_heatmap_renders_a_populated_cell_as_a_value_not_as_missing()
     fig = plot_typicality_heatmap(ranking)
     text = _figure_text(fig)
 
-    assert "0.100\nn=4" in text          # haiku x all_pick, hand-computed in Phase 2
+    assert "0.100" in text and "n=4" in text   # haiku x all_pick, hand-computed in Phase 2
     assert "n/a" not in text
     # The four states are four different marks, and each says which it is.
     assert text.count("not judged") == 1               # sonnet x all_pick
@@ -1600,16 +1601,15 @@ def test_typicality_heatmap_renders_a_populated_cell_as_a_value_not_as_missing()
     assert "real population" in text
 
 
-def test_typicality_heatmap_centres_a_diverging_ramp_on_the_documents_reference():
-    """The midpoint is read from the block; the limits are symmetric about it."""
+def test_typicality_heatmap_anchors_the_house_ramp_at_the_statistics_true_zero():
+    """Same ramp and same anchoring as every sibling grid: zero is a real measurement."""
     ranking = _four_state_ranking()
     reference = ranking["typicality"]["reference_value"]
     image = plot_typicality_heatmap(ranking).axes[0].images[0]
 
-    assert image.cmap.name == "PuOr"
+    assert image.cmap.name == HEATMAP_CMAP
     vmin, vmax = image.get_clim()
-    assert (vmin + vmax) / 2 == pytest.approx(reference)
-    assert vmax - reference == pytest.approx(reference - vmin)
+    assert vmin == 0.0, "a cell at the floor must mean 'no variety', not 'least here'"
     # Wide enough to hold every drawn value, the real population's own included.
     values = [
         cell["value"]
@@ -1617,26 +1617,55 @@ def test_typicality_heatmap_centres_a_diverging_ramp_on_the_documents_reference(
         for cell in ranking["typicality"]["grid"]["cells"][model].values()
         if cell is not None and cell["value"] is not None
     ] + [reference]
-    assert vmin <= min(values) and max(values) <= vmax
+    assert max(values) <= vmax
 
 
-def test_typicality_heatmap_degrades_to_the_neutral_ramp_with_no_reference():
-    """No real population -> no midpoint, and never a literal one in its place."""
+def test_typicality_heatmap_carries_the_reference_as_a_rule_and_a_signed_delta():
+    """The ramp is sequential, so the *side* of the reference lives in the annotations.
+
+    This is the guard on the one thing the diverging ramp used to do for free. A cell
+    above the reference and a cell below it are drawn by magnitude alone; if the signed
+    delta or the colourbar rule went missing, the figure would still look complete while
+    having quietly dropped the reading the whole axis exists to give.
+    """
+    ranking = _four_state_ranking()
+    reference = float(ranking["typicality"]["reference_value"])
+    fig = plot_typicality_heatmap(ranking)
+
+    values = [
+        cell["value"]
+        for model in ranking["typicality"]["grid"]["models"]
+        for cell in ranking["typicality"]["grid"]["cells"][model].values()
+        if cell is not None and cell["value"] is not None
+    ]
+    text = _figure_text(fig)
+    for value in values:
+        assert f"({value - reference:+.3f})" in text
+
+    # The rule sits on the colourbar axes, at the reference's own value.
+    colorbar_ax = fig.axes[-1]
+    assert [line.get_ydata()[0] for line in colorbar_ax.lines] == [pytest.approx(reference)]
+
+
+def test_typicality_heatmap_drops_the_reference_marking_when_there_is_no_reference():
+    """No real population -> no rule, no delta, and never a literal one in their place."""
     records = [r for r in _four_state_fixture() if not r.is_real_reference]
     ranking = _build(records, typicality={**_TYPICALITY, "min_n": 5})
     assert ranking["typicality"]["reference_value"] is None
 
     fig = plot_typicality_heatmap(ranking)
     image = fig.axes[0].images[0]
-    assert image.cmap.name == "Blues"
+    assert image.cmap.name == HEATMAP_CMAP
     assert image.get_clim()[0] == 0.0
     text = _figure_text(fig)
-    assert "neutral sequential ramp" in text          # the block's own recorded reason
-    assert "Ramp midpoint" not in text
+    assert "nothing to measure a distance against" in text   # the block's recorded reason
+    assert "Parenthesised in each cell" not in text          # no delta to explain
+    assert "Colourbar rule" not in text
+    assert len(fig.axes[-1].lines) == 0
 
 
 def test_typicality_heatmap_survives_a_zero_width_range():
-    """Every competitor at the reference value: a ramp, not a division by zero."""
+    """Every competitor at the statistic's floor: a ramp, not a division by zero."""
     identical = [
         _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[3.0, 3.0]),
         _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
@@ -1745,10 +1774,11 @@ def test_a_grid_of_nothing_but_under_powered_cells_still_renders():
     assert all(cell["under_powered"] for cell in cells)
 
     fig = plot_typicality_heatmap(ranking)
-    # The real population's band is marked on the same terms as the cells: this ramp is
-    # centred on it, so a thin midpoint drawn as a firm one is the worse error.
+    # The real population's band is marked on the same terms as the cells: every cell's
+    # delta is measured against it, so a thin reference drawn as a firm one is the worse
+    # error.
     assert [patch.get_hatch() for patch in fig.axes[0].patches].count("//") == len(cells)
-    assert "0.100\nn=4" in _figure_text(fig)
+    assert "0.100" in _figure_text(fig) and "n=4" in _figure_text(fig)
     assert plot_typicality_by_method(ranking).axes[0].collections
 
 

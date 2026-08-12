@@ -30,6 +30,7 @@ from population_synthetic.analysis.utils._stats import median as _median
 from population_synthetic.analysis.utils._stats import percentile as _percentile
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.palette import heatmap_cmap, text_color_on
 
 __all__ = ["render_metric_heatmaps", "plot_run_charts", "plot_run_comparison"]
 
@@ -132,9 +133,7 @@ def render_metric_heatmaps(
             figsize=(max(6.0, len(methods) * 1.5 + 2.5), max(3.5, len(models) * 0.55 + 2.0))
         )
         masked = np.ma.masked_invalid(means)
-        cmap = plt.get_cmap("viridis").copy()
-        cmap.set_bad(color="#DDDDDD")
-        im = ax.imshow(masked, aspect="auto", cmap=cmap)
+        im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap())
 
         ax.set_xticks(range(len(methods)))
         ax.set_xticklabels(methods, rotation=30, ha="right", fontsize=8)
@@ -144,8 +143,6 @@ def render_metric_heatmaps(
         cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
         cbar.set_label(_METRIC_LABELS.get(metric, metric), fontsize=8)
 
-        finite = masked.compressed()
-        threshold = (finite.max() + finite.min()) / 2.0 if finite.size else 0.0
         for i in range(len(models)):
             for j in range(len(methods)):
                 if np.isnan(means[i, j]):
@@ -153,7 +150,7 @@ def render_metric_heatmaps(
                     if (models[i], methods[j]) in by_cell:
                         ax.text(j, i, "n/a", ha="center", va="center", fontsize=6.5, color="#666666")
                     continue
-                color = "white" if means[i, j] < threshold else "black"
+                color = text_color_on(im, means[i, j])
                 ax.text(
                     j, i, f"{_fmt_mean(means[i, j])}\nn={counts[i, j]}",
                     ha="center", va="center", fontsize=6.5, color=color,
@@ -785,9 +782,7 @@ def _plot_heatmap(
         figsize=(max(6.0, len(methods) * 1.3 + 3.0), max(5.0, len(models) * 0.5 + 2.5))
     )
     masked = np.ma.masked_invalid(values)
-    cmap = plt.get_cmap("viridis").copy()
-    cmap.set_bad(color="#DDDDDD")
-    im = ax.imshow(masked, aspect="auto", cmap=cmap)
+    im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap())
 
     ax.set_xticks(range(len(methods)))
     ax.set_xticklabels(methods, rotation=35, ha="right", fontsize=8)
@@ -799,16 +794,13 @@ def _plot_heatmap(
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label(label, fontsize=8)
 
-    finite = masked.compressed()
-    threshold = (finite.max() + finite.min()) / 2.0 if finite.size else 0.0
     for i in range(len(models)):
         for j in range(len(methods)):
             v = values[i, j]
             if np.isnan(v):
                 continue
-            txt = f"{v:.3g}"
-            color = "white" if v < threshold else "black"
-            ax.text(j, i, txt, ha="center", va="center", fontsize=7, color=color)
+            ax.text(j, i, f"{v:.3g}", ha="center", va="center", fontsize=7,
+                    color=text_color_on(im, v))
 
     ax.set_title(f"{metric_label}: model x method", fontsize=12, fontweight="bold")
     fig.tight_layout()

@@ -169,7 +169,7 @@ Outputs per country under `03_Analysis/realism_ranking/<country>/`:
 | `severity_pair_summary_s3/s2/s1.png/.svg` | the country-wide complement of the heatmap, one per level: which attribute pairs clashed, ranked descending, with the real population as its own series — see below |
 | `typicality_summary.csv` | one row per competitor: the **self-contained** typicality statistic (a function of that competitor's own judge scores alone), its bootstrap CI, **both** persona counts under distinct names, the `under_powered`/`boundary` flags, and the secondary `P(typicality ≤ k0)` column with a Wilson interval — see below |
 | `typicality_histogram.csv` | the same statistic's published object: one row per `(competitor, level)` over the full 0–10 scale, so the levels nobody scored are explicit zeros |
-| `typicality_heatmap.png/.svg` | that statistic as a model × method grid on a **diverging** ramp whose midpoint is the real population's own value. Four distinct fills: a value, an under-powered value (hatched), a judged competitor with no typicality-bearing persona (white, cross-hatched), an unjudged pair (grey) |
+| `typicality_heatmap.png/.svg` | that statistic as a model × method grid on the shared sequential ramp. The ramp orders by magnitude only, so the real population's value is marked by a rule on the colourbar and by a **signed delta in every cell** — read the side from the sign. Four distinct fills: a value, an under-powered value (hatched), a judged competitor with no typicality-bearing persona (white, cross-hatched), an unjudged pair (grey) |
 | `typicality_by_method.png/.svg` | the same statistic with methods on x in complexity order, one mark per model, and the real population as a horizontal reference line — the only figure in this task that draws it as a reference rather than a series |
 
 ### Ranking a sweep that is still topping up -- `--rounds`
@@ -230,13 +230,21 @@ which would silently understate every S2 prevalence.
 
 | Level | Meaning | Direction |
 |---|---|---|
-| **S3** | hard contradiction | defect — lower is better, red ramp |
-| **S2** | near-impossible | defect — lower is better, red ramp |
-| **S1** | unusual but possible | **reported, never penalised** — neutral ramp; a higher value may mean healthy reach into the tails, not a problem |
+| **S3** | hard contradiction | defect — colourbar reads *lower is better* |
+| **S2** | near-impossible | defect — colourbar reads *lower is better* |
+| **S1** | unusual but possible | **reported, never penalised** — colourbar reads *not penalised*, plus a printed caption; a higher value may mean healthy reach into the tails, not a problem |
 
-Colouring S1 on a lower-is-better ramp would assert that unusual people are defects, which
+Asserting that a higher S1 prevalence is worse would say unusual people are defects, which
 the judge's own contract explicitly denies — the same class of error as treating SCB as the
 origin on Axis A.
+
+**Read the direction from the label, never from the colour.** All three levels are drawn on
+the shared analysis-layer ramp (`analysis/utils/palette.py`), which carries no better/worse
+reading of its own, so an S1 grid and an S3 grid are distinguishable only by their title,
+their colourbar label and S1's caption. The two hues that once separated them (red for the
+defect levels, blue for S1) were given up when the analysis figures were unified onto one
+house palette. The typicality heatmap is the one realism figure that keeps its own ramp,
+because there the direction *is* the colour — see below.
 
 > **Schema versions.** The per-severity columns arrived with per-persona tidy-CSV schema
 > **v2**; the per-clash file is its own contract at schema **v1**, versioned separately (both
@@ -271,7 +279,7 @@ Four properties worth knowing before reading one:
   distinct clashes; each clash names two attributes; and the levels are not a partition. Never a
   pie, never a 100%-stacked bar. Also a column on every row.
 - **S1 rows are not defects.** `penalised` travels on every row for the same reason the S1 heatmap
-  gets a neutral ramp — and it is now the *only* thing on a row that distinguishes an
+  carries its never-a-defect caption — and it is now the *only* thing on a row that distinguishes an
   unusual-but-possible pairing from a defect, since the two sit in the same file. On the current
   Swedish data the S1 drivers read plainly as tail-reach: SCB's
   own top S1 pairs are `Married × 1-person household` and `Owner-occupied villa × Poverty` —
@@ -302,7 +310,7 @@ Four things about them are load-bearing:
 - **The bars do not sum to the level's overall rate**, for the same three reasons the driver tables
   do not. The caveat is printed on the figure, not only here.
 - **S1 carries the never-a-defect caption**, taken from the same per-level `direction` the S1
-  heatmap's neutral ramp is chosen from.
+  heatmap's colourbar label is chosen from.
 
 `--pair-summary-top-n` (default 15) bounds the bars; what falls below the cut is printed on the
 figure, including how many of the hidden pairs were raised **only** by the real population (those
@@ -337,7 +345,12 @@ number already published, and **does not replace Axis B** — that remains the t
   competitor scoring uniformly at the modal level has collapsed onto the modal Swede; a low-scoring one
   may be reaching the real population's tail or may simply be incoherent. Nor is SCB the ceiling: 16 of
   50 synthetic competitors on `swedish_02` are **more** dispersed than it. Direction is supplied at
-  render time by the diverging ramp centred on SCB's own value, and by nothing else.
+  render time as the signed distance to SCB's own value — parenthesised in every cell, and ruled onto
+  the colourbar — and by nothing else. **Not by the colour:** the heatmap uses the same sequential
+  ramp as every other figure in `03_Analysis`, which orders cells by magnitude, so a competitor
+  0.07 above SCB and one 0.07 below it are drawn differently and neither drawing says which was
+  which. Read the sign. With SCB absent from the consumption set there is no distance to measure, so
+  both markings drop and the figure prints the block's own reason for their absence.
 - **The dispersion is a property of *this judge under this prompt*, not of the population alone.**
   `judge_prompt.md` emits `"reasoning"` **before** `"typicality"`, and chain-of-thought-before-score is
   documented to compress the judgment distribution (Wang, Zhang & Choi, EMNLP Findings 2025,

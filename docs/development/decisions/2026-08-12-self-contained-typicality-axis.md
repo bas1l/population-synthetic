@@ -118,32 +118,58 @@ The reference is genuinely needed for reading, and genuinely destructive in the 
 in the cell reintroduces exactly the cross-unit dependency the whole design removed, and it is the
 step that turned Axis B's number into something that cannot be recomputed from one competitor.
 
-The rendering layer had no third option available. `realism_ranking/charts.py` carried two ramps —
-`_DEFECT_CMAP` (Reds, more is worse) and `_NEUTRAL_CMAP` (Blues, reported but never penalised, the S1
-precedent). Both are sequential and anchored at a hard-coded `vmin = 0.0`, on a true-zero premise
-stated in the module: "a pale cell always means 'few', never 'fewest in this particular sweep'". That
-premise is correct for a defect rate and wrong for an interior-optimum statistic, where the pale end
-must be the *reference*, not zero.
+The rendering layer had no suitable option available. Every ramp `realism_ranking/charts.py` carried
+was sequential and anchored at a hard-coded `vmin = 0.0`, on a true-zero premise stated in the module:
+a cell at the ramp's low end always means "few", never "fewest in this particular sweep". That premise
+is correct for a defect rate and wrong for an interior-optimum statistic, where the ramp's neutral
+point must be the *reference*, not zero.
+
+> **Amended the same day — Decision 2's mechanism was replaced.** As first written, this ADR put the
+> reference in a **diverging colormap** centred on it. Every analysis heatmap was then unified onto
+> the single house ramp of the published manuscript tables (`analysis/utils/palette.py`, `inferno`),
+> and the typicality heatmap was included rather than exempted. The section below records the
+> replacement mechanism. What survives unchanged is the *decision*: the reference is still absent
+> from every cell's arithmetic and present only in the rendering. What changed is where in the
+> rendering it lives — annotations rather than hue.
+>
+> The unification also merged the two sequential ramps this section originally argued against
+> (`_DEFECT_CMAP` Reds, more is worse; `_NEUTRAL_CMAP` Blues, reported but never penalised, the S1
+> precedent), costing the S1-vs-defect *hue* distinction, which now lives in the colourbar label and
+> the caption alone.
 
 ### Decision
 
-**The statistic goes in the cell; the reference goes in the colormap.**
+**The statistic goes in the cell; the reference goes in the rendering — as a number, not as a hue.**
 
-`plot_typicality_heatmap` adds the third ramp state, `_DIVERGING_CMAP = "PuOr"`, with limits
-**symmetric about the midpoint** so equal departures in the two directions get equally saturated
-colours. The midpoint is read from `block["reference_value"]` — the real population's own statistic,
-computed exactly as every competitor's and entering no cell's computation — never from a literal. Low
-end (orange) = more collapsed than the register population; high end (purple) = more dispersed. PuOr
-rather than the familiar red–blue because red and blue are already spoken for by the sibling heatmaps
-in the same folder, and reusing either hue would import their better/worse reading onto an axis that
-has none.
+`plot_typicality_heatmap` draws on the house sequential ramp, anchored at the statistic's true zero
+exactly as its sibling grids are. The reference is read from `block["reference_value"]` — the real
+population's own statistic, computed exactly as every competitor's and entering no cell's computation
+— never from a literal, and it appears in two places drawn together:
+
+1. a **rule across the colourbar** at its own value, coloured from the ramp position it marks;
+2. a **signed delta** parenthesised beside every cell's number, `(+0.704)` / `(−0.156)`.
+
+A sequential ramp orders cells by **magnitude alone**. Two competitors equally far above and below
+the reference are therefore drawn differently, and neither drawing says which side it was on. That
+reading — the entire point of an interior-optimum statistic — lives in the printed sign and nowhere
+else, which is why the delta is a load-bearing part of the figure rather than an annotation, and why
+`direction_reason` stays printed beneath it.
+
+This is a deliberate trade, and it is the one made **against** this ADR's original mechanism. The
+first version of Decision 2 used a diverging ramp (`PuOr`) centred on the reference, which put the
+side in the hue for free. Unifying every analysis heatmap onto one palette bought figure-family
+consistency with the published manuscript tables at the price of that free reading; the annotations
+buy it back explicitly. A future two-sided heatmap must do the same or keep its own diverging ramp.
+What it must not do is take the house ramp and leave the sign implicit — the resulting figure looks
+complete while having silently dropped half its content.
 
 Absence of the reference **degrades and records**, it does not default: with no real population in the
-consumption set (or a real population carrying no typicality-bearing persona), the figure falls back
-to the neutral sequential ramp anchored at the statistic's true zero and prints the block's own
-`reference_note` explaining why. A zero-width range — every competitor exactly at the reference — is
-the one case where a ramp cannot be built at all; the limits fall back to `reference ± 0.05` and the
-figure states that it has no measured range rather than implying a spread the limits invented.
+consumption set (or a real population carrying no typicality-bearing persona), both markings drop
+together and the figure prints the block's own `reference_note` explaining why, rather than marking a
+literal that would be a claim nobody measured. A zero-width range — every competitor at the
+statistic's floor — is the one case where a ramp cannot be built at all; the ceiling falls back to
+`1.0` and the figure states that it has no measured range rather than implying a spread the limits
+invented.
 
 Every caveat printed on the figures — `reference_note`, `direction_reason`, `counting_unit`,
 `under_powered_policy`, `n_confound` — is read from the block. Only the two words for *how this figure
@@ -159,16 +185,19 @@ draws a thing* belong to the chart, so a figure and the numbers it renders canno
 - **One new idiom, deliberately scoped.** `plot_typicality_by_method` draws the real population as a
   horizontal reference line. Everywhere else in the analysis layer it is a series, bar or marker,
   because everywhere else it is *ranked* and a reference line would encode "closer is better" into a
-  figure whose point is not to assume that. This axis ranks nothing: the line is the sibling heatmap's
-  ramp midpoint, in a form that shows each method's spread around it, and it carries the real
-  population's own colour and slug so it cannot read as a target or a threshold.
+  figure whose point is not to assume that. This axis ranks nothing: the line is the same reference
+  the sibling heatmap rules onto its colourbar, in a form that shows each method's spread around it,
+  and it carries the real population's own colour and slug so it cannot read as a target or a
+  threshold.
 - **The reproducibility claim is bounded by the writer, not by this axis.** The JSON block, both CSVs
   and the PNGs are byte-reproducible across two writes and across competitor orderings. The SVG
   siblings are **not**, and no figure in this repository is: matplotlib stamps every SVG with a
   `dc:date` creation timestamp and salts per-save element ids. That is a property of the writer, and
   claiming SVG byte-stability anywhere would be claiming something no artifact here has.
-- **The rollback is one branch, not a redesign.** If the diverging ramp proves unreadable, the neutral
-  sequential ramp already required for the reference-absent case is the fallback.
+- **The rollback is one branch, not a redesign.** If the signed delta proves too dense to read at
+  fifty cells, the fallback is the diverging ramp this section replaced: `_typicality_limits` returns
+  the limits and the reference is already resolved from the block, so restoring it is a change of
+  ramp and limits, not of what the figure claims.
 
 ---
 
