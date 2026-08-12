@@ -22,6 +22,12 @@ process, which consumes the two tidy contracts this module writes:
 clash). The third file, ``{combo}_clash_explanations.csv``, is a side file carrying the
 judge's free text at the same key; nothing downstream reads it.
 
+The two row builders :func:`persona_rows` and :func:`combo_clash_rows` are public
+because they *define* the row grain of those two contracts. A consumer that has to
+rebuild the rows from the same verdict cache -- the ranking's round cap re-reduces a
+combination over its first N rounds -- calls them instead of growing a second copy of
+the row shape that would silently drift from the published files.
+
 Boundary (02-architecture guide sect. 2/9): this module owns output paths, the
 per-unit skip decision, and the cost aggregation; it must NOT know how the
 population/scheme were loaded, how the combos were selected, or anything about the
@@ -92,8 +98,10 @@ from population_synthetic.analysis.utils.realism_csv import (
 
 __all__ = [
     "ComboArtifacts",
+    "combo_clash_rows",
     "load_combo_realism",
     "load_realism_hard_rules",
+    "persona_rows",
     "write_combo_artifacts",
 ]
 
@@ -347,7 +355,7 @@ def _severity_counts(persona: PersonaVerdict) -> dict[str, int]:
     return counts
 
 
-def _persona_rows(
+def persona_rows(
     personas: dict[str, PersonaVerdict],
     loaded: dict[str, LoadedPersona],
     *,
@@ -396,7 +404,7 @@ def _persona_rows(
     return rows
 
 
-def _combo_clash_rows(
+def combo_clash_rows(
     present: list[LoadedPersona],
     *,
     combo_label: str,
@@ -594,7 +602,7 @@ def write_combo_artifacts(
         reduced_by_id = {
             pid: reduce_persona(lp.rounds, persona_id=pid) for pid, lp in loaded_by_id.items()
         }
-        return _persona_rows(
+        return persona_rows(
             reduced_by_id, loaded_by_id,
             combo_label=combo_label, country=country, model=model,
             strategy=strategy, is_real_reference=is_real_reference,
@@ -618,7 +626,7 @@ def write_combo_artifacts(
     paths.append(
         _emit_csv(
             out_dir / f"{combo_label}_clashes.csv",
-            build_rows=lambda: _combo_clash_rows(
+            build_rows=lambda: combo_clash_rows(
                 present, combo_label=combo_label, country=country, model=model,
                 strategy=strategy, is_real_reference=is_real_reference,
             ),
