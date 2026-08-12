@@ -76,26 +76,33 @@ distance. Three consequences:
 
 ## Success Criteria
 
-- [ ] Every consumable competitor, SCB included, carries a self-contained typicality statistic with
+- [x] Every consumable competitor, SCB included, carries a self-contained typicality statistic with
       point estimate, `ci_lo`/`ci_hi`/`ci_level`, `denominator` (= number of personas contributing a
       typicality) and `n_personas` (= the combination's full persona count), and the two are never
       conflated.
 - [ ] The heatmap's cell denominators equal the corresponding `axis_a` grid's *typicality* base for
       the same competitor, asserted cell by cell; the two bases differ from Axis A's denominator by
-      construction and each cell states which it uses.
-- [ ] The diverging ramp's midpoint equals the SCB value read from the same document, not a literal.
+      construction and each cell states which it uses. *(Left unticked deliberately: the two bases are
+      asserted to differ, and the typicality base is asserted to equal the one `factor_significance`
+      consumes, but on a fixture pair — not swept cell by cell across the grid.)*
+- [x] The diverging ramp's midpoint equals the SCB value read from the same document, not a literal.
       Removing SCB from the consumption set degrades to the neutral sequential ramp with a recorded
       reason, never a hard-coded midpoint.
-- [ ] A cell below `--typicality-min-n` renders as explicitly under-powered (distinct from both a
+- [x] A cell below `--typicality-min-n` renders as explicitly under-powered (distinct from both a
       value and an unjudged `None`) and is counted in the block's `excluded` map.
-- [ ] The new block is **reporting-only** in the tested sense: building the document with loose and
+- [x] The new block is **reporting-only** in the tested sense: building the document with loose and
       tight typicality bounds produces byte-identical `axis_a`, `axis_b`, `severity`,
-      `severity_drivers` and `factor_significance` blocks.
+      `severity_drivers` and `factor_significance` blocks. *(The mixed logit inside
+      `factor_significance` is excluded — its variational fit is not bit-reproducible between calls.)*
 - [ ] Running the ranking twice produces byte-identical JSON, CSVs and figures; competitor order does
-      not change any emitted byte.
-- [ ] The 11-bin histogram published per competitor sums to that competitor's typicality denominator,
+      not change any emitted byte. *(Left unticked: holds and is asserted both ways for the JSON, the
+      CSVs and the PNGs. The **SVG** siblings are not byte-reproducible and no figure in this
+      repository is — matplotlib stamps `dc:date` and salts per-save element ids. Documented in the
+      ADR and the operator guide rather than claimed.)*
+- [x] The 11-bin histogram published per competitor sums to that competitor's typicality denominator,
       asserted.
-- [ ] `ruff check src/` clean; `pytest` green.
+- [x] `ruff check src/` clean; `pytest` green (one pre-existing, unrelated failure in
+      `tests/test_axis_facet_defaults.py`).
 
 ## Definitions
 
@@ -502,6 +509,53 @@ left open:
 `tests/test_realism_ranking_builder.py`, `tests/test_realism_ranking_e2e.py`.
 **Dependencies:** Phase 2.
 
+### Phase 4: Documentation
+**Goal:** Every prose site that describes this task describes the third dimension, and the reusable
+idea is recorded where the next reader looks for a *why*.
+
+**Started:** 2026-08-12
+**Completed:** 2026-08-12
+
+- [x] The new **ADR**, `decisions/2026-08-12-self-contained-typicality-axis.md`, extending the
+      per-combination-split ADR rather than amending it: Decision 1 separates **computational**
+      self-containment (claimed, testable) from **directional** self-containment (refused — the
+      optimum is interior); Decision 2 puts the reference in the colormap and defines the two
+      degradations (no reference → neutral ramp with a printed reason; zero-width range → a stated
+      fallback half-width). Closes with the audited ten-site table.
+- [x] `persona-realism-judge.md`: the four new artifacts in the outputs table, a note under the axis
+      table naming the two reporting-only dimensions, and a `### The typicality axis (reporting only)`
+      section — the three reader prerequisites, the statistic and its orientation, the flag table, how
+      to read `boundary` / `no_typicality`, the round-level caveat with the `n_rounds` drift measured
+      on the current base, and the SVG-reproducibility line.
+- [x] `docs/architecture/commands.md`: the typicality paragraph in "Persona realism: two tasks, one
+      seam", the three flags in the runnable block, and their prose entry beside the driver bounds.
+- [x] `docs/architecture/sub-packages.md`: the `realism_ranking/` bullet gains the two reporting-only
+      dimensions, and `utils/` gains the `ordinal.py` entry (including its raise-not-sentinel
+      divergence from `stats_tests.py`).
+- [x] `CLAUDE.md`: the `realism_ranking` clause extended in register — self-contained statistic,
+      survivor denominator, `"direction": null`, render-time direction, and the explicit refusal to
+      replace `axis_b.dispersion_contrast`. The Documentation-table row for the operator guide now
+      names both reporting-only dimensions.
+- [x] `config/analysis/analysis_registry.yaml`: verified complete from Phase 3.4, not rewritten.
+
+**Deliberately not done.** The four **in-source** two-axis sites (`rank_persona_realism.py`'s header
+preamble, `builder.py`'s ASCII table, `builder.py`'s `axis_definitions` block, `charts.py`'s stale
+"Three figures:" lede) are left for a follow-up: a documentation phase that changes code destroys the
+review boundary. `axis_definitions` is the only machine-readable one and is the one that matters — a
+programmatic consumer still learns of two axes from a document carrying three top-level dimensions.
+
+**Two findings recorded rather than fixed.** (1) The `n_rounds` provenance drift is now *wider* than
+the plan measured on 2026-08-11: the stamped `provenance.n_rounds` reads **5** in 49 of the 51
+`swedish_02` combinations and **2** in the other two, while the cached rounds are 1 for 4351 personas
+and 2 for 200, against `judge.yaml`'s declared 3. Because the ranking's homogeneity gate reads
+`n_rounds` from that stamp, a whole-country run over the current base **raises** on the 5-vs-2
+mismatch. (2) SVG output is not byte-reproducible anywhere in this repository (matplotlib stamps
+`dc:date` and salts element ids), which bounds the reproducibility claim to JSON/CSV/PNG.
+
+**Files Modified:** `docs/development/decisions/2026-08-12-self-contained-typicality-axis.md` (new),
+`docs/development/persona-realism-judge.md`, `docs/architecture/commands.md`,
+`docs/architecture/sub-packages.md`, `CLAUDE.md`, this plan. **Dependencies:** Phase 3.
+
 ---
 
 ## Testing Plan
@@ -561,22 +615,33 @@ left open:
 
 ## Documentation Plan
 
-- [ ] `docs/development/persona-realism-judge.md` — a "typicality" section stating the three things a
+- [x] `docs/development/persona-realism-judge.md` — a "typicality" section stating the three things a
       reader needs before reading the figure: the denominator is the survivor subset, the direction is
       interior (not monotone), and the dispersion is a property of this judge under this prompt.
-- [ ] `docs/architecture/commands.md` — the new flags and outputs.
-- [ ] `config/analysis/analysis_registry.yaml` — enumerate the new published outputs in the
-      `realism_ranking` description.
-- [ ] `CLAUDE.md` — the `realism_ranking` paragraph gains the typicality axis, stating it is
+      Additionally carries the measured `Spearman(n, dispersion) = -0.576` confound, the flag table,
+      the boundary/`no_typicality` states, the round-level protocol with the `n_rounds` provenance
+      drift, and the SVG-reproducibility caveat.
+- [x] `docs/architecture/commands.md` — the new flags and outputs.
+- [x] `config/analysis/analysis_registry.yaml` — enumerate the new published outputs in the
+      `realism_ranking` description. *(Done in Phase 3.4; verified complete and accurate here — all
+      four artifacts, the three flags, the diverging ramp and its degradation, and the reporting-only
+      claim are present. Not rewritten.)*
+- [x] `CLAUDE.md` — the `realism_ranking` paragraph gains the typicality axis, stating it is
       reporting-only and does not replace Axis B.
-- [ ] **New ADR** — the computational-vs-directional self-containment distinction and the
+- [x] **New ADR** — the computational-vs-directional self-containment distinction and the
       diverging-ramp resolution. This is the reusable idea: a reference-free statistic with a
       reference-dependent *rendering*.
-- [ ] Record the ten places that assert the two-axis table so they are updated together, not
+      → [`decisions/2026-08-12-self-contained-typicality-axis.md`](../../decisions/2026-08-12-self-contained-typicality-axis.md)
+- [x] Record the ten places that assert the two-axis table so they are updated together, not
       piecemeal: the split ADR, `persona-realism-judge.md`, `analysis_registry.yaml`,
       `docs/architecture/sub-packages.md`, `docs/architecture/commands.md`, `CLAUDE.md`,
       `rank_persona_realism.py`'s header, `builder.py`'s ASCII table **and** its `axis_definitions`
       block (the only machine-readable one), and `charts.py`'s header.
+      *(Recorded as a table in the new ADR, with each site audited. The six prose/config sites are
+      updated; the four in-source ones — sites 7-10 — are deliberately **not**, so a documentation
+      commit does not touch code. `builder.py`'s `axis_definitions` is the only machine-readable one
+      and is the follow-up that matters: the emitted document still self-describes as two axes while
+      carrying a third top-level block.)*
 
 ---
 
@@ -614,6 +679,7 @@ left open:
 | Phase 1 — the statistic | ~1 session; 2 new files | Phase 0 |
 | Phase 2 — the block | ~1 session; 1 file | Phase 1 |
 | Phase 3 — figures + CLI | ~1 session; 3 files | Phase 2 |
+| Phase 4 — documentation + ADR | ~1 session; 5 files + 1 new ADR | Phase 3 |
 
 ---
 
@@ -621,6 +687,8 @@ left open:
 
 - ADR: `docs/development/decisions/2026-08-07-persona-realism-per-combination-split.md` (Axis A/B
   definitions, the four mode-collapse-inversion guards, the per-combination purity rule)
+- ADR (this plan's own): `docs/development/decisions/2026-08-12-self-contained-typicality-axis.md`
+  (computational vs directional self-containment; the reference in the colormap; the ten-site audit)
 - Completed plan: `docs/development/plans/completed/split-persona-realism-ranking.md`
 - Active plan (must land first): `docs/development/plans/active/severity-driver-attribution.md`
 - Sibling figure plan: `docs/development/plans/pending/model-method-tv-heatmap.md`

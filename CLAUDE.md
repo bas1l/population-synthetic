@@ -122,8 +122,17 @@ category pairs beneath them, over the heatmap's own denominator; counts are pers
 non-additive, S1 is never a defect), *and* one `severity_pair_summary_s{3,2,1}` figure per level
 ranking those pairs country-wide, computed from the **full** per-clash series rather than from the
 per-cell-truncated driver tables and drawing SCB as its own series over its own denominator rather
-than pooling it into the bars; it gates on completeness and on one judge model / prompt hash /
-`n_rounds` across the consumption set,
+than pooling it into the bars; beside those a second **reporting-only** dimension, the **typicality
+axis** — the same per-persona judge scores Axis B turns into a distance, read *self-contained*
+instead: one statistic per competitor computed from that competitor's own scores alone
+(`analysis/utils/ordinal.py`, default Berry-Mielke IOV, ordinal-valid, `--typicality-metric mean`
+the interval-assuming alternative whose caveat then travels as a column on every row), over the
+`can_exist`-survivor denominator that is never `n_personas` (both counts on every row), carrying
+`"direction": null` because the optimum is interior — direction enters only at render time via a
+diverging ramp centred on SCB's own value, degrading to the neutral ramp with a printed reason when
+SCB is absent — so it feeds no ranking, no contrast and no test and does **not** replace
+`axis_b.dispersion_contrast`, which remains the only *tested* SCB typicality contrast; it gates on
+completeness and on one judge model / prompt hash / `n_rounds` across the consumption set,
 and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
@@ -184,5 +193,5 @@ Design and audit notes worth consulting before non-trivial changes:
 | [SCB02 category-mapping rationale](docs/scb02_comparison_category_mapping_2026-05-11.md) | Category-mapping rationale. |
 | [ISTAT population data sources](docs/istat_population_data_sources.md) | Italy field-by-field API source matrix, protocol details, sampling chain, known limitations. |
 | [Code standards](docs/code-standards/README.md) · [Data-pipeline engineering](docs/data-pipeline-engineering/README.md) | Repository-agnostic engineering-standards wiki sets. |
-| [Persona realism judge](docs/development/persona-realism-judge.md) | Operator guide for the two-task persona-realism pipeline: the per-combination judge, the `realism_ranking` aggregator, the two axes and their opposite directions, and `--rewrite-artifacts` vs `--force`. |
+| [Persona realism judge](docs/development/persona-realism-judge.md) | Operator guide for the two-task persona-realism pipeline: the per-combination judge, the `realism_ranking` aggregator, the two axes and their opposite directions, the reporting-only severity and typicality dimensions, and `--rewrite-artifacts` vs `--force`. |
 | [Development notes](docs/development/) | In-progress development notes, plans, and `decisions/` (ADRs). |

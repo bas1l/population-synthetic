@@ -62,6 +62,13 @@ attributes), and a metric measuring distance *from* SCB cannot answer a question
 keeps SCB as the target because the observed LLM failure mode is **mode collapse**: matching the real
 spread is the goal, and a spread far below SCB's is as bad as one far above it.
 
+Two dimensions sit **beside** those axes rather than on them, and both are reporting-only: the
+**severity** blocks and the **typicality axis** (each competitor's own spread as one number, read
+without a reference). Neither feeds a ranking, a contrast or a test, and neither changes a number the
+axes publish — in particular the typicality axis does **not** replace Axis B, which remains the only
+tested SCB contrast on typicality. See [the severity dimension](#the-severity-dimension-reporting-only)
+and [the typicality axis](#the-typicality-axis-reporting-only) below.
+
 ## How to run it
 
 Two-stage — the judge reads the **mapped** populations, so map first:
@@ -160,6 +167,10 @@ Outputs per country under `03_Analysis/realism_ranking/<country>/`:
 | `severity_drivers.csv` | **what** clashed in each cell: the attribute pairs ranked by how many of that cell's personas exhibit them, all three levels in one table with `severity` as a column — see below |
 | `severity_driver_values.csv` | the same one grain finer: the category pairs (e.g. `Student × Permanent Full-time`) under each ranked attribute pair, likewise one table for all three levels |
 | `severity_pair_summary_s3/s2/s1.png/.svg` | the country-wide complement of the heatmap, one per level: which attribute pairs clashed, ranked descending, with the real population as its own series — see below |
+| `typicality_summary.csv` | one row per competitor: the **self-contained** typicality statistic (a function of that competitor's own judge scores alone), its bootstrap CI, **both** persona counts under distinct names, the `under_powered`/`boundary` flags, and the secondary `P(typicality ≤ k0)` column with a Wilson interval — see below |
+| `typicality_histogram.csv` | the same statistic's published object: one row per `(competitor, level)` over the full 0–10 scale, so the levels nobody scored are explicit zeros |
+| `typicality_heatmap.png/.svg` | that statistic as a model × method grid on a **diverging** ramp whose midpoint is the real population's own value. Four distinct fills: a value, an under-powered value (hatched), a judged competitor with no typicality-bearing persona (white, cross-hatched), an unjudged pair (grey) |
+| `typicality_by_method.png/.svg` | the same statistic with methods on x in complexity order, one mark per model, and the real population as a horizontal reference line — the only figure in this task that draws it as a reference rather than a series |
 
 ### The severity dimension (reporting only)
 
@@ -258,6 +269,96 @@ rank at zero synthetic personas and so almost never make the cut). A level with 
 renders an explaining figure rather than empty axes — on the current Swedish data the real
 population raises no S3 clash whatsoever, which the S3 figure states as a column of `0.0000 n=0`
 rather than as an absent series.
+
+### The typicality axis (reporting only)
+
+**Decision record:** [`decisions/2026-08-12-self-contained-typicality-axis.md`](decisions/2026-08-12-self-contained-typicality-axis.md).
+
+Typicality is the richest signal the judge produces, and until now the ranking published it only as a
+*distance*: `axis_b.dispersion_contrast` is `abs(measure - real_measure)`, whose absolute value is
+deliberate but discards the **sign**, so a mode-collapsed competitor and an over-dispersed one look
+the same in it. This axis publishes each competitor's own spread as one number, computed from that
+competitor's judge scores alone. It feeds no ranking, no contrast and no significance test, changes no
+number already published, and **does not replace Axis B** — that remains the tested SCB contrast.
+
+**Three things to know before reading the figure.** Each is a way to misread it, not a footnote.
+
+- **The denominator is the survivor subset, never `n_personas`.** A cell is computed over the personas
+  that carry a typicality — a `can_exist` majority *and* a non-null mean — so a competitor with a high
+  impossibility rate is measured over fewer, and differently selected, personas than Axis A ranks. Both
+  counts sit on every row under distinct names (`denominator`, `n_personas`) and `n` is printed in every
+  heatmap cell. The confound is measured: on `swedish_02`, `Spearman(n, dispersion) = -0.576`, so a
+  dispersion cell **partly re-renders the impossibility rate**. The three "most diverse" cells are the
+  n=9, n=21 and n=10 cells. `--typicality-min-n` is a floor, not a fix; read every cell against its own
+  denominator.
+- **The direction is interior, not monotone — this is not a score.** The block carries
+  `"direction": null` as a *data field*, with the reason beside it, because there is no better end. A
+  competitor scoring uniformly at the modal level has collapsed onto the modal Swede; a low-scoring one
+  may be reaching the real population's tail or may simply be incoherent. Nor is SCB the ceiling: 16 of
+  50 synthetic competitors on `swedish_02` are **more** dispersed than it. Direction is supplied at
+  render time by the diverging ramp centred on SCB's own value, and by nothing else.
+- **The dispersion is a property of *this judge under this prompt*, not of the population alone.**
+  `judge_prompt.md` emits `"reasoning"` **before** `"typicality"`, and chain-of-thought-before-score is
+  documented to compress the judgment distribution (Wang, Zhang & Choi, EMNLP Findings 2025,
+  [arXiv:2503.03064](https://arxiv.org/abs/2503.03064)) — the prompt format shrinks the very spread
+  being measured. Only 4 of the 11 levels carry verbal anchors (9–10, 5, 1, 0), which invites
+  round-number clustering (Stureborg et al., [arXiv:2405.01724](https://arxiv.org/abs/2405.01724)).
+  Neither is fixable without moving `prompt_template_sha256` and forcing a full re-judge, so both are
+  held constant across every judged combination and recorded here instead. Compare cells against each
+  other; do not read an absolute dispersion as the population's.
+
+**The statistic.** Default `iov` — Berry-Mielke's index of ordinal variation, in the **dispersion**
+orientation: `0` = all mass on one level (total collapse), `1` = 50/50 at the two extremes, higher =
+more dispersed. It reads only the interior CDF, so it is invariant to any strictly increasing
+relabelling of the 11 levels, and it is the one candidate that separates a `{0,10}` split (1.000) from
+a `{9,10}` split (0.100) — the mode-collapse distinction the axis exists to draw, on which entropy and
+Simpson are identical. Because published implementations of this family point in opposite directions,
+the orientation travels **in the output**: `statistic_label` states the endpoints on the block and on
+every row.
+
+`--typicality-metric mean` selects the mean level instead. It measures **location**, not dispersion,
+and assumes the 0–10 levels are equally spaced — an interval claim about an ordinal scale. Selecting
+it fills `statistic_caveat` on every emitted row; it is not a drop-in for the default.
+
+| Flag | Meaning |
+|------|---------|
+| `--typicality-metric` | `iov` (default) or `mean`/`mean_level`. |
+| `--typicality-min-n` | Typicality-bearing personas a cell needs to be read as powered. Default 30 (excludes 5 of the 50 `swedish_02` cells). Below it the cell is flagged `under_powered`, hatched on the heatmap, drawn hollow on the method figure, and counted in the block's `excluded` map — **never dropped**, and never confused with an unjudged pair. |
+| `--typicality-tail-threshold` | `k0` of the secondary `P(typicality ≤ k0)` column, Wilson interval. Default 5 — deliberately not the per-combination chart's `reliability.tail_threshold` of 3.0, at which a sixth of the cells sit at exactly 0.000. |
+
+**Reading a cell that looks degenerate.** A competitor whose personas all sit on one level gets a
+percentile bootstrap interval of exactly `[0, 0]`, published with `boundary: true`. That is honest
+computationally and has zero coverage whenever true dispersion is above zero — at a boundary the
+bootstrap is *inconsistent*, not merely inaccurate (Andrews 2000). It is flagged rather than patched:
+a smoothed interval would be invisibly wrong instead of visibly degenerate. A competitor with **no**
+typicality-bearing persona is `null` with `status: no_typicality`, never `0.0`, which is a real
+measurement.
+
+The statistic is never folded with the impossibility rate into a composite realism score — different
+denominators, different directions — and `non_composite` says so as a field.
+
+> **Round-level caveat, and an `n_rounds` provenance drift worth knowing before you trust the number.**
+> The statistic is computed over **per-persona mean** typicalities, rounded back to integer levels
+> (`n_non_integer_means` counts the personas that rounding moved). At one successful round per persona
+> every mean is already an integer and the rounding is a no-op — which is the state the current
+> `swedish_02` base is essentially in, and it is why nothing here reports round-to-round reliability.
+> The three `n_rounds` numbers on that base do **not** agree, and only one of them is evidence:
+> `judge.yaml` declares `n_rounds: 3`; the *stamped* `provenance.n_rounds` reads **5** in 49 of the 51
+> combinations and **2** in the other two; the cached rounds themselves are **1** for 4351 personas and
+> **2** for 200. The stamp is written from config at artifact-rewrite time and is not a record of what
+> was judged. Two consequences: no reliability figure (ICC / Krippendorff's α) can be read off this
+> base, and because the ranking's homogeneity gate reads `n_rounds` from that same stamped provenance,
+> a whole-country run over this base **raises** on the 5-vs-2 mismatch until it is reconciled. When a
+> base is genuinely re-judged at N ≥ 2, the protocol is to compute the statistic **once per round**
+> (each round is a complete, genuinely integer, n-persona ordinal sample), report the across-round mean
+> and keep the round-to-round spread as a separate uncertainty component — pooling raw round integers
+> inflates dispersion by 3–10% and the inflation does not shrink as N grows.
+
+> **Reproducibility, stated honestly.** The JSON block, both CSVs and the **PNG** figures are
+> byte-reproducible: two runs, and two different competitor orderings, emit identical bytes. The
+> **SVG** siblings are not, and no figure in this repository is — matplotlib stamps every SVG with a
+> `dc:date` creation timestamp and salts per-save element ids. That is a property of the writer, not of
+> this axis.
 
 Two gates run before any statistic, because both failure modes produce plausible-looking wrong
 numbers:
