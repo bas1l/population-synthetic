@@ -224,12 +224,12 @@ _combo_clash_rows  -> combo_clash_rows
 
 **Goal:** the flag exists, validates, and the published ranking states the consumed round count.
 
-- [ ] 2.1 — `--rounds` in `_parse_args` (`rank_persona_realism.py:185-273`), `type=int,
+- [x] 2.1 — `--rounds` in `_parse_args` (`rank_persona_realism.py:185-273`), `type=int,
       default=None`, mirroring `analyze_persona_realism.py:166`; reject `< 1` with the same wording.
-- [ ] 2.2 — Thread it into the `load_competitors` call (`rank_persona_realism.py:421-429`) together
+- [x] 2.2 — Thread it into the `load_competitors` call (`rank_persona_realism.py:421-429`) together
       with the already-loaded `cfg` (`:399`).
-- [ ] 2.3 — Document the flag in the module docstring flag list (`:102-124`).
-- [ ] 2.4 — Add `"n_rounds_source": provenance.get("n_rounds_source")` to the builder's provenance
+- [x] 2.3 — Document the flag in the module docstring flag list (`:102-124`).
+- [x] 2.4 — Add `"n_rounds_source": provenance.get("n_rounds_source")` to the builder's provenance
       block (`builder.py:1856-1865`). `n_rounds` itself needs no change — it already reads from
       `records[0].provenance`, which Phase 1 restamped.
 

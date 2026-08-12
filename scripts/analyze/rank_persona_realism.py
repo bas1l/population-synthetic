@@ -89,7 +89,9 @@ Two gates run before any statistic (both failure modes produce plausible-looking
 numbers, so neither is a warning): a combination is consumed only if its report, its
 per-persona CSV, and the CSV's row count all agree; and every consumed combination must
 share one judge_model / prompt_template_sha256 / n_rounds, else the run raises naming
-the offending combination.
+the offending combination. Under --rounds the round count becomes a capacity requirement
+instead: the judge model and the prompt hash must still match exactly, and every persona
+must hold at least the capped number of cached rounds.
 
 Usage:
     python scripts/analyze/rank_persona_realism.py
@@ -110,6 +112,11 @@ Usage:
 --force         Recompute a country even if its realism_ranking.json already exists
                 (default: skip that country if present).
 --min-combos    Minimum consumable competitors a country needs to be ranked. Default: 2.
+--rounds        Judge rounds consumed per persona. Must be >= 1. Blank consumes the published
+                artifacts; a set differing only on its round count is then re-consumed at the
+                shallowest cached depth. When set, every competitor is re-reduced from its
+                verdict cache over its first N rounds and a persona holding fewer than N fails
+                the run. Nothing is re-judged -- zero LLM calls either way.
 --driver-top-n  Severity drivers published per cell per level. Default: 5.
 --driver-min-count  Personas a driver needs before it is ranked rather than suppressed-and-
                 counted. Default: 3.
@@ -227,6 +234,14 @@ def _parse_args() -> argparse.Namespace:
         "--min-combos", type=int, default=2, dest="min_combos",
         help="Minimum consumable competitors a country needs to be ranked. Default: 2 "
         "(a one-point ranking is not a ranking).",
+    )
+    parser.add_argument(
+        "--rounds", type=int, default=None, dest="rounds",
+        help="Judge rounds consumed per persona (blank = the published artifacts, or the "
+        "shallowest cached depth when the set agrees on everything but its round count). "
+        "Must be >= 1. When set, every competitor is re-reduced from its verdict cache "
+        "over its first N rounds and a persona holding fewer than N fails the run; "
+        "nothing is re-judged and no LLM call is made.",
     )
     parser.add_argument(
         "--driver-top-n", type=int, default=5, dest="driver_top_n",
@@ -393,6 +408,8 @@ def main() -> None:
             _validate_filter_ids(model_filter, all_model_ids, "model")
         if strategy_filter:
             _validate_filter_ids(strategy_filter, all_strategy_ids, "strategy")
+        if args.rounds is not None and args.rounds < 1:
+            raise ValueError(f"--rounds must be >= 1, got {args.rounds}")
         # The judge config supplies the bootstrap block and the Levene centring, so the
         # intervals here are seeded exactly as the per-combination ones were. Both are
         # read fail-fast: no in-code default may silently disagree with judge.yaml.
@@ -423,6 +440,10 @@ def main() -> None:
             output_base,
             countries=country_filter, models=model_filter,
             strategies=strategy_filter, slugs=slug_filter, strict=args.strict,
+            # `cfg` travels unconditionally, not only under --rounds: without it the
+            # loader cannot re-derive a set that differs on its round count alone, so a
+            # blank --rounds would report the heterogeneity instead of recovering from it.
+            rounds_cap=args.rounds, judge_cfg=cfg,
         )
     except (FileNotFoundError, RuntimeError, ValueError, KeyError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
