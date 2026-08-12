@@ -7,25 +7,45 @@ by more than one judge -- so most of these tests are about what it *rejects*.
 Fixtures fabricate a minimal output base on ``tmp_path``: the capped mapped index the
 discovery walk reads, plus per-combination judge artifacts under the registry-resolved
 ``persona_realism`` folder. No LLM, no real output base.
+
+Two fixture families, because the loader has two source contracts. The hand-written one
+(:func:`_write_combo`) fabricates the published artifacts directly and writes **no**
+verdict cache, which is what makes it a proof for the default path: a test using it that
+passes could not have taken the round-cap path, since that path reads caches and would
+raise on their absence. The cache-backed one (:func:`_write_cached_combo`) writes real
+verdict caches and then derives the published artifacts from them through the producer's
+own ``write_combo_artifacts``, so the capped re-reduction can be compared against
+artifacts it did not itself produce.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import logging
 
+import matplotlib
 import pytest
 
-from population_synthetic.analysis.realism_ranking.loader import load_competitors
-from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR
-from population_synthetic.analysis.utils.realism_clash_csv import (
+matplotlib.use("Agg")
+
+from population_synthetic._paths import PROJECT_ROOT  # noqa: E402
+from population_synthetic.analysis.generation_metadata.pricing import PricingTable  # noqa: E402
+from population_synthetic.analysis.persona_realism.artifacts import (  # noqa: E402
+    write_combo_artifacts,
+)
+from population_synthetic.analysis.persona_realism.config import JudgeConfig  # noqa: E402
+from population_synthetic.analysis.realism_ranking.loader import load_competitors  # noqa: E402
+from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
+from population_synthetic.analysis.utils.realism_clash_csv import (  # noqa: E402
     RealismClashRow,
     write_realism_clashes_csv,
 )
-from population_synthetic.analysis.utils.realism_csv import (
+from population_synthetic.analysis.utils.realism_csv import (  # noqa: E402
     RealismPersonaRow,
     write_realism_personas_csv,
 )
-from population_synthetic.analysis.utils.registry import analysis_output_dir
+from population_synthetic.analysis.utils.registry import analysis_output_dir  # noqa: E402
 
 _COUNTRY = "swedish"
 _AXIS_IDS = (
@@ -280,3 +300,265 @@ def test_homogeneous_set_passes_the_guard(tmp_path):
     _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag")
     records, _ = load_competitors(base, axis_ids=_AXIS_IDS)
     assert len(records) == 2
+
+
+# --------------------------------------------------------------------------- #
+# the round cap: cache-backed fixtures                                         #
+# --------------------------------------------------------------------------- #
+
+_CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
+
+#: A rate-less pricing table. These fixtures write verdict caches directly and lay no
+#: judge-call telemetry beside them, so the cost chain returns before any rate lookup;
+#: an empty table therefore states the truth (nothing was spent) instead of pricing
+#: calls that were never made.
+_PRICING = PricingTable(
+    rates={}, observed_date="2026-08-12", source="loader-test", currency="USD",
+)
+
+#: The one attribute pair every fixture clash names, and the persona values it joins
+#: against -- kept together because a per-clash row carries both, and a pair the persona
+#: does not hold would be written ``unresolved`` and stop testing what it looks like.
+_CLASH_PAIR = ("age_group", "education_level")
+_ATTRIBUTES = {"age_group": "16-19", "education_level": "Doctorate"}
+
+
+def _judge_cfg(**overrides) -> JudgeConfig:
+    """The real judge config with a small seeded bootstrap (fast and deterministic).
+
+    Loaded from ``config/`` rather than fabricated: the bootstrap seed and the
+    reliability parameters are exactly what the cap path recomputes a competitor under,
+    so a test config would prove parity against something the pipeline never uses.
+    """
+    return dataclasses.replace(
+        JudgeConfig.load(_CONFIG_DIR),
+        bootstrap={"iterations": 200, "seed": 20260812, "ci_level": 0.95},
+        **overrides,
+    )
+
+
+def _cached_round(*, can_exist: bool, typicality: int | None, severity: str) -> dict:
+    """One cached round, in the shape ``judge.parse_round_verdict`` re-validates."""
+    return {
+        "can_exist": can_exist,
+        "typicality": typicality,
+        "issues": [
+            {"attributes": list(_CLASH_PAIR), "severity": severity,
+             "explanation": "fixture clash"}
+        ],
+        "reasoning": "",
+    }
+
+
+def _write_cached_combo(
+    base, slug, *, depth, model="claude_haiku", strategy="all_pick", is_real=False,
+    cfg=None, n_impossible=1, n_possible=3,
+):
+    """Write one combination's verdict cache at *depth* rounds, then its artifacts.
+
+    The published files come from the producer's own ``write_combo_artifacts`` rather
+    than being fabricated, so a record re-reduced at the full cached depth is compared
+    against artifacts computed independently of the cap path.
+
+    Typicality rises with the round index, so trimming the cache genuinely moves the
+    numbers below it -- a fixture whose rounds were identical would let a cap that
+    silently kept every round pass by coincidence.
+    """
+    cfg = cfg or _judge_cfg(n_rounds=depth)
+    combo_dir = analysis_output_dir("persona_realism", base) / _COUNTRY / slug
+    combo_dir.mkdir(parents=True, exist_ok=True)
+    persona_ids = []
+    for index in range(n_impossible + n_possible):
+        persona_id = f"persona_{index:05d}"
+        persona_ids.append(persona_id)
+        impossible = index < n_impossible
+        rounds = [
+            _cached_round(
+                can_exist=not impossible,
+                typicality=None if impossible else min(10, 2 + index + r),
+                severity="S3" if impossible else "S1",
+            )
+            for r in range(depth)
+        ]
+        (combo_dir / f"{persona_id}.json").write_text(
+            json.dumps({
+                "persona_id": persona_id, "attributes": dict(_ATTRIBUTES),
+                "rounds": rounds, "failed_rounds": 0,
+            }),
+            encoding="utf-8",
+        )
+    write_combo_artifacts(
+        combo_dir, slug, cfg=cfg, dpi=60, force=True,
+        country=_COUNTRY, model=model, strategy=strategy, is_real_reference=is_real,
+        expected_ids=persona_ids, hard_rules=(), pricing=_PRICING,
+    )
+    return combo_dir
+
+
+# --------------------------------------------------------------------------- #
+# the round cap: the default path is untouched                                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_rounds_cap_none_yields_exactly_the_published_records(tmp_path):
+    """Passing the cap arguments explicitly as ``None`` changes nothing.
+
+    The hand-written fixture lays down no verdict cache at all, so a run that reached
+    the cap path would raise rather than compare equal -- which is what makes this a
+    guard on the *path taken* and not merely on the values returned.
+    """
+    base = _base(tmp_path, [_SLUG_A, _SLUG_B])
+    _write_combo(base, _SLUG_A)
+    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag")
+
+    baseline, baseline_skipped = load_competitors(base, axis_ids=_AXIS_IDS)
+    explicit, explicit_skipped = load_competitors(
+        base, axis_ids=_AXIS_IDS, rounds_cap=None, judge_cfg=_judge_cfg(),
+    )
+
+    assert explicit == baseline
+    assert explicit_skipped == baseline_skipped
+
+
+def test_a_homogeneous_set_never_enters_the_cap_path(tmp_path):
+    """Auto-derivation is a recovery step, so an agreeing set must not trigger it."""
+    base = _base(tmp_path, [_SLUG_A, _SLUG_B])
+    _write_combo(base, _SLUG_A)
+    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag")
+
+    records, _ = load_competitors(base, axis_ids=_AXIS_IDS, judge_cfg=_judge_cfg())
+
+    assert [record.provenance["n_rounds_source"] for record in records] == ["report", "report"]
+    # The published artifacts really were the source: there is nothing else to read.
+    judge_root = analysis_output_dir("persona_realism", base)
+    assert not list(judge_root.rglob("persona_[0-9]*.json"))
+
+
+# --------------------------------------------------------------------------- #
+# the round cap: an explicit --rounds                                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_a_round_heterogeneous_set_loads_under_a_cap_and_raises_without_one(tmp_path):
+    base = _base(tmp_path, [_SLUG_A, _SLUG_B])
+    _write_cached_combo(base, _SLUG_A, depth=5)
+    _write_cached_combo(base, _SLUG_B, depth=2, model="claude_sonnet", strategy="all_pick_dag")
+
+    records, _ = load_competitors(base, axis_ids=_AXIS_IDS, rounds_cap=2, judge_cfg=_judge_cfg())
+    assert {record.slug for record in records} == {_SLUG_A, _SLUG_B}
+
+    # Without a cap -- and without the config the auto path would need -- the set is
+    # exactly the heterogeneity the gate has always refused.
+    with pytest.raises(ValueError, match="Heterogeneous judge"):
+        load_competitors(base, axis_ids=_AXIS_IDS)
+
+
+@pytest.mark.parametrize("key", ["judge_model", "prompt_template_sha256"])
+def test_a_differing_judge_or_prompt_still_raises_with_a_cap_active(tmp_path, key):
+    """The cap relaxes the round count and nothing else: no cap repairs a new judge."""
+    base = _base(tmp_path, [_SLUG_A, _SLUG_B])
+    _write_cached_combo(base, _SLUG_A, depth=3)
+    if key == "judge_model":
+        odd = _judge_cfg(n_rounds=3, judge_model="claude-haiku-4-5")
+    else:
+        template = tmp_path / "other_prompt.md"
+        template.write_text("a different prompt template", encoding="utf-8")
+        odd = _judge_cfg(n_rounds=3, prompt_template=template)
+    _write_cached_combo(base, _SLUG_B, depth=3, model="claude_sonnet",
+                        strategy="all_pick_dag", cfg=odd)
+
+    with pytest.raises(ValueError, match=key):
+        load_competitors(base, axis_ids=_AXIS_IDS, rounds_cap=2, judge_cfg=_judge_cfg())
+
+
+def test_a_cap_deeper_than_the_cache_raises_naming_the_shortfall(tmp_path):
+    """A shortfall is a hard failure, never a competitor quietly ranked short."""
+    base = _base(tmp_path, [_SLUG_A])
+    _write_cached_combo(base, _SLUG_A, depth=2)
+
+    with pytest.raises(ValueError) as excinfo:
+        load_competitors(base, axis_ids=_AXIS_IDS, rounds_cap=3, judge_cfg=_judge_cfg())
+
+    message = str(excinfo.value)
+    assert _SLUG_A in message
+    assert "persona_00000" in message
+    assert "at 3 round(s)" in message
+    assert "only 2 cached" in message
+
+
+def test_a_capped_record_stamps_the_consumed_count_and_its_source(tmp_path):
+    base = _base(tmp_path, [_SLUG_A])
+    _write_cached_combo(base, _SLUG_A, depth=5)
+
+    (record,), _ = load_competitors(
+        base, axis_ids=_AXIS_IDS, rounds_cap=2, judge_cfg=_judge_cfg(),
+    )
+    assert record.provenance["n_rounds"] == 2
+    assert record.provenance["n_rounds_source"] == "cap"
+
+
+def test_a_cap_at_the_full_cached_depth_reproduces_the_published_record(tmp_path):
+    """The cap is a no-op at full depth -- the strongest check on the re-reduction.
+
+    The published blocks were computed by ``persona_realism`` from the same cache and
+    read back off disk; the capped ones are recomputed here. Their agreeing is what
+    says the cap path measures the same thing the artifacts do, only over fewer rounds.
+    """
+    base = _base(tmp_path, [_SLUG_A])
+    _write_cached_combo(base, _SLUG_A, depth=5)
+
+    (published,), _ = load_competitors(base, axis_ids=_AXIS_IDS)
+    (capped,), _ = load_competitors(
+        base, axis_ids=_AXIS_IDS, rounds_cap=5, judge_cfg=_judge_cfg(),
+    )
+
+    assert capped.impossibility == published.impossibility
+    assert capped.dispersion == published.dispersion
+    assert capped.personas == published.personas
+    assert capped.clashes == published.clashes
+    assert (capped.n_personas, capped.n_failed) == (published.n_personas, published.n_failed)
+
+
+def test_capped_clash_rows_hold_no_round_beyond_the_cap(tmp_path):
+    base = _base(tmp_path, [_SLUG_A])
+    _write_cached_combo(base, _SLUG_A, depth=5)
+
+    (published,), _ = load_competitors(base, axis_ids=_AXIS_IDS)
+    assert max(row.round_index for row in published.clashes) == 4
+
+    (capped,), _ = load_competitors(
+        base, axis_ids=_AXIS_IDS, rounds_cap=2, judge_cfg=_judge_cfg(),
+    )
+    assert capped.clashes
+    assert all(row.round_index < 2 for row in capped.clashes)
+
+
+# --------------------------------------------------------------------------- #
+# the round cap: auto-derivation when --rounds is blank                        #
+# --------------------------------------------------------------------------- #
+
+
+def test_auto_derivation_ranks_at_the_shallowest_cached_depth(tmp_path, caplog):
+    base = _base(tmp_path, [_SLUG_A, _SLUG_B])
+    _write_cached_combo(base, _SLUG_A, depth=5)
+    _write_cached_combo(base, _SLUG_B, depth=2, model="claude_sonnet", strategy="all_pick_dag")
+
+    with caplog.at_level(logging.WARNING):
+        records, _ = load_competitors(base, axis_ids=_AXIS_IDS, judge_cfg=_judge_cfg())
+
+    assert {record.provenance["n_rounds"] for record in records} == {2}
+    assert {record.provenance["n_rounds_source"] for record in records} == {"auto"}
+    assert "shallowest cached depth of 2" in caplog.text
+    assert _SLUG_A in caplog.text          # the trimmed combination is named
+    assert _SLUG_B not in caplog.text      # the shallowest one was not trimmed
+
+
+def test_auto_derivation_does_not_mask_a_differing_judge_model(tmp_path):
+    """Differing on the judge *and* the round count is terminal, not recoverable."""
+    base = _base(tmp_path, [_SLUG_A, _SLUG_B])
+    _write_cached_combo(base, _SLUG_A, depth=5)
+    _write_cached_combo(base, _SLUG_B, depth=2, model="claude_sonnet", strategy="all_pick_dag",
+                        cfg=_judge_cfg(n_rounds=2, judge_model="claude-haiku-4-5"))
+
+    with pytest.raises(ValueError, match="judge_model"):
+        load_competitors(base, axis_ids=_AXIS_IDS, judge_cfg=_judge_cfg())

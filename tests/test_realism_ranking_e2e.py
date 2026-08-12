@@ -17,6 +17,7 @@ The properties under test are the ones the split exists to guarantee:
 from __future__ import annotations
 
 import csv
+import dataclasses
 import json
 import subprocess
 import sys
@@ -79,8 +80,6 @@ _AXIS_IDS = ([_COUNTRY], ["all_pick", "all_pick_dag"], ["claude_haiku", "claude_
 
 
 def _cfg() -> JudgeConfig:
-    import dataclasses
-
     return dataclasses.replace(
         JudgeConfig.load(_CONFIG_DIR),
         n_rounds=2, workers=2,
@@ -107,9 +106,14 @@ def _population(attrs: list[str], *, n_impossible: int, n_possible: int, offset:
     return people
 
 
-def _judge(base, label, *, model, strategy, n_impossible, is_real=False, offset=0):
-    """Run the judge for one combination, exactly as the driver script does."""
-    cfg = _cfg()
+def _judge(base, label, *, model, strategy, n_impossible, is_real=False, offset=0, n_rounds=None):
+    """Run the judge for one combination, exactly as the driver script does.
+
+    *n_rounds* overrides the fixture's round count. Re-judging an already-judged label
+    at a deeper count **tops up** its cache (the runner appends the missing rounds) and
+    rewrites its artifacts, which is how a mid-top-up sweep is reproduced here.
+    """
+    cfg = _cfg() if n_rounds is None else dataclasses.replace(_cfg(), n_rounds=n_rounds)
     attrs = scheme_attributes(_COUNTRY)
     out_dir = analysis_output_dir("persona_realism", base) / _COUNTRY / label
     population = _population(attrs, n_impossible=n_impossible, n_possible=5, offset=offset)
@@ -364,6 +368,54 @@ def test_the_driver_script_emits_the_pair_summaries_and_honours_no_charts(judged
         assert (out_dir / f"{name}.svg").is_file(), name
     # Beside the heatmaps they complement, in the registry-resolved folder.
     assert all((out_dir / f"severity_heatmap_s{n}.png").is_file() for n in (1, 2, 3))
+
+
+#: The depth one combination is topped up to, above the fixture's two rounds.
+_DEEP_ROUNDS = 5
+#: The tables the driver writes for every ranked country, charts or no charts.
+_RANKING_TABLES = (
+    "realism_summary.csv", "scb_contrast.csv",
+    "typicality_summary.csv", "typicality_histogram.csv",
+)
+
+
+@pytest.fixture
+def mixed_depth_base(judged_base):
+    """The judged base with one combination topped up to a deeper round count.
+
+    The state a sweep is in while a deeper ``--rounds`` is being applied combination by
+    combination: the consumption set then disagrees on ``n_rounds`` alone, which is the
+    heterogeneity the round cap exists to rank through.
+    """
+    slug, model, strategy, n_impossible = _COMBOS[0]
+    _judge(judged_base, slug, model=model, strategy=strategy,
+           n_impossible=n_impossible, n_rounds=_DEEP_ROUNDS)
+    return judged_base
+
+
+def test_the_driver_script_ranks_a_mixed_depth_set_under_the_round_cap(mixed_depth_base):
+    """The whole point of the flag, through the real CLI: rank everyone at N rounds."""
+    out_dir = _run_ranking_script(mixed_depth_base, "--rounds", "2", "--no-charts")
+
+    ranking = json.loads((out_dir / "realism_ranking.json").read_text(encoding="utf-8"))
+    provenance = ranking["provenance"]
+    assert provenance["n_rounds"] == 2
+    assert provenance["n_rounds_source"] == "cap"
+    # Every competitor is still consumed -- the deeper one is trimmed, not dropped.
+    assert len(provenance["consumed_artifacts"]) == 4
+    for name in _RANKING_TABLES:
+        assert (out_dir / name).is_file(), name
+
+
+def test_the_driver_script_rejects_a_non_positive_round_cap(judged_base):
+    """``--rounds 0`` is rejected at the edge, before anything is read or written."""
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--country", _COUNTRY,
+         "--output-base", str(judged_base), "--force", "--rounds", "0"],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+    )
+    assert result.returncode != 0
+    assert "--rounds must be >= 1" in result.stdout + result.stderr
 
 
 _TYPICALITY_CSVS = ("typicality_summary.csv", "typicality_histogram.csv")

@@ -57,22 +57,22 @@ competitor to it.
 
 ## Success Criteria
 
-- [ ] `python scripts/analyze/rank_persona_realism.py --rounds 2` completes on a set holding a
+- [x] `python scripts/analyze/rank_persona_realism.py --rounds 2` completes on a set holding a
       2-round and a 5-round combination that previously raised the heterogeneity error.
-- [ ] With no `--rounds`, byte-identical output to the current implementation on a homogeneous set
+- [x] With no `--rounds`, byte-identical output to the current implementation on a homogeneous set
       (regression-checked by the existing e2e reproducibility test).
-- [ ] With no `--rounds` on a set differing only on `n_rounds`, the run succeeds at the minimum
+- [x] With no `--rounds` on a set differing only on `n_rounds`, the run succeeds at the minimum
       cached depth, logs a warning naming the derived N and the combinations that were trimmed, and
       stamps `provenance.n_rounds_source == "auto"`.
-- [ ] With no `--rounds` on a set differing on `judge_model` or `prompt_template_sha256`, the run
+- [x] With no `--rounds` on a set differing on `judge_model` or `prompt_template_sha256`, the run
       still raises the existing heterogeneity error.
-- [ ] A capped run whose set contains a combination with a persona holding < N successful rounds
+- [x] A capped run whose set contains a combination with a persona holding < N successful rounds
       fails loudly, naming the combination and the shortfall — it does not rank it short.
-- [ ] `ranking.json` `provenance.n_rounds` equals the consumed count (N when capped), and
+- [x] `ranking.json` `provenance.n_rounds` equals the consumed count (N when capped), and
       `provenance.n_rounds_source` distinguishes `"report"` from `"cap"`.
-- [ ] Setting `rounds` in the GUI's `realism_ranking` task options emits `--rounds <value>` and a
+- [x] Setting `rounds` in the GUI's `realism_ranking` task options emits `--rounds <value>` and a
       blank value emits nothing.
-- [ ] `ruff check src/` clean; `pytest` green.
+- [x] `ruff check src/` clean; `pytest` green.
 
 ## Definitions
 
@@ -243,18 +243,19 @@ _combo_clash_rows  -> combo_clash_rows
 
 **Goal:** N is settable from the GUI task options and the behaviour is covered.
 
-- [ ] 3.1 — Add `rounds:` (blank, with a comment) to the `realism_ranking` node's `options:` block
+- [x] 3.1 — Add `rounds:` (blank, with a comment) to the `realism_ranking` node's `options:` block
       in `config/gui/flows/analysis_workflow.yaml:169-173`. Purely a YAML change —
       `gui/commands.py:41` translates keys generically and blank values are omitted.
-- [ ] 3.2 — Loader tests (below).
-- [ ] 3.3 — One e2e CLI test through `_run_ranking_script` (`test_realism_ranking_e2e.py:338`).
-- [ ] 3.4 — Docs: the `--rounds` row in the command catalog, a paragraph in the persona-realism
+- [x] 3.2 — Loader tests (below).
+- [x] 3.3 — One e2e CLI test through `_run_ranking_script` (`test_realism_ranking_e2e.py:338`).
+- [x] 3.4 — Docs: the `--rounds` row in the command catalog, a paragraph in the persona-realism
       operator guide, and the CLAUDE.md `realism_ranking` sentence (the gate is now two keys plus a
       capacity check when capped).
 
 **Files Modified:**
 - `config/gui/flows/analysis_workflow.yaml`
-- `tests/test_realism_ranking_loader.py`, `tests/test_realism_ranking_e2e.py`
+- `tests/test_realism_ranking_loader.py`, `tests/test_realism_ranking_e2e.py`,
+  `tests/test_workflow_commands.py`
 - `docs/architecture/commands.md`, `docs/development/persona-realism-judge.md`, `CLAUDE.md`
 
 **Dependencies:** Phase 2
@@ -264,27 +265,27 @@ _combo_clash_rows  -> combo_clash_rows
 ## Testing Plan
 
 ### Unit Tests
-- [ ] `rounds_cap=None` yields records identical to the current loader (guards the default path).
-- [ ] A set with `n_rounds` 5 and 2 in provenance loads under `rounds_cap=2` and raises without it.
-- [ ] Differing `judge_model` (or `prompt_template_sha256`) still raises **with** a cap active.
-- [ ] Capacity: a persona cache holding 2 rounds under `rounds_cap=3` raises naming combination,
+- [x] `rounds_cap=None` yields records identical to the current loader (guards the default path).
+- [x] A set with `n_rounds` 5 and 2 in provenance loads under `rounds_cap=2` and raises without it.
+- [x] Differing `judge_model` (or `prompt_template_sha256`) still raises **with** a cap active.
+- [x] Capacity: a persona cache holding 2 rounds under `rounds_cap=3` raises naming combination,
       persona and counts.
-- [ ] A capped record's `provenance["n_rounds"] == N` and `n_rounds_source == "cap"`.
-- [ ] `rounds_cap=5` on a 5-round cache reproduces the uncapped record's `impossibility` /
+- [x] A capped record's `provenance["n_rounds"] == N` and `n_rounds_source == "cap"`.
+- [x] `rounds_cap=5` on a 5-round cache reproduces the uncapped record's `impossibility` /
       `dispersion` / persona rows — the cap is a no-op at full depth. (Strongest correctness check:
       it proves the re-reduction path agrees with the published artifacts.)
-- [ ] Capped clash rows contain no `round_index >= N`.
-- [ ] Auto: a set with cached depths 5 and 2 and no `rounds_cap` loads at N=2, stamps
+- [x] Capped clash rows contain no `round_index >= N`.
+- [x] Auto: a set with cached depths 5 and 2 and no `rounds_cap` loads at N=2, stamps
       `n_rounds_source == "auto"`, and emits the warning.
-- [ ] Auto: a homogeneous set with no `rounds_cap` never enters the cap path (assert the CSV
+- [x] Auto: a homogeneous set with no `rounds_cap` never enters the cap path (assert the CSV
       readers are still the source — e.g. by spying, or by asserting `n_rounds_source == "report"`).
-- [ ] Auto does not mask a differing `judge_model`: that set still raises.
+- [x] Auto does not mask a differing `judge_model`: that set still raises.
 
 ### Integration Tests
-- [ ] e2e: judge two combinations at different round counts, rank with `--rounds <min>`, assert the
+- [x] e2e: judge two combinations at different round counts, rank with `--rounds <min>`, assert the
       declared outputs exist and `provenance.n_rounds` is the cap.
-- [ ] e2e: `--rounds 0` / `--rounds -1` exit non-zero with the validation message.
-- [ ] `tests/test_workflow_commands.py`: `rounds: '2'` → `--rounds 2`; blank → flag absent.
+- [x] e2e: `--rounds 0` / `--rounds -1` exit non-zero with the validation message.
+- [x] `tests/test_workflow_commands.py`: `rounds: '2'` → `--rounds 2`; blank → flag absent.
 
 ### Manual Verification
 - [ ] Run the real failing case: rank `swedish_02` with `all_generate_evaluate_pick_v2` (2 rounds)
@@ -293,8 +294,8 @@ _combo_clash_rows  -> combo_clash_rows
 - [ ] GUI: set `rounds` on the `realism_ranking` node, confirm the emitted command in the run log.
 
 ### Edge Cases
-- [ ] `rounds_cap` greater than every cached count → capacity error, no partial output.
-- [ ] The `real_{country}` competitor is subject to the same capacity check (it is an ordinary
+- [x] `rounds_cap` greater than every cached count → capacity error, no partial output.
+- [x] The `real_{country}` competitor is subject to the same capacity check (it is an ordinary
       competitor).
 - [ ] A combination whose personas have *unequal* cached counts, all ≥ N → passes, all trimmed to N.
 
@@ -302,11 +303,11 @@ _combo_clash_rows  -> combo_clash_rows
 
 ## Documentation Plan
 
-- [ ] `docs/architecture/commands.md` — `--rounds` in the `rank_persona_realism.py` flag list
-- [ ] `docs/development/persona-realism-judge.md` — when to cap, and that it never re-judges
-- [ ] `CLAUDE.md` — the `realism_ranking` gate sentence (one judge model / prompt hash, plus either
+- [x] `docs/architecture/commands.md` — `--rounds` in the `rank_persona_realism.py` flag list
+- [x] `docs/development/persona-realism-judge.md` — when to cap, and that it never re-judges
+- [x] `CLAUDE.md` — the `realism_ranking` gate sentence (one judge model / prompt hash, plus either
       one `n_rounds` or an explicit cap with a capacity check)
-- [ ] Inline docstrings on `load_competitors` and the cap path stating that the cap reads caches,
+- [x] Inline docstrings on `load_competitors` and the cap path stating that the cap reads caches,
       not the CSV contracts, and why
 
 ---
