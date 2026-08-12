@@ -51,6 +51,13 @@ from __future__ import annotations
 import textwrap
 from typing import Any
 
+from population_synthetic.analysis.utils.palette import (
+    HEATMAP_CMAP,
+    MISSING_COLOR,
+    heatmap_cmap,
+    text_color_on,
+)
+
 __all__ = [
     "plot_headline_map",
     "plot_impossibility_forest",
@@ -65,23 +72,24 @@ _COMPETITOR_COLOR = "#4878CF"
 _REAL_COLOR = "#C44E52"
 _CI_COLOR = "#8C8C8C"
 
-# Sequential ramp for a quantity where MORE IS WORSE (the impossibility rate, and the
-# S3/S2 clash prevalences). Sequential, not diverging: these quantities have a true
-# zero and no meaningful midpoint, so a diverging map would invent one and split the
-# combinations into "good" and "bad" sides at an arbitrary value. Red carries the
-# defect reading intentionally -- pale means few, dark means many, and many is bad.
-_DEFECT_CMAP = "Reds"
+# The house sequential ramp, shared with every other grid in ``03_Analysis`` (see
+# ``analysis/utils/palette.py``). Used for every monotone quantity this module draws:
+# the impossibility rate and all three clash prevalences. Sequential, not diverging:
+# those quantities have a true zero and no meaningful midpoint, so a diverging map
+# would invent one and split the combinations into "good" and "bad" sides at an
+# arbitrary value.
+#
+# **This ramp carries no better/worse reading, and that is a change in where the
+# reading lives, not a loss of it.** S3/S2 are defects and S1 is unusual-but-possible
+# -- reported and never penalised -- and these once used two hues to say so (Reds vs
+# Blues). Hue is now spent on figure-family identity instead, so the distinction is
+# carried entirely by ``plot_severity_heatmap``'s colourbar label and its caption,
+# both of which already stated it in words and both of which travel on the figure.
+_SEQUENTIAL_CMAP = HEATMAP_CMAP
 
-# Sequential ramp for a quantity that is REPORTED BUT NOT PENALISED -- the S1
-# (unusual-but-possible) prevalence. It still encodes magnitude, but in a hue that
-# carries no defect connotation, because a high S1 rate plausibly means healthy reach
-# into the tails. Rendering S1 on the red ramp would silently assert that unusual
-# people are defects, which the judge's own contract explicitly denies.
-_NEUTRAL_CMAP = "Blues"
-
-# Fill for a model x method pair that was never judged. Deliberately outside both ramps
-# so it can never be mistaken for their pale (few / none) end.
-_MISSING_COLOR = "#DDDDDD"
+# Fill for a model x method pair that was never judged. Deliberately outside the ramp
+# so it can never be mistaken for its low (few / none) end.
+_MISSING_COLOR = MISSING_COLOR
 
 #: Axis-B measure the headline map's y-axis uses. A presentation choice, not a
 #: statistic: the other two measures are in the JSON and the contrast CSV.
@@ -235,7 +243,6 @@ def _render_grid_heatmap(
     *,
     title: str,
     cbar_label: str,
-    cmap_name: str,
     caption: str,
     error_context: str,
 ):
@@ -248,14 +255,14 @@ def _render_grid_heatmap(
     Three rendering decisions carry meaning:
 
     * **The ramp is sequential and anchored at a true zero.** ``vmin=0`` because zero is
-      a real floor, not the bottom of the observed range, so a pale cell always means
-      "few", never "fewest in this particular sweep". A diverging map would be wrong:
-      the quantity has no meaningful midpoint, so a diverging map would invent one and
-      sort combinations into good and bad halves at an arbitrary value.
+      a real floor, not the bottom of the observed range, so a cell at the ramp's low end
+      always means "few", never "fewest in this particular sweep". A diverging map would
+      be wrong: the quantity has no meaningful midpoint, so a diverging map would invent
+      one and sort combinations into good and bad halves at an arbitrary value.
     * **An unjudged cell is grey and labelled ``n/a``**, drawn outside the ramp entirely.
-      Rendering it at the pale end would show a combination that was never judged as the
-      cleanest in the sweep -- the single most damaging misreading these figures could
-      produce.
+      Rendering it at the ramp's low end would show a combination that was never judged
+      as the cleanest in the sweep -- the single most damaging misreading these figures
+      could produce.
     * **The real population is a separated band, not a grid row.** It has no model and no
       method; giving it a row would present it as a factor level, which is exactly what
       the ranking's factor tests hold it out of being. A white rule and a caption keep it
@@ -302,9 +309,10 @@ def _render_grid_heatmap(
     fig, ax = plt.subplots(
         figsize=(max(7.0, len(methods) * 1.5 + 3.5), max(3.2, n_rows * 0.55 + 2.4))
     )
-    cmap = plt.get_cmap(cmap_name).copy()
-    cmap.set_bad(color=_MISSING_COLOR)
-    im = ax.imshow(np.ma.masked_invalid(plotted), aspect="auto", cmap=cmap, vmin=0.0, vmax=vmax)
+    im = ax.imshow(
+        np.ma.masked_invalid(plotted), aspect="auto",
+        cmap=heatmap_cmap(_SEQUENTIAL_CMAP, missing=_MISSING_COLOR), vmin=0.0, vmax=vmax,
+    )
 
     row_labels = list(models)
     if real_rate is not None:
@@ -315,7 +323,6 @@ def _render_grid_heatmap(
     ax.set_yticklabels(row_labels, fontsize=8)
 
     # Annotate each cell with its value and denominator; grey cells say so explicitly.
-    threshold = vmax * 0.6   # dark fill -> white text
     for i, model in enumerate(models):
         for j, method in enumerate(methods):
             cell = grid["cells"].get(model, {}).get(method)
@@ -327,7 +334,7 @@ def _render_grid_heatmap(
             ax.text(
                 j, i, f"{value:.3f}\nn={cell['denominator']}",
                 ha="center", va="center", fontsize=7,
-                color="white" if value > threshold else "black",
+                color=text_color_on(im, value),
             )
 
     if real_rate is not None:
@@ -338,7 +345,7 @@ def _render_grid_heatmap(
         ax.text(
             centre, row, f"{float(real_rate):.3f}   n={real['denominator']}",
             ha="center", va="center", fontsize=7.5,
-            color="white" if float(real_rate) > threshold else "black",
+            color=text_color_on(im, float(real_rate)),
         )
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
@@ -382,7 +389,6 @@ def plot_impossibility_heatmap(ranking: dict[str, Any]):
             "(grey = not judged, which is not a rate of zero)"
         ),
         cbar_label="Impossibility rate -- lower is better",
-        cmap_name=_DEFECT_CMAP,
         caption="",
         error_context="plot_impossibility_heatmap",
     )
@@ -396,13 +402,18 @@ def plot_severity_heatmap(ranking: dict[str, Any], severity: str):
     are counted independently, so a persona carrying both an S3 and an S2 appears on
     both figures.
 
-    **The three levels are not rendered alike, and that is deliberate.** S3 and S2 are
-    defects and get the lower-is-better ramp. S1 is *unusual but possible* -- the judge's
-    own contract reports it and never penalises it, and a high S1 rate plausibly means
-    healthy reach into the tails rather than a problem. Putting it on a lower-is-better
-    ramp would silently assert that unusual people are defects, so it gets a neutral
-    ramp and a caption saying so. The distinction is drawn in the figure, not only in
-    this docstring, because the figure travels without the code.
+    **The three levels are not labelled alike, and that is deliberate.** S3 and S2 are
+    defects and their colourbar says lower is better. S1 is *unusual but possible* -- the
+    judge's own contract reports it and never penalises it, and a high S1 rate plausibly
+    means healthy reach into the tails rather than a problem. Its colourbar therefore
+    marks it as not penalised and it carries a caption saying a higher value is not
+    worse. The distinction is drawn on the figure, not only in this docstring, because
+    the figure travels without the code.
+
+    It is drawn in *words* rather than in hue: all three levels share the house ramp
+    (``_SEQUENTIAL_CMAP``), which carries no better/worse reading of its own. A reader
+    must therefore take the direction from the colourbar label and the caption, both of
+    which are always present, and never from the colour.
 
     Raises ``KeyError`` on an unknown severity level.
     """
@@ -432,7 +443,6 @@ def plot_severity_heatmap(ranking: dict[str, Any], severity: str):
             f"({level['meaning']}; grey = not judged, not a prevalence of zero)"
         ),
         cbar_label=cbar_label,
-        cmap_name=_DEFECT_CMAP if penalised else _NEUTRAL_CMAP,
         caption=caption,
         error_context=f"plot_severity_heatmap({severity})",
     )
@@ -707,22 +717,21 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
 # --------------------------------------------------------------------------- #
 
 
-#: Diverging ramp for the typicality statistic. The third ramp state this module carries,
-#: and the only diverging one: the other two encode a monotone quantity (``_DEFECT_CMAP``
-#: more-is-worse, ``_NEUTRAL_CMAP`` reported-but-never-penalised), while this statistic's
-#: optimum is *interior* -- collapsed onto one level and maximally dispersed are both
-#: departures from the real population, in opposite directions, and a sequential ramp
-#: would flatten one of them into "less of the other". The midpoint is the real
-#: population's own value, read from the block; the two ends are more-collapsed-than-it
-#: and more-dispersed-than-it, neither of which is better.
+#: This figure draws on the house sequential ramp like every other grid in the layer, and
+#: that costs it something the other grids never had to carry: the statistic's optimum is
+#: **interior**. Collapsed onto one level and maximally dispersed are both departures from
+#: the real population, in *opposite* directions, and a sequential ramp orders cells by
+#: magnitude alone -- so two competitors equally far above and below the reference get
+#: different colours, and neither colour says which side it was on.
 #:
-#: PuOr rather than the more familiar red-blue: red is spoken for by ``_DEFECT_CMAP`` and
-#: blue by ``_NEUTRAL_CMAP`` on the sibling heatmaps in this same folder, and reusing
-#: either hue here would import their better/worse reading onto an axis that has none. It
-#: is a ColorBrewer diverging pair (colour-vision-deficiency safe) and near-white at its
-#: centre, so "at the real population's spread" reads as the neutral point rather than as
-#: an extreme. Low end (orange) = more collapsed; high end (purple) = more dispersed.
-_DIVERGING_CMAP = "PuOr"
+#: The side is therefore carried explicitly instead of chromatically, in two places that
+#: are always drawn together: a rule across the colourbar at the reference's own value,
+#: and a signed delta printed inside every cell. Both are read from
+#: ``block["reference_value"]``, never from a literal, and both disappear together when
+#: there is no reference to measure against. A reader gets the two-sided reading from the
+#: numbers rather than from the hue; what they must not do is infer a direction from the
+#: ramp, which is why ``direction_reason`` stays printed on the figure.
+_REFERENCE_RULE_WIDTH = 2.0
 
 #: Overlay for an UNDER-POWERED cell -- measured, but on fewer personas than ``min_n``.
 #: A hatch rather than a fill, because the value is still published and still readable:
@@ -742,13 +751,12 @@ _NO_TYPICALITY_COLOR = "#FFFFFF"
 _NO_TYPICALITY_HATCH = "xx"
 _NO_TYPICALITY_EDGE = "#CCCCCC"
 
-#: Half-width the diverging ramp falls back to when every competitor -- the real
-#: population included -- carries exactly the same value. The range is then genuinely
-#: zero-width; a ramp cannot be built on it and normalising by it would divide by zero.
-#: Every cell renders at the midpoint colour, which is the truth (they are all at the
-#: reference), and the figure says so in a footnote rather than implying a spread that
-#: the limits invented.
-_FLAT_RANGE_HALF_WIDTH = 0.05
+#: Ceiling the ramp falls back to when every consumed competitor sits at the statistic's
+#: floor. The range is then genuinely zero-width; a ramp cannot be built on it and
+#: normalising by it would divide by zero. Every cell renders at the ramp's bottom, which
+#: is the truth (they are all totally collapsed), and the figure says so in a footnote
+#: rather than implying a spread the limits invented.
+_FLAT_RANGE_CEILING = 1.0
 
 #: Qualitative colours for the per-model marks on the methods-on-x figure. Qualitative,
 #: because model identity is nominal: a sequential ramp over an alphabetical model list
@@ -806,48 +814,24 @@ def _typicality_values(grid: dict[str, Any]) -> list[float]:
     return values
 
 
-def _typicality_limits(
-    values: list[float], reference: float | None
-) -> tuple[float, float, str, bool]:
-    """Colour limits for the typicality ramp: ``(vmin, vmax, cmap_name, flat)``.
+def _typicality_limits(values: list[float]) -> tuple[float, float, bool]:
+    """Colour limits for the typicality ramp: ``(vmin, vmax, flat)``.
 
-    Two regimes, and which one applies is decided by the *document*, never by a literal:
+    Anchored at the statistic's **true zero**, exactly as the sibling grids are, because
+    zero here is a real measurement (total collapse onto one level) rather than the bottom
+    of whatever this sweep happened to contain. A cell at the ramp's floor therefore always
+    means "no internal variety at all", never "least in this particular run".
 
-    * **A reference value** (the real population's own statistic) makes the ramp diverging
-      and its limits **symmetric about that midpoint**, so equal departures in the two
-      directions get equally saturated colours. The sibling heatmaps' ``vmin = 0`` premise
-      -- a true zero, so a pale cell always means "few" -- does not transfer: on an
-      interior-optimum statistic the pale end is the *reference*, and anchoring at zero
-      would paint every competitor on one side of it.
-    * **No reference** degrades to the neutral sequential ramp anchored at the statistic's
-      true zero (total collapse onto one level, which is a real measurement). There is
-      then no midpoint to centre anything on, and inventing one is exactly the failure
-      this degradation exists to avoid.
+    The reference plays no part in the limits. It cannot: on a sequential ramp it is not a
+    midpoint, and centring the range on it would push the observed values off both ends.
+    It is drawn *onto* the finished ramp instead -- see ``_REFERENCE_RULE_WIDTH``.
 
-    *flat* reports that every value coincided with the reference, so the returned limits
-    are the fallback half-width rather than a measured range; the caller prints it.
+    *flat* reports that every consumed competitor sits at the floor, so the ceiling is the
+    fallback rather than a measured maximum; the caller prints it.
     """
-    if reference is None:
-        vmax = max(values)
-        return 0.0, vmax if vmax > 0.0 else 1.0, _NEUTRAL_CMAP, False
-    midpoint = float(reference)
-    radius = max(abs(value - midpoint) for value in values)
-    flat = radius == 0.0
-    if flat:
-        radius = _FLAT_RANGE_HALF_WIDTH
-    return midpoint - radius, midpoint + radius, _DIVERGING_CMAP, flat
-
-
-def _ramp_text_color(value: float, vmin: float, vmax: float, *, diverging: bool) -> str:
-    """White text on a dark fill, black on a pale one.
-
-    A diverging ramp is dark at *both* ends and pale in the middle, so the sequential
-    rule (dark above a threshold) would print white text on the pale midpoint -- exactly
-    the cells nearest the real population's value, which is where a reader looks first.
-    """
-    position = (value - vmin) / (vmax - vmin)
-    dark = (position <= 0.18 or position >= 0.82) if diverging else position >= 0.6
-    return "white" if dark else "black"
+    vmax = max(values)
+    flat = vmax <= 0.0
+    return 0.0, _FLAT_RANGE_CEILING if flat else vmax, flat
 
 
 def _typicality_footnotes(
@@ -875,6 +859,12 @@ def _typicality_footnotes(
         role = f"No {reference_role.lower()}: {block['reference_note']}"
     lines = [
         role,
+        *(
+            ["Parenthesised in each cell: that competitor's signed distance to the "
+             "reference. The ramp orders by magnitude only, so the SIDE of the reference "
+             "is readable from this sign and from nothing else on the figure."]
+            if has_reference else []
+        ),
         f"Not a score: {block['direction_reason']}",
         f"Counted in {block['counting_unit']}",
         f"Under-powered ({under_powered_mark}, min_n = {block['min_n']}): "
@@ -883,9 +873,9 @@ def _typicality_footnotes(
     ]
     if flat:
         lines.append(
-            "Every consumed competitor carries exactly the reference value, so the ramp "
-            f"has no measured range; it is drawn at the reference +/- {_FLAT_RANGE_HALF_WIDTH} "
-            "and every cell sits at the midpoint colour."
+            "Every consumed competitor sits at the statistic's floor, so the ramp has no "
+            f"measured range; its ceiling is the fallback {_FLAT_RANGE_CEILING} and every "
+            "cell is drawn at the floor."
         )
     if has_band:
         lines.append(
@@ -904,11 +894,17 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
     combination and an over-dispersed one, which ``axis_b.dispersion_contrast`` cannot
     tell apart once it takes an absolute value, land on opposite sides of the ramp.
 
-    **The reference is in the colours, never in the cells.** The midpoint is read from
-    ``block["reference_value"]`` -- the real population's own statistic, computed exactly
-    as every competitor's -- so removing the real population from the consumption set
-    degrades this figure to the neutral sequential ramp with the reason printed on it,
-    rather than falling back on a literal midpoint that would be a claim nobody measured.
+    **The reference is drawn onto the figure, never mixed into a cell's arithmetic.** It is
+    read from ``block["reference_value"]`` -- the real population's own statistic, computed
+    exactly as every competitor's -- and appears twice: as a rule across the colourbar at
+    its own value, and as the signed delta beside every cell's number. Removing the real
+    population from the consumption set removes both, with the reason printed on the
+    figure, rather than falling back on a literal that would be a claim nobody measured.
+
+    Because the ramp is sequential, the *side* of the reference is not in the colour: two
+    competitors equally far above and below it are drawn differently, and neither drawing
+    says which was which. That reading lives entirely in the printed delta, which is why
+    the delta is not optional decoration.
 
     **Four states, four appearances**, because collapsing any two of them into one fill
     would publish a claim that was never made: a value (on the ramp), an under-powered
@@ -938,8 +934,18 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
             "plot_typicality_heatmap requires at least one competitor with a defined "
             "typicality statistic"
         )
-    vmin, vmax, cmap_name, flat = _typicality_limits(values, block["reference_value"])
-    diverging = cmap_name == _DIVERGING_CMAP
+    vmin, vmax, flat = _typicality_limits(values)
+    reference = block["reference_value"]
+    has_reference = reference is not None
+
+    def _delta(value: float) -> str:
+        """The signed distance to the reference, or nothing when there is none.
+
+        Parenthesised and inline rather than on its own line: it qualifies the number it
+        follows, and repeating "vs real" in fifty cells crowds out the number itself. The
+        footnote names what the parentheses hold.
+        """
+        return f"  ({value - float(reference):+.3f})" if has_reference else ""
 
     n_rows = len(models) + (1 if real_value is not None else 0)
     plotted = np.full((n_rows, max(len(methods), 1)), np.nan)
@@ -954,15 +960,14 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
     fig, ax = plt.subplots(
         figsize=(max(7.0, len(methods) * 1.5 + 3.5), max(3.2, n_rows * 0.55 + 2.4))
     )
-    cmap = plt.get_cmap(cmap_name).copy()
-    cmap.set_bad(color=_MISSING_COLOR)
     im = ax.imshow(
-        np.ma.masked_invalid(plotted), aspect="auto", cmap=cmap, vmin=vmin, vmax=vmax
+        np.ma.masked_invalid(plotted), aspect="auto",
+        cmap=heatmap_cmap(_SEQUENTIAL_CMAP, missing=_MISSING_COLOR), vmin=vmin, vmax=vmax,
     )
 
     row_labels = list(models)
     if real_value is not None:
-        suffix = " -- ramp midpoint" if diverging else ""
+        suffix = " -- deltas are measured against it" if has_reference else ""
         row_labels.append(f"{real['slug']}  (real population{suffix})")
     ax.set_xticks(range(max(len(methods), 1)))
     ax.set_xticklabels(methods or [""], rotation=30, ha="right", fontsize=8)
@@ -998,9 +1003,9 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
             # Above the hatch, always: the hatch qualifies the number and must not be
             # allowed to strike through it.
             ax.text(
-                j, i, f"{value:.3f}\nn={cell['denominator']}",
+                j, i, f"{value:.3f}{_delta(value)}\nn={cell['denominator']}",
                 ha="center", va="center", fontsize=7, zorder=4,
-                color=_ramp_text_color(value, vmin, vmax, diverging=diverging),
+                color=text_color_on(im, value),
             )
 
     if real_value is not None:
@@ -1019,7 +1024,7 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
         ax.text(
             centre, row, f"{float(real_value):.3f}   n={real['denominator']}",
             ha="center", va="center", fontsize=7.5, zorder=4,
-            color=_ramp_text_color(float(real_value), vmin, vmax, diverging=diverging),
+            color=text_color_on(im, float(real_value)),
         )
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
@@ -1031,12 +1036,20 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
         fontsize=8,
     )
     cbar.ax.tick_params(labelsize=7)
+    if has_reference:
+        # The one place on this figure where the reference is visible rather than
+        # arithmetic. Its colour is taken from the ramp position it marks, so the rule
+        # stays visible whether it lands on the dark floor or the bright ceiling.
+        cbar.ax.axhline(
+            float(reference), color=text_color_on(im, float(reference)),
+            linewidth=_REFERENCE_RULE_WIDTH,
+        )
 
     ax.set_xlabel("Method (strategy)", fontsize=9)
     ax.set_ylabel("Model", fontsize=9)
     subtitle = (
-        "diverging ramp centred on the real population's own value"
-        if diverging else "neutral ramp -- no real population to centre on"
+        "sequential ramp; the rule on the colourbar is the real population"
+        if has_reference else "sequential ramp -- no real population to measure against"
     )
     ax.set_title(
         f"Typicality -- {block['statistic']} by model x method\n"
@@ -1044,8 +1057,8 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
         fontsize=12, fontweight="bold",
     )
     _place_footnote(fig, ax, _typicality_footnotes(
-        block, reference_role="Ramp midpoint", under_powered_mark="hatched", flat=flat,
-        has_reference=diverging, has_band=real_value is not None,
+        block, reference_role="Colourbar rule", under_powered_mark="hatched", flat=flat,
+        has_reference=has_reference, has_band=real_value is not None,
     ))
     return fig
 

@@ -1126,8 +1126,9 @@ TYPICALITY_NO_DIRECTION = (
     "typicality has no monotone better direction: a competitor scoring uniformly at the "
     "modal level has collapsed onto the modal persona, while a low-scoring one may be "
     "reaching the real population's tail or may simply be incoherent. The optimum is "
-    "interior, so direction is supplied at render time by a diverging ramp centred on "
-    "reference_value and is deliberately absent from the statistic itself."
+    "interior, so it is deliberately absent from the statistic itself and is supplied at "
+    "render time as a signed distance to reference_value -- read the side from that "
+    "delta, never from the position on the ramp, which orders by magnitude alone."
 )
 
 #: How a per-persona mean becomes one of the k integer levels the statistics are defined
@@ -1393,9 +1394,9 @@ def _typicality_axis(
     **Self-contained computationally, not directionally.** Each cell is a function of one
     competitor's own scores and the passed tunables, so it is reproducible from that
     competitor alone. It carries no better/worse direction (``direction: null``): the
-    optimum is interior, and direction enters only at render time through a diverging
-    ramp centred on ``reference_value`` -- the real population's own statistic, computed
-    exactly as every other competitor's and holding no role in any cell's computation.
+    optimum is interior, and direction enters only at render time as a signed distance to
+    ``reference_value`` -- the real population's own statistic, computed exactly as every
+    other competitor's and holding no role in any cell's computation.
 
     The grid comes from the same :func:`_grid` reshape every other heatmap here uses, so
     the null-cell guarantee, the complexity-ordered method axis and the real population's
@@ -1463,21 +1464,21 @@ def _typicality_axis(
     reference_value = None if real_cell is None else real_cell["value"]
     if real_cell is None:
         reference_note = (
-            "no real population in the consumption set, so there is no midpoint to centre a "
-            "diverging ramp on. A renderer must degrade to a neutral sequential ramp and "
-            "print the reason rather than substituting a literal midpoint."
+            "no real population in the consumption set, so there is nothing to measure a "
+            "distance against. A renderer must drop the reference marking entirely and "
+            "print the reason rather than substituting a literal reference."
         )
     elif reference_value is None:
         reference_note = (
             f"the real population {real_cell['slug']!r} carries no typicality-bearing "
-            "persona, so it has no value to centre a diverging ramp on -- the same "
+            "persona, so it has no value to measure a distance against -- the same "
             "degradation as its absence, for a different reason."
         )
     else:
         reference_note = (
             "the real population's own statistic, computed exactly as every other "
-            "competitor's. It is the render-time midpoint of the diverging ramp and enters "
-            "no cell's computation."
+            "competitor's. It is marked on the render (a colourbar rule, and the signed "
+            "delta on every cell) and enters no cell's computation."
         )
 
     unjudged = sum(

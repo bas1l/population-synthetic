@@ -57,6 +57,7 @@ from population_synthetic.analysis.realism_ranking.loader import load_competitor
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
 from population_synthetic.analysis.utils.figures import save_figure  # noqa: E402
+from population_synthetic.analysis.utils.palette import HEATMAP_CMAP  # noqa: E402
 from population_synthetic.analysis.utils.registry import analysis_output_dir  # noqa: E402
 
 from tests.test_persona_realism_smoke import _stub_factory  # noqa: E402
@@ -478,10 +479,14 @@ def test_the_typicality_axis_degrades_without_the_real_competitor(judged_base):
 
     block = _rank(synthetic)["typicality"]
     assert block["reference_slug"] is None and block["reference_value"] is None
-    assert "neutral sequential ramp" in block["reference_note"]
+    assert "nothing to measure a distance against" in block["reference_note"]
 
-    image = plot_typicality_heatmap(_rank(synthetic)).axes[0].images[0]
-    assert image.cmap.name == "Blues", "the diverging ramp needs a midpoint it does not have"
+    figure = plot_typicality_heatmap(_rank(synthetic))
+    assert figure.axes[0].images[0].cmap.name == HEATMAP_CMAP
+    assert len(figure.axes[-1].lines) == 0, (
+        "with no reference there is no distance to mark, and marking one anyway would "
+        "publish a midpoint nobody measured"
+    )
     assert plot_typicality_by_method(_rank(synthetic)).axes[0].lines is not None
 
 

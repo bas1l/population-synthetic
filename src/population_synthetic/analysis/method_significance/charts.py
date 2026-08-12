@@ -43,6 +43,7 @@ from population_synthetic.analysis.method_significance.builder import (
 )
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.palette import heatmap_cmap, text_color_on
 
 logger = logging.getLogger(__name__)
 
@@ -163,8 +164,13 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
     Cell = the per-(attribute, model) OLS slope of TV distance on method rank
     (positive = fidelity worsens with complexity, negative = improves). This is
     the *descriptive* per-category interaction: **no p-value is claimed at this
-    grain** (n = 1 per cell), so no significance stars are drawn. A diverging
-    colormap centres white at 0. Absent slopes render as grey gaps.
+    grain** (n = 1 per cell), so no significance stars are drawn. Absent slopes
+    render as grey gaps.
+
+    The sign is carried by the ``+``/``-`` on every cell, by the colourbar label and
+    by the rule drawn at zero on the colourbar -- **not** by the colour. The house
+    sequential ramp orders cells by magnitude, so two slopes of equal size and
+    opposite sign are drawn differently and neither drawing says which was which.
     """
     attributes: list[str] = result["metadata"]["attributes"]
     models: list[str] = result["metadata"]["models"]
@@ -197,9 +203,11 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
     fig, ax = plt.subplots(
         figsize=(max(6.0, len(models) * 0.9 + 3.0), max(4.0, len(attributes) * 0.45 + 2.5))
     )
-    cmap = plt.get_cmap("RdBu_r").copy()
-    cmap.set_bad(color="#DDDDDD")
-    im = ax.imshow(masked, aspect="auto", cmap=cmap, vmin=-bound, vmax=bound)
+    # The house sequential ramp, on limits kept symmetric about zero so a slope of zero
+    # always lands at the same point of the ramp across figures. The ramp orders by
+    # magnitude, not by sign, so the sign is carried by the signed cell annotations, the
+    # colourbar label and the rule drawn at zero below -- never by the colour.
+    im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap(), vmin=-bound, vmax=bound)
 
     ax.set_xticks(range(len(models)))
     ax.set_xticklabels(models, rotation=40, ha="right", fontsize=8)
@@ -208,14 +216,15 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
     cbar.set_label("TV(method) slope (+ = worsens, - = improves)", fontsize=8)
+    cbar.ax.axhline(0.0, color=text_color_on(im, 0.0), linewidth=2.0)
 
     for i in range(values.shape[0]):
         for j in range(values.shape[1]):
             v = values[i, j]
             if np.isnan(v):
                 continue
-            color = "white" if abs(v) > 0.6 * bound else "black"
-            ax.text(j, i, f"{v:+.3f}", ha="center", va="center", fontsize=6.5, color=color)
+            ax.text(j, i, f"{v:+.3f}", ha="center", va="center", fontsize=6.5,
+                    color=text_color_on(im, v))
 
     country = result["metadata"]["country"]
     ax.set_title(
