@@ -1,6 +1,6 @@
-"""charts.py -- pure rendering of persona-realism structures into matplotlib figures.
+"""charts.py -- pure rendering of ONE combination's realism structures into figures.
 
-Three publication figures for the persona-realism judge:
+Two per-combination publication figures for the persona-realism judge:
 
 * :func:`plot_typicality_distribution` -- one combination's per-persona mean
   typicality over its ``can_exist`` subset, as a 0-10 integer-bucket histogram
@@ -9,10 +9,10 @@ Three publication figures for the persona-realism judge:
 * :func:`plot_clash_taxonomy` -- one combination's attribute-pair clash taxonomy
   (a horizontal bar per ``(pair, severity)`` clash, ranked by the number of
   personas exhibiting it).
-* :func:`plot_headline_map` -- the cross-combination 2-D map: x = impossibility
-  rate, y = typicality-dispersion distance-to-SCB, with the SCB real population
-  drawn as a distinct reference point at ``y == 0`` (it *is* the dispersion
-  reference, so its distance to itself is zero).
+
+Both take a single combination's structures and nothing else. The cross-combination
+headline map now belongs to ``realism_ranking``'s chart module, where the real
+population is plotted as an ordinary competitor rather than pinned to the origin.
 
 Pure sink boundary (02-architecture guide sect. 9): this module never touches
 disk, never knows a file path, a DPI, or which country produced the data -- it
@@ -24,7 +24,6 @@ inside each function so importing this module never touches a display.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Sequence
 
 from population_synthetic.analysis.persona_realism.reduce import ClashKey
@@ -35,30 +34,10 @@ from population_synthetic.analysis.persona_realism.reduce import ClashKey
 _SEVERITY_COLORS: dict[str, str] = {"S3": "#C44E52", "S2": "#DD8452", "S1": "#8C8C8C"}
 _TYPICALITY_COLOR = "#4878CF"
 _TAIL_COLOR = "#C44E52"
-_COMBO_COLOR = "#4878CF"
-_REFERENCE_COLOR = "#C44E52"
 
 # The 0-10 ordinal typicality domain (prompt-schema constant, mirrors judge.py).
 _TYPICALITY_MIN = 0
 _TYPICALITY_MAX = 10
-
-
-@dataclass(frozen=True)
-class HeadlinePoint:
-    """One competitor's position on the headline map (a pure plot-input record).
-
-    ``impossibility_rate`` is the x-coordinate (share of majority-impossible
-    personas); ``dispersion_distance`` is the y-coordinate (this combination's
-    typicality-dispersion distance to the SCB reference -- ``0`` for SCB itself).
-    ``is_reference`` flags the SCB real population so the plotter draws it
-    distinctly. ``n_personas`` is carried only to size/annotate the marker.
-    """
-
-    label: str
-    impossibility_rate: float
-    dispersion_distance: float
-    is_reference: bool = False
-    n_personas: int = 0
 
 
 def plot_typicality_distribution(
@@ -147,52 +126,5 @@ def plot_clash_taxonomy(clash_taxonomy: dict[ClashKey, int], combo_label: str):
 
     handles = [plt.Rectangle((0, 0), 1, 1, color=_SEVERITY_COLORS[s]) for s in ("S3", "S2", "S1")]
     ax.legend(handles, ["S3 (hard)", "S2 (near)", "S1 (unusual)"], fontsize=8, loc="lower right")
-    fig.tight_layout()
-    return fig
-
-
-def plot_headline_map(points: Sequence[HeadlinePoint], *, measure_label: str = "variance"):
-    """Render the cross-combination headline map.
-
-    ``points`` are the competitors (synthetic combinations *and* the SCB real
-    population); each carries its impossibility rate (x) and its typicality
-    dispersion distance-to-SCB (y). The SCB reference (``is_reference``) is drawn
-    as a distinct star at ``y == 0``. *measure_label* names which dispersion
-    measure the y-axis distance uses (for the axis title). An **empty** *points*
-    sequence raises (nothing to map). Returns the ``Figure`` unsaved and open.
-    """
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    if not points:
-        raise ValueError("plot_headline_map requires at least one competitor point (got none)")
-
-    fig, ax = plt.subplots(figsize=(9, 7))
-    for pt in points:
-        if pt.is_reference:
-            ax.scatter(
-                pt.impossibility_rate, pt.dispersion_distance,
-                marker="*", s=320, color=_REFERENCE_COLOR, edgecolor="black", linewidth=0.6,
-                zorder=3, label="SCB reference",
-            )
-        else:
-            ax.scatter(
-                pt.impossibility_rate, pt.dispersion_distance,
-                marker="o", s=90, color=_COMBO_COLOR, edgecolor="white", linewidth=0.5, zorder=2,
-            )
-        ax.annotate(
-            pt.label, (pt.impossibility_rate, pt.dispersion_distance),
-            textcoords="offset points", xytext=(6, 4), fontsize=7,
-        )
-
-    ax.set_xlabel("Impossibility rate (share of internally-contradictory personas)", fontsize=9)
-    ax.set_ylabel(f"Typicality dispersion distance to SCB ({measure_label})", fontsize=9)
-    ax.set_title("Persona realism -- coherence vs typicality-spectrum map", fontsize=12, fontweight="bold")
-    ax.axhline(0, color="gray", linestyle="--", linewidth=0.7, alpha=0.7, zorder=0)
-    ax.tick_params(axis="both", labelsize=8)
-    handles, labels = ax.get_legend_handles_labels()
-    if handles:
-        ax.legend(handles, labels, fontsize=8, loc="best")
     fig.tight_layout()
     return fig

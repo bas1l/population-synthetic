@@ -32,6 +32,16 @@ n_rounds: 3
 # stochasticity across rounds is the measured quantity, not noise to eliminate.
 temperature: 0.0
 
+# DECLARED BUT NOT WIRED (both keys below). They are loaded, validated and stamped
+# into every report's `provenance` block, but no computation reads them: a persona's
+# impossibility is decided solely by the majority of the boolean `can_exist` across
+# rounds (reduce.reduce_persona -> possible_majority), and clashes are reported as an
+# unweighted per-severity taxonomy. They are kept -- rather than deleted -- so the
+# declared intent survives, and the provenance block carries an explicit
+# `severity_config_status` note saying they gate nothing, so a reader can never
+# mistake them for an active knob. Wiring severity gating into `reduce_persona` would
+# change every existing impossibility rate and is a deliberate, separate decision.
+#
 # Weight of each issue severity when folding clashes into a per-persona clash
 # score. S1 (unusual-but-possible) is reported but never penalized (weight 0).
 severity_weights:
@@ -39,8 +49,8 @@ severity_weights:
   S2: 0.5
   S1: 0.0
 
-# Which severities force can_exist=false at aggregation. A hard contradiction (S3)
-# is the only impossibility driver; S2/S1 are near/possible and do not gate.
+# Which severities would force can_exist=false at aggregation. A hard contradiction
+# (S3) is the only intended impossibility driver; S2/S1 are near/possible.
 impossibility_severities:
   - "S3"
 
@@ -66,15 +76,32 @@ bootstrap:
   seed: 20260723
   ci_level: 0.95
 
-# Judge self-consistency (reliability) settings for the aggregation/stats layer.
+# Judge self-consistency (reliability) + dispersion settings for the stats layer.
+# Every key here is read FAIL-FAST (no in-code default): a missing key raises, so a
+# tunable can never be silently different from what this file says.
+#
 # `typicality_level` is the Krippendorff's-alpha measurement level for the ordinal
-# 0-10 typicality across rounds: "ordinal" (default; a rating is a rank, not an
-# interval -- the principled choice) or "interval" (treat the 0-10 scale as evenly
-# spaced). The can_exist reliability is always nominal (a boolean has no interval
-# meaning) and is not configurable. These measure the judge's precision, NOT its
-# correctness -- validity is anchored only by hard_rules.yaml.
+# 0-10 typicality across rounds: "ordinal" (a rating is a rank, not an interval --
+# the principled choice) or "interval" (treat the 0-10 scale as evenly spaced). The
+# can_exist reliability is always nominal (a boolean has no interval meaning) and is
+# not configurable. It measures the judge's precision, NOT its correctness --
+# validity is anchored only by hard_rules.yaml.
+#
+# `tail_threshold` is the mean typicality at or below which a persona counts toward
+# `tail_coverage` (the rank-based reach into the unusual-but-possible tail) and below
+# which the per-combination typicality chart shades its bars. 3.0 on the 0-10 scale
+# puts the cut just under the bottom third: low enough that an ordinary-but-plain
+# persona (4-6) is not counted as unusual, high enough that the tail is not a handful
+# of 0-1 outliers. Changing it moves `tail_coverage` and the Axis-B contrast.
+#
+# `variance_center` is the centring of the Levene variance-equality test comparing a
+# combination's typicality spread with the real reference's: "median" is the
+# Brown-Forsythe variant (robust to the skewed, non-normal typicality distribution --
+# the safe default), "mean" is the classic Levene test.
 reliability:
   typicality_level: "ordinal"
+  tail_threshold: 3.0
+  variance_center: "median"
 
 # Parallel judge-call fan-out (ThreadPoolExecutor max_workers).
 workers: 8

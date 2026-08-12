@@ -98,12 +98,23 @@ plus per-combo deep diagnostics and per-country cross-factor significance (Krusk
 across the model and method factors), read from the LLM-call telemetry of the **capped mirror**
 (`03_Analysis/population_cap/`, produced by `population_cap`), not `01_Raw` directly,
 `persona_realism/` an LLM-as-judge coherence task — judges each individual mapped persona N cold
-rounds (`can_exist` binary + `typicality` 0-10 ordinal + severity-tagged clash issues) and ranks
-every combination **plus the SCB real reference as a competitor** on a per-combination impossibility
-rate (bootstrap CI), typicality dispersion vs SCB (Levene), and a judge self-reliability metric
-(ICC / Krippendorff's α — self-consistency, **not** validity; the config-driven hard-rules subset is
-the only validity anchor); judge model + params config-driven in `config/analysis/persona_realism/`,
-cost via `model_pricing.yaml`,
+rounds (`can_exist` binary + `typicality` 0-10 ordinal + severity-tagged clash issues) and reduces
+round → persona → combination into **that combination's own** impossibility rate (bootstrap CI),
+typicality dispersion, and judge self-reliability metric (ICC / Krippendorff's α — self-consistency,
+**not** validity; the config-driven hard-rules subset is the only validity anchor). It is **strictly
+per-combination**: it emits no field that depends on another unit, so its artifacts are
+byte-reproducible in isolation and order-independent, and the SCB real population is enumerated as
+an **ordinary competitor** `real_{country}` with no reference role; judge model + params
+config-driven in `config/analysis/persona_realism/`, cost via `model_pricing.yaml`,
+`realism_ranking/` the cross-combination half — consumes the per-persona tidy CSVs
+(`analysis/utils/realism_csv.py`, the inter-task contract) and owns every cross-unit claim with **no
+LLM work at all**: Axis A ranks impossibility rate with SCB as an ordinary ranked competitor (lower
+is better for everyone — so "is the chain-sampled population itself incoherent?" is asked, not
+assumed), Axis B contrasts typicality dispersion against SCB **as the target** (near zero is better;
+the failure mode guarded against is mode collapse), plus Holm-corrected SCB contrasts with effect
+sizes, Kruskal-Wallis + Dunn/Holm on the model and method factors (SCB held out) and a logit mixed
+model on `can_exist`; it gates on completeness and on one judge model / prompt hash / `n_rounds`
+across the consumption set,
 and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
@@ -121,7 +132,9 @@ validation gate: `validate_raw` (**root**) → `mapping` (reads the full `01_Raw
 per-combo validity CSVs, seeded-caps `--n` clean personas, and materializes both the capped
 persona-dir mirror and `03_Analysis/population_cap/_mapped/`; `generation_metadata` reads the
 mirror's telemetry via `analysis/utils/capped_source.py` and the mapped-file consumers read
-`_mapped/` via `resolve_mapped_dir` (fail-fast, no `01_Raw`/`mapping/` fallback). A workflow task's
+`_mapped/` via `resolve_mapped_dir` (fail-fast, no `01_Raw`/`mapping/` fallback). One process is
+itself chained further: `realism_ranking` declares `depends_on: [persona_realism]` — the only
+analysis node whose upstream is another analysis node rather than the gate. A workflow task's
 per-node **`bypass`** flag is GUI-only orchestration that is invisible to every script and emits no
 CLI flag: it runs nothing yet still unlocks the dependents, asserting with **zero** verification
 that the task's outputs are already on disk — so it is confirmed by an unskippable pre-run modal.
@@ -162,4 +175,5 @@ Design and audit notes worth consulting before non-trivial changes:
 | [SCB02 category-mapping rationale](docs/scb02_comparison_category_mapping_2026-05-11.md) | Category-mapping rationale. |
 | [ISTAT population data sources](docs/istat_population_data_sources.md) | Italy field-by-field API source matrix, protocol details, sampling chain, known limitations. |
 | [Code standards](docs/code-standards/README.md) · [Data-pipeline engineering](docs/data-pipeline-engineering/README.md) | Repository-agnostic engineering-standards wiki sets. |
-| [Development notes](docs/development/) | In-progress development notes and plans. |
+| [Persona realism judge](docs/development/persona-realism-judge.md) | Operator guide for the two-task persona-realism pipeline: the per-combination judge, the `realism_ranking` aggregator, the two axes and their opposite directions, and `--rewrite-artifacts` vs `--force`. |
+| [Development notes](docs/development/) | In-progress development notes, plans, and `decisions/` (ADRs). |

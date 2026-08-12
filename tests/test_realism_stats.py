@@ -1,7 +1,7 @@
 """Unit tests for the persona-realism reliability / dispersion / resampling primitives.
 
-Validates ``bootstrap_ci``, ``icc``, ``krippendorff_alpha`` and
-``variance_equality_test`` (all added to
+Validates ``bootstrap_ci``, ``bootstrap_difference_ci``, ``two_proportion_test``,
+``icc``, ``krippendorff_alpha`` and ``variance_equality_test`` (all added to
 :mod:`population_synthetic.analysis.utils.stats_tests` for the persona-realism
 judge process) against hand-computed known answers, and pins the library-backed
 Levene test to scipy's own output on a fixture -- per the statistical-software
@@ -20,8 +20,11 @@ from scipy import stats
 
 from population_synthetic.analysis.utils.stats_tests import (
     bootstrap_ci,
+    bootstrap_difference_ci,
+    holm_adjust,
     icc,
     krippendorff_alpha,
+    two_proportion_test,
     variance_equality_test,
 )
 
@@ -192,6 +195,63 @@ def test_krippendorff_rejects_unknown_level():
 
 
 # --------------------------------------------------------------------------- #
+# bootstrap_difference_ci + two_proportion_test (the SCB-contrast primitives)  #
+# --------------------------------------------------------------------------- #
+
+
+def test_bootstrap_difference_point_is_the_observed_rate_difference():
+    a = [1, 1, 0, 0]          # rate 0.5
+    b = [1, 0, 0, 0, 0]       # rate 0.2
+    res = bootstrap_difference_ci(a, b, iterations=500, seed=7)
+    assert res["point"] == pytest.approx(0.3)
+    assert res["lo"] <= res["point"] <= res["hi"]
+    assert res["n_a"] == 4 and res["n_b"] == 5
+
+
+def test_bootstrap_difference_is_deterministic_for_a_seed():
+    a, b = [1, 0, 1, 0], [0, 0, 1, 0]
+    first = bootstrap_difference_ci(a, b, iterations=500, seed=11)
+    second = bootstrap_difference_ci(a, b, iterations=500, seed=11)
+    assert (first["lo"], first["hi"]) == (second["lo"], second["hi"])
+
+
+def test_bootstrap_difference_empty_sample_is_skipped_not_zero():
+    res = bootstrap_difference_ci([], [1, 0], iterations=10, seed=1)
+    assert res["point"] is None and "note" in res
+
+
+def test_two_proportion_matches_a_hand_computed_z():
+    # p_a = 20/100 = 0.2, p_b = 10/100 = 0.1, pooled = 30/200 = 0.15
+    # se = sqrt(0.15 * 0.85 * (1/100 + 1/100)) = sqrt(0.0025500) = 0.0504975
+    # z  = 0.1 / 0.0504975 = 1.98030
+    res = two_proportion_test(20, 100, 10, 100)
+    assert res["diff"] == pytest.approx(0.1)
+    assert res["z"] == pytest.approx(1.980295, rel=1e-5)
+    assert res["p"] == pytest.approx(2 * stats.norm.sf(abs(res["z"])))
+
+
+def test_two_proportion_reports_an_effect_size_beside_every_p_value():
+    res = two_proportion_test(50, 100, 10, 100)
+    # Cohen's h = 2*asin(sqrt(.5)) - 2*asin(sqrt(.1)) = 1.570796 - 0.643501 = 0.927295
+    assert res["h"] == pytest.approx(0.927295, rel=1e-5)
+    assert res["h_magnitude"] == "large"
+
+
+def test_two_proportion_degenerate_inputs_are_skipped_not_nan():
+    empty = two_proportion_test(0, 0, 1, 10)
+    assert empty["z"] is None and "note" in empty
+    all_zero = two_proportion_test(0, 10, 0, 10)
+    assert all_zero["diff"] == 0.0            # the rates are still reported
+    assert all_zero["z"] is None and "note" in all_zero
+
+
+def test_holm_adjust_is_the_same_implementation_the_dunn_posthoc_uses():
+    # Holm on [0.01, 0.04, 0.03] with m=3: sorted 0.01*3=0.03, 0.03*2=0.06, 0.04*1=0.06
+    # (running max keeps the last at 0.06).
+    assert holm_adjust([0.01, 0.04, 0.03]) == pytest.approx([0.03, 0.06, 0.06])
+
+
+# --------------------------------------------------------------------------- #
 # variance_equality_test -- pinned to scipy.stats.levene                      #
 # --------------------------------------------------------------------------- #
 
@@ -221,6 +281,18 @@ def test_variance_equality_too_few_groups_is_skipped():
 def test_variance_equality_zero_variance_everywhere_is_skipped_not_nan():
     res = variance_equality_test({"a": [3.0, 3.0, 3.0], "b": [3.0, 3.0, 3.0]})
     assert res["statistic"] is None and res["p"] is None and "note" in res
+
+
+def test_variance_equality_one_zero_spread_group_is_skipped_not_infinitely_significant():
+    """scipy returns ``inf``/``p=0`` here; that must not reach a report as a finding.
+
+    A single zero-spread group collapses Levene's denominator. Passed through, it reads
+    downstream as the strongest possible evidence of unequal spread -- the opposite of
+    "undefined" -- so it is reported as a skip with the offending group named.
+    """
+    res = variance_equality_test({"a": [1.0, 9.0], "b": [5.0, 5.0]}, center="median")
+    assert res["statistic"] is None and res["p"] is None
+    assert "zero spread" in res["note"] and "b" in res["note"]
 
 
 def test_variance_equality_drops_singleton_groups():
@@ -363,16 +435,9 @@ def test_reduce_combo_all_failed_is_empty_base():
 # --------------------------------------------------------------------------- #
 
 
-def _scb_ref():
-    return reduce_combo(
-        [reduce_persona([_possible(5), _possible(5)], persona_id=f"s{i}") for i in range(3)],
-        "real_swedish",
-    )
-
-
 def test_stats_impossibility_bootstrap_over_personas():
     combo = _make_combo()
-    rs = compute_realism_stats(combo, _scb_ref(), bootstrap=_BOOT)
+    rs = compute_realism_stats(combo, bootstrap=_BOOT)
     imp = rs.impossibility
     assert imp["point"] == pytest.approx(1.0 / 3.0)  # rate == mean of indicators
     assert imp["rate"] == pytest.approx(1.0 / 3.0)
@@ -381,22 +446,36 @@ def test_stats_impossibility_bootstrap_over_personas():
     assert imp["n"] == 3  # the resampled unit is the persona
 
 
-def test_stats_dispersion_measures_and_distance_to_scb():
+def test_stats_dispersion_describes_only_this_combination():
+    """The dispersion block is self-contained: measures of THIS combo, nothing relative.
+
+    The distance-to-reference keys that used to live here required a second combination
+    to have been judged first, which is exactly the coupling the split removed; they now
+    belong to realism_ranking's Axis B.
+    """
     combo = _make_combo()  # typicality_means (8.5, 3.5)
-    rs = compute_realism_stats(combo, _scb_ref(), bootstrap=_BOOT, tail_threshold=3.0)
+    rs = compute_realism_stats(combo, bootstrap=_BOOT, tail_threshold=3.0)
     disp = rs.dispersion
     assert disp["n"] == 2
     assert disp["variance"] == pytest.approx(12.5)         # sample var of [8.5, 3.5]
     assert disp["tail_coverage"] == pytest.approx(0.0)     # neither <= 3.0
-    assert disp["scb_reference"] == "real_swedish"
-    # SCB [5,5,5] -> variance 0 -> distance 12.5; entropy: SCB single bucket -> 0.
-    assert disp["distance_to_scb"]["variance"] == pytest.approx(12.5)
-    assert "statistic" in disp["variance_equality"]
+    assert disp["tail_threshold"] == pytest.approx(3.0)
+    for banned in ("scb_reference", "distance_to_scb", "variance_equality"):
+        assert banned not in disp, banned
+
+
+def test_compute_realism_stats_takes_no_reference_argument():
+    """A positional second argument would re-open the order dependence."""
+    import inspect
+
+    params = list(inspect.signature(compute_realism_stats).parameters)
+    assert params[0] == "combo"
+    assert "scb_ref" not in params
 
 
 def test_stats_reliability_is_named_self_consistency_not_accuracy():
     combo = _make_combo()
-    rs = compute_realism_stats(combo, None, bootstrap=_BOOT, typicality_level="ordinal")
+    rs = compute_realism_stats(combo, bootstrap=_BOOT, typicality_level="ordinal")
     rel = rs.reliability
     # can_exist rounds are perfectly consistent within each persona -> alpha 1.
     assert rel["can_exist_alpha"]["alpha"] == pytest.approx(1.0)
@@ -404,9 +483,6 @@ def test_stats_reliability_is_named_self_consistency_not_accuracy():
     assert rel["typicality_alpha"]["alpha"] is not None
     assert rel["typicality_icc"]["model"] == "ICC(1,1)"
     assert rel["typicality_level"] == "ordinal"
-    # No SCB reference -> distance/variance-equality skipped, not crashed.
-    assert rs.dispersion["variance_equality"]["statistic"] is None
-    assert rs.dispersion["distance_to_scb"]["variance"] is None
 
 
 def test_stats_single_round_reliability_is_skipped_not_nan():
@@ -415,7 +491,7 @@ def test_stats_single_round_reliability_is_skipped_not_nan():
          reduce_persona([_possible(7)], persona_id="b")],
         "combo_1r",
     )
-    rs = compute_realism_stats(combo, None, bootstrap=_BOOT)
+    rs = compute_realism_stats(combo, bootstrap=_BOOT)
     assert rs.reliability["can_exist_alpha"]["alpha"] is None
     assert "note" in rs.reliability["can_exist_alpha"]
     assert rs.reliability["typicality_icc"]["icc"] is None
@@ -428,7 +504,7 @@ def test_stats_empty_can_exist_set_dispersion_skipped():
          reduce_persona([_impossible(), _impossible()], persona_id="b")],
         "combo_all_impossible",
     )
-    rs = compute_realism_stats(combo, None, bootstrap=_BOOT)
+    rs = compute_realism_stats(combo, bootstrap=_BOOT)
     assert rs.dispersion["variance"] is None
     assert rs.dispersion["tail_coverage"] is None
     assert "note" in rs.dispersion
@@ -438,7 +514,7 @@ def test_stats_empty_can_exist_set_dispersion_skipped():
 
 def test_stats_all_failed_combo_impossibility_skipped():
     combo = reduce_combo([None, None, None], "combo_dead")
-    rs = compute_realism_stats(combo, None, bootstrap=_BOOT)
+    rs = compute_realism_stats(combo, bootstrap=_BOOT)
     assert rs.impossibility["point"] is None and "note" in rs.impossibility
     assert rs.impossibility["successful_count"] == 0 and rs.impossibility["failed_count"] == 3
 

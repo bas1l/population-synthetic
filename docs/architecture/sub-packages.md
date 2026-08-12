@@ -150,7 +150,36 @@ consumers + `generation_metadata`:
   under `03_Analysis/real_population_stats/{country}/`. No synthetic population, comparison, or
   fidelity metric is involved -- `artifacts.py::write_real_population_stats` is the orchestrator that
   ties computation, rendering, and I/O together, idempotent unless `--force`.
+- **`persona_realism/`** -- The LLM-as-judge task, **strictly per-combination** (driven by
+  `analyze_persona_realism.py`, `per_combo` dispatch). `config.py` holds `JudgeConfig` (loadable
+  without the LLM client layer, `reliability_value()` reads fail-fast with no in-code default);
+  `runner.py` fans out the resumable per-persona judge calls; `reduce.py` reduces round → persona →
+  combination; `stats.py` computes that combination's **own** impossibility rate (bootstrap CI),
+  typicality dispersion and judge self-reliability — it takes **no reference combination** and emits
+  no field that depends on one; `charts.py` renders the two per-combination figures; `csv_writer.py`
+  and `report.py` are the flat sinks; `artifacts.py` orchestrates and also writes
+  `{combo}_personas.csv`, the tidy inter-task contract. The real API-sourced population is
+  enumerated as an **ordinary competitor** `real_{country}` (same code path, differing only in its
+  `real_sample_size` first-N prefix draw). Judging one combination requires no other, so its output
+  is byte-reproducible in isolation and independent of processing order — the property that makes
+  `03_Analysis/persona_realism/{country}/` contain combination directories and nothing else.
+- **`realism_ranking/`** -- The cross-combination half (driven by `rank_persona_realism.py`,
+  `slugs` dispatch, `depends_on: [persona_realism]`). `loader.py` discovers the consumption set
+  through the registry and enforces two gates before any statistic: **completeness** (report +
+  per-persona CSV + a row count matching `n_personas`) and **homogeneity** (one `judge_model` /
+  `prompt_template_sha256` / `n_rounds` across the set — ranking units judged by different judges
+  measures the judges). `builder.py` computes Axis A (impossibility ranking with seeded bootstrap
+  CIs, Holm-corrected contrasts against the real population with effect sizes) and Axis B
+  (typicality-dispersion distance + Levene, with the real population as the **target**), plus
+  Kruskal–Wallis + Dunn/Holm on the model and method factors (real competitor held out) and a logit
+  mixed model on `can_exist`; `charts.py` renders the re-anchored headline map and the impossibility
+  forest. It performs **no LLM work** — re-running it is free and touches no verdict cache.
 - **`utils/`** -- cross-process shared infra:
+  - `realism_csv.py` -- the per-persona tidy schema shared by the two persona-realism tasks
+    (writer used by the producer, reader by the consumer, one definition). Keeps *absent* distinct
+    from *zero* (a persona with no typicality reads back `None`, never `0.0`), round-trips counts as
+    `int`, and validates on read: a missing column, an unparseable count, or a row count disagreeing
+    with the report's `n_personas` raises, naming the file.
   - `registry.py` -- the **analysis registry** accessor: loads/validates
     `config/analysis/analysis_registry.yaml` (the single source of truth mapping each process's
     canonical id → label/description/folder/script/dispatch) and exposes `AnalysisProcess`,

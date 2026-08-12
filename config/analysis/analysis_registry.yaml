@@ -172,16 +172,49 @@ processes:
     label: "Persona Realism Judge (LLM-as-judge)"
     description: >
       LLM-as-judge scoring of each individual persona's internal coherence: per
-      persona, N judge rounds (default 3, cold temperature) return can_exist
-      (binary possibility) and typicality (0-10 ordinal) plus severity-tagged
-      attribute-clash issues. Aggregates round -> persona -> combination into a
-      per-combination impossibility rate (bootstrap CI), typicality dispersion vs
-      the SCB real reference (Levene variance-equality test), and a judge
-      self-reliability metric (ICC / Krippendorff's alpha across rounds). The real
-      API-sourced population is judged as an additional competitor. Judge model,
-      rounds, temperature, severity weights, sampling size, and bootstrap params
-      are config-driven (config/analysis/persona_realism/); cost per combo reuses
+      persona, N judge rounds (cold temperature) return can_exist (binary
+      possibility) and typicality (0-10 ordinal) plus severity-tagged
+      attribute-clash issues. Aggregates round -> persona -> combination into that
+      combination's OWN impossibility rate (bootstrap CI), typicality dispersion,
+      and judge self-reliability metric (ICC / Krippendorff's alpha across rounds),
+      plus a per-persona tidy CSV. Strictly per-combination: nothing is compared,
+      ranked, or accumulated across combinations here, so each combination's output
+      is reproducible in isolation and independent of processing order. The real
+      API-sourced population is enumerated as an ORDINARY competitor with no
+      reference role. Cross-combination claims belong to realism_ranking. Judge
+      model, rounds, temperature, sampling size, and bootstrap params are
+      config-driven (config/analysis/persona_realism/); cost per combo reuses
       config/analysis/model_pricing.yaml.
     folder: "persona_realism"
     script: "scripts/analyze/analyze_persona_realism.py"
     dispatch: "per_combo"
+
+  realism_ranking:
+    label: "Realism Ranking (combinations vs the real population)"
+    description: >
+      Cross-combination half of the persona-realism pipeline. Consumes the
+      per-combination judge artifacts (report + per-persona tidy CSV) and makes
+      every claim that needs more than one combination, performing NO LLM work.
+      Axis A (validity): each competitor's impossibility rate with a seeded
+      bootstrap CI, ranked, with the real population as an ORDINARY ranked
+      competitor -- so whether conditional chained sampling itself produces
+      incoherent personas is asked rather than assumed. Axis B (coverage):
+      typicality dispersion, where the real population IS the target and distance
+      near zero is better (the failure mode guarded against is mode collapse).
+      Adds Holm-corrected pairwise contrasts against the real population with
+      effect sizes, Kruskal-Wallis + Dunn/Holm on the model and method factors
+      (real population held out), and a logit mixed model on can_exist where the
+      [analysis] extra resolves. Gates on completeness and on a single
+      judge_model / prompt hash / n_rounds across the consumption set. Emits
+      realism_ranking.json, realism_summary.csv, scb_contrast.csv, headline_map
+      impossibility_forest and impossibility_heatmap (model x method, with the real
+      population as a separate band) figures per country. Also reports a separate,
+      purely descriptive SEVERITY dimension: one model x method heatmap per clash
+      level (S3 / S2 / S1) showing the share of a combination's personas carrying at
+      least one clash at that level, counted independently so a persona with both an
+      S3 and an S2 appears on both. It feeds no ranking or test and leaves the binary
+      impossibility rate untouched; S3/S2 are defects (lower is better) while S1 is
+      unusual-but-possible and is reported, never penalised.
+    folder: "realism_ranking"
+    script: "scripts/analyze/rank_persona_realism.py"
+    dispatch: "slugs"

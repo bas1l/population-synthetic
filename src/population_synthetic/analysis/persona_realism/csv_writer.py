@@ -1,11 +1,18 @@
-"""csv_writer.py -- write per-combination realism rows to CSV.
+"""csv_writer.py -- write one combination's flat realism summary row to CSV.
 
-Pure sink: takes already-assembled :class:`RealismRow` records (one per
-combination) and a target path, and writes them via the stdlib ``csv`` module
-with a **fixed** column set. Knows nothing about matplotlib, the country id, the
-stats formulas, or how the rows were computed -- the caller (:mod:`artifacts`)
-assembles each row from a :class:`~population_synthetic.analysis.persona_realism.stats.RealismStats`
-plus the cost/validation blocks and resolves the path.
+Pure sink: takes an already-assembled :class:`RealismRow` record and a target path,
+and writes it via the stdlib ``csv`` module with a **fixed** column set. Knows
+nothing about matplotlib, the country id, the stats formulas, or how the row was
+computed -- the caller (:mod:`artifacts`) assembles it from a
+:class:`~population_synthetic.analysis.persona_realism.stats.RealismStats` plus the
+cost/validation blocks and resolves the path.
+
+Every column describes the combination **on its own**. The five columns that
+described it relative to the SCB reference (``dist_variance``, ``dist_entropy``,
+``dist_tail_coverage``, ``variance_equality_stat``, ``variance_equality_p``) are
+gone: they made a single combination's row unreproducible without first judging a
+different combination. The contrast now lives in ``realism_ranking``'s
+``scb_contrast.csv``, computed from the per-persona tidy CSVs.
 
 :data:`FIELDNAMES` is the single source of truth for the column set and order,
 consumed by both the header and each row; :class:`RealismRow`'s fields are kept
@@ -43,11 +50,6 @@ class RealismRow:
     disp_variance: float | None
     disp_entropy: float | None
     disp_tail_coverage: float | None
-    dist_variance: float | None
-    dist_entropy: float | None
-    dist_tail_coverage: float | None
-    variance_equality_stat: float | None
-    variance_equality_p: float | None
     can_exist_alpha: float | None
     typicality_alpha: float | None
     typicality_icc: float | None

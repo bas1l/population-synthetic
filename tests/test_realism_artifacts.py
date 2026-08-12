@@ -20,9 +20,10 @@ from population_synthetic.analysis.persona_realism import artifacts as A
 from population_synthetic.analysis.persona_realism.csv_writer import FIELDNAMES, RealismRow, write_realism_csv
 from population_synthetic.analysis.persona_realism.judge import Issue, RoundVerdict
 from population_synthetic.analysis.persona_realism.reduce import reduce_combo, reduce_persona
-from population_synthetic.analysis.persona_realism.report import write_combo_report, write_run_report
-from population_synthetic.analysis.persona_realism.runner import JudgeConfig
+from population_synthetic.analysis.persona_realism.config import JudgeConfig
+from population_synthetic.analysis.persona_realism.report import write_combo_report
 from population_synthetic.analysis.persona_realism.stats import compute_realism_stats
+from population_synthetic.analysis.utils.realism_csv import read_realism_personas_csv
 
 _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
 _BOOT = {"iterations": 200, "seed": 20260723, "ci_level": 0.95}
@@ -58,15 +59,8 @@ def _combo():
     return reduce_combo([p1, p2, p3], "combo_x")
 
 
-def _scb_ref():
-    return reduce_combo(
-        [reduce_persona([_possible(5), _possible(5)], persona_id=f"s{i}") for i in range(3)],
-        "real_swedish",
-    )
-
-
-def _stats(combo=None, scb=None):
-    return compute_realism_stats(combo or _combo(), scb or _scb_ref(), bootstrap=_BOOT)
+def _stats(combo=None):
+    return compute_realism_stats(combo or _combo(), bootstrap=_BOOT)
 
 
 # --------------------------------------------------------------------------- #
@@ -121,19 +115,6 @@ def test_write_combo_report_carries_meta_and_validity_anchor(tmp_path):
     assert payload["provenance"]["judge_model"] == "claude-fable-5"
     # impossibility/dispersion/reliability blocks are serialised verbatim from stats.
     assert payload["impossibility"]["rate"] == pytest.approx(1.0 / 3.0)
-
-
-def test_write_run_report_structure(tmp_path):
-    path = write_run_report(
-        tmp_path / "run_report.json",
-        combos=[{"combo_label": "combo_x", "n_personas": 3}],
-        headline={"measure": "variance", "reference": "real_swedish", "points": []},
-        provenance={"judge_model": "claude-fable-5"},
-        pricing={"currency": "USD"},
-    )
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["headline_map"]["measure"] == "variance"
-    assert payload["combos"][0]["combo_label"] == "combo_x"
 
 
 # --------------------------------------------------------------------------- #
@@ -233,11 +214,11 @@ def test_write_combo_artifacts_writes_all_and_is_idempotent(tmp_path):
     out_dir = _seed_combo_dir(tmp_path)
     ca = A.write_combo_artifacts(
         out_dir, "combo_x",
-        scb_ref=_scb_ref(), cfg=_cfg(), dpi=80, force=False,
+        cfg=_cfg(), dpi=80, force=False,
         hard_rules=(), pricing=_PRICING,
     )
     expected = {
-        out_dir / "combo_x.csv", out_dir / "combo_x.json",
+        out_dir / "combo_x.csv", out_dir / "combo_x.json", out_dir / "combo_x_personas.csv",
         out_dir / "typicality.png", out_dir / "typicality.svg",
         out_dir / "clash_taxonomy.png", out_dir / "clash_taxonomy.svg",
     }
@@ -254,7 +235,7 @@ def test_write_combo_artifacts_writes_all_and_is_idempotent(tmp_path):
     mtimes = {p: p.stat().st_mtime_ns for p in expected}
     ca2 = A.write_combo_artifacts(
         out_dir, "combo_x",
-        scb_ref=_scb_ref(), cfg=_cfg(), dpi=80, force=False,
+        cfg=_cfg(), dpi=80, force=False,
         hard_rules=(), pricing=_PRICING,
     )
     assert expected.issubset(set(ca2.paths))
@@ -264,35 +245,139 @@ def test_write_combo_artifacts_writes_all_and_is_idempotent(tmp_path):
 
 def test_write_combo_artifacts_force_rewrites(tmp_path):
     out_dir = _seed_combo_dir(tmp_path)
-    A.write_combo_artifacts(out_dir, "combo_x", scb_ref=_scb_ref(), cfg=_cfg(), dpi=80,
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80,
                             force=False, hard_rules=(), pricing=_PRICING)
     csv_path = out_dir / "combo_x.csv"
     before = csv_path.stat().st_mtime_ns
-    A.write_combo_artifacts(out_dir, "combo_x", scb_ref=_scb_ref(), cfg=_cfg(), dpi=80,
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80,
                             force=True, hard_rules=(), pricing=_PRICING)
     assert csv_path.stat().st_mtime_ns != before
 
 
-def test_write_headline_map_renders_map_and_summary(tmp_path):
-    scb_dir = _seed_combo_dir(tmp_path / "scb")
-    combo_dir = _seed_combo_dir(tmp_path / "syn")
+# --------------------------------------------------------------------------- #
+# per-combination isolation: no field depends on any other combination        #
+# --------------------------------------------------------------------------- #
+
+
+def test_combo_report_carries_no_reference_dependent_field(tmp_path):
+    """The split's load-bearing property: a combination's report describes only itself.
+
+    A ``distance_to_scb`` / ``variance_equality`` / ``scb_reference`` key here would mean
+    the file could not be produced without first judging a *different* combination --
+    the connascence of execution order the split exists to remove.
+    """
+    out_dir = _seed_combo_dir(tmp_path)
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    report = json.loads((out_dir / "combo_x.json").read_text(encoding="utf-8"))
+    dispersion = report["dispersion"]
+    for banned in ("distance_to_scb", "variance_equality", "scb_reference"):
+        assert banned not in dispersion, banned
+    assert set(FIELDNAMES).isdisjoint(
+        {"dist_variance", "dist_entropy", "dist_tail_coverage",
+         "variance_equality_stat", "variance_equality_p"}
+    )
+
+
+def test_combo_artifacts_are_byte_identical_regardless_of_order(tmp_path):
+    """Judging a slug before or after any other slug produces identical bytes.
+
+    Two combo dirs seeded from the same verdicts are written in opposite orders; if
+    anything in the artifact layer accumulated state across units (a reference held in
+    memory, a running aggregate), the two reports would differ.
+    """
+    first = _seed_combo_dir(tmp_path / "a")
+    second = _seed_combo_dir(tmp_path / "b")
     cfg = _cfg()
-    scb_combo, _present = A.load_combo_realism(scb_dir, "real_swedish")
-    scb_ca = A.write_combo_artifacts(scb_dir, "real_swedish", scb_ref=None, cfg=cfg, dpi=80,
-                                     force=True, hard_rules=(), pricing=_PRICING)
-    syn_ca = A.write_combo_artifacts(combo_dir, "combo_x", scb_ref=scb_combo, cfg=cfg, dpi=80,
-                                     force=True, hard_rules=(), pricing=_PRICING)
-    out_root = tmp_path / "root"
-    A.write_headline_map([scb_ca, syn_ca], out_root, cfg=cfg, dpi=80, force=True,
-                         scb_label="real_swedish", pricing=_PRICING)
-    assert (out_root / "headline_map.png").exists()
-    assert (out_root / "headline_map.svg").exists()
-    assert (out_root / "realism_summary.csv").exists()
-    run_report = json.loads((out_root / "run_report.json").read_text(encoding="utf-8"))
-    labels = {p["label"]: p for p in run_report["headline_map"]["points"]}
-    assert labels["real_swedish"]["is_reference"] is True
-    assert labels["real_swedish"]["dispersion_distance"] == 0.0
-    assert "combo_x" in labels
-    # combined CSV carries one row per combo.
-    with open(out_root / "realism_summary.csv", newline="", encoding="utf-8") as fh:
-        assert len(list(csv.DictReader(fh))) == 2
+
+    A.write_combo_artifacts(first, "combo_x", cfg=cfg, dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    other = _seed_combo_dir(tmp_path / "other")
+    A.write_combo_artifacts(other, "combo_y", cfg=cfg, dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    A.write_combo_artifacts(second, "combo_x", cfg=cfg, dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+
+    for name in ("combo_x.json", "combo_x.csv", "combo_x_personas.csv"):
+        assert (first / name).read_bytes() == (second / name).read_bytes(), name
+
+
+def test_personas_csv_row_count_matches_report_n_personas(tmp_path):
+    """The completeness marker the aggregator gates on."""
+    out_dir = _seed_combo_dir(tmp_path)
+    A.write_combo_artifacts(
+        out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+        country="swedish", model="claude_haiku", strategy="all_pick",
+        hard_rules=(), pricing=_PRICING,
+    )
+    report = json.loads((out_dir / "combo_x.json").read_text(encoding="utf-8"))
+    rows = read_realism_personas_csv(out_dir / "combo_x_personas.csv",
+                                     expected_rows=report["n_personas"])
+    assert len(rows) == 3
+    by_id = {r.persona_id: r for r in rows}
+    # The impossible persona: majority false, and NO typicality at all -- absent, not 0.0.
+    assert by_id["persona_00002"].can_exist_majority is False
+    assert by_id["persona_00002"].typicality_mean is None
+    assert by_id["persona_00002"].max_severity == "S3"
+    # A possible persona keeps its per-round series and its axis identity.
+    assert by_id["persona_00000"].typicality_rounds == (8, 9)
+    assert by_id["persona_00000"].can_exist_true_votes == 2
+    assert by_id["persona_00000"].model == "claude_haiku"
+    assert by_id["persona_00000"].is_real_reference is False
+
+
+def test_personas_csv_marks_the_real_competitor_without_model_or_strategy(tmp_path):
+    out_dir = _seed_combo_dir(tmp_path)
+    A.write_combo_artifacts(
+        out_dir, "real_swedish", cfg=_cfg(), dpi=80, force=True,
+        country="swedish", is_real_reference=True, hard_rules=(), pricing=_PRICING,
+    )
+    rows = read_realism_personas_csv(out_dir / "real_swedish_personas.csv")
+    assert rows and all(r.is_real_reference for r in rows)
+    assert all(r.model == "" and r.strategy == "" for r in rows)
+
+
+def test_personas_csv_carries_per_severity_counts_from_the_verdict_cache(tmp_path):
+    """The severity dimension's input, sourced from the cached clashes -- no re-judging.
+
+    The persona below carries an S3 *and* an S2 in the same round, so it must be
+    countable at both levels; ``max_severity`` alone would file it under S3 and hide the
+    S2 entirely.
+    """
+    out_dir = tmp_path / "combo_x"
+    attrs = {"age_group": "25-34", "education_level": "Upper-Secondary"}
+    both = _impossible(issues=(
+        Issue(("age_group", "education_level"), "S3", "hard"),
+        Issue(("income_bracket", "occupation"), "S2", "near"),
+    ))
+    _write_cache(out_dir, "persona_00000", attrs, [both, both])
+    _write_cache(out_dir, "persona_00001", attrs,
+                 [_possible(7, issues=(Issue(("a", "b"), "S1", "unusual"),))] * 2)
+    _write_cache(out_dir, "persona_00002", attrs, [_possible(8), _possible(8)])
+    _write_jsonl(out_dir, ["persona_00000", "persona_00001", "persona_00002"])
+
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    rows = {r.persona_id: r
+            for r in read_realism_personas_csv(out_dir / "combo_x_personas.csv")}
+
+    double = rows["persona_00000"]
+    assert double.max_severity == "S3"                       # the partition view
+    assert double.clash_count_s3 == 1 and double.clash_count_s2 == 1   # both countable
+    assert double.clash_count_s1 == 0
+    assert double.clash_count == 2
+
+    assert rows["persona_00001"].clash_count_s1 == 1
+    assert rows["persona_00001"].clash_count_s2 == 0
+    # A clean persona is at zero on every level.
+    clean = rows["persona_00002"]
+    assert (clean.clash_count_s1, clean.clash_count_s2, clean.clash_count_s3) == (0, 0, 0)
+    assert clean.max_severity == ""
+
+
+def test_personas_csv_row_count_mismatch_raises(tmp_path):
+    out_dir = _seed_combo_dir(tmp_path)
+    A.write_combo_artifacts(out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
+                            hard_rules=(), pricing=_PRICING)
+    with pytest.raises(ValueError, match="n_personas=99"):
+        read_realism_personas_csv(out_dir / "combo_x_personas.csv", expected_rows=99)

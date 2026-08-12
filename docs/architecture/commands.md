@@ -187,6 +187,34 @@ resolve their output dir via `analysis_output_dir(id, output_base)` rather than 
 | `real_population_stats` | Real Reference Population Stats | `real_population_stats/{country}/` | `analyze_real_population_stats.py` | per_country |
 | `generation_metadata` | Generation Metadata (country × model × method) | `generation_metadata/` | `summarize_generation_metadata.py` | slugs |
 | `persona_realism` | Persona Realism Judge (LLM-as-judge) | `persona_realism/` | `analyze_persona_realism.py` | per_combo |
+| `realism_ranking` | Realism Ranking (combinations vs the real population) | `realism_ranking/` | `rank_persona_realism.py` | slugs |
+
+### Persona realism: two tasks, one seam
+
+`persona_realism` is **strictly per-combination**: judging one combination reads no other, and its
+artifacts are byte-reproducible in isolation. It writes `{combo}.json`, `{combo}.csv`, the two
+figures, and `{combo}_personas.csv` — the per-persona tidy CSV that is the inter-task contract
+(schema in `analysis/utils/realism_csv.py`). The real API-sourced population is enumerated as an
+**ordinary competitor** `real_{country}`, not as a reference.
+
+`realism_ranking` consumes those files and owns every cross-combination claim. It performs **no LLM
+work**, so it is free to re-run. Two axes, opposite in direction: Axis A ranks impossibility rate
+with the real population as an ordinary ranked competitor (lower is better, for everyone); Axis B
+contrasts typicality dispersion against the real population **as the target** (distance near zero is
+better — the failure mode being guarded against is mode collapse). Alongside them it reports a
+purely descriptive **severity** dimension: one model × method heatmap per clash level (S3 / S2 / S1),
+counted independently so a persona with both an S3 and an S2 appears on both. It feeds no ranking or
+test; S3/S2 are defects, while S1 is unusual-but-possible and is reported, never penalised.
+
+```bash
+python scripts/analyze/analyze_persona_realism.py --slug swedish_02_all_pick_v2_claude_haiku
+python scripts/analyze/analyze_persona_realism.py --rewrite-artifacts   # rebuild artifacts, 0 LLM calls
+python scripts/analyze/rank_persona_realism.py --country swedish_02
+```
+
+`--rewrite-artifacts` regenerates the derived files from the verdict cache already on disk. It is
+the supported way to refresh artifacts after an output-schema change; **`--force` is not** — that
+truncates every verdict cache and re-judges from scratch, at full LLM cost.
 
 ## See also
 
