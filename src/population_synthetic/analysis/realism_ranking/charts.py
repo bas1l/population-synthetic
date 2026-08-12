@@ -15,6 +15,18 @@ Three figures:
 * :func:`plot_severity_pair_summary` -- the complement of that heatmap at one level: the
   attribute pairs that clashed, ranked country-wide, with the real population as its own
   series rather than pooled into the bars.
+* :func:`plot_typicality_heatmap` -- the self-contained typicality statistic on the same
+  grid, on a **diverging** ramp whose midpoint is the real population's own value, read
+  from the block. The optimum is interior, so neither end of the ramp is "better"; the
+  two ends are "more collapsed than the register population" and "more dispersed than
+  it". With no real population in the consumption set there is no midpoint, and the
+  figure degrades to the neutral sequential ramp with the reason printed on it.
+* :func:`plot_typicality_by_method` -- the same statistic with the methods on x in
+  complexity order, one mark per model, and the real population as a horizontal
+  reference line. It is the one figure in this task where the real population is a
+  reference rather than a series, and it is drawn that way only because this axis has no
+  ranking to hold it out of: the line is the ramp midpoint of its sibling heatmap, in a
+  form that shows each method's spread around it.
 
 **The real population is drawn as an ordinary competitor.** The previous version of the
 map pinned it to ``y = 0`` and marked it with a reference star, which encoded *the real
@@ -45,6 +57,8 @@ __all__ = [
     "plot_impossibility_heatmap",
     "plot_severity_heatmap",
     "plot_severity_pair_summary",
+    "plot_typicality_by_method",
+    "plot_typicality_heatmap",
 ]
 
 _COMPETITOR_COLOR = "#4878CF"
@@ -685,4 +699,514 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
         ax.legend([handles[i] for i in order], [legend_labels[i] for i in order],
                   fontsize=8, loc="best", framealpha=0.92)
     _place_footnote(fig, ax, _pair_summary_footnotes(summary))
+    return fig
+
+
+# --------------------------------------------------------------------------- #
+# Typicality -- the self-contained statistic, rendered against the real value  #
+# --------------------------------------------------------------------------- #
+
+
+#: Diverging ramp for the typicality statistic. The third ramp state this module carries,
+#: and the only diverging one: the other two encode a monotone quantity (``_DEFECT_CMAP``
+#: more-is-worse, ``_NEUTRAL_CMAP`` reported-but-never-penalised), while this statistic's
+#: optimum is *interior* -- collapsed onto one level and maximally dispersed are both
+#: departures from the real population, in opposite directions, and a sequential ramp
+#: would flatten one of them into "less of the other". The midpoint is the real
+#: population's own value, read from the block; the two ends are more-collapsed-than-it
+#: and more-dispersed-than-it, neither of which is better.
+#:
+#: PuOr rather than the more familiar red-blue: red is spoken for by ``_DEFECT_CMAP`` and
+#: blue by ``_NEUTRAL_CMAP`` on the sibling heatmaps in this same folder, and reusing
+#: either hue here would import their better/worse reading onto an axis that has none. It
+#: is a ColorBrewer diverging pair (colour-vision-deficiency safe) and near-white at its
+#: centre, so "at the real population's spread" reads as the neutral point rather than as
+#: an extreme. Low end (orange) = more collapsed; high end (purple) = more dispersed.
+_DIVERGING_CMAP = "PuOr"
+
+#: Overlay for an UNDER-POWERED cell -- measured, but on fewer personas than ``min_n``.
+#: A hatch rather than a fill, because the value is still published and still readable:
+#: greying it out would make "measured on too few personas to read" look like the
+#: unjudged ``_MISSING_COLOR``, which claims nothing was measured at all. Sparse and
+#: semi-transparent for the same reason -- a dense hatch strikes through the number it is
+#: qualifying, and the number is still the cell's point.
+_UNDER_POWERED_HATCH = "//"
+_UNDER_POWERED_EDGE = "#333333"
+_UNDER_POWERED_ALPHA = 0.35
+
+#: Fill + overlay for a cell whose competitor was judged but carries NO typicality-bearing
+#: persona (every persona was judged impossible). The fourth state on this figure, and
+#: deliberately neither the ramp (there is no value), nor ``_MISSING_COLOR`` (that pair was
+#: never judged), nor the under-powered hatch (that one has a value).
+_NO_TYPICALITY_COLOR = "#FFFFFF"
+_NO_TYPICALITY_HATCH = "xx"
+_NO_TYPICALITY_EDGE = "#CCCCCC"
+
+#: Half-width the diverging ramp falls back to when every competitor -- the real
+#: population included -- carries exactly the same value. The range is then genuinely
+#: zero-width; a ramp cannot be built on it and normalising by it would divide by zero.
+#: Every cell renders at the midpoint colour, which is the truth (they are all at the
+#: reference), and the figure says so in a footnote rather than implying a spread that
+#: the limits invented.
+_FLAT_RANGE_HALF_WIDTH = 0.05
+
+#: Qualitative colours for the per-model marks on the methods-on-x figure. Qualitative,
+#: because model identity is nominal: a sequential ramp over an alphabetical model list
+#: would encode an order that does not exist.
+_MODEL_CMAP = "tab20"
+
+#: ``tab20`` entries withheld from the model palette: its red pair. Red is this folder's
+#: identity colour for the real population (``_REAL_COLOR`` on the forest plot, the pair
+#: summary and this figure's reference line), so handing it to a model would break the one
+#: colour mapping every figure here asks the reader to learn.
+_RESERVED_MODEL_COLORS = (6, 7)
+
+#: Total width the per-model marks are dodged across within one method's slot. Wide enough
+#: to separate a dozen models, narrow enough that a mark never crosses into its
+#: neighbour's slot -- a point read against the wrong method is worse than a crowded one.
+_METHOD_DODGE_SPAN = 0.62
+
+#: Wrap width for the colourbar / y-axis label. The label states the statistic's endpoints
+#: (it comes from the block, not from here), which is longer than a single axis line.
+_LABEL_WRAP = 42
+
+
+def _typicality_block(ranking: dict[str, Any], context: str) -> dict[str, Any]:
+    """The typicality block, or a raise naming what is missing.
+
+    The block is ``None`` on a document built without the axis's options -- a state the
+    builder records as a skipped test. Rendering that as an empty figure would present a
+    deliberate omission as a measured absence.
+    """
+    block = ranking.get("typicality")
+    if block is None:
+        raise ValueError(
+            f"{context} requires a ranking built with the typicality options; this "
+            "document carries typicality: null (the reason is in skipped_tests)."
+        )
+    return block
+
+
+def _typicality_values(grid: dict[str, Any]) -> list[float]:
+    """Every defined statistic value on the grid, the real population's included.
+
+    The real population is in the list because the ramp's limits must cover it: it is
+    drawn on the same colour scale as the cells, and limits computed without it would
+    clip the one value the scale is centred on.
+    """
+    values = [
+        float(cell["value"])
+        for model in grid["models"]
+        for cell in (grid["cells"][model][method] for method in grid["methods"])
+        if cell is not None and cell["value"] is not None
+    ]
+    real = grid.get("real")
+    if real is not None and real["value"] is not None:
+        values.append(float(real["value"]))
+    return values
+
+
+def _typicality_limits(
+    values: list[float], reference: float | None
+) -> tuple[float, float, str, bool]:
+    """Colour limits for the typicality ramp: ``(vmin, vmax, cmap_name, flat)``.
+
+    Two regimes, and which one applies is decided by the *document*, never by a literal:
+
+    * **A reference value** (the real population's own statistic) makes the ramp diverging
+      and its limits **symmetric about that midpoint**, so equal departures in the two
+      directions get equally saturated colours. The sibling heatmaps' ``vmin = 0`` premise
+      -- a true zero, so a pale cell always means "few" -- does not transfer: on an
+      interior-optimum statistic the pale end is the *reference*, and anchoring at zero
+      would paint every competitor on one side of it.
+    * **No reference** degrades to the neutral sequential ramp anchored at the statistic's
+      true zero (total collapse onto one level, which is a real measurement). There is
+      then no midpoint to centre anything on, and inventing one is exactly the failure
+      this degradation exists to avoid.
+
+    *flat* reports that every value coincided with the reference, so the returned limits
+    are the fallback half-width rather than a measured range; the caller prints it.
+    """
+    if reference is None:
+        vmax = max(values)
+        return 0.0, vmax if vmax > 0.0 else 1.0, _NEUTRAL_CMAP, False
+    midpoint = float(reference)
+    radius = max(abs(value - midpoint) for value in values)
+    flat = radius == 0.0
+    if flat:
+        radius = _FLAT_RANGE_HALF_WIDTH
+    return midpoint - radius, midpoint + radius, _DIVERGING_CMAP, flat
+
+
+def _ramp_text_color(value: float, vmin: float, vmax: float, *, diverging: bool) -> str:
+    """White text on a dark fill, black on a pale one.
+
+    A diverging ramp is dark at *both* ends and pale in the middle, so the sequential
+    rule (dark above a threshold) would print white text on the pale midpoint -- exactly
+    the cells nearest the real population's value, which is where a reader looks first.
+    """
+    position = (value - vmin) / (vmax - vmin)
+    dark = (position <= 0.18 or position >= 0.82) if diverging else position >= 0.6
+    return "white" if dark else "black"
+
+
+def _typicality_footnotes(
+    block: dict[str, Any], *, reference_role: str, under_powered_mark: str,
+    flat: bool, has_reference: bool, has_band: bool,
+) -> list[str]:
+    """The caveats that must travel *on* a typicality figure, in reading order.
+
+    The reference first (the whole rendering is relative to it), then the direction
+    refusal, then how to read a cell's two denominators, then what the marks mean, then
+    what is excluded. Every caveat's *wording* comes from the block --
+    ``reference_note``, ``direction_reason``, ``counting_unit``,
+    ``under_powered_policy``, ``n_confound`` -- so the figure and the numbers it renders
+    cannot disagree about what they mean. Only the two words for *how this figure draws
+    a thing* (``reference_role``, ``under_powered_mark``) are the caller's, because they
+    describe the rendering rather than the measurement.
+    """
+    reference = block["reference_value"]
+    if has_reference:
+        role = (
+            f"{reference_role}: {block['reference_slug']} at {float(reference):.3f} -- "
+            f"{block['reference_note']}"
+        )
+    else:
+        role = f"No {reference_role.lower()}: {block['reference_note']}"
+    lines = [
+        role,
+        f"Not a score: {block['direction_reason']}",
+        f"Counted in {block['counting_unit']}",
+        f"Under-powered ({under_powered_mark}, min_n = {block['min_n']}): "
+        f"{block['under_powered_policy']}",
+        f"Denominator confound: {block['n_confound']}",
+    ]
+    if flat:
+        lines.append(
+            "Every consumed competitor carries exactly the reference value, so the ramp "
+            f"has no measured range; it is drawn at the reference +/- {_FLAT_RANGE_HALF_WIDTH} "
+            "and every cell sits at the midpoint colour."
+        )
+    if has_band:
+        lines.append(
+            "The real population spans the full width because it has no method: it is not "
+            "a model x method cell, and the factor tests hold it out."
+        )
+    return lines
+
+
+def plot_typicality_heatmap(ranking: dict[str, Any]):
+    """Render the self-contained typicality statistic as a model x method grid.
+
+    The severity and impossibility dimensions each have this figure; typicality had none,
+    and appeared only as a *distance* on the headline map's y-axis. Here each cell is the
+    competitor's own spread, computed from its own personas alone -- so a mode-collapsed
+    combination and an over-dispersed one, which ``axis_b.dispersion_contrast`` cannot
+    tell apart once it takes an absolute value, land on opposite sides of the ramp.
+
+    **The reference is in the colours, never in the cells.** The midpoint is read from
+    ``block["reference_value"]`` -- the real population's own statistic, computed exactly
+    as every competitor's -- so removing the real population from the consumption set
+    degrades this figure to the neutral sequential ramp with the reason printed on it,
+    rather than falling back on a literal midpoint that would be a claim nobody measured.
+
+    **Four states, four appearances**, because collapsing any two of them into one fill
+    would publish a claim that was never made: a value (on the ramp), an under-powered
+    value (on the ramp, hatched), a judged competitor with no typicality-bearing persona
+    (white, cross-hatched, labelled), and an unjudged pair (grey, labelled). Computes
+    nothing -- every number, and every caption's wording, arrives from the block.
+
+    Returns the ``Figure`` unsaved and open. Raises ``ValueError`` when no competitor has
+    a defined statistic, matching the sibling charts.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.patches import Rectangle
+
+    block = _typicality_block(ranking, "plot_typicality_heatmap")
+    grid = block["grid"]
+    models: list[str] = list(grid["models"])
+    methods: list[str] = list(grid["methods"])
+    real = grid.get("real")
+    real_value = None if real is None else real["value"]
+
+    values = _typicality_values(grid)
+    if not values:
+        raise ValueError(
+            "plot_typicality_heatmap requires at least one competitor with a defined "
+            "typicality statistic"
+        )
+    vmin, vmax, cmap_name, flat = _typicality_limits(values, block["reference_value"])
+    diverging = cmap_name == _DIVERGING_CMAP
+
+    n_rows = len(models) + (1 if real_value is not None else 0)
+    plotted = np.full((n_rows, max(len(methods), 1)), np.nan)
+    for i, model in enumerate(models):
+        for j, method in enumerate(methods):
+            cell = grid["cells"][model][method]
+            if cell is not None and cell["value"] is not None:
+                plotted[i, j] = float(cell["value"])
+    if real_value is not None:
+        plotted[-1, :] = float(real_value)
+
+    fig, ax = plt.subplots(
+        figsize=(max(7.0, len(methods) * 1.5 + 3.5), max(3.2, n_rows * 0.55 + 2.4))
+    )
+    cmap = plt.get_cmap(cmap_name).copy()
+    cmap.set_bad(color=_MISSING_COLOR)
+    im = ax.imshow(
+        np.ma.masked_invalid(plotted), aspect="auto", cmap=cmap, vmin=vmin, vmax=vmax
+    )
+
+    row_labels = list(models)
+    if real_value is not None:
+        suffix = " -- ramp midpoint" if diverging else ""
+        row_labels.append(f"{real['slug']}  (real population{suffix})")
+    ax.set_xticks(range(max(len(methods), 1)))
+    ax.set_xticklabels(methods or [""], rotation=30, ha="right", fontsize=8)
+    ax.set_yticks(range(n_rows))
+    ax.set_yticklabels(row_labels, fontsize=8)
+
+    for i, model in enumerate(models):
+        for j, method in enumerate(methods):
+            cell = grid["cells"][model][method]
+            if cell is None:
+                ax.text(j, i, "not judged", ha="center", va="center", fontsize=7.5,
+                        color="#666666", style="italic")
+                continue
+            if cell["value"] is None:
+                # Judged, but no persona survived to carry a typicality: a measurement
+                # that could not be made, which is not the same as one that was not tried.
+                ax.add_patch(Rectangle(
+                    (j - 0.5, i - 0.5), 1, 1, facecolor=_NO_TYPICALITY_COLOR,
+                    edgecolor=_NO_TYPICALITY_EDGE, hatch=_NO_TYPICALITY_HATCH,
+                    linewidth=0.0, zorder=2,
+                ))
+                ax.text(j, i, f"no typicality\nof {cell['n_personas']} personas",
+                        ha="center", va="center", fontsize=7, color="#555555",
+                        style="italic", zorder=4)
+                continue
+            value = float(cell["value"])
+            if cell["under_powered"]:
+                ax.add_patch(Rectangle(
+                    (j - 0.5, i - 0.5), 1, 1, fill=False, edgecolor=_UNDER_POWERED_EDGE,
+                    hatch=_UNDER_POWERED_HATCH, alpha=_UNDER_POWERED_ALPHA,
+                    linewidth=0.0, zorder=2,
+                ))
+            # Above the hatch, always: the hatch qualifies the number and must not be
+            # allowed to strike through it.
+            ax.text(
+                j, i, f"{value:.3f}\nn={cell['denominator']}",
+                ha="center", va="center", fontsize=7, zorder=4,
+                color=_ramp_text_color(value, vmin, vmax, diverging=diverging),
+            )
+
+    if real_value is not None:
+        row = n_rows - 1
+        ax.axhline(row - 0.5, color="white", linewidth=3.0)
+        centre = (len(methods) - 1) / 2.0 if methods else 0.0
+        if real["under_powered"]:
+            # The reference is measured on the same terms as everyone else, and can be
+            # too thin to read like anyone else. An unmarked band would present a shaky
+            # midpoint as a firm one -- and this ramp is centred on it.
+            ax.add_patch(Rectangle(
+                (-0.5, row - 0.5), max(len(methods), 1), 1, fill=False,
+                edgecolor=_UNDER_POWERED_EDGE, hatch=_UNDER_POWERED_HATCH,
+                alpha=_UNDER_POWERED_ALPHA, linewidth=0.0, zorder=2,
+            ))
+        ax.text(
+            centre, row, f"{float(real_value):.3f}   n={real['denominator']}",
+            ha="center", va="center", fontsize=7.5, zorder=4,
+            color=_ramp_text_color(float(real_value), vmin, vmax, diverging=diverging),
+        )
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
+    # The label states the statistic's endpoints and its lack of a direction, both read
+    # from the block: a colourbar that says only "IOV" leaves the reader to guess which
+    # end is which, and this family's own implementations disagree about that.
+    cbar.set_label(
+        textwrap.fill(f"{block['statistic_label']} -- no better/worse direction", _LABEL_WRAP),
+        fontsize=8,
+    )
+    cbar.ax.tick_params(labelsize=7)
+
+    ax.set_xlabel("Method (strategy)", fontsize=9)
+    ax.set_ylabel("Model", fontsize=9)
+    subtitle = (
+        "diverging ramp centred on the real population's own value"
+        if diverging else "neutral ramp -- no real population to centre on"
+    )
+    ax.set_title(
+        f"Typicality -- {block['statistic']} by model x method\n"
+        f"({subtitle}; grey = not judged, which is not a value of zero)",
+        fontsize=12, fontweight="bold",
+    )
+    _place_footnote(fig, ax, _typicality_footnotes(
+        block, reference_role="Ramp midpoint", under_powered_mark="hatched", flat=flat,
+        has_reference=diverging, has_band=real_value is not None,
+    ))
+    return fig
+
+
+def _model_colors(n_models: int, palette) -> list[Any]:
+    """One colour per model, most-distinguishable first.
+
+    ``tab20`` is a set of ten hues each paired with a lighter tint of itself, in
+    alternating order, so taking its entries in sequence hands the first two models two
+    shades of the same blue -- the pair a reader is most likely to confuse on a figure
+    whose whole content is which model sits where. Every *dark* entry is taken first, and
+    the light tints only once the ten hues are exhausted. The red pair is withheld
+    (:data:`_RESERVED_MODEL_COLORS`) because red identifies the real population here.
+    """
+    order = [
+        index
+        for index in list(range(0, palette.N, 2)) + list(range(1, palette.N, 2))
+        if index not in _RESERVED_MODEL_COLORS
+    ]
+    return [palette(order[index % len(order)]) for index in range(n_models)]
+
+
+def _method_dodge(n_models: int) -> list[float]:
+    """Per-model x-offsets within one method's slot, evenly spread and deterministic.
+
+    A dodge rather than the jitter its sibling panel in ``method_significance`` uses: the
+    offsets there come from a seeded RNG, which is reproducible but places a model at a
+    different position in each method's slot, so the eye cannot follow one model across
+    the axis. Here a model keeps its offset, which is what makes the per-model polyline
+    readable -- and the figure stays byte-identical without depending on a seed.
+    """
+    if n_models <= 1:
+        return [0.0]
+    step = _METHOD_DODGE_SPAN / (n_models - 1)
+    return [-_METHOD_DODGE_SPAN / 2 + step * i for i in range(n_models)]
+
+
+def plot_typicality_by_method(ranking: dict[str, Any]):
+    """Render the typicality statistic with the methods on x and the real value as a line.
+
+    The heatmap's complement: it answers "does the spread track the method" in the shape
+    the rest of the analysis layer asks that question in -- methods on x in complexity
+    order (taken from ``grid["methods"]`` verbatim, never re-sorted here), one mark per
+    model, and each model's marks joined so a reader can follow it across the axis.
+
+    **The real population is a horizontal reference line here, and nowhere else in this
+    task.** Everywhere else it is an ordinary series, bar or marker, because everywhere
+    else it is *ranked* and a reference line would encode "closer to it is better" into a
+    figure whose whole point is not to assume that. This axis ranks nothing: the line is
+    the ramp midpoint of the sibling heatmap, drawn so each method's spread around it is
+    visible. It carries the real population's own colour and slug so it cannot be read as
+    a target or a threshold.
+
+    Under-powered competitors are drawn hollow rather than dropped, and their intervals
+    are drawn with everyone else's: a mark with no visible uncertainty on a bounded
+    statistic invites being read as exact. Returns the ``Figure`` unsaved and open; raises
+    ``ValueError`` when no competitor has a defined statistic.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+
+    block = _typicality_block(ranking, "plot_typicality_by_method")
+    grid = block["grid"]
+    models: list[str] = list(grid["models"])
+    methods: list[str] = list(grid["methods"])
+    if not _typicality_values(grid):
+        raise ValueError(
+            "plot_typicality_by_method requires at least one competitor with a defined "
+            "typicality statistic"
+        )
+
+    fig, ax = plt.subplots(figsize=(max(7.5, len(methods) * 1.6 + 3.0), 6.0))
+    colours = _model_colors(len(models), plt.get_cmap(_MODEL_CMAP))
+    offsets = _method_dodge(len(models))
+    handles: list[Line2D] = []
+    any_under_powered = False
+
+    for index, model in enumerate(models):
+        colour = colours[index]
+        xs: list[float] = []
+        ys: list[float] = []
+        drawn = 0
+        for position, method in enumerate(methods):
+            x = position + offsets[index]
+            cell = grid["cells"][model][method]
+            if cell is None or cell["value"] is None:
+                # A break in the polyline, not a shortcut across the gap: joining the two
+                # neighbours would draw a segment through a method this model was never
+                # judged on, which is the one thing the line must not imply.
+                xs.append(x)
+                ys.append(float("nan"))
+                continue
+            value = float(cell["value"])
+            if cell["ci_lo"] is not None and cell["ci_hi"] is not None:
+                ax.plot([x, x], [cell["ci_lo"], cell["ci_hi"]],
+                        color=colour, linewidth=0.9, alpha=0.45, zorder=2)
+            if cell["under_powered"]:
+                any_under_powered = True
+                ax.scatter(x, value, s=46, facecolors="none", edgecolors=colour,
+                           linewidths=1.2, zorder=3)
+            else:
+                ax.scatter(x, value, s=46, color=colour, edgecolor="white",
+                           linewidth=0.4, zorder=3)
+            xs.append(x)
+            ys.append(value)
+            drawn += 1
+        if drawn > 1:
+            ax.plot(xs, ys, color=colour, linewidth=0.9, alpha=0.55, zorder=2)
+        if drawn:
+            handles.append(Line2D([], [], color=colour, marker="o", markersize=5,
+                                  linewidth=0.9, markeredgecolor="white",
+                                  markeredgewidth=0.4, label=model))
+
+    reference = block["reference_value"]
+    if reference is not None:
+        ax.axhline(float(reference), color=_REAL_COLOR, linestyle="--",
+                   linewidth=1.1, alpha=0.9, zorder=1)
+        # Inline, at the left edge and lifted a few points clear of the line, following
+        # the c2st reference-line idiom: a legend entry alone would leave the line
+        # unlabelled where it is actually read, and a baseline sitting *on* the line lets
+        # the dashes strike through the label.
+        ax.annotate(
+            f"{block['reference_slug']} = {float(reference):.3f}  (real population, "
+            "not a target)",
+            xy=(-0.55, float(reference)), xytext=(0, 3), textcoords="offset points",
+            va="bottom", ha="left", fontsize=7.5, color=_REAL_COLOR,
+        )
+    if any_under_powered:
+        handles.append(Line2D([], [], color="#555555", marker="o", markersize=6,
+                              markerfacecolor="none", markeredgewidth=1.2, linestyle="none",
+                              label=f"hollow = under-powered (n < {block['min_n']})"))
+
+    ax.set_xticks(range(len(methods)))
+    ax.set_xticklabels(methods, rotation=25, ha="right", fontsize=8)
+    ax.set_xlim(-0.6, len(methods) - 0.4)
+    ax.set_xlabel("Method (strategy) -- simplest first", fontsize=9)
+    ax.set_ylabel(textwrap.fill(block["statistic_label"], _LABEL_WRAP), fontsize=8)
+    ax.set_title(
+        f"Typicality -- {block['statistic']} by method, one mark per model\n"
+        "(no better/worse direction: the optimum is interior)",
+        fontsize=12, fontweight="bold",
+    )
+    ax.tick_params(axis="y", labelsize=8)
+    ax.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.6, zorder=0)
+    ax.set_axisbelow(True)
+    if handles:
+        ax.legend(handles=handles, fontsize=7.5, loc="center left",
+                  bbox_to_anchor=(1.01, 0.5), framealpha=0.92)
+
+    excluded = block["excluded"]
+    footnotes = _typicality_footnotes(
+        block, reference_role="Reference line", under_powered_mark="hollow", flat=False,
+        has_reference=reference is not None, has_band=False,
+    )
+    footnotes.append(
+        f"Not drawn: {excluded['cells_unjudged']} unjudged model x method pair(s) and "
+        f"{excluded['competitors_without_typicality']} judged competitor(s) whose personas "
+        f"carry no typicality; {excluded['competitors_under_powered']} under-powered "
+        "competitor(s) are drawn hollow rather than dropped."
+    )
+    _place_footnote(fig, ax, footnotes)
     return fig

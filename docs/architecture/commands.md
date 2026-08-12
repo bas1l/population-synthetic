@@ -233,13 +233,35 @@ beside the axes. The denominator, the persona counting unit, the non-additivity 
 count of what the top-N cut all appear **on the figure**, and S1 additionally carries the
 never-a-defect caption.
 
+A second reporting-only dimension, **typicality**, reads the same per-persona judge scores that Axis B
+turns into a distance, but reads them **self-contained**: one statistic per competitor computed from
+that competitor's own scores alone (default Berry-Mielke IOV — ordinal-valid, invariant to any
+strictly increasing relabelling of the 0–10 levels). It replaces nothing;
+`axis_b.dispersion_contrast` remains the tested contrast against the real population. Four artifacts:
+`typicality_summary.csv` (value + bootstrap CI + **both** persona counts under distinct names —
+`denominator`, the personas carrying a typicality, vs `n_personas` — the `under_powered`/`boundary`
+flags, and a secondary `P(typicality ≤ k0)` column with a Wilson interval), `typicality_histogram.csv`
+(one row per competitor × level over the full scale, the published object the scalar summarises),
+`typicality_heatmap` (the model × method grid on a **diverging** ramp whose midpoint is the real
+population's own value read from the document — the optimum is interior, so the ends are
+more-collapsed-than-real and more-dispersed-than-real; with no real population it degrades to the
+neutral sequential ramp and prints the reason) and `typicality_by_method` (methods on x in complexity
+order, one mark per model, the real population as a horizontal reference line — the only figure here
+that draws it as a reference rather than a series, because this axis ranks nothing). See the
+[ADR](../development/decisions/2026-08-12-self-contained-typicality-axis.md) for why the statistic is
+reference-free while its rendering is not.
+
 ```bash
 python scripts/analyze/analyze_persona_realism.py --slug swedish_02_all_pick_v2_claude_haiku
 python scripts/analyze/analyze_persona_realism.py --rewrite-artifacts   # rebuild artifacts, 0 LLM calls
 python scripts/analyze/rank_persona_realism.py --country swedish_02
 python scripts/analyze/rank_persona_realism.py --country swedish_02 --force \
     --driver-top-n 5 --driver-min-count 3 \      # bounds on the driver tables
-    --pair-summary-top-n 15                      # bars on each severity_pair_summary figure
+    --pair-summary-top-n 15 \                    # bars on each severity_pair_summary figure
+    --typicality-metric iov \                    # or `mean` (location, interval assumption)
+    --typicality-min-n 30 \                      # below it a cell is flagged, never dropped
+    --typicality-tail-threshold 5                # k0 of the secondary P(typicality <= k0) column
+python scripts/analyze/rank_persona_realism.py --country swedish_02 --rounds 2   # rank a mid-top-up sweep
 ```
 
 `--rewrite-artifacts` regenerates the derived files from the verdict cache already on disk. It is
@@ -255,8 +277,29 @@ suppressed-and-counted — a rank-1 driver seen in two personas is an anecdote p
 Both exclusions are counted in the JSON block and printed at the end of the run.
 `--pair-summary-top-n` (default 15) bounds the bars on each `severity_pair_summary` figure; what
 falls below that cut is printed on the figure itself, including how many of the hidden pairs were
-raised only by the real population. All three are resolved at the CLI edge — the builder reads no
-config — and `--no-charts` skips the figures while still writing the JSON and the CSVs.
+raised only by the real population.
+
+`--typicality-metric` (default `iov`; `mean`/`mean_level` selects the interval-assuming mean level,
+whose caveat is then published as a column on every emitted row), `--typicality-min-n` (default 30 —
+below it a cell is flagged `under_powered`, hatched on the heatmap, drawn hollow on the method figure
+and counted in the block's `excluded` map, never dropped and never confused with an unjudged pair) and
+`--typicality-tail-threshold` (default 5 — the `k0` of the secondary `P(typicality ≤ k0)` column, not
+the per-combination chart's 3.0) bound the typicality axis.
+
+All six are resolved at the CLI edge — the builder reads no config — and `--no-charts` skips the
+figures while still writing the JSON and the CSVs.
+
+`--rounds N` pins how many judge rounds the **ranking** consumes per persona, so a sweep still being
+topped up can be ranked at one depth instead of being refused as heterogeneous. Blank (the default)
+reads the published per-combination artifacts; a set differing on its round count *alone* is then
+re-consumed at the shallowest cached depth with a warning naming it. Set, every competitor is
+re-derived from its verdict cache over its first N rounds, and a persona holding fewer than N fails
+the run rather than being ranked short — the round count becomes a capacity requirement, while
+`judge_model` and `prompt_template_sha256` are still compared exactly. **Nothing is re-judged either
+way**: the cap reads caches, makes zero LLM calls and writes nothing under `persona_realism/`.
+`realism_ranking.json` carries the consumed count as `provenance.n_rounds` and where it came from as
+`provenance.n_rounds_source` (`report` / `cap` / `auto`); pin `--rounds` for anything published,
+since an auto-derived depth moves as the sweep tops up.
 
 ## See also
 

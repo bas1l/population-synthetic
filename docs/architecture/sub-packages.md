@@ -173,7 +173,14 @@ consumers + `generation_metadata`:
   (typicality-dispersion distance + Levene, with the real population as the **target**), plus
   Kruskal–Wallis + Dunn/Holm on the model and method factors (real competitor held out) and a logit
   mixed model on `can_exist`; `charts.py` renders the re-anchored headline map and the impossibility
-  forest. It performs **no LLM work** — re-running it is free and touches no verdict cache.
+  forest. Two dimensions sit **beside** the axes, both reporting-only and neither changing a number
+  the axes publish: the **severity** blocks (per-level prevalence grids + the driver attribution) and
+  the **typicality axis** — one *self-contained* statistic per competitor (`_typicality_axis`, over
+  `analysis/utils/ordinal.py`; default Berry-Mielke IOV, ordinal-valid), a function of that
+  competitor's own scores alone, carrying `"direction": null` because the optimum is interior.
+  Direction enters only at render time, through a diverging ramp centred on the real population's own
+  value; the axis does **not** replace `axis_b.dispersion_contrast`, which stays the tested contrast.
+  It performs **no LLM work** — re-running it is free and touches no verdict cache.
 - **`utils/`** -- cross-process shared infra:
   - `realism_csv.py` -- the per-persona tidy schema shared by the two persona-realism tasks
     (writer used by the producer, reader by the consumer, one definition). Keeps *absent* distinct
@@ -200,6 +207,15 @@ consumers + `generation_metadata`:
     sibling. All three fail loudly -- unknown id, missing/malformed
     `family`/`version`, or an undeclared family raises; nothing "sorts unknown last"
   - `_stats.py` -- stdlib numeric primitives (median, percentile, Shannon entropy); no external dep
+  - `ordinal.py` -- dispersion statistics on a bounded ordinal scale of integer levels `0..k-1`
+    (`histogram_counts`, `cdf_interior`, `iov`, `leik_d`, `mean_level`, `cumulative_count` /
+    `cumulative_proportion`, `wilson_interval`, `STATISTIC_LABELS`). Knows nothing of personas,
+    typicality or any country -- numbers and `k` in, a number out. Every statistic is stated in the
+    **dispersion** orientation (0 = collapsed onto one level, 1 = maximally spread) and names its own
+    endpoints in `STATISTIC_LABELS`, because published implementations of this family point in
+    opposite directions. Degenerate input **raises** rather than returning a sentinel -- unlike
+    `stats_tests.py`, which reports skipped-with-a-reason: this is the arithmetic underneath, and the
+    "unmeasurable" decision belongs to the caller that knows what an absent measurement means
   - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected) for generation_metadata /
     model_ranking, plus the repeated-measures family for `method_significance` (Friedman +
     Iman-Davenport + Kendall's W, Page's L trend, Nemenyi post-hoc + CD, Benjamini-Hochberg FDR,

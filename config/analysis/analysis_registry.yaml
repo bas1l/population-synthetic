@@ -238,6 +238,30 @@ processes:
       denominator and is never pooled into the bars; the denominator, the persona counting
       unit, the non-additivity warning and the count of what the top-N cut all appear on
       the figure. --pair-summary-top-n bounds the bars.
+      Alongside them a second reporting-only dimension, TYPICALITY, read on its own rather
+      than as Axis B's distance: one SELF-CONTAINED statistic per competitor, a function of
+      that competitor's own judge scores alone (default Berry-Mielke IOV, ordinal-valid and
+      invariant to any strictly increasing relabelling of the 0-10 levels;
+      --typicality-metric mean selects the interval-assuming mean level, whose caveat is
+      then published as a column on every row). It feeds no ranking and no test, and
+      axis_b.dispersion_contrast remains the tested contrast against the real population.
+      Emits typicality_summary.csv (one row per competitor: value, bootstrap CI, BOTH
+      persona counts under distinct names -- denominator, the personas carrying a
+      typicality, vs n_personas, the combination's full count -- the under_powered and
+      boundary flags, and the secondary P(typicality <= k0) column with a Wilson interval,
+      k0 from --typicality-tail-threshold), typicality_histogram.csv (one row per
+      competitor x level over the full 0-10 scale, the published object the scalar
+      summarises), typicality_heatmap (the model x method grid on a DIVERGING ramp whose
+      midpoint is the real population's own value read from the document -- there is no
+      better/worse direction, the optimum is interior, so the ends are more-collapsed-than-
+      real and more-dispersed-than-real; with no real population it degrades to the neutral
+      sequential ramp and prints the reason) and typicality_by_method (methods on x in
+      complexity order, one mark per model, the real population as a horizontal reference
+      line -- the only figure here that draws it as a reference rather than a series,
+      because this axis ranks nothing). --typicality-min-n (default 30) gates a cell as
+      under-powered: it is flagged, hatched on the heatmap, drawn hollow on the method
+      figure and counted in the block's excluded map, never dropped and never confused with
+      an unjudged pair.
     folder: "realism_ranking"
     script: "scripts/analyze/rank_persona_realism.py"
     dispatch: "slugs"
