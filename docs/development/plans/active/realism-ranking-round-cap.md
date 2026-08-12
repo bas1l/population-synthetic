@@ -288,10 +288,10 @@ _combo_clash_rows  -> combo_clash_rows
 - [x] `tests/test_workflow_commands.py`: `rounds: '2'` → `--rounds 2`; blank → flag absent.
 
 ### Manual Verification
-- [ ] Run the real failing case: rank `swedish_02` with `all_generate_evaluate_pick_v2` (2 rounds)
+- [x] Run the real failing case: rank `swedish_02` with `all_generate_evaluate_pick_v2` (2 rounds)
       and `all_generate_evaluate_random_pick_v2` (5 rounds) at `--rounds 2`; confirm both appear in
       the ranking and the report states the cap.
-- [ ] GUI: set `rounds` on the `realism_ranking` node, confirm the emitted command in the run log.
+- [x] GUI: set `rounds` on the `realism_ranking` node, confirm the emitted command in the run log.
 
 ### Edge Cases
 - [x] `rounds_cap` greater than every cached count → capacity error, no partial output.
