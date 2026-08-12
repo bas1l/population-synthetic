@@ -13,7 +13,7 @@
 tasks:
   validate_raw:                   # pipeline root -- per-combo raw-persona completeness check
     enabled: true
-    bypass: true                  # assume already done -> unlock dependents, run nothing
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force (overwrite CSV)
     force: false
     options:
@@ -22,7 +22,7 @@ tasks:
 
   mapping:                        # map the full validated raw pool (reads 01_Raw, not the cap)
     enabled: true
-    bypass: true                  # assume already done -> unlock dependents, run nothing
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
     options:
@@ -31,7 +31,7 @@ tasks:
 
   validate_mapped:                # per-combo mapped-persona check (unmapped-value detection)
     enabled: true
-    bypass: true                  # assume already done -> unlock dependents, run nothing
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force (overwrite CSV)
     force: false
     options:
@@ -40,7 +40,7 @@ tasks:
 
   population_cap:                 # seeded cap of each combo to N VALIDATED personas (runs last of the gate)
     enabled: true
-    bypass: true                  # assume already done -> unlock dependents, run nothing
+    bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force (overwrite mirror)
     force: false
     options:
@@ -50,7 +50,7 @@ tasks:
     depends_on: [validate_mapped]
 
   fidelity:
-    enabled: false
+    enabled: true
     bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
@@ -122,7 +122,7 @@ tasks:
     depends_on: [population_cap]
 
   real_population_stats:          # per_country dispatch -- real population only, ignores model/strategy
-    enabled: false
+    enabled: true
     bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
@@ -152,9 +152,9 @@ tasks:
       judge-model: claude-sonnet-5 # --judge-model (blank = config default claude-sonnet-5)
       sample:                     # --sample (blank = judge every synthetic persona; int caps per combo)
       real-sample: '100'          # --real-sample (blank = config default 100; caps the real_{country} competitor)
-      rounds: '2'                 # --rounds (blank = config default n_rounds, currently 3)
+      rounds: '1'                 # --rounds (blank = config default n_rounds, currently 3)
       workers: '1'                # --workers (blank = config default fan-out width)
-      rewrite-artifacts: false    # --rewrite-artifacts: rebuild the derived files from the
+      rewrite-artifacts: true     # --rewrite-artifacts: rebuild the derived files from the
                                   # EXISTING verdict cache, zero LLM calls. This -- not Force --
                                   # is how to regenerate artifacts after an output-schema change.
       output-base:                # --output-base (blank = script default)
@@ -165,7 +165,7 @@ tasks:
     bypass: false                 # assume already done -> unlock dependents, run nothing
     min_combos: 2
     supports_force: true          # node shows a Force checkbox -> --force (recompute a country)
-    force: true
+    force: false
     options:
       strict: false               # --strict (fail instead of skipping a non-consumable combo)
       min-combos: '2'             # --min-combos (a one-point ranking is not a ranking)
