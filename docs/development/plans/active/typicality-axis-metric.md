@@ -380,18 +380,30 @@ decision*.
 ### Phase 1: The statistic
 **Goal:** A tested pure function, with no consumer wired to it.
 
-- [ ] 1.1 — `analysis/utils/ordinal.py`: `cdf_interior(counts, k)` (the 10 interior cutpoints, with
+**Started:** 2026-08-12
+**Completed:** 2026-08-12
+
+- [x] 1.1 — `analysis/utils/ordinal.py`: `cdf_interior(counts, k)` (the 10 interior cutpoints, with
       the F_k-1 exclusion argued in the docstring), `iov(counts, k)`, `leik_d(counts, k)`, and
       whichever of the shortlist survives Phase 0.
-- [ ] 1.2 — Unit-test the identity `SUM (F_j - 0.5)^2 + SUM F_j*(1-F_j) = (k-1)/4` as the guard
+- [x] 1.2 — Unit-test the identity `SUM (F_j - 0.5)^2 + SUM F_j*(1-F_j) = (k-1)/4` as the guard
       against a sign/complement error.
-- [ ] 1.3 — Assert ordinal invariance: any strictly increasing relabelling of the levels leaves the
+- [x] 1.3 — Assert ordinal invariance: any strictly increasing relabelling of the levels leaves the
       statistic unchanged (this is the property the mean fails and the plan claims).
-- [ ] 1.4 — Pin the endpoints: all mass on one level -> 0; 50/50 at the extremes -> 1; and the
+- [x] 1.4 — Pin the endpoints: all mass on one level -> 0; 50/50 at the extremes -> 1; and the
       separation that motivates the choice, `{0,10}` = 1.000 vs `{9,10}` = 0.100.
-- [ ] 1.5 — Confirm against the published van der Eijk fixture if A ships: V = (30,40,210,130,530,50,10)
+- [ ] 1.5 — **Not applicable.** Phase 0 chose IOV, so van der Eijk's A does not ship (the table rates
+      it "viable at n>=50 only") and there is no A implementation to confirm against the fixture.
+      ~~Confirm against the published van der Eijk fixture if A ships: V = (30,40,210,130,530,50,10)
       at k=7 -> A = 0.6113333, with `U` **unclamped** (at TU=0, U = -(k-1)/(k-2) = -1.111 at k=11;
-      only the product A is bounded).
+      only the product A is bounded).~~
+
+**Shipped surface** (all in `ordinal.py`, exported via `__all__`): `histogram_counts` (levels ->
+counts, the single level-range check), `cdf_interior`, `iov` (default), `leik_d`, `mean_level` (the
+`--typicality-metric mean` alternative, carrying its interval-assumption caveat in the docstring),
+`cumulative_count` / `cumulative_proportion` (`P(X <= k0)`, the secondary column), `wilson_interval`
+(that column's interval), and `STATISTIC_LABELS` — the endpoint-stating label per statistic, so
+Phase 2 emits `statistic_label` from the definition rather than re-wording it at the emission site.
 
 **Files Modified:** `src/population_synthetic/analysis/utils/ordinal.py` (new),
 `tests/test_ordinal_stats.py` (new). **Dependencies:** Phase 0.
@@ -446,7 +458,9 @@ decision*.
 ## Testing Plan
 
 ### Unit Tests
-- [ ] The identity, ordinal-invariance, endpoint and `{0,10}` vs `{9,10}` tests from Phase 1.
+- [x] The identity, ordinal-invariance, endpoint and `{0,10}` vs `{9,10}` tests from Phase 1
+      (`tests/test_ordinal_stats.py`; the invariance test is paired with its contrast — the same
+      relabelling *does* move the mean — so the claimed distinction is pinned, not asserted).
 - [ ] `_typicality_axis` on a hand-computed fixture; denominators equal the count of personas
       contributing a typicality, **not** `n_personas`, asserted against a fixture where the two differ.
 - [ ] The degenerate cell: all personas at one level -> statistic 0.0, CI exactly `[0, 0]`, and a
