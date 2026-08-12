@@ -146,21 +146,23 @@ def test_slugs_round_cap_translates_to_a_flag_and_a_blank_omits_it():
 
 
 def test_analysis_flow_declares_the_realism_ranking_round_cap():
-    """The shipped flow declares ``rounds`` (blank) on the ranking node.
+    """The shipped flow declares ``rounds`` on the ranking node.
 
     Read from the real ``config/gui/flows/analysis_workflow.yaml`` rather than a
     literal, because the GUI can only edit an option the flow already declares
     (``set_task_option`` raises on an unknown key): a missing key silently removes the
     cap from the GUI altogether, with no error anywhere.
+
+    Only the key's *presence* is pinned. Its value is operator state -- the GUI writes
+    whatever depth the last run selected straight back into this file -- so asserting a
+    blank default would fail the suite for anyone who has used the option.
     """
     flow = yaml.safe_load(
         (PROJECT_ROOT / "config" / "gui" / "flows" / "analysis_workflow.yaml").read_text(
             encoding="utf-8"
         )
     )
-    options = flow["tasks"]["realism_ranking"]["options"]
-    assert "rounds" in options
-    assert options["rounds"] is None  # blank = the published artifacts / auto depth
+    assert "rounds" in flow["tasks"]["realism_ranking"]["options"]
 
 
 def test_slugs_empty_combos_raises():
