@@ -40,6 +40,8 @@ from population_synthetic.analysis.realism_ranking.builder import (  # noqa: E40
     severity_driver_value_rows,
     severity_pair_summary,
     summary_rows,
+    typicality_histogram_rows,
+    typicality_summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_headline_map,
@@ -47,8 +49,11 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_impossibility_heatmap,
     plot_severity_heatmap,
     plot_severity_pair_summary,
+    plot_typicality_by_method,
+    plot_typicality_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors  # noqa: E402
+from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
 from population_synthetic.analysis.utils.figures import save_figure  # noqa: E402
 from population_synthetic.analysis.utils.registry import analysis_output_dir  # noqa: E402
@@ -118,8 +123,15 @@ def _judge(base, label, *, model, strategy, n_impossible, is_real=False, offset=
     )
 
 
+#: The typicality axis's tunables, which the builder requires and never defaults. Only
+#: ``n_levels`` matches the CLI (the judge's fixed 0-10 scale); the floor is 1 rather than
+#: the shipped 30 because these combinations hold five personas each, and the production
+#: floor would flag every one of them as under-powered.
+_TYPICALITY = {"statistic": "iov", "n_levels": 11, "min_n": 1, "tail_threshold": 5}
+
+
 def _rank(records, **kwargs):
-    """``build_ranking`` with this fixture's driver bounds.
+    """``build_ranking`` with this fixture's driver and typicality bounds.
 
     The bounds are required arguments -- the builder reads no config and the CLI owns
     the defaults -- and this fixture's cells hold a handful of personas, so it ranks
@@ -127,6 +139,7 @@ def _rank(records, **kwargs):
     """
     kwargs.setdefault("driver_top_n", 5)
     kwargs.setdefault("driver_min_count", 1)
+    kwargs.setdefault("typicality", dict(_TYPICALITY))
     return build_ranking(
         records, _COUNTRY, bootstrap=_cfg().bootstrap, variance_center="median", **kwargs
     )
@@ -172,12 +185,16 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
 
     (out_dir / "realism_ranking.json").write_text(json.dumps(ranking, indent=2), encoding="utf-8")
     for name, rows in (("realism_summary.csv", summary_rows(ranking)),
-                       ("scb_contrast.csv", scb_contrast_rows(ranking))):
+                       ("scb_contrast.csv", scb_contrast_rows(ranking)),
+                       ("typicality_summary.csv", typicality_summary_rows(ranking)),
+                       ("typicality_histogram.csv", typicality_histogram_rows(ranking))):
         assert rows, name
         (out_dir / name).write_text("ok", encoding="utf-8")
     save_figure(plot_headline_map(ranking), out_dir / "headline_map.png", dpi=80)
     save_figure(plot_impossibility_forest(ranking), out_dir / "impossibility_forest.png", dpi=80)
     save_figure(plot_impossibility_heatmap(ranking), out_dir / "impossibility_heatmap.png", dpi=80)
+    save_figure(plot_typicality_heatmap(ranking), out_dir / "typicality_heatmap.png", dpi=80)
+    save_figure(plot_typicality_by_method(ranking), out_dir / "typicality_by_method.png", dpi=80)
     for level in ("S1", "S2", "S3"):
         save_figure(plot_severity_heatmap(ranking, level),
                     out_dir / f"severity_heatmap_{level.lower()}.png", dpi=80)
@@ -187,9 +204,12 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
                     out_dir / f"severity_pair_summary_{level.lower()}.png", dpi=80)
 
     for name in ("realism_ranking.json", "realism_summary.csv", "scb_contrast.csv",
+                 "typicality_summary.csv", "typicality_histogram.csv",
                  "headline_map.png", "headline_map.svg",
                  "impossibility_forest.png", "impossibility_forest.svg",
                  "impossibility_heatmap.png", "impossibility_heatmap.svg",
+                 "typicality_heatmap.png", "typicality_heatmap.svg",
+                 "typicality_by_method.png", "typicality_by_method.svg",
                  "severity_heatmap_s1.png", "severity_heatmap_s1.svg",
                  "severity_heatmap_s2.png", "severity_heatmap_s2.svg",
                  "severity_heatmap_s3.png", "severity_heatmap_s3.svg",
@@ -344,6 +364,98 @@ def test_the_driver_script_emits_the_pair_summaries_and_honours_no_charts(judged
         assert (out_dir / f"{name}.svg").is_file(), name
     # Beside the heatmaps they complement, in the registry-resolved folder.
     assert all((out_dir / f"severity_heatmap_s{n}.png").is_file() for n in (1, 2, 3))
+
+
+_TYPICALITY_CSVS = ("typicality_summary.csv", "typicality_histogram.csv")
+_TYPICALITY_FIGURES = ("typicality_heatmap", "typicality_by_method")
+
+
+def test_the_driver_script_emits_the_typicality_axis_byte_stably(judged_base):
+    """Judge -> rank through the real CLI: both CSVs, both figures, twice to the same bytes.
+
+    Byte-stability is asserted on the CSVs, the JSON's typicality block and the PNGs. The
+    SVG siblings are deliberately excluded: matplotlib stamps every SVG with a
+    ``dc:date`` creation timestamp and derives its element ids from a per-save random
+    salt, so no figure this repository writes has byte-identical SVG output across two
+    runs. That is a property of the writer, not of this axis, and asserting it here would
+    only pin the writer's behaviour in the wrong test.
+    """
+    # --no-charts first, on a directory no figure has been written into yet: it must
+    # suppress the figures and keep the tables, because a chart flag deciding which
+    # numbers get published would be invisible in any later run.
+    out_dir = _run_ranking_script(judged_base, "--typicality-min-n", "1", "--no-charts")
+    assert sorted(p.name for p in out_dir.glob("typicality_*.png")) == []
+    assert sorted(p.name for p in out_dir.glob("typicality_*.svg")) == []
+    for name in _TYPICALITY_CSVS:
+        assert (out_dir / name).is_file(), name
+
+    out_dir = _run_ranking_script(judged_base, "--typicality-min-n", "1")
+    for name in _TYPICALITY_CSVS:
+        assert (out_dir / name).is_file(), name
+    for name in _TYPICALITY_FIGURES:
+        assert (out_dir / f"{name}.png").is_file(), name
+        assert (out_dir / f"{name}.svg").is_file(), name
+
+    before = {
+        path.name: path.read_bytes()
+        for path in [out_dir / name for name in _TYPICALITY_CSVS]
+        + [out_dir / f"{name}.png" for name in _TYPICALITY_FIGURES]
+    }
+    block_before = json.loads(
+        (out_dir / "realism_ranking.json").read_text(encoding="utf-8"))["typicality"]
+
+    _run_ranking_script(judged_base, "--typicality-min-n", "1")
+    for name, payload in before.items():
+        assert (out_dir / name).read_bytes() == payload, f"{name} is not byte-stable"
+    after = json.loads(
+        (out_dir / "realism_ranking.json").read_text(encoding="utf-8"))["typicality"]
+    assert after == block_before
+
+    # The axis is wired to the CLI's own defaults, not to a literal in the builder.
+    assert block_before["statistic"] == "iov"
+    assert block_before["n_levels"] == 11
+    assert block_before["tail_threshold"] == 5
+    assert block_before["reference_slug"] == f"real_{_COUNTRY}"
+
+
+def test_the_typicality_axis_degrades_without_the_real_competitor(judged_base):
+    """No real population -> no midpoint, a recorded reason, and never a literal one."""
+    records, _ = load_competitors(judged_base, axis_ids=_AXIS_IDS)
+    synthetic = [record for record in records if not record.is_real_reference]
+    assert len(synthetic) == len(records) - 1
+
+    block = _rank(synthetic)["typicality"]
+    assert block["reference_slug"] is None and block["reference_value"] is None
+    assert "neutral sequential ramp" in block["reference_note"]
+
+    image = plot_typicality_heatmap(_rank(synthetic)).axes[0].images[0]
+    assert image.cmap.name == "Blues", "the diverging ramp needs a midpoint it does not have"
+    assert plot_typicality_by_method(_rank(synthetic)).axes[0].lines is not None
+
+
+def test_typicality_competitor_order_changes_no_emitted_byte(judged_base, tmp_path):
+    """A-then-B or B-then-A: the same rows and the same rendered PNG bytes."""
+    records, _ = load_competitors(judged_base, axis_ids=_AXIS_IDS)
+    forward, reverse = _rank(records), _rank(list(reversed(records)))
+
+    assert forward["typicality"] == reverse["typicality"]
+    assert typicality_summary_rows(forward) == typicality_summary_rows(reverse)
+    assert typicality_histogram_rows(forward) == typicality_histogram_rows(reverse)
+
+    out_dir = tmp_path / "order"
+    out_dir.mkdir()
+    for name, plot in (("typicality_heatmap", plot_typicality_heatmap),
+                       ("typicality_by_method", plot_typicality_by_method)):
+        first = save_figure(plot(forward), out_dir / f"{name}_a.png", dpi=80).read_bytes()
+        second = save_figure(plot(reverse), out_dir / f"{name}_b.png", dpi=80).read_bytes()
+        assert first == second, name
+
+    # The method axis is the complexity order of the ids present, taken from the grid
+    # verbatim rather than re-sorted at render time.
+    methods = forward["typicality"]["grid"]["methods"]
+    assert methods == strategy_complexity_order(methods)
+    ax = plot_typicality_heatmap(forward).axes[0]
+    assert [label.get_text() for label in ax.get_xticklabels()] == methods
 
 
 def test_a_single_slug_judged_alone_produces_its_complete_artifact_set(tmp_path):

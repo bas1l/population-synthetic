@@ -455,24 +455,51 @@ flatteners. Three resolutions the task list left open:
 ### Phase 3: The figures and the CLI
 **Goal:** Both figures beside the existing ones, and the CSVs.
 
-- [ ] 3.1 — `plot_typicality_heatmap`: diverging ramp, **midpoint resolved from the block's
+**Started:** 2026-08-12
+**Completed:** 2026-08-12
+
+- [x] 3.1 — `plot_typicality_heatmap`: diverging ramp, **midpoint resolved from the block's
       `reference_value`**, symmetric limits, `n` annotated in every cell, under-powered cells hatched
       or greyed distinctly from `_MISSING_COLOR`, SCB as the existing full-width band. Degrade to the
       neutral sequential ramp with a printed note when `reference_value` is `null`.
-- [ ] 3.2 — `plot_typicality_by_method`: methods on x in `grid["methods"]` order, statistic on y,
+- [x] 3.2 — `plot_typicality_by_method`: methods on x in `grid["methods"]` order, statistic on y,
       per-model marks, SCB as a horizontal reference line with an inline label. Follow
       `method_significance/_draw_method_panel` for the panel structure and `fidelity/plot_c2st` for
       the reference-line-with-caption idiom. **Note this is a new idiom** — everywhere else in the
       analysis layer the real population is a series, bar or marker, never a reference line; the one
       `axhline` in `realism_ranking/charts.py` marks zero Axis-B distance, an arithmetic fact.
-- [ ] 3.3 — `rank_persona_realism.py`: `--typicality-metric`, `--typicality-min-n`, and the tail
+- [x] 3.3 — `rank_persona_realism.py`: `--typicality-metric`, `--typicality-min-n`, and the tail
       threshold if 0.3 shipped; resolved at the edge and passed as arguments (the builder reads no
       config). Write both CSVs and both figures; honour `--no-charts`.
-- [ ] 3.4 — Register the new outputs in `config/analysis/analysis_registry.yaml`'s
+- [x] 3.4 — Register the new outputs in `config/analysis/analysis_registry.yaml`'s
       `realism_ranking` description.
 
+**Shipped surface.** A dedicated renderer, never the existing one: `_render_grid_heatmap` reads
+`cell["rate"]` by literal key and this block's key is `value`, so reusing it would have painted every
+cell grey and labelled it `n/a` **without raising** (Constraint 1). Three resolutions the task list
+left open:
+
+- **`_DIVERGING_CMAP = "PuOr"` is the third ramp state.** Neither end is the Reds of `_DEFECT_CMAP`
+  nor the Blues of `_NEUTRAL_CMAP`: both hues already carry a reading on the sibling heatmaps in the
+  same folder, and importing either would put a better/worse direction on an axis that has none. Its
+  limits are symmetric about `reference_value` and cover every drawn value including the real band;
+  when every competitor coincides with the reference the range is genuinely zero-width, so the ramp
+  falls back to `reference ± 0.05` and the figure prints that it has no measured range.
+- **Four states, four appearances**: a value on the ramp, an under-powered value on the ramp under a
+  sparse translucent hatch (the number stays readable — it is still the cell's point), a judged
+  competitor with no typicality-bearing persona in white under a cross-hatch, and an unjudged pair
+  flat grey. Only the wording of *how a thing is drawn* is the chart's; every caveat's text is read
+  from the block, so the figures and the numbers cannot disagree.
+- **`n_levels` is resolved at the CLI edge as a prompt-schema constant, not from config.** The 0-10
+  scale exists in `judge.yaml` only as prose and in `persona_realism/judge.py` as a private
+  validation bound; there is no machine-readable config key to read, and adding one would invite
+  editing a number that `prompt_template_sha256` actually fixes. It is stated once in
+  `rank_persona_realism.py` beside the flags, the same mirror-with-a-pointer the per-combination
+  typicality chart already uses.
+
 **Files Modified:** `src/population_synthetic/analysis/realism_ranking/charts.py`,
-`scripts/analyze/rank_persona_realism.py`, `config/analysis/analysis_registry.yaml`.
+`scripts/analyze/rank_persona_realism.py`, `config/analysis/analysis_registry.yaml`,
+`tests/test_realism_ranking_builder.py`, `tests/test_realism_ranking_e2e.py`.
 **Dependencies:** Phase 2.
 
 ---
@@ -496,12 +523,19 @@ flatteners. Three resolutions the task list left open:
 - [x] Degenerate bounds (`min_n < 1`) raise rather than emitting an empty table.
 
 ### Integration Tests
-- [ ] e2e in `test_realism_ranking_e2e.py`: judge -> rank on a `tmp_path` base emits both CSVs and
-      both figures, byte-stable across two writes.
-- [ ] SCB absent from the consumption set -> `reference_value` is `null`, the heatmap degrades to the
+- [x] e2e in `test_realism_ranking_e2e.py`: judge -> rank on a `tmp_path` base emits both CSVs and
+      both figures, byte-stable across two writes. *(asserted on the CSVs, the JSON block and the
+      PNGs; the SVG siblings are excluded because matplotlib stamps every SVG with a `dc:date`
+      creation timestamp and per-save element ids — a property of the writer that no figure in this
+      repository escapes, and one this axis's test is the wrong place to pin.)*
+- [x] SCB absent from the consumption set -> `reference_value` is `null`, the heatmap degrades to the
       neutral ramp with a recorded reason, and no hard-coded midpoint appears.
-- [ ] Competitor order does not change any emitted byte (A-then-B vs B-then-A).
-- [ ] The heatmap's method axis equals `strategy_complexity_order` of the present ids.
+- [x] Competitor order does not change any emitted byte (A-then-B vs B-then-A) — the rows, the block
+      and both rendered PNGs.
+- [x] The heatmap's method axis equals `strategy_complexity_order` of the present ids.
+- [x] A populated cell is not rendered as missing — the guard against Constraint 1's
+      silent-wrong-output path, which produces a plausible figure rather than an error.
+- [x] `--no-charts` suppresses both figures and still writes both CSVs.
 
 ### Manual Verification
 - [ ] Run over the 51 `swedish_02` combinations; confirm SCB lands at its measured value (IOV 0.399 /
@@ -517,8 +551,11 @@ flatteners. Three resolutions the task list left open:
 - [x] An unjudged `(model, method)` pair — `None`, distinct from both a computed 0.0 and an
       under-powered cell.
 - [x] n=1 competitor: statistic defined but CI degenerate; must not crash the ramp limits. *(the
-      statistic/CI half is tested in Phase 2; the ramp-limit half belongs to the Phase 3 figures.)*
-- [ ] All competitors identical -> zero-width diverging range; the ramp must not divide by zero.
+      statistic/CI half is tested in Phase 2; the ramp-limit half in Phase 3 — a lone competitor
+      renders on both figures with valid limits.)*
+- [x] All competitors identical -> zero-width diverging range; the ramp must not divide by zero.
+- [x] A grid whose only defined cells are under-powered or `no_typicality` renders rather than
+      raising; a grid with *nothing* defined raises, matching every sibling chart.
 
 ---
 

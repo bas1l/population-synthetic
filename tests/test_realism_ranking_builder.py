@@ -33,6 +33,8 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_impossibility_heatmap,
     plot_severity_heatmap,
     plot_severity_pair_summary,
+    plot_typicality_by_method,
+    plot_typicality_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord  # noqa: E402
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
@@ -1538,3 +1540,222 @@ def test_competitor_order_changes_no_emitted_typicality_byte():
     assert forward["typicality"] == reverse["typicality"]
     assert typicality_summary_rows(forward) == typicality_summary_rows(reverse)
     assert typicality_histogram_rows(forward) == typicality_histogram_rows(reverse)
+
+
+# --------------------------------------------------------------------------- #
+# typicality figures -- the reference lives in the rendering, not in the cells  #
+# --------------------------------------------------------------------------- #
+
+
+def _four_state_fixture():
+    """One grid carrying all four states the typicality heatmap must tell apart.
+
+    ``claude_haiku x all_pick`` has four typicality-bearing personas (under-powered at a
+    floor of five), ``claude_sonnet x all_pick_dag`` five (powered), ``claude_haiku x
+    all_pick_dag`` was judged but every persona is impossible (no typicality), and
+    ``claude_sonnet x all_pick`` is unjudged -- it exists only as the rectangle's hole.
+    """
+    return [
+        _record("swedish_all_pick_claude_haiku", n_impossible=2,
+                typicalities=[9.0, 9.0, 10.0, 10.0],
+                model="claude_haiku", strategy="all_pick"),
+        _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
+                typicalities=[0.0, 0.0, 10.0, 10.0, 10.0],
+                model="claude_sonnet", strategy="all_pick_dag"),
+        _record("swedish_all_pick_dag_claude_haiku", n_impossible=3, typicalities=[],
+                model="claude_haiku", strategy="all_pick_dag"),
+        _real_record([4.0, 4.0, 5.0, 6.0, 7.0]),
+    ]
+
+
+def _four_state_ranking(**options):
+    return _build(_four_state_fixture(), typicality={**_TYPICALITY, "min_n": 5, **options})
+
+
+def _figure_text(fig) -> str:
+    """Every string on a figure: the axes' annotations and the footnote block."""
+    return " ".join(
+        [t.get_text() for ax in fig.axes for t in ax.texts] + [t.get_text() for t in fig.texts]
+    )
+
+
+def test_typicality_heatmap_renders_a_populated_cell_as_a_value_not_as_missing():
+    """The guard against Constraint 1's silent-wrong-output path.
+
+    ``_render_grid_heatmap`` reads ``cell["rate"]`` by literal key, and this block's value
+    key is ``value``: pointing the old renderer at this grid paints every cell grey and
+    labels it ``n/a`` **without raising**. Nothing else in the suite would notice, because
+    the figure is produced, is the right size and carries the right labels -- so the
+    populated cells are asserted to carry their numbers.
+    """
+    ranking = _four_state_ranking()
+    fig = plot_typicality_heatmap(ranking)
+    text = _figure_text(fig)
+
+    assert "0.100\nn=4" in text          # haiku x all_pick, hand-computed in Phase 2
+    assert "n/a" not in text
+    # The four states are four different marks, and each says which it is.
+    assert text.count("not judged") == 1               # sonnet x all_pick
+    assert "no typicality\nof 3 personas" in text      # haiku x all_pick_dag
+    assert "real population" in text
+
+
+def test_typicality_heatmap_centres_a_diverging_ramp_on_the_documents_reference():
+    """The midpoint is read from the block; the limits are symmetric about it."""
+    ranking = _four_state_ranking()
+    reference = ranking["typicality"]["reference_value"]
+    image = plot_typicality_heatmap(ranking).axes[0].images[0]
+
+    assert image.cmap.name == "PuOr"
+    vmin, vmax = image.get_clim()
+    assert (vmin + vmax) / 2 == pytest.approx(reference)
+    assert vmax - reference == pytest.approx(reference - vmin)
+    # Wide enough to hold every drawn value, the real population's own included.
+    values = [
+        cell["value"]
+        for model in ranking["typicality"]["grid"]["models"]
+        for cell in ranking["typicality"]["grid"]["cells"][model].values()
+        if cell is not None and cell["value"] is not None
+    ] + [reference]
+    assert vmin <= min(values) and max(values) <= vmax
+
+
+def test_typicality_heatmap_degrades_to_the_neutral_ramp_with_no_reference():
+    """No real population -> no midpoint, and never a literal one in its place."""
+    records = [r for r in _four_state_fixture() if not r.is_real_reference]
+    ranking = _build(records, typicality={**_TYPICALITY, "min_n": 5})
+    assert ranking["typicality"]["reference_value"] is None
+
+    fig = plot_typicality_heatmap(ranking)
+    image = fig.axes[0].images[0]
+    assert image.cmap.name == "Blues"
+    assert image.get_clim()[0] == 0.0
+    text = _figure_text(fig)
+    assert "neutral sequential ramp" in text          # the block's own recorded reason
+    assert "Ramp midpoint" not in text
+
+
+def test_typicality_heatmap_survives_a_zero_width_range():
+    """Every competitor at the reference value: a ramp, not a division by zero."""
+    identical = [
+        _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[3.0, 3.0]),
+        _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
+                typicalities=[3.0, 3.0], model="claude_sonnet", strategy="all_pick_dag"),
+        _real_record([3.0, 3.0]),
+    ]
+    ranking = _build(identical)
+    assert ranking["typicality"]["reference_value"] == 0.0
+
+    fig = plot_typicality_heatmap(ranking)
+    vmin, vmax = fig.axes[0].images[0].get_clim()
+    assert vmin < vmax, "a zero-width range must still yield valid limits"
+    assert "no measured range" in _figure_text(fig)
+
+
+def test_typicality_heatmap_method_axis_is_the_complexity_order():
+    """The figure takes its axis from the grid verbatim, never re-sorting it."""
+    records = _complexity_fixture() + [_real_record([5.0, 6.0, 7.0])]
+    ranking = _build(records)
+    methods = ranking["typicality"]["grid"]["methods"]
+    assert methods == strategy_complexity_order(methods) != sorted(methods)
+
+    ax = plot_typicality_heatmap(ranking).axes[0]
+    assert [label.get_text() for label in ax.get_xticklabels()] == methods
+
+
+def test_typicality_figures_carry_their_direction_refusal_and_the_min_n_gate():
+    """The caveats travel on the figures: they outlive this docstring and the code."""
+    ranking = _four_state_ranking()
+    block = ranking["typicality"]
+    for fig in (plot_typicality_heatmap(ranking), plot_typicality_by_method(ranking)):
+        # Whitespace-normalised: the footnote block is hard-wrapped for reading, so the
+        # payload's sentences arrive on the figure broken across lines.
+        text = " ".join(_figure_text(fig).split())
+        assert "Not a score:" in text
+        # Worded by the block, not by the chart, so the two cannot drift.
+        assert " ".join(block["direction_reason"].split()) in text
+        assert " ".join(block["under_powered_policy"].split()) in text
+        assert "min_n = 5" in text
+        assert block["reference_slug"] in text
+
+
+def test_typicality_by_method_draws_the_real_population_as_a_reference_line():
+    """The one place in this task the real population is a reference rather than a series.
+
+    Legitimate only because this axis ranks nothing: on Axis A a reference line would
+    encode "closer to it is better" into a figure built to leave that question open.
+    """
+    ranking = _four_state_ranking()
+    reference = ranking["typicality"]["reference_value"]
+    ax = plot_typicality_by_method(ranking).axes[0]
+
+    horizontal = [line for line in ax.lines
+                  if len(set(line.get_ydata())) == 1
+                  and list(set(line.get_ydata())) == [pytest.approx(reference)]]
+    assert horizontal, "the reference line is missing"
+    inline = " ".join(t.get_text() for t in ax.texts)
+    assert f"{reference:.3f}" in inline and "not a target" in inline
+    # Methods on x, in the grid's own order; nothing is drawn for the unjudged pair.
+    assert [label.get_text() for label in ax.get_xticklabels()] == \
+        ranking["typicality"]["grid"]["methods"]
+
+
+def test_typicality_by_method_marks_an_under_powered_competitor_without_dropping_it():
+    ranking = _four_state_ranking()
+    assert _typ(ranking)["under_powered"] is True
+    fig = plot_typicality_by_method(ranking)
+    ax = fig.axes[0]
+
+    drawn = [value for collection in ax.collections
+             for _x, value in collection.get_offsets()]
+    assert pytest.approx(_typ(ranking)["value"]) in drawn, "an under-powered mark is drawn"
+    labels = [handle.get_label() for handle in ax.get_legend().legend_handles]
+    assert any("hollow = under-powered" in label for label in labels)
+    assert "under-powered competitor(s) are drawn hollow" in " ".join(_figure_text(fig).split())
+
+
+def test_typicality_figures_raise_rather_than_emitting_an_empty_one():
+    """Nothing measurable is a raise, matching every sibling chart in this module."""
+    dead = _build([_record("swedish_all_pick_claude_haiku", n_impossible=3, typicalities=[])])
+    for plot in (plot_typicality_heatmap, plot_typicality_by_method):
+        with pytest.raises(ValueError, match="defined typicality statistic"):
+            plot(dead)
+
+    # ... and so is a document built without the axis at all, whose absence is a decision
+    # rather than a measurement.
+    without = build_ranking(
+        _typicality_fixture(), _COUNTRY, bootstrap=_BOOT, variance_center="median",
+        driver_top_n=3, driver_min_count=1,
+    )
+    for plot in (plot_typicality_heatmap, plot_typicality_by_method):
+        with pytest.raises(ValueError, match="typicality: null"):
+            plot(without)
+
+
+def test_a_grid_of_nothing_but_under_powered_cells_still_renders():
+    """Every cell below the floor is still a measurement, and still gets drawn.
+
+    The degenerate neighbour of the raise above: nothing here clears ``min_n``, but
+    something *was* measured everywhere, so suppressing the figure would report a sweep of
+    small samples as a sweep of no data.
+    """
+    ranking = _build(_four_state_fixture(), typicality={**_TYPICALITY, "min_n": 50})
+    grid = ranking["typicality"]["grid"]
+    cells = [_typ(ranking), _typ(ranking, "claude_sonnet", "all_pick_dag"), grid["real"]]
+    assert all(cell["under_powered"] for cell in cells)
+
+    fig = plot_typicality_heatmap(ranking)
+    # The real population's band is marked on the same terms as the cells: this ramp is
+    # centred on it, so a thin midpoint drawn as a firm one is the worse error.
+    assert [patch.get_hatch() for patch in fig.axes[0].patches].count("//") == len(cells)
+    assert "0.100\nn=4" in _figure_text(fig)
+    assert plot_typicality_by_method(ranking).axes[0].collections
+
+
+def test_a_single_competitor_renders_on_both_figures():
+    """n = 1 competitor: a degenerate CI, and ramp limits that are still valid."""
+    lone = _build([_record("swedish_all_pick_claude_haiku", n_impossible=0,
+                           typicalities=[2.0, 4.0, 6.0])])
+    vmin, vmax = plot_typicality_heatmap(lone).axes[0].images[0].get_clim()
+    assert vmin < vmax
+    assert plot_typicality_by_method(lone).axes[0].collections
