@@ -411,24 +411,46 @@ Phase 2 emits `statistic_label` from the definition rather than re-wording it at
 ### Phase 2: The block
 **Goal:** `typicality` in `realism_ranking.json`, with CIs, denominators and the histogram.
 
-- [ ] 2.1 — `_typicality_axis(records, *, statistic, min_n, bootstrap)` in `builder.py`, modelled on
+**Started:** 2026-08-12
+**Completed:** 2026-08-12
+
+- [x] 2.1 — `_typicality_axis(records, *, statistic, min_n, bootstrap)` in `builder.py`, modelled on
       `_severity_grids`: same `_grid_entries` adapter with the `"_record"` back-pointer, same
       `_grid` reshape, so SCB placement and the null-cell guarantee come for free.
-- [ ] 2.2 — Per competitor: point estimate, `ci_lo`/`ci_hi`/`ci_level` via `bootstrap_ci` with the
+- [x] 2.2 — Per competitor: point estimate, `ci_lo`/`ci_hi`/`ci_level` via `bootstrap_ci` with the
       statistic passed as the `statistic` argument and the seed from the judge config's bootstrap
       block, `denominator` (typicality base), `n_personas`, `under_powered` flag, and the 11-bin
       histogram.
-- [ ] 2.3 — Carry `"direction": null` with the reason string, `"reference_value"` (SCB's own
+- [x] 2.3 — Carry `"direction": null` with the reason string, `"reference_value"` (SCB's own
       statistic, or `null`), `"counting_unit"`, and `"reporting_only"` as data fields — the tables
       travel without the code.
-- [ ] 2.4 — Append `_Skip` records for competitors that cannot be computed; count under-powered and
+- [x] 2.4 — Append `_Skip` records for competitors that cannot be computed; count under-powered and
       excluded cells into an `excluded` map rather than dropping them silently.
-- [ ] 2.5 — Two module-level flatteners (`typicality_summary_rows`, `typicality_histogram_rows`) added
+- [x] 2.5 — Two module-level flatteners (`typicality_summary_rows`, `typicality_histogram_rows`) added
       to `__all__`, keyed like `summary_rows`, with a total sort key: method by complexity, then
       model, real population last (reuse `_competitor_position`).
 
-**Files Modified:** `src/population_synthetic/analysis/realism_ranking/builder.py`.
-**Dependencies:** Phase 1.
+**Shipped surface.** `_typicality_axis(records, skips, *, statistic, n_levels, min_n,
+tail_threshold, bootstrap, skipped_combinations)`, the `TYPICALITY_STATISTICS` registry (`iov`
+default, `mean_level` carrying its caveat), the `TYPICALITY_OPTION_KEYS` bundle contract, and the two
+flatteners. Three resolutions the task list left open:
+
+- **The level count is an argument, not a literal.** Nothing on a `CompetitorRecord` states the
+  judge's scale, so `n_levels` arrives in the options bundle with no default (`k` = 11 for the 0-10
+  judge scale) — Phase 3 resolves it at the edge alongside `--typicality-metric` /
+  `--typicality-min-n` / `--typicality-tail-threshold`.
+- **The options arrive as one bundle**, `typicality={statistic, n_levels, min_n, tail_threshold}`,
+  passed verbatim exactly as `bootstrap` already is; every key inside it is required and an
+  incomplete or typo'd bundle raises. Omitting the bundle emits `"typicality": null` **and** a
+  recorded skip — so the CLI keeps working unchanged until Phase 3 wires it, without the builder
+  ever holding a default.
+- **Three cell states, not two:** `status` is `ok` / `under_powered` / `no_typicality`, and an
+  unjudged pair is the grid's `null`. A competitor with no typicality-bearing persona is *not*
+  flagged under-powered — nothing was measured, which is a different claim from "measured on too
+  few".
+
+**Files Modified:** `src/population_synthetic/analysis/realism_ranking/builder.py`,
+`tests/test_realism_ranking_builder.py`. **Dependencies:** Phase 1.
 
 ### Phase 3: The figures and the CLI
 **Goal:** Both figures beside the existing ones, and the CSVs.
@@ -461,17 +483,17 @@ Phase 2 emits `statistic_label` from the definition rather than re-wording it at
 - [x] The identity, ordinal-invariance, endpoint and `{0,10}` vs `{9,10}` tests from Phase 1
       (`tests/test_ordinal_stats.py`; the invariance test is paired with its contrast — the same
       relabelling *does* move the mean — so the claimed distinction is pinned, not asserted).
-- [ ] `_typicality_axis` on a hand-computed fixture; denominators equal the count of personas
+- [x] `_typicality_axis` on a hand-computed fixture; denominators equal the count of personas
       contributing a typicality, **not** `n_personas`, asserted against a fixture where the two differ.
-- [ ] The degenerate cell: all personas at one level -> statistic 0.0, CI exactly `[0, 0]`, and a
+- [x] The degenerate cell: all personas at one level -> statistic 0.0, CI exactly `[0, 0]`, and a
       `boundary` flag set. Assert the flag, not just the interval.
-- [ ] Under-powered cell is flagged and counted, never silently dropped; distinct in the payload from
+- [x] Under-powered cell is flagged and counted, never silently dropped; distinct in the payload from
       an unjudged `None`.
-- [ ] Histogram bins sum to the typicality denominator.
-- [ ] Reporting-only: loose vs tight bounds leave `axis_a`, `axis_b`, `severity`, `severity_drivers`
+- [x] Histogram bins sum to the typicality denominator.
+- [x] Reporting-only: loose vs tight bounds leave `axis_a`, `axis_b`, `severity`, `severity_drivers`
       and `factor_significance` byte-identical (the mixed logit excluded — its variational fit is not
       bit-reproducible between calls).
-- [ ] Degenerate bounds (`min_n < 1`) raise rather than emitting an empty table.
+- [x] Degenerate bounds (`min_n < 1`) raise rather than emitting an empty table.
 
 ### Integration Tests
 - [ ] e2e in `test_realism_ranking_e2e.py`: judge -> rank on a `tmp_path` base emits both CSVs and
@@ -490,11 +512,12 @@ Phase 2 emits `statistic_label` from the definition rather than re-wording it at
       synthetic scores at level 9, SCB peaking at 4 with no mass at 0, 1 or 10.
 
 ### Edge Cases
-- [ ] A competitor with zero typicality-bearing personas (every persona judged impossible) — `None`,
+- [x] A competitor with zero typicality-bearing personas (every persona judged impossible) — `None`,
       never 0.0.
-- [ ] An unjudged `(model, method)` pair — `None`, distinct from both a computed 0.0 and an
+- [x] An unjudged `(model, method)` pair — `None`, distinct from both a computed 0.0 and an
       under-powered cell.
-- [ ] n=1 competitor: statistic defined but CI degenerate; must not crash the ramp limits.
+- [x] n=1 competitor: statistic defined but CI degenerate; must not crash the ramp limits. *(the
+      statistic/CI half is tested in Phase 2; the ramp-limit half belongs to the Phase 3 figures.)*
 - [ ] All competitors identical -> zero-width diverging range; the ramp must not divide by zero.
 
 ---

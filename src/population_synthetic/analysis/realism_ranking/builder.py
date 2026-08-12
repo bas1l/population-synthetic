@@ -22,6 +22,14 @@ rather than assumed away. On Axis B it is the target: the observed LLM failure m
 mode collapse, so matching the real spread is the goal and maximising it is not --
 ``distance_to_scb`` near zero is good, and a large distance is bad in either direction.
 
+Two dimensions sit *beside* those axes rather than on them, and both are reporting-only:
+the severity blocks (which levels clashed, and what clashed at each) and the typicality
+axis (each competitor's own spread as one number, with no reference in the computation
+and no better/worse direction). Neither feeds a ranking, a contrast or a test, and
+neither changes a number the axes publish. In particular the typicality axis does not
+replace Axis B: it is the same per-persona means read self-contained rather than as a
+distance, so the sign Axis B's absolute value discards is legible again.
+
 Statistical-honesty rules enforced throughout (guide 03):
 
 * every rate carries its denominator, and the denominator is never used as a divisor
@@ -39,11 +47,21 @@ Statistical-honesty rules enforced throughout (guide 03):
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Callable, Sequence
 
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
+from population_synthetic.analysis.utils.ordinal import (
+    STATISTIC_LABELS,
+    cumulative_count,
+    histogram_counts,
+    iov,
+    mean_level,
+    wilson_interval,
+)
 from population_synthetic.analysis.utils.realism_csv import (
     SEVERITY_COUNT_FIELDS,
     SEVERITY_LEVELS,
@@ -68,12 +86,17 @@ __all__ = [
     "DRIVER_NON_ADDITIVE",
     "PAIR_SUMMARY_COUNTING_UNIT",
     "SEVERITY_DIRECTIONS",
+    "TYPICALITY_COUNTING_UNIT",
+    "TYPICALITY_OPTION_KEYS",
+    "TYPICALITY_STATISTICS",
     "build_ranking",
     "summary_rows",
     "scb_contrast_rows",
     "severity_driver_rows",
     "severity_driver_value_rows",
     "severity_pair_summary",
+    "typicality_histogram_rows",
+    "typicality_summary_rows",
 ]
 
 #: The multiple-comparison correction applied to every family of tests here. Stated
@@ -1033,6 +1056,507 @@ def _axis_b_contrast(
 
 
 # --------------------------------------------------------------------------- #
+# Typicality axis -- one self-contained number per competitor (reporting only) #
+# --------------------------------------------------------------------------- #
+
+
+#: Why the interval-assuming statistic is not the default, carried on every row that
+#: uses it. A caveat that lives only in the docs is a caveat the table travels without.
+TYPICALITY_MEAN_CAVEAT = (
+    "the mean level assumes the typicality levels are equally spaced -- an interval "
+    "claim about an ordinal judge scale whose verbal anchors are not evenly placed. It "
+    "also measures location rather than dispersion, so it answers a different question "
+    "from the default statistic, and metric summaries of ordinal data are known to "
+    "invert group orderings exactly when the groups differ in distributional shape "
+    "(Liddell & Kruschke 2018)."
+)
+
+
+@dataclass(frozen=True)
+class _OrdinalStatistic:
+    """One selectable typicality statistic: how to compute it, and how to read it.
+
+    ``compute`` takes ``(counts, k)`` -- the per-level histogram, not the raw sample --
+    because that is the form every statistic in
+    :mod:`population_synthetic.analysis.utils.ordinal` is defined on. ``bounds`` returns
+    the statistic's range at *k* levels, which is what makes a degenerate interval at a
+    parameter-space *boundary* distinguishable from an equally narrow one in the
+    interior. ``caveat`` is ``None`` unless publishing the statistic asserts something
+    about the scale that the scale does not support.
+    """
+
+    compute: Callable[[Sequence[int], int], float]
+    orientation: str
+    bounds: Callable[[int], tuple[float, float]]
+    caveat: str | None = None
+
+
+#: The selectable typicality statistics, by id. Exported so the CLI edge takes its
+#: choices from the definition rather than restating them, which is how a flag and the
+#: thing it selects drift apart. The ids are :data:`ordinal.STATISTIC_LABELS` keys, so
+#: the published label always comes from the definition of the statistic it labels.
+TYPICALITY_STATISTICS: Mapping[str, _OrdinalStatistic] = MappingProxyType({
+    "iov": _OrdinalStatistic(
+        compute=iov, orientation="dispersion", bounds=lambda _k: (0.0, 1.0),
+    ),
+    "mean_level": _OrdinalStatistic(
+        compute=mean_level, orientation="location",
+        bounds=lambda k: (0.0, float(k - 1)), caveat=TYPICALITY_MEAN_CAVEAT,
+    ),
+})
+
+#: The tunables this block requires from its caller. Every one is a decision the CLI
+#: edge owns; none has a default here, because a default in the builder would be a
+#: second source of truth for a number the CLI already declares.
+TYPICALITY_OPTION_KEYS: tuple[str, ...] = ("statistic", "n_levels", "min_n", "tail_threshold")
+
+#: The unit every typicality number is in, and -- the trap this block exists around --
+#: which of the two persona counts it is over. Carried as a data field on the block and
+#: on every emitted row: a denominator that has to be guessed gets read as ``n_personas``.
+TYPICALITY_COUNTING_UNIT = (
+    "personas, not judge rounds: one per-persona mean typicality is one observation, and "
+    "the denominator is the number of personas that carry one -- the majority-possible "
+    "personas with a non-null mean. That base is smaller than, and differently selected "
+    "from, the combination's persona count, which travels beside it as n_personas."
+)
+
+#: Why this axis publishes no better/worse direction. The optimum is interior, so a
+#: monotone ramp would assert a claim the statistic does not make.
+TYPICALITY_NO_DIRECTION = (
+    "typicality has no monotone better direction: a competitor scoring uniformly at the "
+    "modal level has collapsed onto the modal persona, while a low-scoring one may be "
+    "reaching the real population's tail or may simply be incoherent. The optimum is "
+    "interior, so direction is supplied at render time by a diverging ramp centred on "
+    "reference_value and is deliberately absent from the statistic itself."
+)
+
+#: How a per-persona mean becomes one of the k integer levels the statistics are defined
+#: on. Stated as data because the rule is invisible in the numbers it produces.
+TYPICALITY_LEVEL_ASSIGNMENT = (
+    "each persona contributes one observation, at the integer level its mean typicality "
+    "rounds to (nearest level, halves to even -- the same rule the per-combination "
+    "typicality figure uses). At one judge round per persona every mean is already an "
+    "integer and the rule is a no-op; n_non_integer_means counts the personas it moved."
+)
+
+#: The refusal to fold this into a headline number, as a data field.
+TYPICALITY_NON_COMPOSITE = (
+    "never averaged, weighted or otherwise folded together with the impossibility rate "
+    "into a single realism score: the two have different denominators (this one is the "
+    "can_exist-survivor subset) and different directions (Axis A is monotone, this axis "
+    "has an interior optimum), so a composite would be arithmetic over incommensurable "
+    "quantities."
+)
+
+#: The two neighbouring blocks computed over the same per-persona means. Cross-referenced
+#: in the document because three readings of one base must not look like three bases.
+TYPICALITY_CROSS_REFERENCE = (
+    "computed over the same per-persona typicality means as factor_significance (which "
+    "tests the model and method factors over them, with the real population held out) "
+    "and as axis_b.dispersion_contrast (each competitor's distance to the real "
+    "population's spread). One base, three readings: this block adds no contrast and no "
+    "inferential claim of its own, so the three cannot disagree about what was measured."
+)
+
+#: Why a degenerate interval is published flagged rather than repaired.
+TYPICALITY_BOUNDARY_NOTE = (
+    "a competitor whose personas all sit on one level yields a percentile bootstrap "
+    "interval of exactly [0, 0]. That is the honest interval computationally, and it has "
+    "zero coverage whenever the true dispersion is above zero -- at a parameter-space "
+    "boundary the bootstrap is inconsistent, not merely inaccurate (Andrews 2000). Such "
+    "a cell is published with boundary=true rather than patched with a smoothed, "
+    "bias-corrected or reverse-percentile interval, each of which would replace an "
+    "interval that is visibly degenerate with one that is invisibly wrong."
+)
+
+#: What an under-powered cell claims, and what it does not.
+TYPICALITY_UNDER_POWERED_POLICY = (
+    "a competitor whose typicality denominator is below min_n is flagged under_powered "
+    "and counted in excluded -- never dropped. It claims 'measured, on too few personas "
+    "to read', which is a different fact from an unjudged cell (null: nothing was "
+    "measured) and from a judged competitor with no typicality-bearing persona at all "
+    "(status 'no_typicality')."
+)
+
+#: The confound the min_n gate bounds but does not remove.
+TYPICALITY_N_CONFOUND = (
+    "the base is the can_exist-survivor subset, so a competitor with a high "
+    "impossibility rate is measured over fewer and differently-selected personas. Across "
+    "cells the denominator and the dispersion can therefore be correlated, which means a "
+    "dispersion cell partly re-renders the impossibility rate. Read every cell against "
+    "its own denominator; min_n is a floor, not a fix."
+)
+
+
+def _typicality_levels(record: CompetitorRecord, k: int) -> tuple[list[int], int]:
+    """*record*'s per-persona typicality means, as integer levels, plus what was rounded.
+
+    Reads :attr:`CompetitorRecord.typicality_means` -- the *same* base the factor tests
+    and the Axis B contrast consume -- rather than re-filtering the persona rows, so this
+    block and those cannot disagree about which personas carry a typicality.
+
+    Returns ``(levels, n_non_integer)``. The second number is reported rather than
+    silently absorbed: rounding a mean back into an integer bucket is exactly the step
+    the round-level protocol exists to remove, and a cell where it fired often is a cell
+    whose histogram is a little coarser than the means behind it.
+
+    A mean that bins outside ``[0, k-1]`` raises: it means the scale this block was given
+    is not the scale the judge used, and binning it in would publish a histogram over a
+    scale nobody measured.
+    """
+    levels: list[int] = []
+    n_non_integer = 0
+    for mean in record.typicality_means:
+        value = float(mean)
+        if not value.is_integer():
+            n_non_integer += 1
+        level = int(round(value))
+        if not 0 <= level <= k - 1:
+            raise ValueError(
+                f"Competitor {record.slug!r} carries a mean typicality of {value}, which "
+                f"bins to level {level}, outside the 0..{k - 1} scale this block was given. "
+                "Either the judge's typicality scale moved or the wrong level count was "
+                "resolved at the edge."
+            )
+        levels.append(level)
+    return levels, n_non_integer
+
+
+def _level_statistic(spec: _OrdinalStatistic, k: int) -> Callable[[Sequence[float]], float]:
+    """Adapt an ordinal statistic to the float vector :func:`bootstrap_ci` resamples.
+
+    ``bootstrap_ci`` resamples a float array and hands it to the statistic, while every
+    statistic here is defined on the per-level *histogram* of an integer sample. Wrapping
+    the conversion once means the point estimate and all its bootstrap replicates go
+    through one binning rule rather than two.
+
+    A resampled value that is not integral is a bug in this module's own binning (the
+    caller passes levels, and resampling only ever repeats them), so it raises rather
+    than rounding a second time.
+    """
+    def statistic(sample: Sequence[float]) -> float:
+        levels: list[int] = []
+        for value in sample:
+            level = float(value)
+            if not level.is_integer():
+                raise ValueError(
+                    f"Bootstrap resample carries the non-integer level {level}; the "
+                    "typicality statistics are defined on integer levels only."
+                )
+            levels.append(int(level))
+        return spec.compute(histogram_counts(levels, k), k)
+
+    return statistic
+
+
+def _typicality_cell(
+    record: CompetitorRecord,
+    *,
+    spec: _OrdinalStatistic,
+    k: int,
+    min_n: int,
+    tail_threshold: int,
+    bootstrap: dict[str, Any],
+    skips: list[_Skip],
+) -> dict[str, Any]:
+    """One competitor's typicality statistic, interval, histogram and tail proportion.
+
+    Every number here is a function of *this* competitor's own scores and the passed
+    tunables -- no other competitor, no reference, no config. Recomputing the cell from
+    that competitor alone reproduces it exactly, which is the property that lets the
+    block be rendered against a reference without being computed against one.
+
+    The point estimate is taken from the bootstrap's own ``point`` rather than computed
+    beside it, so the interval can never bracket a different number than the one it is
+    published with.
+
+    A competitor with no typicality-bearing persona gets ``value: None`` and a recorded
+    :class:`_Skip` -- never ``0.0``, which is a real measurement (total collapse onto one
+    level) and would rank an unmeasured competitor as the most collapsed in the sweep.
+    """
+    levels, n_non_integer = _typicality_levels(record, k)
+    denominator = len(levels)
+    identity = {
+        "slug": record.slug,
+        "model": record.model,
+        "strategy": record.strategy,
+        "is_real_reference": record.is_real_reference,
+        # The two bases, side by side and never conflated: `denominator` is the personas
+        # that carry a typicality, `n_personas` the combination's full persona count.
+        "denominator": denominator,
+        "n_personas": record.n_personas,
+        "n_non_integer_means": n_non_integer,
+    }
+
+    if denominator == 0:
+        skips.append(_Skip(
+            test=f"typicality[{record.slug}]",
+            reason=(
+                "no persona carries a typicality (every persona was judged impossible, or "
+                "left no successful round), so a statistic over the sample is undefined. "
+                "The competitor is published with a null value rather than dropped."
+            ),
+        ))
+        return {
+            **identity,
+            "status": "no_typicality",
+            "value": None,
+            "ci_lo": None,
+            "ci_hi": None,
+            "ci_level": bootstrap["ci_level"],
+            "boundary": False,
+            "under_powered": False,
+            "histogram": None,
+            "tail_count": None,
+            "tail_proportion": None,
+            "tail_ci_lo": None,
+            "tail_ci_hi": None,
+        }
+
+    counts = histogram_counts(levels, k)
+    ci = bootstrap_ci(
+        [float(level) for level in levels],
+        _level_statistic(spec, k),
+        iterations=bootstrap["iterations"],
+        ci_level=bootstrap["ci_level"],
+        seed=bootstrap["seed"],
+    )
+    # Compared exactly rather than within a tolerance: an endpoint here arises from a
+    # degenerate histogram whose interior CDF is exactly 0/1 (or exactly 1/2), so it is
+    # exactly representable -- a near-miss is a genuinely interior value, not a rounding
+    # artefact, and widening this test would flag interior cells as boundary ones.
+    low, high = spec.bounds(k)
+    boundary = ci["lo"] == ci["hi"] and ci["point"] in (low, high)
+    tail_count = cumulative_count(counts, k, tail_threshold)
+    # A proportion, so it gets a proportion's interval: Wilson keeps a non-degenerate
+    # width at 0 and 1, where the bootstrap of a proportion collapses to a point.
+    tail_lo, tail_hi = wilson_interval(
+        tail_count, denominator, confidence_level=bootstrap["ci_level"],
+    )
+
+    return {
+        **identity,
+        "status": "under_powered" if denominator < min_n else "ok",
+        "value": ci["point"],
+        "ci_lo": ci["lo"],
+        "ci_hi": ci["hi"],
+        "ci_level": ci["ci_level"],
+        "boundary": boundary,
+        "under_powered": denominator < min_n,
+        "histogram": counts,
+        "tail_count": tail_count,
+        "tail_proportion": tail_count / denominator,
+        "tail_ci_lo": tail_lo,
+        "tail_ci_hi": tail_hi,
+    }
+
+
+def _typicality_options(options: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the caller's resolved typicality tunables, adding nothing.
+
+    Every key in :data:`TYPICALITY_OPTION_KEYS` must be present and no other key may be:
+    a missing one would need a default this module refuses to hold, and an unknown one is
+    a typo that would otherwise be silently ignored while the intended value never
+    arrived.
+    """
+    missing = [key for key in TYPICALITY_OPTION_KEYS if key not in options]
+    unknown = sorted(set(options) - set(TYPICALITY_OPTION_KEYS))
+    if missing or unknown:
+        raise ValueError(
+            f"Malformed typicality options (missing={missing}, unknown={unknown}); the "
+            f"required keys are {list(TYPICALITY_OPTION_KEYS)}. They are resolved at the "
+            "CLI edge -- this module holds no defaults for them."
+        )
+    return {key: options[key] for key in TYPICALITY_OPTION_KEYS}
+
+
+def _typicality_axis(
+    records: Sequence[CompetitorRecord],
+    skips: list[_Skip],
+    *,
+    statistic: str,
+    n_levels: int,
+    min_n: int,
+    tail_threshold: int,
+    bootstrap: dict[str, Any],
+    skipped_combinations: Sequence[tuple[str, str]] = (),
+) -> dict[str, Any]:
+    """One self-contained typicality statistic per competitor, on the model x method grid.
+
+    **Reporting only, exactly as the severity blocks are.** It feeds no ranking, no
+    contrast and no significance test, and changes no number already published. What it
+    adds is a typicality number that can be read *on its own*: Axis B publishes
+    ``abs(measure - real_measure)``, whose absolute value is deliberate but discards the
+    sign, so a mode-collapsed competitor and an over-dispersed one are indistinguishable
+    in it. A cell here is that competitor's own spread.
+
+    **Self-contained computationally, not directionally.** Each cell is a function of one
+    competitor's own scores and the passed tunables, so it is reproducible from that
+    competitor alone. It carries no better/worse direction (``direction: null``): the
+    optimum is interior, and direction enters only at render time through a diverging
+    ramp centred on ``reference_value`` -- the real population's own statistic, computed
+    exactly as every other competitor's and holding no role in any cell's computation.
+
+    The grid comes from the same :func:`_grid` reshape every other heatmap here uses, so
+    the null-cell guarantee, the complexity-ordered method axis and the real population's
+    placement beside the cells rather than in them are inherited rather than re-stated.
+    The cell's value key is ``value``, not ``rate``: it is not a rate, and naming it one
+    to match the impossibility renderer would mislabel every number in the block. A
+    dedicated renderer reads it.
+
+    All four tunables arrive as arguments (this module reads no config): *statistic*
+    selects from :data:`TYPICALITY_STATISTICS`, *n_levels* is the judge scale's level
+    count ``k`` (levels ``0 .. k-1``), *min_n* is the denominator below which a cell is
+    flagged under-powered, and *tail_threshold* is the ``k0`` of the secondary
+    ``P(T <= k0)`` column.
+    """
+    if statistic not in TYPICALITY_STATISTICS:
+        raise ValueError(
+            f"Unknown typicality statistic {statistic!r}; the selectable ids are "
+            f"{sorted(TYPICALITY_STATISTICS)}."
+        )
+    if n_levels < 2:
+        raise ValueError(
+            f"typicality n_levels must be >= 2, got {n_levels!r}: a single-level scale has "
+            "no interior cutpoint and no dispersion to measure."
+        )
+    if min_n < 1:
+        raise ValueError(
+            f"typicality min_n must be >= 1, got {min_n!r}: a statistic over no persona is "
+            "undefined, so a floor below one gates nothing."
+        )
+    if not 0 <= tail_threshold <= n_levels - 1:
+        raise ValueError(
+            f"typicality tail_threshold must lie in [0, {n_levels - 1}], got "
+            f"{tail_threshold!r}: a cut outside the scale selects everything or nothing."
+        )
+    spec = TYPICALITY_STATISTICS[statistic]
+
+    # Computed per competitor up front so the grid closure below is a pure lookup and the
+    # block-level aggregates are a second pass over finished cells -- never an accumulator
+    # mutated from inside a closure, whose totals would depend on how many times _grid
+    # happened to call it.
+    cells = {
+        record.slug: _typicality_cell(
+            record, spec=spec, k=n_levels, min_n=min_n, tail_threshold=tail_threshold,
+            bootstrap=bootstrap, skips=skips,
+        )
+        for record in records
+    }
+
+    def _cell(entry: dict[str, Any]) -> dict[str, Any]:
+        return cells[entry["_record"].slug]
+
+    grid = _grid(
+        _grid_entries(records),
+        value_of=_cell,
+        note=(
+            "A null cell means that model x method combination was not judged -- nothing "
+            "was measured there. It is NOT a value of zero, which is a real measurement on "
+            "this statistic. A competitor that was judged but carries no typicality-bearing "
+            "persona is a third state again: present, with a null value and status "
+            "'no_typicality'." + _GRID_NOTE_SUFFIX
+        ),
+    )
+
+    real_cell = grid["real"]
+    reference_value = None if real_cell is None else real_cell["value"]
+    if real_cell is None:
+        reference_note = (
+            "no real population in the consumption set, so there is no midpoint to centre a "
+            "diverging ramp on. A renderer must degrade to a neutral sequential ramp and "
+            "print the reason rather than substituting a literal midpoint."
+        )
+    elif reference_value is None:
+        reference_note = (
+            f"the real population {real_cell['slug']!r} carries no typicality-bearing "
+            "persona, so it has no value to centre a diverging ramp on -- the same "
+            "degradation as its absence, for a different reason."
+        )
+    else:
+        reference_note = (
+            "the real population's own statistic, computed exactly as every other "
+            "competitor's. It is the render-time midpoint of the diverging ramp and enters "
+            "no cell's computation."
+        )
+
+    unjudged = sum(
+        1
+        for model in grid["models"]
+        for method in grid["methods"]
+        if grid["cells"][model][method] is None
+    )
+    return {
+        "statistic": statistic,
+        "statistic_label": STATISTIC_LABELS[statistic],
+        # Null unless publishing this statistic asserts something the scale does not
+        # support; then it travels on every row, not only in the docs.
+        "statistic_caveat": spec.caveat,
+        "orientation": spec.orientation,
+        "direction": None,
+        "direction_reason": TYPICALITY_NO_DIRECTION,
+        "metric": (
+            "one competitor's own per-persona mean typicalities, summarised by the "
+            "selected ordinal statistic over the k-level histogram of that sample"
+        ),
+        "n_levels": n_levels,
+        "level_assignment": TYPICALITY_LEVEL_ASSIGNMENT,
+        "min_n": min_n,
+        "under_powered_policy": TYPICALITY_UNDER_POWERED_POLICY,
+        "tail_threshold": tail_threshold,
+        "tail_metric": (
+            f"P(typicality <= {tail_threshold}) over the same denominator -- the "
+            "assumption-free companion to the statistic, with a Wilson score interval "
+            "because it is a proportion and the bootstrap is the wrong tool at its boundary"
+        ),
+        "ci_method": (
+            "percentile bootstrap over one competitor's personas, seeded from the judge "
+            "config's bootstrap block (seed, iterations and ci_level in provenance)"
+        ),
+        "boundary_note": TYPICALITY_BOUNDARY_NOTE,
+        "reference_slug": None if real_cell is None else real_cell["slug"],
+        "reference_value": reference_value,
+        "reference_note": reference_note,
+        "counting_unit": TYPICALITY_COUNTING_UNIT,
+        "non_composite": TYPICALITY_NON_COMPOSITE,
+        "n_confound": TYPICALITY_N_CONFOUND,
+        "cross_reference": TYPICALITY_CROSS_REFERENCE,
+        "reporting_only": (
+            "Descriptive. This block feeds no ranking, no contrast and no significance "
+            "test, and changes no number already published -- it does not replace "
+            "axis_b.dispersion_contrast, which remains the tested contrast against the "
+            "real population."
+        ),
+        "grid": grid,
+        "excluded": {
+            # Every exclusion this block is subject to, counted rather than left to be
+            # inferred from a short table (guide 03 sect. 6: report what was dropped).
+            "combinations_skipped": len(skipped_combinations),
+            "cells_unjudged": unjudged,
+            "competitors_under_powered": sum(
+                1 for cell in cells.values() if cell["under_powered"]
+            ),
+            "competitors_without_typicality": sum(
+                1 for cell in cells.values() if cell["status"] == "no_typicality"
+            ),
+            "personas_without_a_typicality": sum(
+                cell["n_personas"] - cell["denominator"] for cell in cells.values()
+            ),
+            "note": (
+                "combinations_skipped are the units the loader could not consume (listed "
+                "with reasons under skipped_combinations); cells_unjudged are model x "
+                "method pairs no combination filled; competitors_under_powered are "
+                "published-and-flagged, not dropped; competitors_without_typicality carry "
+                "a null value because every one of their personas was judged impossible; "
+                "personas_without_a_typicality is the gap between n_personas and the "
+                "denominator, summed -- the personas Axis A ranks and this axis cannot "
+                "measure."
+            ),
+        },
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Factor significance -- model vs method                                       #
 # --------------------------------------------------------------------------- #
 
@@ -1198,6 +1722,7 @@ def build_ranking(
     variance_center: str,
     driver_top_n: int,
     driver_min_count: int,
+    typicality: Mapping[str, Any] | None = None,
     skipped_combinations: Sequence[tuple[str, str]] = (),
 ) -> dict[str, Any]:
     """Assemble one country's complete ranking document.
@@ -1210,6 +1735,12 @@ def build_ranking(
     *driver_top_n* / *driver_min_count* bound the severity-driver tables. They are
     required rather than defaulted because a default here would be a second source of
     truth for a number the CLI already declares, and the two could silently disagree.
+
+    *typicality* is the resolved bundle of that axis's tunables
+    (:data:`TYPICALITY_OPTION_KEYS`), passed verbatim exactly as *bootstrap* is. A caller
+    that omits it gets ``typicality: null`` **and** a recorded skip saying so, rather than
+    a block quietly built on defaults this module does not hold; every key inside it is
+    required, so an incomplete bundle raises.
     """
     skips: list[_Skip] = []
     real = next((r for r in records if r.is_real_reference), None)
@@ -1245,6 +1776,26 @@ def build_ranking(
         top_n=driver_top_n, min_count=driver_min_count,
         skipped_combinations=skipped_combinations,
     )
+
+    # Same reason as the drivers above: it appends to *skips*, which the document literal
+    # also reads.
+    if typicality is None:
+        skips.append(_Skip(
+            test="typicality_axis",
+            reason=(
+                "the caller passed no typicality options, so the self-contained typicality "
+                f"axis was not computed. Pass typicality={{{', '.join(TYPICALITY_OPTION_KEYS)}}} "
+                "to build it; this module holds no defaults for them."
+            ),
+        ))
+        typicality_axis = None
+    else:
+        typicality_axis = _typicality_axis(
+            records, skips,
+            **_typicality_options(typicality),
+            bootstrap=bootstrap,
+            skipped_combinations=skipped_combinations,
+        )
 
     provenance = dict(records[0].provenance) if records else {}
     return {
@@ -1286,6 +1837,10 @@ def build_ranking(
         # The attribution half of that same dimension, and equally outside axis_a:
         # reporting only, and it changes no existing number.
         "severity_drivers": drivers,
+        # The self-contained typicality reading, beside axis_b rather than inside it:
+        # reporting only, and it changes no existing number. Null when the caller did not
+        # request it (with the reason in skipped_tests).
+        "typicality": typicality_axis,
         "factor_significance": {
             "by_model": by_model,
             "by_method": by_method,
@@ -1505,6 +2060,140 @@ def severity_driver_value_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
     rows.sort(key=lambda row: (
         *position(row), SEVERITY_RANK[row["severity"]], row["pair_rank"], row["rank"],
     ))
+    return rows
+
+
+def _typicality_cells(ranking: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The typicality block and every competitor's cell in it, in slug order.
+
+    Flattens the grid back to a list for the same reason the driver tables do: the model
+    x method shape exists for the heatmap, and a table wants one row per competitor. The
+    real population is picked up from ``real`` explicitly -- it has no grid coordinate,
+    and omitting it would answer "how spread is the register population's typicality?"
+    with silence, on the one axis where that is the reading everything else is measured
+    against.
+
+    Raises ``ValueError`` when the document was built without the axis: an empty table
+    would claim there was nothing to publish.
+    """
+    block = ranking["typicality"]
+    if block is None:
+        raise ValueError(
+            "This ranking document carries no typicality axis: build_ranking was called "
+            "without the `typicality` options (the reason is recorded in skipped_tests). "
+            "Pass the resolved options to build it, rather than writing an empty table."
+        )
+    grid = block["grid"]
+    rows = [
+        cell
+        for model in grid["models"]
+        for cell in (grid["cells"][model][method] for method in grid["methods"])
+        if cell is not None            # an unjudged (model, method) pair is None, not empty
+    ]
+    if grid["real"] is not None:
+        rows.append(grid["real"])
+    return block, sorted(rows, key=lambda cell: cell["slug"])
+
+
+def _typicality_identity(cell: dict[str, Any]) -> dict[str, Any]:
+    """The columns every typicality row carries whatever its grain."""
+    return {
+        "slug": cell["slug"],
+        "model": cell["model"],
+        "strategy": cell["strategy"],
+        "is_real_reference": cell["is_real_reference"],
+    }
+
+
+def typicality_summary_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the typicality axis into ``typicality_summary.csv`` rows.
+
+    One row per competitor, the real population included as an ordinary one. Every row
+    carries **both** persona counts under distinct names -- ``denominator`` (the personas
+    contributing a typicality) and ``n_personas`` (the combination's full count) -- so a
+    value is never read against the wrong base, plus the flags that say how to read it:
+    ``status``, ``under_powered`` with the ``min_n`` it was compared against, and
+    ``boundary`` for a degenerate interval at the statistic's endpoint.
+
+    The interpretive fields travel on the row rather than only in the block:
+    ``statistic_label`` states the endpoints, ``direction`` is empty by construction with
+    ``direction_reason`` beside it, and ``statistic_caveat`` is non-empty exactly when the
+    selected statistic asserts something about the scale that the scale does not support.
+    The file outlives the docstring.
+    """
+    block, cells = _typicality_cells(ranking)
+    rows = [
+        {
+            **_typicality_identity(cell),
+            "statistic": block["statistic"],
+            "statistic_label": block["statistic_label"],
+            "orientation": block["orientation"],
+            "value": cell["value"],
+            "ci_lo": cell["ci_lo"],
+            "ci_hi": cell["ci_hi"],
+            "ci_level": cell["ci_level"],
+            "boundary": cell["boundary"],
+            "status": cell["status"],
+            "under_powered": cell["under_powered"],
+            "min_n": block["min_n"],
+            "denominator": cell["denominator"],
+            "n_personas": cell["n_personas"],
+            "n_non_integer_means": cell["n_non_integer_means"],
+            "tail_threshold": block["tail_threshold"],
+            "tail_count": cell["tail_count"],
+            "tail_proportion": cell["tail_proportion"],
+            "tail_ci_lo": cell["tail_ci_lo"],
+            "tail_ci_hi": cell["tail_ci_hi"],
+            "reference_slug": block["reference_slug"],
+            "reference_value": block["reference_value"],
+            "direction": block["direction"],
+            "direction_reason": block["direction_reason"],
+            "counting_unit": TYPICALITY_COUNTING_UNIT,
+            "statistic_caveat": block["statistic_caveat"],
+        }
+        for cell in cells
+    ]
+    # Total order, no residual tie: the competitor is placed on the method-then-model axes
+    # rather than by slug (see _competitor_position), and a (method, model) pair identifies
+    # one competitor within a country, so the key is total on its own. Sorted after the
+    # build rather than during it so the emitted bytes never depend on record order.
+    rows.sort(key=_competitor_position(rows))
+    return rows
+
+
+def typicality_histogram_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the per-competitor histograms into ``typicality_histogram.csv`` rows.
+
+    Long form: one row per ``(competitor, level)`` over the full ``0 .. k-1`` scale, so
+    the bins of a competitor sum to its ``denominator`` and the levels nobody scored are
+    present as explicit zeros rather than as gaps a reader has to notice.
+
+    The histogram is the published object and the scalar summarises it, so this table is
+    the one that survives a change of statistic. A competitor with no typicality-bearing
+    persona contributes no row -- it has no histogram, and a row of zeros would claim it
+    was measured; it is in the summary table with a null value instead.
+    """
+    _block, cells = _typicality_cells(ranking)
+    rows: list[dict[str, Any]] = []
+    for cell in cells:
+        if cell["histogram"] is None:
+            continue
+        for level, count in enumerate(cell["histogram"]):
+            rows.append({
+                **_typicality_identity(cell),
+                "level": level,
+                "n_personas_at_level": count,
+                "proportion": count / cell["denominator"],
+                "denominator": cell["denominator"],
+                "n_personas": cell["n_personas"],
+                "status": cell["status"],
+                "under_powered": cell["under_powered"],
+                "counting_unit": TYPICALITY_COUNTING_UNIT,
+            })
+    # The same competitor key as the summary grain, extended by the level, which is total
+    # within a competitor because each level appears exactly once.
+    position = _competitor_position(rows)
+    rows.sort(key=lambda row: (*position(row), row["level"]))
     return rows
 
 

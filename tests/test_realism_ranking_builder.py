@@ -24,6 +24,8 @@ from population_synthetic.analysis.realism_ranking.builder import (  # noqa: E40
     severity_driver_value_rows,
     severity_pair_summary,
     summary_rows,
+    typicality_histogram_rows,
+    typicality_summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_headline_map,
@@ -44,6 +46,11 @@ from population_synthetic.analysis.utils.realism_csv import (  # noqa: E402
 _BOOT = {"iterations": 200, "seed": 20260723, "ci_level": 0.95}
 _COUNTRY = "swedish"
 _PROVENANCE = {"judge_model": "claude-sonnet-5", "prompt_template_sha256": "abc", "n_rounds": 2}
+#: The typicality axis's tunables, which the builder requires and never defaults. The
+#: floor is 1 rather than the CLI's production 30: these fixtures hold a handful of
+#: personas, so the shipped floor would flag every cell and the gate's own tests would be
+#: the only ones exercising an ordinary cell.
+_TYPICALITY = {"statistic": "iov", "n_levels": 11, "min_n": 1, "tail_threshold": 5}
 
 
 def _row(pid, slug, *, impossible, typicality, model, strategy, is_real=False):
@@ -80,10 +87,12 @@ def _record(slug, *, n_impossible, typicalities, model="claude_haiku", strategy=
 
 
 def _build(records, **kwargs):
-    # The driver bounds are required arguments (the builder reads no config), so the
-    # helper pins permissive ones; the tests that are *about* them pass their own.
+    # The driver bounds and the typicality options are required arguments (the builder
+    # reads no config), so the helper pins permissive ones; the tests that are *about*
+    # them pass their own.
     kwargs.setdefault("driver_top_n", 3)
     kwargs.setdefault("driver_min_count", 1)
+    kwargs.setdefault("typicality", dict(_TYPICALITY))
     return build_ranking(records, _COUNTRY, bootstrap=_BOOT, variance_center="median", **kwargs)
 
 
@@ -1210,3 +1219,322 @@ def test_pair_summary_figure_of_an_empty_level_explains_itself():
     ax = fig.axes[0]
     assert not ax.patches, "an empty level must draw no bar"
     assert "measured absence" in " ".join(t.get_text() for t in ax.texts)
+
+
+# --------------------------------------------------------------------------- #
+# typicality axis (self-contained per competitor -- reporting only)             #
+# --------------------------------------------------------------------------- #
+
+
+def _typicality_fixture():
+    """Two competitors whose typicality bases differ from their persona counts.
+
+    Competitor A: two impossible personas plus four scored ``{9, 9, 10, 10}`` -- the
+    collapse pattern, IOV 0.1 by hand (only ``F_9 = 0.5`` is interior-non-degenerate, so
+    ``4 * 0.25 / 10``). Competitor B: four scored ``{0, 0, 10, 10}`` -- every interior
+    cutpoint at 0.5, so IOV 1.0. The pair is exactly the separation the statistic was
+    chosen for: a location or order-blind summary scores the two splits identically.
+    """
+    a = _record("swedish_all_pick_claude_haiku", n_impossible=2,
+                typicalities=[9.0, 9.0, 10.0, 10.0],
+                model="claude_haiku", strategy="all_pick")
+    b = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
+                typicalities=[0.0, 0.0, 10.0, 10.0],
+                model="claude_sonnet", strategy="all_pick_dag")
+    return [a, b]
+
+
+def _real_record(typicalities):
+    return _record("real_swedish", n_impossible=0, typicalities=typicalities,
+                   model="", strategy="", is_real=True)
+
+
+def _typ(ranking, model="claude_haiku", method="all_pick"):
+    return ranking["typicality"]["grid"]["cells"][model][method]
+
+
+def test_typicality_denominator_is_the_typicality_base_not_the_persona_count():
+    """The two bases differ by construction, and both travel on the cell.
+
+    Competitor A's impossibility rate is over six personas; its typicality is over the
+    four that carry one. Reading the second against the first would understate every
+    spread in the sweep by the impossibility rate.
+    """
+    ranking = _build(_typicality_fixture())
+    a, b = _typ(ranking), _typ(ranking, "claude_sonnet", "all_pick_dag")
+
+    assert a["value"] == pytest.approx(0.1)
+    assert a["denominator"] == 4 and a["n_personas"] == 6
+    assert b["value"] == pytest.approx(1.0)
+    assert b["denominator"] == b["n_personas"] == 4
+    # ... while Axis A ranks A over all six personas, which is the point of the two names.
+    assert ranking["axis_a"]["grid"]["cells"]["claude_haiku"]["all_pick"]["denominator"] == 6
+    # {9,10} vs {0,10}: the collapse distinction an order-blind summary cannot draw.
+    assert a["value"] < b["value"]
+    # The base is the one the factor tests consume -- one source, so they cannot disagree.
+    groups = ranking["factor_significance"]["by_model"]["groups"]
+    assert sum(group["n"] for group in groups.values()) == a["denominator"] + b["denominator"]
+
+
+def test_a_fully_collapsed_competitor_is_zero_with_a_flagged_boundary_interval():
+    """The honest ``[0, 0]`` is published *with* its flag, never bare and never patched.
+
+    At a parameter-space boundary the percentile bootstrap is inconsistent rather than
+    merely inaccurate, so the interval is reported as degenerate instead of being
+    smoothed into one that looks trustworthy.
+    """
+    collapsed = _record("swedish_all_pick_claude_haiku", n_impossible=0,
+                        typicalities=[9.0] * 5)
+    spread = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
+                     typicalities=[2.0, 4.0, 6.0, 8.0, 9.0],
+                     model="claude_sonnet", strategy="all_pick_dag")
+    ranking = _build([collapsed, spread])
+
+    cell = _typ(ranking)
+    assert cell["value"] == 0.0
+    assert (cell["ci_lo"], cell["ci_hi"]) == (0.0, 0.0)
+    assert cell["boundary"] is True
+    assert cell["status"] == "ok"          # measured, and measurable -- merely collapsed
+    assert "inconsistent" in ranking["typicality"]["boundary_note"]
+
+    # An interior cell with a genuine interval must not inherit the flag.
+    interior = _typ(ranking, "claude_sonnet", "all_pick_dag")
+    assert interior["boundary"] is False
+    assert interior["ci_lo"] < interior["value"] < interior["ci_hi"]
+
+
+def _powered_fixture():
+    """One competitor below a floor of three typicality-bearing personas, one above."""
+    small = _record("swedish_all_pick_claude_haiku", n_impossible=1,
+                    typicalities=[3.0, 7.0], model="claude_haiku", strategy="all_pick")
+    large = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
+                    typicalities=[3.0] * 3 + [7.0] * 3,
+                    model="claude_sonnet", strategy="all_pick_dag")
+    return [small, large]
+
+
+def test_under_powered_cell_is_flagged_and_counted_rather_than_silently_dropped():
+    """Three states, never two: a value, an under-powered value, and an unjudged null."""
+    ranking = _build(_powered_fixture(), typicality={**_TYPICALITY, "min_n": 3})
+    block = ranking["typicality"]
+    small = _typ(ranking)
+    large = _typ(ranking, "claude_sonnet", "all_pick_dag")
+
+    assert small["under_powered"] is True and small["status"] == "under_powered"
+    assert small["value"] is not None, "an under-powered cell is published, not dropped"
+    assert small["denominator"] == 2
+    assert large["under_powered"] is False and large["status"] == "ok"
+    assert block["min_n"] == 3
+    assert block["excluded"]["competitors_under_powered"] == 1
+    assert "too few personas" in block["under_powered_policy"]
+
+    # Distinct from an unjudged pair, which claims nothing was measured at all.
+    assert block["grid"]["cells"]["claude_haiku"]["all_pick_dag"] is None
+    assert block["grid"]["cells"]["claude_sonnet"]["all_pick"] is None
+    assert block["excluded"]["cells_unjudged"] == 2
+    assert "NOT a value of zero" in block["grid"]["note"]
+
+
+def test_a_competitor_with_no_typicality_is_null_and_never_zero():
+    """Every persona judged impossible: nothing was measured, and 0.0 is a measurement."""
+    dead = _record("swedish_all_pick_claude_haiku", n_impossible=3, typicalities=[])
+    ranking = _build([dead])
+    cell = _typ(ranking)
+
+    assert cell["value"] is None and cell["status"] == "no_typicality"
+    assert cell["denominator"] == 0 and cell["n_personas"] == 3
+    # Not "measured on too few personas" -- a different claim, and this is not it.
+    assert cell["under_powered"] is False
+    assert cell["histogram"] is None and cell["tail_proportion"] is None
+    reasons = {s["test"]: s["reason"] for s in ranking["skipped_tests"]}
+    assert "typicality[swedish_all_pick_claude_haiku]" in reasons
+    assert "undefined" in reasons["typicality[swedish_all_pick_claude_haiku]"]
+    excluded = ranking["typicality"]["excluded"]
+    assert excluded["competitors_without_typicality"] == 1
+    assert excluded["personas_without_a_typicality"] == 3
+
+
+def test_a_single_persona_competitor_is_defined_with_a_degenerate_interval():
+    """n = 1 must produce a number and an honest zero-width interval, not a crash."""
+    lone = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[7.0])
+    cell = _typ(_build([lone]))
+    assert cell["denominator"] == 1
+    assert cell["value"] == 0.0            # one persona cannot be dispersed
+    assert cell["ci_lo"] == cell["ci_hi"] == 0.0
+    assert cell["boundary"] is True
+
+
+def test_histogram_bins_sum_to_the_typicality_denominator():
+    ranking = _build(_typicality_fixture())
+    a = _typ(ranking)
+    assert len(a["histogram"]) == _TYPICALITY["n_levels"]
+    assert a["histogram"][9] == 2 and a["histogram"][10] == 2
+    assert sum(a["histogram"]) == a["denominator"]
+
+    rows = typicality_histogram_rows(ranking)
+    by_slug: dict[str, list] = {}
+    for row in rows:
+        by_slug.setdefault(row["slug"], []).append(row)
+    assert set(by_slug) == {"swedish_all_pick_claude_haiku", "swedish_all_pick_dag_claude_sonnet"}
+    for group in by_slug.values():
+        # The full scale, including the levels nobody scored -- a gap would read as absent.
+        assert [row["level"] for row in group] == list(range(_TYPICALITY["n_levels"]))
+        assert sum(row["n_personas_at_level"] for row in group) == group[0]["denominator"]
+        assert sum(row["proportion"] for row in group) == pytest.approx(1.0)
+        # Both bases on every row, under distinct names.
+        assert group[0]["denominator"] <= group[0]["n_personas"]
+
+
+def test_tail_column_is_a_proportion_with_a_wilson_interval_over_the_same_base():
+    ranking = _build(_typicality_fixture(), typicality={**_TYPICALITY, "tail_threshold": 5})
+    block = ranking["typicality"]
+    assert block["tail_threshold"] == 5
+
+    spread = _typ(ranking, "claude_sonnet", "all_pick_dag")      # {0, 0, 10, 10}
+    assert spread["tail_count"] == 2 and spread["tail_proportion"] == pytest.approx(0.5)
+    assert 0.0 < spread["tail_ci_lo"] < 0.5 < spread["tail_ci_hi"] < 1.0
+
+    collapsed = _typ(ranking)                                    # {9, 9, 10, 10}
+    assert collapsed["tail_count"] == 0 and collapsed["tail_proportion"] == 0.0
+    # A proportion at its boundary keeps a width -- which is why it is not bootstrapped.
+    assert collapsed["tail_ci_lo"] == 0.0 and collapsed["tail_ci_hi"] > 0.0
+
+
+def test_reference_value_is_the_real_populations_own_statistic_or_null_with_a_reason():
+    """The reference is read from the document, never assumed and never a literal."""
+    records = _typicality_fixture() + [_real_record([9.0, 9.0, 10.0, 10.0])]
+    block = _build(records)["typicality"]
+    assert block["reference_slug"] == "real_swedish"
+    assert block["reference_value"] == pytest.approx(0.1)
+    assert block["reference_value"] == block["grid"]["real"]["value"]
+    assert "midpoint" in block["reference_note"]
+    # It is an ordinary competitor: no grid coordinate, no privilege in any cell.
+    assert "real_swedish" not in block["grid"]["models"]
+
+    without = _build(_typicality_fixture())["typicality"]
+    assert without["reference_slug"] is None and without["reference_value"] is None
+    assert "neutral sequential ramp" in without["reference_note"]
+
+
+def test_typicality_block_publishes_its_orientation_and_no_direction():
+    """Direction is the render's job; the statistic states its endpoints and stops."""
+    from population_synthetic.analysis.utils.ordinal import STATISTIC_LABELS
+
+    block = _build(_typicality_fixture())["typicality"]
+    assert block["direction"] is None
+    assert "no monotone better direction" in block["direction_reason"]
+    assert block["orientation"] == "dispersion"
+    # Sourced from the definition rather than re-worded here, so the two cannot drift.
+    assert block["statistic_label"] == STATISTIC_LABELS["iov"]
+    assert "maximally dispersed" in block["statistic_label"]
+    assert block["statistic_caveat"] is None
+    assert "no ranking" in block["reporting_only"]
+    assert "personas, not judge rounds" in block["counting_unit"]
+    assert "factor_significance" in block["cross_reference"]
+    assert "never averaged" in block["non_composite"]
+
+
+def test_the_mean_option_carries_its_interval_assumption_on_every_row():
+    """A caveat that lives only in the docs is one the table travels without."""
+    ranking = _build(_typicality_fixture(),
+                     typicality={**_TYPICALITY, "statistic": "mean_level"})
+    block = ranking["typicality"]
+    assert block["orientation"] == "location"
+    assert "equally spaced" in block["statistic_caveat"]
+    assert _typ(ranking)["value"] == pytest.approx(9.5)
+
+    rows = typicality_summary_rows(ranking)
+    assert rows and all("equally spaced" in row["statistic_caveat"] for row in rows)
+    # ... and the default statistic makes no such claim, so it carries no such caveat.
+    default_rows = typicality_summary_rows(_build(_typicality_fixture()))
+    assert all(row["statistic_caveat"] is None for row in default_rows)
+
+
+def test_typicality_changes_no_number_the_ranking_already_published():
+    """Reporting-only, in the tested sense: loose vs tight bounds, byte for byte."""
+    records = _driver_fixture()
+    loose = _build(records, typicality={"statistic": "iov", "n_levels": 11,
+                                        "min_n": 1, "tail_threshold": 3})
+    tight = _build(records, typicality={"statistic": "mean_level", "n_levels": 11,
+                                        "min_n": 50, "tail_threshold": 8})
+    for key in ("axis_a", "axis_b", "severity", "severity_drivers"):
+        assert loose[key] == tight[key], key
+    # The mixed model is excluded: its variational fit is not bit-reproducible between
+    # two calls, which is a property of the fitter and would mask, not reveal, a leak.
+    for factor in ("by_model", "by_method"):
+        assert loose["factor_significance"][factor] == tight["factor_significance"][factor]
+    assert loose["typicality"] != tight["typicality"], "the fixture must discriminate"
+
+    # It has not leaked into the ranking, the contrasts, the factor tests or their tables.
+    assert "typicality" not in loose["axis_a"]
+    assert all("typicality" not in entry for entry in loose["axis_a"]["ranking"])
+    assert all("typicality" not in row for row in loose["axis_b"]["dispersion_contrast"])
+    assert "typicality" not in loose["factor_significance"]
+    assert all("typicality" not in row for row in summary_rows(loose))
+    assert all("typicality" not in row for row in scb_contrast_rows(loose))
+    assert all("typicality" not in row for row in severity_driver_rows(loose))
+
+
+@pytest.mark.parametrize("options", [
+    {"min_n": 0}, {"min_n": -1}, {"n_levels": 1}, {"tail_threshold": 11},
+    {"tail_threshold": -1}, {"statistic": "not_a_statistic"},
+])
+def test_degenerate_typicality_options_raise_rather_than_emitting_an_empty_table(options):
+    with pytest.raises(ValueError):
+        _build(_typicality_fixture(), typicality={**_TYPICALITY, **options})
+
+
+@pytest.mark.parametrize("options", [
+    {key: value for key, value in _TYPICALITY.items() if key != "min_n"},   # incomplete
+    {**_TYPICALITY, "typicality_min_n": 30},                                # a typo'd key
+])
+def test_malformed_typicality_options_raise_rather_than_being_defaulted(options):
+    with pytest.raises(ValueError, match="Malformed typicality options"):
+        _build(_typicality_fixture(), typicality=options)
+
+
+def test_omitting_the_options_leaves_a_null_block_a_recorded_reason_and_no_table():
+    """Absent because nobody asked is a fact worth recording, not a silent default."""
+    ranking = build_ranking(
+        _typicality_fixture(), _COUNTRY, bootstrap=_BOOT, variance_center="median",
+        driver_top_n=3, driver_min_count=1,
+    )
+    assert ranking["typicality"] is None
+    assert "typicality_axis" in {skip["test"] for skip in ranking["skipped_tests"]}
+    for flatten in (typicality_summary_rows, typicality_histogram_rows):
+        with pytest.raises(ValueError, match="no typicality axis"):
+            flatten(ranking)
+
+
+def test_typicality_rows_are_ordered_by_method_then_model_with_the_real_population_last():
+    """The tables read simplest-method-first, exactly as their heatmap does."""
+    records = _complexity_fixture() + [_real_record([5.0, 6.0, 7.0])]
+    ranking = _build(records)
+    rows = typicality_summary_rows(ranking)
+
+    assert [row["strategy"] for row in rows] == [
+        "all_pick", "all_pick_dag", "all_generate_pick", ""]
+    assert rows[-1]["is_real_reference"] is True
+    assert rows[-1]["slug"] == "real_swedish"
+    # Every row carries the same columns, so the file is a rectangle.
+    keys = list(rows[0])
+    assert keys[:4] == ["slug", "model", "strategy", "is_real_reference"]
+    assert all(list(row) == keys for row in rows)
+    # Both persona counts, under distinct names, on every row.
+    assert all({"denominator", "n_personas"} <= set(row) for row in rows)
+
+    histogram = typicality_histogram_rows(ranking)
+    assert [row["slug"] for row in rows] == list(dict.fromkeys(
+        row["slug"] for row in histogram))
+    # Byte-stable: the same ranking flattens to the same row sequence, twice.
+    assert typicality_summary_rows(ranking) == rows
+    assert typicality_histogram_rows(ranking) == histogram
+
+
+def test_competitor_order_changes_no_emitted_typicality_byte():
+    records = _typicality_fixture()
+    forward = _build(records)
+    reverse = _build(list(reversed(records)))
+    assert forward["typicality"] == reverse["typicality"]
+    assert typicality_summary_rows(forward) == typicality_summary_rows(reverse)
+    assert typicality_histogram_rows(forward) == typicality_histogram_rows(reverse)
