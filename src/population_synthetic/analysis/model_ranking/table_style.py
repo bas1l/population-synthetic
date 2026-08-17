@@ -69,16 +69,33 @@ def inferno_cmap():
     return heatmap_cmap()
 
 
-def vertical_divider(ax, n_columns_left: int) -> None:
-    """Draw the white vertical rule after the first *n_columns_left* columns.
+#: The divider rule's colour and width. White rather than a dark rule: the gap has
+#: to read as a *break in the grid* at any point on the ramp, and a dark rule is
+#: invisible against the ramp's low end. Named so the two orientations cannot
+#: drift apart, and so a renderer that needs a divider never restates the values.
+_DIVIDER_COLOR = "white"
+_DIVIDER_LINEWIDTH = 2.5
+
+
+def vertical_divider(ax, n_columns_left: float) -> None:
+    """Draw the divider rule after the first *n_columns_left* columns.
 
     Separates a block of ordinary cells from a block that must not be read as one
-    of them (in the two tables, the per-axis columns from the Overall roll-up).
-    White rather than a dark rule: the gap has to read as a *break in the grid*
-    at any point on the ramp, and a dark rule is invisible against the ramp's low
-    end.
+    of them (in the two tables, the per-axis columns from the Overall roll-up; in
+    the model x method heatmap, the grid from its row marginal).
     """
-    ax.axvline(n_columns_left - 0.5, color="white", linewidth=2.5)
+    ax.axvline(n_columns_left - 0.5, color=_DIVIDER_COLOR, linewidth=_DIVIDER_LINEWIDTH)
+
+
+def horizontal_divider(ax, n_rows_above: float) -> None:
+    """Draw the divider rule below the first *n_rows_above* rows.
+
+    The row-wise twin of :func:`vertical_divider`, for a grid whose marginal sits
+    *below* it rather than beside it. *n_rows_above* is a float rather than an int
+    because a grid may open a gap between row blocks, which puts its bottom edge
+    at a fractional row coordinate.
+    """
+    ax.axhline(n_rows_above - 0.5, color=_DIVIDER_COLOR, linewidth=_DIVIDER_LINEWIDTH)
 
 
 def best_cells_per_column(values: np.ndarray) -> set[tuple[int, int]]:

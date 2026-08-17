@@ -73,38 +73,38 @@ because it invites direct cell-to-cell comparison.
 
 ## Success Criteria
 
-- [ ] `python scripts/analyze/rank_models.py --country swedish_02` writes
+- [x] `python scripts/analyze/rank_models.py --country swedish_02` writes
       `{country}_model_method_heatmap.png` **and** `{country}_model_method_heatmap.svg` into
       the `model_ranking` output folder.
-- [ ] `--no-charts` suppresses both files; the JSON and CSV artifacts are unaffected either way.
-- [ ] Each cell's printed value equals `overall_tv_similarity × 100` from
+- [x] `--no-charts` suppresses both files; the JSON and CSV artifacts are unaffected either way.
+- [x] Each cell's printed value equals `overall_tv_similarity × 100` from
       `{country}_performance.csv` for the same `(model, strategy)`, to 1 decimal.
-- [ ] Column order equals `strategy_complexity_order(metadata["strategies"])` exactly, and is
+- [x] Column order equals `strategy_complexity_order(metadata["strategies"])` exactly, and is
       identical to `result["methods_matrix"]["strategies"]`.
-- [ ] Every model with at least one full-`n` cell (`n >= requested_n`) is in Tier 1; every
+- [x] Every model with at least one full-`n` cell (`n >= requested_n`) is in Tier 1; every
       model with zero full-`n` cells is in Tier 2. The partition is computed from `n` against
       the slug's own `requested_n` — no literal cap threshold appears in the rule, the
       implementation, or the tests, and the test fixtures use a `requested_n` other than 100 so
       a hardcoded threshold cannot pass by coincidence.
-- [ ] Tier 1 rows precede Tier 2 rows, separated by an explicit break (gap + rule line) that is
+- [x] Tier 1 rows precede Tier 2 rows, separated by an explicit break (gap + rule line) that is
       distinguishable in greyscale and not confusable with the marginal dividers or the
       per-cell thin marking. The Tier 2 block is annotated as unranked, stating the reason.
-- [ ] Tier 1 row order is `(-max_over_full_n, -mean_over_full_n, model_id)` and Tier 2 row
+- [x] Tier 1 row order is `(-max_over_full_n, -mean_over_full_n, model_id)` and Tier 2 row
       order is `(-max_over_all_cells, model_id)`; the same input yields the same order on
       repeated runs, including under a constructed tie in each tier.
-- [ ] A Tier 1 model's ordering key ignores its thin cells: a model whose single best cell is
+- [x] A Tier 1 model's ordering key ignores its thin cells: a model whose single best cell is
       thin ranks on its best **full-`n`** cell instead, and its thin cells are still drawn and
       still marked.
-- [ ] The row marginal prints the ordering key — best qualifying score, argmax method, and the
+- [x] The row marginal prints the ordering key — best qualifying score, argmax method, and the
       number of cells the key was computed over — flagged provisional for Tier 2 rows.
-- [ ] The column marginal averages **full-`n` cells only** and prints how many cells it
+- [x] The column marginal averages **full-`n` cells only** and prints how many cells it
       averaged, so an excluded thin cell is visible rather than silent.
 - [ ] On `swedish_02` (`requested_n = 100`) Tier 2 contains exactly `ollama_llama31_8b`, whose
       five cells are all thin (n = 11, 19, 22, 34, 49). `ollama_gemma4_e4b` and
       `ollama_deepseek_r1_14b` stay in Tier 1, each ranked on its four full-`n` cells with one
       thin cell marked in the `all_generate_evaluate_random_pick_v2` column (n = 7 and n = 9).
       The remaining seven models have five full-`n` cells each.
-- [ ] Every cell whose `n < requested_n` is marked and prints its `n`; a cell at
+- [x] Every cell whose `n < requested_n` is marked and prints its `n`; a cell at
       `n == requested_n` is unmarked.
 - [ ] On `swedish_02` the marking fires on exactly these 7 cells and on none of the other 43:
       `all_generate_evaluate_random_pick_v2` × `ollama_gemma4_e4b` (n=7),
@@ -113,14 +113,14 @@ because it invites direct cell-to-cell comparison.
       `all_pick_v2` × `ollama_llama31_8b` (n=22);
       `all_generate_pick_v2` × `ollama_llama31_8b` (n=34);
       `all_generate_evaluate_pick_v2` × `ollama_llama31_8b` (n=49).
-- [ ] Model tick labels are coloured by `classify_hosting` provenance, using the same colours
+- [x] Model tick labels are coloured by `classify_hosting` provenance, using the same colours
       and legend text as `plot_model_fidelity_table`.
-- [ ] Ramp, text-contrast rule, colourbar, and NaN grey are produced by calling the same
+- [x] Ramp, text-contrast rule, colourbar, and NaN grey are produced by calling the same
       functions the sibling tables call — no re-specified colour values in `charts.py`.
 - [x] The two shipped manuscript tables render identically before and after the Phase 1
       extraction (structural assertions, not byte comparison).
-- [ ] `pytest` passes, including the new heatmap tests.
-- [ ] `ruff check src/` clean.
+- [x] `pytest` passes, including the new heatmap tests.
+- [x] `ruff check src/` clean.
 
 ## Definitions
 
@@ -415,37 +415,37 @@ colourbar's label-only percentage scaling.
 ### Phase 2: The model × method heatmap
 **Goal:** The figure shipped as a `model_ranking` artifact, honest about `n`.
 
-- [ ] Task 2.1 — New `analysis/utils/cap_index.py`, shared with the parent plan's two figures:
+- [x] Task 2.1 — New `analysis/utils/cap_index.py`, shared with the parent plan's two figures:
       resolve the stage directory with `resolve_stage_source` (`capped_source.py:66-86`), read
       `_index.json` into `{slug: requested_n}`, and expose the full-`n`/thin predicate
       (`n >= requested_n`). Raise with the path named when the file is absent, and raise when a
       requested slug has no entry. No default, no inferred cap, no literal threshold.
-- [ ] Task 2.2 — `plot_model_method_heatmap(result, requested_n, out_path)` in `charts.py`:
+- [x] Task 2.2 — `plot_model_method_heatmap(result, requested_n, out_path)` in `charts.py`:
       regroup `combos` into a model × method grid of `overall.tv_similarity_mean` and `n`;
       columns ordered by `strategy_complexity_order(metadata["strategies"])`. Missing
       `(model, method)` pairs are `NaN`, excluded from every key below, and rendered by the
       ramp's `set_bad` grey.
-- [ ] Task 2.3 — Partition the rows using the shared predicate: Tier 1 = models with at least
+- [x] Task 2.3 — Partition the rows using the shared predicate: Tier 1 = models with at least
       one full-`n` cell, Tier 2 = models with none. Sort Tier 1 by
       `(-max_over_full_n, -mean_over_full_n, model_id)` and Tier 2 by
       `(-max_over_all_cells, model_id)`; emit Tier 1 first. Record each model's argmax method
       alongside its row — over full-`n` cells for Tier 1, over all cells for Tier 2 — with
       within-row ties resolving to the first in `strategy_complexity_order`. A Tier 1 model's
       thin cells never enter its ordering key.
-- [ ] Task 2.4 — Draw the break between the tiers: a gap plus a rule line, Tier 2 row labels
+- [x] Task 2.4 — Draw the break between the tiers: a gap plus a rule line, Tier 2 row labels
       styled distinctly from Tier 1, and the Tier 2 block annotated as unranked with the reason
       (*every cell below the requested cap*). It must not rely on colour alone, and must be
       visually distinct from both the per-cell thin marking and the marginal dividers — a
       reader should not have to work out which of the three separators they are looking at.
-- [ ] Task 2.5 — Annotate each cell with its value (`× 100`, one decimal) and its `n`, using
+- [x] Task 2.5 — Annotate each cell with its value (`× 100`, one decimal) and its `n`, using
       the shared text-contrast rule so both stay legible across the ramp.
-- [ ] Task 2.6 — Mark every thin cell (`n < requested_n[slug]`). Choose an encoding that does
+- [x] Task 2.6 — Mark every thin cell (`n < requested_n[slug]`). Choose an encoding that does
       not touch cell hue (the ramp already means score) and survives greyscale — e.g. a hatch
       or a corner glyph — and record the choice in a comment. Add a legend entry naming it.
-- [ ] Task 2.7 — Colour model tick labels by `metadata.model_hosting` using the shared
+- [x] Task 2.7 — Colour model tick labels by `metadata.model_hosting` using the shared
       `HOST_COLORS` / `HOST_LABELS`, with the same legend treatment as
       `plot_model_fidelity_table` (`manuscript_tables.py:274`).
-- [ ] Task 2.8 — Add the two marginals, separated from the grid by the shared divider so
+- [x] Task 2.8 — Add the two marginals, separated from the grid by the shared divider so
       neither can be read as a cell. They are **deliberately asymmetric**, and the asymmetry
       must not be "fixed" into two means — see Technical Design point 4. The row marginal
       prints the ordering key: best qualifying score, argmax method, and the count of cells the
@@ -453,25 +453,62 @@ colourbar's label-only percentage scaling.
       mean across models over **full-`n` cells only**, printed with the count it averaged, so a
       method's mean is never moved by a 7-persona cell and an excluded cell is visible rather
       than silent. State both scopes in the caption.
-- [ ] Task 2.9 — Persist via `analysis/utils/figures.py::save_figure` so the PNG and its `.svg`
+- [x] Task 2.9 — Persist via `analysis/utils/figures.py::save_figure` so the PNG and its `.svg`
       sibling are both written. Note that every existing function in `charts.py` calls
       `fig.savefig` directly and emits PNG only (:111, :168, :247, :310) — the new function must
       not follow that local precedent.
-- [ ] Task 2.10 — Name the output `{country}_model_method_heatmap.{png,svg}` and give it a title
+- [x] Task 2.10 — Name the output `{country}_model_method_heatmap.{png,svg}` and give it a title
       and subtitle that distinguish it from the two figures it sits beside: `{country}_heatmap.png`
       (combos × attributes, `charts.py:52`) and `{country}_models_table.png` (models × attributes
       at one strategy). Conform to `uniform-analysis-output-naming.md`.
-- [ ] Task 2.11 — Wire into `rank_models.py` behind the existing `--no-charts` flag (:117); add
+- [x] Task 2.11 — Wire into `rank_models.py` behind the existing `--no-charts` flag (:117); add
       the new pair to the docstring output list (:13-26). While editing that list, also add the
       already-written-but-undocumented `{country}_c2st_vs_tv.png` (written at :295-299) —
       pre-existing drift, fixed in passing.
 
+**Phase 2 implementation notes (five deviations from the task text, each forced by a
+constraint the task text and the code together left in tension):**
+
+1. **`plot_model_method_heatmap` returns `Path | None` (the PNG), not `(png, svg)`.** The
+   module-contract table says "→ `(png, svg)` paths", but `save_figure` owns the
+   dual-format policy — *which* formats and how the sibling's name is derived — and
+   returns the PNG for exactly that reason. Returning the pair would have meant computing
+   `png.with_suffix(".svg")` in `charts.py`, i.e. restating in the caller the naming rule
+   the helper exists to hold. The two manuscript tables, which route through the same
+   helper, already return `Path`. The SVG is still written and is asserted by a test.
+2. **`table_style` gains `horizontal_divider(ax, n_rows_above)`**, the row-wise twin of
+   `vertical_divider`. The column marginal sits *below* the grid, so fencing it off needed
+   a horizontal rule; the only alternative was writing the divider's colour and width into
+   `charts.py`, which the "no re-specified colour values" rule forbids. Both orientations
+   now read one `_DIVIDER_COLOR` / `_DIVIDER_LINEWIDTH` pair, so they cannot drift, and
+   `n_columns_left` / `n_rows_above` are typed `float` because a grid with a tier gap has
+   its bottom edge at a fractional row coordinate.
+3. **`requested_n` is a `CapIndex`, a read-only `Mapping[str, int]`, not a bare dict.** The
+   fail-fast requirement is that a slug with no entry raises *with the offending path
+   named*, and a bare dict cannot name the file it came from. `CapIndex` is the map the
+   contract asks for plus the path it was read from; the chart's parameter keeps the name
+   `requested_n` and reads as one (`requested_n[slug]`, `requested_n.is_full_n(...)`).
+4. **The thin marking is a hatch *plus* an annotation backing patch.** The hatch alone
+   (Task 2.6's suggestion) is drawn in the cell's own contrast colour, which is the same
+   colour as the annotation on that cell — on the dark end of the ramp the white hatch and
+   the white number merged into an unreadable cell, which defeats both the marking and the
+   `n` it exists to qualify. Each thin cell's annotation therefore sits on a patch of the
+   cell's own ramp colour, punched through the hatch. Hue is still untouched, and the
+   hatch stroke is thinned via a scoped `rc_context` at draw time (the width is an rcParam,
+   not a patch property, so it cannot be set on the artist).
+5. **The row marginal is drawn *inside* the axes, with its width reserved in column
+   units.** Hanging it outside and relying on `bbox_inches="tight"` put it underneath the
+   colourbar, which `fig.colorbar` lays out in exactly that space. The reserved width is
+   derived from the longest marginal string and the figure widens to match, so the text
+   never collides with the colourbar regardless of how long the method ids are.
+
 **Files Modified:**
 - `src/population_synthetic/analysis/utils/cap_index.py` — new; shared cap-index read + full-`n`/thin predicate
+- `src/population_synthetic/analysis/model_ranking/table_style.py` — `horizontal_divider` added (note 2)
 - `src/population_synthetic/analysis/model_ranking/charts.py` — new plot function
 - `scripts/analyze/rank_models.py` — call site + docstring output list
-- `tests/test_cap_index.py` — new
-- `tests/test_model_ranking_charts.py` — new
+- `tests/test_cap_index.py` — new (20 tests)
+- `tests/test_model_ranking_charts.py` — new (38 tests, including the two CLI integration tests)
 
 **Dependencies:** Phase 1
 
@@ -484,45 +521,45 @@ colourbar's label-only percentage scaling.
       pre-extraction private functions (characterisation, structural not byte-wise).
 - [x] `categories_on_top` with an explicit label list places exactly those labels, and the
       table call sites still render `attributes + ["overall"]`.
-- [ ] Heatmap cell values equal `combos[slug]["overall"]["tv_similarity_mean"] × 100` to one
+- [x] Heatmap cell values equal `combos[slug]["overall"]["tv_similarity_mean"] × 100` to one
       decimal, for every `(model, strategy)` in a fixture.
-- [ ] Column order equals `strategy_complexity_order(metadata["strategies"])` **and** equals
+- [x] Column order equals `strategy_complexity_order(metadata["strategies"])` **and** equals
       `result["methods_matrix"]["strategies"]` — pinning the equivalence without coupling.
-- [ ] The tier predicate is exact at the boundary: `n == requested_n` is full-`n` (not thin),
+- [x] The tier predicate is exact at the boundary: `n == requested_n` is full-`n` (not thin),
       `n == requested_n - 1` is thin. Asserted against a `requested_n` supplied by the fixture,
       never a literal. The fixture's `requested_n` must be a value other than 100 (e.g. 40), so
       a hardcoded threshold fails the test rather than passing by coincidence. (The unrelated
       `× 100` metric rescaling is of course still present in the value assertions.)
-- [ ] Tier assignment: a model with at least one full-`n` cell lands in Tier 1, a model with
+- [x] Tier assignment: a model with at least one full-`n` cell lands in Tier 1, a model with
       zero lands in Tier 2, on a fixture containing both.
-- [ ] A Tier 1 model's ordering key ignores its thin cells — a fixture in which a model's
+- [x] A Tier 1 model's ordering key ignores its thin cells — a fixture in which a model's
       single best cell is thin ranks that model on its best **full-`n`** cell, and the thin
       cell is still drawn and still marked.
-- [ ] A model with exactly **one** full-`n` cell is ranked in Tier 1 on that single cell, and
+- [x] A model with exactly **one** full-`n` cell is ranked in Tier 1 on that single cell, and
       its row marginal reports a count of 1.
-- [ ] Tier 1 rows all precede Tier 2 rows in the rendered order, regardless of the values.
-- [ ] Tier 1 tie-break chain on a constructed fixture: identical `max_over_full_n` orders by
+- [x] Tier 1 rows all precede Tier 2 rows in the rendered order, regardless of the values.
+- [x] Tier 1 tie-break chain on a constructed fixture: identical `max_over_full_n` orders by
       descending `mean_over_full_n`; identical on both orders by ascending model id. Tier 2
       tie-break: identical `max_over_all_cells` orders by ascending model id. Both are total
       and stable across repeated calls on the same input.
-- [ ] The row marginal prints the ordering key, the argmax method and the cell count, not a
+- [x] The row marginal prints the ordering key, the argmax method and the cell count, not a
       mean; a Tier 2 row's marginal is flagged provisional. A within-row tie on the maximum
       resolves the argmax method to the first in `strategy_complexity_order`.
-- [ ] The column marginal averages full-`n` cells only and prints the count averaged: a fixture
+- [x] The column marginal averages full-`n` cells only and prints the count averaged: a fixture
       column containing one thin cell yields a mean over the remaining cells and a count one
       lower than the row count.
-- [ ] Thin marking fires iff `n < requested_n`, including both boundary cases above.
-- [ ] `cap_index` raises with the path in the message when `_index.json` is absent, and raises
+- [x] Thin marking fires iff `n < requested_n`, including both boundary cases above.
+- [x] `cap_index` raises with the path in the message when `_index.json` is absent, and raises
       when a requested slug has no entry.
-- [ ] `save_figure` is used: both the `.png` and the `.svg` exist after a call.
-- [ ] Model tick label colours match `metadata.model_hosting` via the shared host colours; a
+- [x] `save_figure` is used: both the `.png` and the `.svg` exist after a call.
+- [x] Model tick label colours match `metadata.model_hosting` via the shared host colours; a
       model absent from the map falls back to the same presentation default the tables use
       (`manuscript_tables.py:28-31`).
 
 ### Integration Tests
-- [ ] `rank_models.py` on a fixture emits the new pair alongside the existing artifacts and
+- [x] `rank_models.py` on a fixture emits the new pair alongside the existing artifacts and
       leaves the existing ones unchanged (same file set plus two).
-- [ ] `--no-charts` suppresses the pair while the JSON and CSV are still written.
+- [x] `--no-charts` suppresses the pair while the JSON and CSV are still written.
 
 ### Manual Verification
 - [ ] Run `python scripts/analyze/rank_models.py --country swedish_02`; open the PNG and the
@@ -548,25 +585,25 @@ colourbar's label-only percentage scaling.
       still distinguishable.
 
 ### Edge Cases
-- [ ] A missing `(model, method)` cell renders as the ramp's `set_bad` grey, never as 0 — must
+- [x] A missing `(model, method)` cell renders as the ramp's `set_bad` grey, never as 0 — must
       be covered by a synthetic fixture, since the current 50-combo dataset has no gaps.
-- [ ] Boundary `n == requested_n` is unmarked.
-- [ ] A slug present in the grid but absent from `population_cap/_index.json` raises.
-- [ ] A country whose `population_cap/_index.json` does not exist raises with the path named,
+- [x] Boundary `n == requested_n` is unmarked.
+- [x] A slug present in the grid but absent from `population_cap/_index.json` raises.
+- [x] A country whose `population_cap/_index.json` does not exist raises with the path named,
       rather than drawing an unmarked figure.
-- [ ] A grid in which *every* model is Tier 2 (no full-`n` cell anywhere) still renders: every
+- [x] A grid in which *every* model is Tier 2 (no full-`n` cell anywhere) still renders: every
       cell marked, the whole grid annotated provisional, and no empty Tier 1 block drawn. This
       is also the case that would silently break a `max(n)`-inferred cap.
-- [ ] A grid with *no* Tier 2 model — the expected shape of a healthy run — draws no break line
+- [x] A grid with *no* Tier 2 model — the expected shape of a healthy run — draws no break line
       and no unranked annotation, rather than an empty block or a stray rule.
-- [ ] A Tier 1 model whose full-`n` cells are all NaN has no defined ordering key: it sorts last
+- [x] A Tier 1 model whose full-`n` cells are all NaN has no defined ordering key: it sorts last
       *within its tier* by an explicit rule rather than raising or comparing against NaN, and
       its row marginal prints no argmax method. It stays in Tier 1 — it has full-`n` cells; the
       values are missing, which is a different failure from thin evidence.
-- [ ] A column whose cells are all NaN contributes no best-cell marker
+- [x] A column whose cells are all NaN contributes no best-cell marker
       (`_best_cells_per_column`, `manuscript_tables.py:79-80`) and does not crash the marginals.
-- [ ] A single-model or single-method grid renders without a degenerate axis.
-- [ ] A model whose cells are *all* NaN across both tiers' key definitions sorts last by that
+- [x] A single-model or single-method grid renders without a degenerate axis.
+- [x] A model whose cells are *all* NaN across both tiers' key definitions sorts last by that
       same explicit rule, and never silently compares against NaN.
 
 ---
@@ -575,15 +612,15 @@ colourbar's label-only percentage scaling.
 
 Deliberately small — this adds a figure to an existing process, not a process.
 
-- [ ] Update the `scripts/analyze/rank_models.py` docstring output list (:13-26) with
+- [x] Update the `scripts/analyze/rank_models.py` docstring output list (:13-26) with
       `{country}_model_method_heatmap.png` (PNG + SVG), plus the missing
       `{country}_c2st_vs_tv.png` noted in Task 2.11.
-- [ ] No `docs/architecture/commands.md` change: the command surface is unchanged — no new
+- [x] No `docs/architecture/commands.md` change: the command surface is unchanged — no new
       script, no new flag. Stated here so a reviewer does not expect an edit.
-- [ ] No `CLAUDE.md` architecture change, no `config/analysis/analysis_registry.yaml` entry,
+- [x] No `CLAUDE.md` architecture change, no `config/analysis/analysis_registry.yaml` entry,
       and no `config/gui/flows/analysis_workflow.yaml` task: this plan adds no process and no
       DAG node.
-- [ ] Inline comment recording the thin-marking encoding chosen in Task 2.6 and why it does not
+- [x] Inline comment recording the thin-marking encoding chosen in Task 2.6 and why it does not
       use cell hue, and a module docstring in `analysis/utils/cap_index.py` stating the
       full-`n`/thin rule once, as the definition its three consumers share.
 
