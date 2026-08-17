@@ -114,10 +114,15 @@ consumers + `generation_metadata`:
   report discovery via the capped `_mapped/_index.json`), `builder.py` (`build_performance_comparison` +
   JSON/CSV writers, plus the `methods_matrix` per-strategy × per-attribute block and the
   embedded `metadata.model_hosting`), `charts.py` (heatmap, leaderboard, per-attribute bars),
-  `hosting.py` (config-driven provider → `local`/`hosted` classification), and
+  `hosting.py` (config-driven provider → `local`/`hosted` classification),
   `manuscript_tables.py` (two print-oriented, pure-consumer heatmap-tables emitted as PNG + SVG:
   a **models** table at the global-best strategy with hosted/local hue, and a **methods** table
-  of mean-over-models TV-similarity per strategy). Never recomputes from populations.
+  of mean-over-models TV-similarity per strategy), and `table_style.py` (the visual grammar those
+  manuscript-style grids share — ramp with NaN grey, best-per-column argmax, column divider,
+  top-placed column labels, percentage colourbar, hosted/local provenance colours — holding the
+  presentation decisions only, so it knows nothing about the metric, the country, or the names of
+  models, strategies and attributes; the layer-wide ramp itself stays in `utils/palette.py`).
+  Never recomputes from populations.
 - **`method_significance/`** -- Per-category method/model significance (sits after the compare stage;
   driven by `analyze_method_significance.py`). Reuses `model_ranking`'s `loader` to obtain the
   (model × method × category) TV grid and asks, per country and per attribute, *which factor drives
