@@ -34,6 +34,9 @@ Follows the project charting conventions (deferred ``Agg`` matplotlib import,
 NaN -> grey, ``dpi=150``, white Overall divider, category labels on top) and
 persists via the shared
 :func:`population_synthetic.analysis.utils.figures.save_figure` (PNG + SVG pair).
+The visual grammar those conventions describe is not defined here: it lives in
+:mod:`population_synthetic.analysis.model_ranking.table_style`, shared with the
+other manuscript-style grids so they cannot drift apart.
 """
 
 from __future__ import annotations
@@ -43,48 +46,24 @@ from typing import Any
 
 import numpy as np
 
-from population_synthetic.analysis.utils.figures import save_figure
-from population_synthetic.analysis.utils.palette import (
-    MISSING_COLOR,
-    heatmap_cmap,
-    text_color_for_rgb,
+from population_synthetic.analysis.model_ranking.table_style import (
+    ANNOT_FONTSIZE,
+    BOX_EDGE,
+    HOST_COLORS,
+    HOST_DEFAULT_CLASS,
+    HOST_LABELS,
+    add_percentage_colorbar,
+    best_cells_per_column,
+    categories_on_top,
+    inferno_cmap,
+    vertical_divider,
 )
-
-_BOX_EDGE = "#111111"
-_ANNOT_FONTSIZE = 7.0
-
-# Colourblind-safe categorical hues for the provenance side-marker (figure) and
-# the LaTeX ``Host`` column swatch. These encode *category* (hosting class), not
-# score, and are deliberately distinct from the inferno score ramp.
-_HOST_COLORS = {"hosted": "#4878CF", "local": "#E8935A"}
-_HOST_LABELS = {"hosted": "hosted (API)", "local": "local (Ollama)"}
-
+from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.palette import MISSING_COLOR, text_color_for_rgb
 
 # ------------------------------------------------------------------
-# Shared private helpers
+# Table-specific private helpers
 # ------------------------------------------------------------------
-
-def _overall_divider(ax, n_attributes: int) -> None:
-    """Draw the white vertical divider separating the axes from the Overall column."""
-    ax.axvline(n_attributes - 0.5, color="white", linewidth=2.5)
-
-
-def _best_cells_per_column(values: np.ndarray) -> set[tuple[int, int]]:
-    """Row index of the max finite value in each column (ties -> first row).
-
-    Columns whose cells are all NaN contribute no marker.
-    """
-    best: set[tuple[int, int]] = set()
-    n_rows, n_cols = values.shape
-    for j in range(n_cols):
-        finite = [(i, values[i, j]) for i in range(n_rows) if not np.isnan(values[i, j])]
-        if not finite:
-            continue
-        # max() returns the first maximal element in iteration (row) order -> ties -> first row.
-        best_row = max(finite, key=lambda t: t[1])[0]
-        best.add((best_row, j))
-    return best
-
 
 def _annotate_and_box(ax, values: np.ndarray, cmap, norm, best_cells: set[tuple[int, int]]) -> None:
     """Write ``f"{v*100:.1f}"`` per finite cell; bold + draw a border on the best-per-column cells.
@@ -107,7 +86,7 @@ def _annotate_and_box(ax, values: np.ndarray, cmap, norm, best_cells: set[tuple[
             is_best = (i, j) in best_cells
             ax.text(
                 j, i, f"{v * 100:.1f}",
-                ha="center", va="center", fontsize=_ANNOT_FONTSIZE,
+                ha="center", va="center", fontsize=ANNOT_FONTSIZE,
                 color=text_color_for_rgb(cmap(norm(v))),
                 fontweight="bold" if is_best else "normal",
             )
@@ -115,43 +94,9 @@ def _annotate_and_box(ax, values: np.ndarray, cmap, norm, best_cells: set[tuple[
                 ax.add_patch(
                     Rectangle(
                         (j - 0.5, i - 0.5), 1, 1,
-                        fill=False, edgecolor=_BOX_EDGE, linewidth=2.0, zorder=5,
+                        fill=False, edgecolor=BOX_EDGE, linewidth=2.0, zorder=5,
                     )
                 )
-
-
-def _categories_on_top(ax, attributes: list[str]) -> None:
-    """Place the column (category) tick labels above the table, rotated for readability."""
-    n_cols = len(attributes) + 1
-    ax.xaxis.set_ticks_position("top")
-    ax.xaxis.set_label_position("top")
-    ax.set_xticks(range(n_cols))
-    ax.set_xticklabels(attributes + ["overall"], rotation=40, ha="left", fontsize=8)
-
-
-def _inferno_cmap():
-    """The house heatmap ramp with a grey ``set_bad`` for NaN cells.
-
-    A one-line pass-through kept as a named local, because these tables' four call
-    sites read as "the same ramp every time" and the shared helper takes arguments
-    the tables never vary.
-    """
-    return heatmap_cmap()
-
-
-def _add_percentage_colorbar(fig, im, ax, label: str):
-    """Attach a colorbar whose tick labels read 0--100 while the mappable stays on 0--1.
-
-    The underlying ``Normalize`` is unchanged (still 0--1); only the tick *labels*
-    are scaled to a percentage via a ``FuncFormatter``, and the label carries the
-    ``(%)`` unit.
-    """
-    from matplotlib.ticker import FuncFormatter
-
-    cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
-    cbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _pos: f"{v * 100:.0f}"))
-    cbar.set_label(label, fontsize=8)
-    return cbar
 
 
 def _global_best_strategy(matrix: dict[str, Any]) -> str | None:
@@ -295,7 +240,7 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
     from matplotlib.patches import Patch
 
     norm = _shared_norm(values)
-    cmap = _inferno_cmap()
+    cmap = inferno_cmap()
 
     n_cols = len(attributes) + 1
     fig, ax = plt.subplots(
@@ -303,22 +248,22 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
     )
     im = ax.imshow(np.ma.masked_invalid(values), cmap=cmap, norm=norm, aspect="auto")
 
-    _categories_on_top(ax, attributes)
+    categories_on_top(ax, attributes + ["overall"])
     ax.set_yticks(range(len(row_models)))
     ax.set_yticklabels(row_models, fontsize=8)
     # Provenance side-marker: colour each model's row label by hosting class
-    # (models absent from the map default to "hosted").
+    # (models absent from the map take the presentation default).
     for label, model in zip(ax.get_yticklabels(), row_models):
-        label.set_color(_HOST_COLORS[hosting.get(model, "hosted")])
+        label.set_color(HOST_COLORS[hosting.get(model, HOST_DEFAULT_CLASS)])
 
-    _overall_divider(ax, len(attributes))
-    _annotate_and_box(ax, values, cmap, norm, _best_cells_per_column(values))
+    vertical_divider(ax, len(attributes))
+    _annotate_and_box(ax, values, cmap, norm, best_cells_per_column(values))
 
-    _add_percentage_colorbar(fig, im, ax, "TV-similarity (%)")
+    add_percentage_colorbar(fig, im, ax, "TV-similarity (%)")
 
-    classes_present = {hosting.get(m, "hosted") for m in row_models}
+    classes_present = {hosting.get(m, HOST_DEFAULT_CLASS) for m in row_models}
     handles = [
-        Patch(facecolor=_HOST_COLORS[c], edgecolor="none", label=_HOST_LABELS[c])
+        Patch(facecolor=HOST_COLORS[c], edgecolor="none", label=HOST_LABELS[c])
         for c in ("hosted", "local") if c in classes_present
     ]
     if handles:
@@ -360,7 +305,7 @@ def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> 
     import matplotlib.pyplot as plt
 
     norm = _shared_norm(values)
-    cmap = _inferno_cmap()
+    cmap = inferno_cmap()
 
     n_cols = len(attributes) + 1
     fig, ax = plt.subplots(
@@ -368,13 +313,13 @@ def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> 
     )
     im = ax.imshow(np.ma.masked_invalid(values), cmap=cmap, norm=norm, aspect="auto")
 
-    _categories_on_top(ax, attributes)
+    categories_on_top(ax, attributes + ["overall"])
     ax.set_yticks(range(len(ordered)))
     ax.set_yticklabels(ordered, fontsize=8)
-    _overall_divider(ax, len(attributes))
-    _annotate_and_box(ax, values, cmap, norm, _best_cells_per_column(values))
+    vertical_divider(ax, len(attributes))
+    _annotate_and_box(ax, values, cmap, norm, best_cells_per_column(values))
 
-    _add_percentage_colorbar(fig, im, ax, "TV-similarity (%, mean over models)")
+    add_percentage_colorbar(fig, im, ax, "TV-similarity (%, mean over models)")
 
     country = result["metadata"]["country"]
     ax.set_title(
@@ -473,12 +418,12 @@ def write_model_fidelity_latex(result: dict[str, Any], out_path: str | Path) -> 
     country = result["metadata"]["country"]
 
     norm = _shared_norm(values)
-    cmap = _inferno_cmap()
-    best_cells = _best_cells_per_column(values)
+    cmap = inferno_cmap()
+    best_cells = best_cells_per_column(values)
 
     body_rows: list[str] = []
     for i, model in enumerate(row_models):
-        host = hosting.get(model, "hosted")
+        host = hosting.get(model, HOST_DEFAULT_CLASS)
         cells = [_latex_escape(model), _latex_escape(host)]
         for j in range(values.shape[1]):
             cells.append(_latex_number(values[i, j], cmap, norm, (i, j) in best_cells))
@@ -508,8 +453,8 @@ def write_method_fidelity_latex(result: dict[str, Any], out_path: str | Path) ->
     country = result["metadata"]["country"]
 
     norm = _shared_norm(values)
-    cmap = _inferno_cmap()
-    best_cells = _best_cells_per_column(values)
+    cmap = inferno_cmap()
+    best_cells = best_cells_per_column(values)
 
     body_rows: list[str] = []
     for i, strategy in enumerate(ordered):

@@ -15,6 +15,13 @@ Outputs, per country, under the analysis-stage model_ranking folder:
     {country}_performance.csv     one row per combo (rank order)
     {country}_heatmap.png         combos x attributes (+ overall) TV-similarity
     {country}_leaderboard.png     overall ranking with coherence annotations
+    {country}_c2st_vs_tv.png      joint discriminability (C2ST ROC-AUC) vs marginal
+                                  fidelity, one point per combo, coloured by strategy
+    {country}_model_method_heatmap.png
+                                  models x methods overall TV-similarity, each cell
+                                  annotated with its persona count n; cells below the
+                                  requested cap hatched, models with no full-n cell
+                                  partitioned out of the ranking (PNG + SVG)
     {country}_models_table.png    manuscript table: models at the global-best strategy x
                                   axes (+ overall), single inferno ramp with a
                                   hosted/local provenance side-marker (PNG + SVG)
@@ -60,6 +67,7 @@ from population_synthetic.analysis.model_ranking.builder import (
 from population_synthetic.analysis.model_ranking.charts import (
     plot_attribute_bars,
     plot_c2st_vs_tv,
+    plot_model_method_heatmap,
     plot_performance_heatmap,
     plot_performance_leaderboard,
 )
@@ -77,6 +85,7 @@ from population_synthetic.analysis.model_ranking.manuscript_tables import (
     write_method_fidelity_latex,
     write_model_fidelity_latex,
 )
+from population_synthetic.analysis.utils.cap_index import load_cap_index
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -204,6 +213,18 @@ def main() -> None:
     output_base = resolve_output_base(args.output_base)
     performance_dir = analysis_output_dir("model_ranking", output_base)
 
+    # The gate's own per-slug requested cap, needed by the model x method heatmap to mark
+    # under-sampled cells. Read once, up front, so a missing population_cap index fails
+    # before any country is written rather than half-way through the loop; not read at all
+    # when charts are suppressed, which is the only mode that does not need it.
+    cap_index = None
+    if not args.no_charts:
+        try:
+            cap_index = load_cap_index(output_base)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
+
     # Attribute axis per country, computed once and shared with the loader.
     attrs_by_country: dict[str, list[str]] = {}
 
@@ -297,6 +318,11 @@ def main() -> None:
             )
             if c2st_scatter is not None:
                 print(f"C2ST-vs-TV scatter written to {c2st_scatter}")
+            model_method_heatmap = plot_model_method_heatmap(
+                result, cap_index, performance_dir / f"{country}_model_method_heatmap.png"
+            )
+            if model_method_heatmap is not None:
+                print(f"Model x method heatmap written to {model_method_heatmap}")
             models_table = plot_model_fidelity_table(
                 result, performance_dir / f"{country}_models_table.png"
             )
