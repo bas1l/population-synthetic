@@ -224,15 +224,15 @@ validate n  ->  raw_slug_dir exists?
 **Goal:** An already-populated output base is cleaned without `--force`; both indexes tell
 the truth; an exclusion is not a failure.
 
-- [ ] 2.1 — `_mapped_index_entry`: add `"skip_reason": summary["exclusion_reason"]`.
-- [ ] 2.2 — Replace the blanket no-force early return with a re-evaluation: call
+- [x] 2.1 — `_mapped_index_entry`: add `"skip_reason": summary["exclusion_reason"]`.
+- [x] 2.2 — Replace the blanket no-force early return with a re-evaluation: call
       `clean_selection(...)` and return early **only** when `clean_available >= args.n`.
       Otherwise fall through to `cap_combo`, which returns at its exclusion branch before
       reaching its own mirror check, so `force=False` is safe.
-- [ ] 2.3 — Branch the closing log on `summary["excluded"]`: a WARNING naming the counts
+- [x] 2.3 — Branch the closing log on `summary["excluded"]`: a WARNING naming the counts
       and stating that downstream analyses will skip the slug, else the existing INFO line.
-- [ ] 2.4 — Confirm the exclusion path exits 0 and still upserts both index entries.
-- [ ] 2.5 — Update the script's module docstring (it currently promises the cap "selects
+- [x] 2.4 — Confirm the exclusion path exits 0 and still upserts both index entries.
+- [x] 2.5 — Update the script's module docstring (it currently promises the cap "selects
       `--n` of them" unconditionally).
 
 **Files Modified:**
