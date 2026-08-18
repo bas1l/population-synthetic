@@ -274,19 +274,19 @@ the truth; an exclusion is not a failure.
 **Goal:** The inverted contract is pinned, including the re-run path that protects existing
 output bases.
 
-- [ ] 4.1 — Invert `test_cap_combo_under_generation_copies_all_and_warns`
+- [x] 4.1 — Invert `test_cap_combo_under_generation_copies_all_and_warns`
       (`tests/test_population_cap.py:285`) into
       `test_cap_combo_under_generation_excludes_the_combo`.
-- [ ] 4.2 — Update `test_cap_combo_zero_persona_dirs_handled` (line 341): zero clean
+- [x] 4.2 — Update `test_cap_combo_zero_persona_dirs_handled` (line 341): zero clean
       personas is now the same rule, so `dest` must not exist and no capped mapped file is
       written.
-- [ ] 4.3 — New: a previously capped combination that no longer reaches N is withdrawn on a
+- [x] 4.3 — New: a previously capped combination that no longer reaches N is withdrawn on a
       **no-force** re-run (mirror and mapped file both removed).
-- [ ] 4.4 — New: `withdraw_combo` is idempotent -- calling it twice with nothing on disk is
+- [x] 4.4 — New: `withdraw_combo` is idempotent -- calling it twice with nothing on disk is
       a no-op and returns the same summary.
-- [ ] 4.5 — New: the `_mapped/_index.json` entry for an excluded combination satisfies the
+- [x] 4.5 — New: the `_mapped/_index.json` entry for an excluded combination satisfies the
       consumers' skip predicate and carries a non-empty `skip_reason`.
-- [ ] 4.6 — New: `clean_available == n` is full-N (the inclusive boundary) and produces
+- [x] 4.6 — New: `clean_available == n` is full-N (the inclusive boundary) and produces
       normal capped outputs.
 
 **Files Modified:**

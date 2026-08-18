@@ -7,13 +7,27 @@ ids, seeded-selects N of them, copies the selected raw ``persona_*`` dirs into t
 telemetry mirror, and writes a capped mapped file (the mapping index filtered to the same
 N) into ``_mapped/``.
 
+Reaching N is a **precondition**: a combination holding fewer clean personas is excluded
+and its capped outputs are withdrawn, so it reads as absent to every mapped-file consumer
+rather than competing as a thin one.
+
 - ``utils.sampling.select_indices``      -- reproducible seeded draw; distinct indices;
                                             ``n >= total`` returns all; algorithmic
                                             consistency with ``subsample_population``.
-- ``population_cap.cap_combo``            -- over/under-generation, ancillary copy,
-                                            ``force`` semantics, 0-clean edge, seed 0,
+- ``population_cap.cap_combo``            -- over-generation, the inclusive full-N
+                                            boundary, the exclusion of a combo that never
+                                            reached N (0-clean included), ancillary copy,
+                                            ``force`` semantics, seed 0,
                                             the capped mapped file's exact-N guarantee, and
                                             read-only (synced-placeholder) sources/mirrors.
+- ``population_cap.withdraw_combo``       -- idempotent: an absent capped output is a
+                                            no-op, never a raise.
+- ``cap_populations.py`` (the CLI edge)   -- a no-force re-run re-evaluates the full-N
+                                            rule, so a mirror left by an earlier run is
+                                            withdrawn once the combo no longer reaches N,
+                                            and the ``_mapped/_index.json`` entry it
+                                            writes satisfies the consumers' skip predicate
+                                            and names the shortfall.
 - ``utils.capped_source`` resolvers       -- return the mirror when present; **raise
                                             ``FileNotFoundError`` when absent, with NO
                                             fallback to ``01_Raw``**.
@@ -33,12 +47,19 @@ from __future__ import annotations
 import json
 import os
 import stat
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.generation_metadata import summarize
-from population_synthetic.analysis.population_cap import cap_combo
+from population_synthetic.analysis.population_cap import (
+    CleanSelection,
+    cap_combo,
+    withdraw_combo,
+)
 from population_synthetic.analysis.utils.capped_source import (
     MAPPED_SUBDIR,
     resolve_combo_source,
@@ -47,11 +68,18 @@ from population_synthetic.analysis.utils.capped_source import (
 from population_synthetic.analysis.utils.registry import analysis_output_dir
 from population_synthetic.analysis.utils.sampling import select_indices, subsample_population
 from population_synthetic.analysis.utils.validity_csv import write_validity_csv
+from population_synthetic.generators.synthetic.manifest_loader import axis_slug
 
-# A slug that decomposes into (country=swedish, strategy=all_pick, model=claude_haiku);
-# claude_haiku is a genuinely-priced model in the real pricing config, so
-# generation_metadata can compute cost over the capped fixture.
-_SLUG = "swedish_all_pick_claude_haiku"
+# The fixture combination, as the three axis IDs the CLI takes; claude_haiku is a
+# genuinely-priced model in the real pricing config, so generation_metadata can compute
+# cost over the capped fixture. The slug is derived through the project's own formatter
+# rather than spelled out, so the fixture cannot drift from the on-disk format.
+_COUNTRY = "swedish"
+_MODEL_ID = "claude_haiku"
+_STRATEGY_ID = "all_pick"
+_SLUG = axis_slug(_MODEL_ID, _STRATEGY_ID, _COUNTRY)
+
+_CAP_SCRIPT = PROJECT_ROOT / "scripts" / "analyze" / "cap_populations.py"
 
 
 # --------------------------------------------------------------------------- #
@@ -124,8 +152,6 @@ def _cap_stage(output_base: Path) -> Path:
 def _persona_dirs(combo_dir: Path) -> list[str]:
     return sorted(p.name for p in combo_dir.glob("persona_*") if p.is_dir())
 
-
-_COUNTRY = "swedish"
 
 _VR_HEADER = ("persona_id", "passed", "has_identity_json", "missing_categories")
 _VM_HEADER = ("persona_id", "passed", "unmapped_fields")
@@ -212,6 +238,47 @@ def _capped_mapped_count(output_base: Path, slug: str = _SLUG) -> int:
     return len(payload["individuals"])
 
 
+def _restrict_mapped_pass(
+    output_base: Path, raw_slug_dir: Path, keep: int, *, slug: str = _SLUG
+) -> None:
+    """Rewrite this combo's ``validate_mapped`` CSV so only the first *keep* ids pass.
+
+    Shrinks the clean pool of an already-capped combo without touching ``01_Raw`` -- the
+    on-disk state a re-run meets when the mapped-value gate has since failed personas the
+    previous cap drew on.
+    """
+    persona_ids = _persona_dirs(raw_slug_dir)
+    vm_csv = analysis_output_dir("validate_mapped", output_base) / f"{slug}.csv"
+    write_validity_csv(
+        vm_csv,
+        _VM_HEADER,
+        [
+            (pid, i < keep, "" if i < keep else "housing_tenure")
+            for i, pid in enumerate(persona_ids)
+        ],
+    )
+
+
+def _run_cap_cli(output_base: Path, n: int, *extra_args: str) -> subprocess.CompletedProcess:
+    """Drive the real per-combo CLI edge (``scripts/analyze/cap_populations.py``)."""
+    cmd = [
+        sys.executable, str(_CAP_SCRIPT),
+        "--model-id", _MODEL_ID,
+        "--strategy-id", _STRATEGY_ID,
+        "--country-id", _COUNTRY,
+        "--n", str(n),
+        "--output-base", str(output_base),
+        *extra_args,
+    ]
+    return subprocess.run(cmd, capture_output=True, text=True, cwd=str(PROJECT_ROOT))
+
+
+def _index_entry(index_path: Path, slug: str = _SLUG) -> dict:
+    """Return the ``_index.json`` record for *slug* (the indexes are lists of records)."""
+    entries = json.loads(index_path.read_text(encoding="utf-8"))
+    return next(entry for entry in entries if entry["slug"] == slug)
+
+
 # --------------------------------------------------------------------------- #
 # (a) select_indices
 # --------------------------------------------------------------------------- #
@@ -282,22 +349,53 @@ def test_cap_combo_over_generation_deterministic_for_fixed_seed(tmp_path: Path):
     assert a["selected_ids"] == b["selected_ids"]
 
 
-def test_cap_combo_under_generation_copies_all_and_warns(tmp_path: Path, caplog):
+def test_cap_combo_under_generation_excludes_the_combo(tmp_path: Path, caplog):
+    """Under-generation is an exclusion, not a cap to whatever exists.
+
+    The earlier contract copied every clean persona and merely warned, which let a
+    combination that never reached N enter every downstream analysis as an equal
+    competitor. It now writes no capped mirror and no capped mapped file at all, and the
+    shortfall travels on the summary for the caller to record.
+    """
     raw = _make_raw_combo(tmp_path, _SLUG, m=3)
     dest = _cap_stage(tmp_path) / _SLUG
 
     with caplog.at_level("WARNING"):
         summary = _cap(tmp_path, raw, 5, 0, dest)
 
+    assert summary["excluded"] is True
     assert summary["clean_available"] == 3
-    assert summary["selected"] == 3
     assert summary["requested_n"] == 5
-    # Under-generation is not a truncation: nothing was dropped.
+    assert summary["selected"] == 0
+    assert summary["selected_ids"] == []
+    # Under-generation is not a truncation: nothing was dropped, and nothing was kept.
     assert summary["truncated"] is False
-    assert len(_persona_dirs(dest)) == 3
-    assert any("fewer than the requested" in rec.message for rec in caplog.records)
-    # All clean personas flow into the capped mapped file too.
-    assert _capped_mapped_count(tmp_path) == 3
+    assert summary["synthetic_file"] is None
+    assert summary["real_file"] is None
+    assert summary["mapped_n"] == 0
+    assert "fewer than the requested" in summary["exclusion_reason"]
+    assert not dest.exists()
+    assert not _capped_mapped_file(tmp_path).exists()
+    assert any("EXCLUDED" in rec.message for rec in caplog.records)
+
+
+def test_cap_combo_exactly_n_clean_personas_is_full_n(tmp_path: Path):
+    """The full-N boundary is inclusive: ``clean_available == n`` caps normally."""
+    raw = _make_raw_combo(tmp_path, _SLUG, m=4)
+    dest = _cap_stage(tmp_path) / _SLUG
+
+    summary = _cap(tmp_path, raw, 4, 0, dest)
+
+    assert summary["excluded"] is False
+    assert summary["exclusion_reason"] is None
+    assert summary["clean_available"] == 4
+    assert summary["selected"] == 4
+    # Nothing was dropped at the boundary, so the draw is not a truncation.
+    assert summary["truncated"] is False
+    assert _persona_dirs(dest) == sorted(summary["selected_ids"])
+    assert len(_persona_dirs(dest)) == 4
+    assert summary["mapped_n"] == 4
+    assert _capped_mapped_count(tmp_path) == 4
 
 
 def test_cap_combo_copies_ancillary_files(tmp_path: Path):
@@ -338,7 +436,13 @@ def test_cap_combo_force_fully_replaces_stale_personas(tmp_path: Path):
     assert _capped_mapped_count(tmp_path) == 3
 
 
-def test_cap_combo_zero_persona_dirs_handled(tmp_path: Path, caplog):
+def test_cap_combo_zero_persona_dirs_excluded_by_the_same_rule(tmp_path: Path, caplog):
+    """A combo holding no persona dirs is handled as the full-N rule at its extreme.
+
+    Zero clean personas used to produce an empty mirror and an empty capped mapped file --
+    an output that consumers had to recognize as degenerate. It is now the ordinary
+    exclusion path, so neither artifact is written and no branch special-cases zero.
+    """
     combo = tmp_path / "01_Raw" / _SLUG
     combo.mkdir(parents=True)  # combo dir exists but holds no persona_* dirs
     dest = _cap_stage(tmp_path) / _SLUG
@@ -346,13 +450,14 @@ def test_cap_combo_zero_persona_dirs_handled(tmp_path: Path, caplog):
     with caplog.at_level("WARNING"):
         summary = _cap(tmp_path, combo, 4, 0, dest)
 
+    assert summary["excluded"] is True
     assert summary["clean_available"] == 0
     assert summary["selected"] == 0
     assert summary["truncated"] is False
-    assert dest.is_dir()
-    assert _persona_dirs(dest) == []
-    # The capped mapped file exists but is empty (no clean personas to carry).
-    assert _capped_mapped_count(tmp_path) == 0
+    assert summary["mapped_n"] == 0
+    assert not dest.exists()
+    assert not _capped_mapped_file(tmp_path).exists()
+    assert any("EXCLUDED" in rec.message for rec in caplog.records)
 
 
 def test_cap_combo_seed_zero_is_honored_not_unset(tmp_path: Path):
@@ -422,6 +527,94 @@ def test_cap_combo_does_not_leave_the_mirror_readonly(tmp_path: Path):
     # The real reference is copied with copy2 from the same synced pool: a read-only copy
     # would break the NEXT run's copy2 before it ever reached the rmtree.
     assert os.access(_mapped_dest(tmp_path) / f"real_{_COUNTRY}.json", os.W_OK)
+
+
+# --------------------------------------------------------------------------- #
+# (b3) withdraw_combo -- the physical half of the exclusion verdict
+# --------------------------------------------------------------------------- #
+
+
+def test_withdraw_combo_is_idempotent_when_nothing_is_on_disk(tmp_path: Path):
+    # The rule is re-evaluated on EVERY invocation, including runs where the combo never
+    # had capped outputs, so an absent artifact must be a no-op rather than a raise -- and
+    # the verdict a repeated call returns must not drift.
+    dest = _cap_stage(tmp_path) / _SLUG
+    mapped_dest = _mapped_dest(tmp_path)
+    clean = CleanSelection(raw_passed=3, mapped_passed=2, dirs=[])
+
+    summaries = [
+        withdraw_combo(
+            slug=_SLUG,
+            country=_COUNTRY,
+            clean=clean,
+            n=4,
+            seed=0,
+            dest_dir=dest,
+            mapped_dest_dir=mapped_dest,
+        )
+        for _ in range(2)
+    ]
+
+    assert summaries[0] == summaries[1]
+    assert summaries[0]["excluded"] is True
+    assert summaries[0]["clean_available"] == 0
+    assert summaries[0]["requested_n"] == 4
+    assert summaries[0]["exclusion_reason"]
+    # A withdrawal creates nothing -- least of all an empty capped output.
+    assert not dest.exists()
+    assert not _capped_mapped_file(tmp_path).exists()
+
+
+# --------------------------------------------------------------------------- #
+# (b4) the CLI edge -- re-run withdrawal and the mapped index entry
+# --------------------------------------------------------------------------- #
+
+
+def test_cli_no_force_rerun_withdraws_a_combo_that_no_longer_reaches_n(tmp_path: Path):
+    # The bug this guards: an existing mirror means a cap RAN, not that a valid one did.
+    # A no-force re-run must therefore re-read the validity CSVs before honouring it,
+    # which is what cleans an output base capped under the old behaviour.
+    raw = _make_raw_combo(tmp_path, _SLUG, m=4)
+    _write_gate_inputs(tmp_path, _SLUG, raw)
+    dest = _cap_stage(tmp_path) / _SLUG
+
+    first = _run_cap_cli(tmp_path, 4)
+    assert first.returncode == 0, first.stderr
+    assert len(_persona_dirs(dest)) == 4
+    assert _capped_mapped_file(tmp_path).is_file()
+
+    # The mapped-value gate now fails two of the four personas: the combo is short.
+    _restrict_mapped_pass(tmp_path, raw, keep=2)
+
+    second = _run_cap_cli(tmp_path, 4)  # deliberately WITHOUT --force
+    assert second.returncode == 0, second.stderr
+    assert not dest.exists()
+    assert not _capped_mapped_file(tmp_path).is_file()
+    # The copied real reference is shared by every combo of the country, so withdrawing
+    # one combo must not disturb it.
+    assert (_mapped_dest(tmp_path) / f"real_{_COUNTRY}.json").is_file()
+
+    stage_entry = _index_entry(_cap_stage(tmp_path) / "_index.json")
+    assert stage_entry["excluded"] is True
+    assert stage_entry["clean_available"] == 2
+    assert stage_entry["requested_n"] == 4
+
+
+def test_cli_excluded_mapped_index_entry_reads_as_skipped_with_a_reason(tmp_path: Path):
+    # The exclusion is enforced downstream entirely through the entry the consumers
+    # already gate on, so the entry -- not the missing file -- is the contract.
+    raw = _make_raw_combo(tmp_path, _SLUG, m=2)
+    _write_gate_inputs(tmp_path, _SLUG, raw)
+
+    result = _run_cap_cli(tmp_path, 5)
+    assert result.returncode == 0, result.stderr
+
+    entry = _index_entry(_mapped_dest(tmp_path) / "_index.json")
+    # Verbatim the predicate every mapped-file consumer gates on.
+    assert entry.get("skipped") is True or entry.get("synthetic_file") is None
+    assert entry["n"] == 0
+    assert entry["skip_reason"]
+    assert "fewer than the requested" in entry["skip_reason"]
 
 
 # --------------------------------------------------------------------------- #
