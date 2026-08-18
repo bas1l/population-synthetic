@@ -78,12 +78,15 @@ and a coarser, cross-country **global** tier — `config/mapping/scb` — whose 
 deferred/design-only; see [Comparison & mapping](docs/architecture/comparison-mapping.md)),
 `validate_mapped/` an atomistic per-combo check writing one CSV per combo (row per mapped persona:
 which canonical fields are left as the `__UNMAPPED__` sentinel), `population_cap/` the validation
-gate's final stage — intersects the two validity CSVs to the clean persona ids, seeded-caps `--n` of
-them, copies the selected `persona_*` dirs (plus combo logs/metadata) into the capped mirror at
-`03_Analysis/population_cap/{slug}/` (telemetry for `generation_metadata`) and writes the capped
-mapped file + copied real reference under `.../population_cap/_mapped/` (read by every mapped-file
-analysis via `analysis/utils/capped_source.resolve_mapped_dir`, fail-fast, no `mapping/` fallback),
-`fidelity/` two-stage map -> score statistical scoring + charts (synthetic vs real), `multivariate_fidelity/` standalone
+gate's final stage — intersects the two validity CSVs to the clean persona ids, enforces the
+**full-N rule** on them (a combination with fewer than `--n` clean personas is *excluded*: it is
+withdrawn — no mirror, no capped mapped file, any earlier ones deleted — logged at WARNING, recorded
+in `population_cap/_index.json`, and exits 0, so it is simply absent downstream), then seeded-caps
+`--n` of them, copies the selected `persona_*` dirs (plus combo logs/metadata) into the capped
+mirror at `03_Analysis/population_cap/{slug}/` (telemetry for `generation_metadata`) and writes the
+capped mapped file + copied real reference under `.../population_cap/_mapped/` (read by every
+mapped-file analysis via `analysis/utils/capped_source.resolve_mapped_dir`, fail-fast, no `mapping/`
+fallback), `fidelity/` two-stage map -> score statistical scoring + charts (synthetic vs real), `multivariate_fidelity/` standalone
 multivariate fidelity (recomputes the `multivariate` block over the mapped populations into
 its own `03_Analysis/multivariate_fidelity/` folder), `model_ranking/` cross-model
 ranking of the fidelity reports (models × strategies per country), `method_significance/`
@@ -157,8 +160,12 @@ stage folder was renamed `mapped/` → `mapping/`; readers pass `for_read=True` 
 back to any legacy on-disk `mapped/` (deprecation-logged) until re-mapped. The analysis DAG is a
 validation gate: `validate_raw` (**root**) → `mapping` (reads the full `01_Raw` pool) →
 `validate_mapped` → `population_cap` → every other process. `population_cap` intersects the two
-per-combo validity CSVs, seeded-caps `--n` clean personas, and materializes both the capped
-persona-dir mirror and `03_Analysis/population_cap/_mapped/`; `generation_metadata` reads the
+per-combo validity CSVs and returns a per-combination verdict, not merely a cap: reaching `--n`
+clean personas materializes both the capped persona-dir mirror and
+`03_Analysis/population_cap/_mapped/`, while falling short of it excludes the combination outright —
+no capped outputs at all, and its `_mapped/_index.json` entry carries `skipped: true` + a
+`skip_reason`, the predicate every mapped-file consumer already honours, so `--n` is a real
+invariant rather than a ceiling; `generation_metadata` reads the
 mirror's telemetry via `analysis/utils/capped_source.py` and the mapped-file consumers read
 `_mapped/` via `resolve_mapped_dir` (fail-fast, no `01_Raw`/`mapping/` fallback). One process is
 itself chained further: `realism_ranking` declares `depends_on: [persona_realism]` — the only

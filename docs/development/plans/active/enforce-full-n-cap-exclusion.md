@@ -243,20 +243,20 @@ the truth; an exclusion is not a failure.
 ### Phase 3: Truthful reporting downstream
 **Goal:** No consumer reports a wrong reason, and no document states the old policy.
 
-- [ ] 3.1 — In each of the seven consumers, print `entry.get("skip_reason")` when present
+- [x] 3.1 — In each of the seven consumers, print `entry.get("skip_reason")` when present
       and fall back to the existing "skipped during mapping (no mapped synthetic file)"
       string when absent: `score_fidelity_all.py:248`,
       `score_multivariate_fidelity.py:191`, `scan_consistency.py:193`,
       `analyze_persona_realism.py:294`, `model_ranking/loader.py:211`,
       `realism_ranking/loader.py` (the `skipped.append` in its discovery walk),
       `method_significance/marginal_charts.py:151`.
-- [ ] 3.2 — Rewrite the `population_cap` description in
+- [x] 3.2 — Rewrite the `population_cap` description in
       `config/analysis/analysis_registry.yaml` (it states every combination is capped and
       that "no task analyzes more than N", which becomes "and none analyzes a combination
       that never reached N").
-- [ ] 3.3 — Update the header of `analysis/utils/capped_source.py`, which describes the
+- [x] 3.3 — Update the header of `analysis/utils/capped_source.py`, which describes the
       capped outputs as always present for a generated combo.
-- [ ] 3.4 — Update the `CLAUDE.md` analysis-registry paragraph describing what
+- [x] 3.4 — Update the `CLAUDE.md` analysis-registry paragraph describing what
       `population_cap` does.
 
 **Files Modified:**

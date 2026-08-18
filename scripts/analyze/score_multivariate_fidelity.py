@@ -188,7 +188,8 @@ def main() -> None:
                 continue
 
             if entry.get("skipped") is True or entry.get("synthetic_file") is None:
-                print(f"[{slug}] SKIP: no mapped synthetic file (skipped during mapping).")
+                reason = entry.get("skip_reason") or "no mapped synthetic file (skipped during mapping)"
+                print(f"[{slug}] SKIP: {reason}.")
                 continue
 
             synthetic_path = mapped_dir / entry["synthetic_file"]

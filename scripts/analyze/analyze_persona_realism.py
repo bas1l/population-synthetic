@@ -291,7 +291,7 @@ def _enumerate_combos(
         if entry.get("skipped") is True or entry.get("synthetic_file") is None:
             if not slugs:
                 continue  # unselected + unmapped -> silently out of scope
-            skipped.append((slug, "skipped during mapping (no mapped synthetic file)"))
+            skipped.append((slug, entry.get("skip_reason") or "skipped during mapping (no mapped synthetic file)"))
             continue
         decomposed = decompose_slug(slug, country_ids, strategy_ids, model_ids)
         if decomposed is None:
