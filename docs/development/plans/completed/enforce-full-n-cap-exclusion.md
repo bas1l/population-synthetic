@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-18
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed
+**Completed:** 2026-08-20 17:44
 **Base Branch:** `dev`
 **Branch:** `feature/enforce-full-n-cap-exclusion`
 
