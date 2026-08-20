@@ -132,6 +132,31 @@ python scripts/analyze/summarize_generation_metadata.py --model claude_haiku --n
 # --verbose prints per-combo deep diagnostics; --metrics limits the comparison to a metric subset
 python scripts/analyze/summarize_generation_metadata.py --country swedish --verbose --metrics time cost
 
+# Validation attrition: what the gate discarded. Per combination, the five-stage funnel
+# (generated -> raw-valid -> mapped-valid -> clean -> selected) re-read out of
+# population_cap/_index.json + the validate_raw/validate_mapped roll-ups, plus retention_rate
+# (clean/generated) and generation_multiplier (generated/clean -- per USABLE persona, deliberately
+# not denominated on selected, which is zero for every withdrawal). Emits one tidy CSV + JSON per
+# country, a normalised per-combination funnel and a model x method validation-survival grid.
+# Its row grain is EVERY combination the gate recorded, INCLUDING the ones the full-N rule withdrew
+# -- a withdrawn combination has no capped mirror, no capped mapped file and no generation_metadata
+# row, so this is the only artifact it appears on at all. Run cap_populations.py first.
+python scripts/analyze/analyze_validation_attrition.py --country swedish_02
+# --strict turns "missing from a validator roll-up" from a printed skip into a failure; counts that
+# DISAGREE across the three records always fail either way. --no-charts / --force / --dpi as usual.
+python scripts/analyze/analyze_validation_attrition.py --country swedish_02 --strict --force
+
+# Cost efficiency: each combination's fidelity beside the cost of the run that produced it, per
+# country x model x method. THE DENOMINATOR IS THE POINT -- generation_metadata totals cost over the
+# capped mirror (the ~100 personas kept), this totals the same per-call telemetry over the FULL
+# generated pool in 01_Raw, because the discarded personas were paid for; the two differ by up to
+# 4.8x on the live grid and the gap is largest where retention is worst. The basis is a CSV column
+# and is printed on the figure. Consumes three artifacts -- rank_models.py,
+# summarize_generation_metadata.py and analyze_validation_attrition.py must all have run.
+# Emits {country}_cost_efficiency.{csv,json} + {country}_cost_vs_fidelity.{png,svg}.
+python scripts/analyze/analyze_cost_efficiency.py --country swedish_02
+python scripts/analyze/analyze_cost_efficiency.py --country swedish_02 --no-charts --force
+
 # Persona realism judge (LLM-as-judge): judge each mapped persona's internal coherence with the
 # Claude CLI (default claude-sonnet-5; Fable is the slowest/most-expensive selectable option) over N
 # cold rounds -- can_exist (binary) + typicality (0-10) +
@@ -188,6 +213,38 @@ resolve their output dir via `analysis_output_dir(id, output_base)` rather than 
 | `generation_metadata` | Generation Metadata (country × model × method) | `generation_metadata/` | `summarize_generation_metadata.py` | slugs |
 | `persona_realism` | Persona Realism Judge (LLM-as-judge) | `persona_realism/` | `analyze_persona_realism.py` | per_combo |
 | `realism_ranking` | Realism Ranking (combinations vs the real population) | `realism_ranking/` | `rank_persona_realism.py` | slugs |
+| `validation_attrition` | Validation Attrition (where the personas went) | `validation_attrition/` | `analyze_validation_attrition.py` | slugs |
+| `cost_efficiency` | Cost Efficiency (fidelity vs generation cost) | `cost_efficiency/` | `analyze_cost_efficiency.py` | slugs |
+
+### Attrition and cost: two processes that carry their denominator
+
+`validation_attrition` and `cost_efficiency` both exist because a number was being read against the
+wrong population, and both publish the population it was read against.
+
+`validation_attrition` re-reads the gate and computes nothing new about a persona: it validates
+nothing, caps nothing and makes no LLM call, so it is free to re-run. Its value is its **row grain**
+— one row per combination the gate recorded, withdrawals included. The full-N rule leaves an
+excluded combination with no capped mirror, no capped mapped file and no `generation_metadata` row,
+so without this process a withdrawal is visible only as an absence. `generated` comes from
+`CapSummary.raw_total`, globbed from `01_Raw` at cap time; an `_index.json` predating that field
+raises and names the `cap_populations.py` re-run rather than falling back to the validator's own
+count. The model × method grid draws **four** cell states — measured, measured-and-withdrawn (its
+real rate on the ramp plus a hatch, never greyed and never zeroed), an empty pool, and never
+generated — because collapsing withdrawn into missing is exactly how the previous hand-built version
+of this figure went wrong.
+
+`cost_efficiency` joins that CSV to `model_ranking`'s accuracy and to LLM cost totalled over the
+**full generated pool**, not the capped mirror. Its join key is the run slug, which
+`generation_metadata`'s summary does not publish: it is reconstructed from that file's `model` +
+`method` columns through `manifest_loader.axis_slug` and checked on every read against the slug
+`model_ranking` does publish for the same pair, so the reconstruction rule is proved against live
+data on each run rather than trusted. Membership across the three inputs legitimately differs, and
+the rule is stated rather than inner-joined away: the output row set is the attrition set **minus**
+the withdrawals, and each withdrawal is reported in `withdrawn_combinations` with the money it cost
+and the personas it kept. No accuracy-per-dollar composite is computed — about a third of the model
+axis is unmetered, and unmetered is not free, so it is a data column and a labelled zero-cost band on
+a symlog axis instead. Both decisions are recorded in
+[`2026-08-20-cost-denominator-and-reconstructed-join-key.md`](../development/decisions/2026-08-20-cost-denominator-and-reconstructed-join-key.md).
 
 ### Persona realism: two tasks, one seam
 

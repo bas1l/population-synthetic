@@ -86,7 +86,16 @@ in `population_cap/_index.json`, and exits 0, so it is simply absent downstream)
 mirror at `03_Analysis/population_cap/{slug}/` (telemetry for `generation_metadata`) and writes the
 capped mapped file + copied real reference under `.../population_cap/_mapped/` (read by every
 mapped-file analysis via `analysis/utils/capped_source.resolve_mapped_dir`, fail-fast, no `mapping/`
-fallback), `fidelity/` two-stage map -> score statistical scoring + charts (synthetic vs real), `multivariate_fidelity/` standalone
+fallback), `validation_attrition/` the gate's own report on what it discarded — per combination the
+five-stage funnel (generated -> raw-valid -> mapped-valid -> clean -> selected) read back out of
+`population_cap/_index.json` and the two validator roll-ups, plus `retention_rate` (clean/generated)
+and `generation_multiplier` (generated/clean, personas generated per *usable* persona, deliberately
+not denominated on `selected`, which is zero for every withdrawal); it validates nothing and caps
+nothing, and its row grain is **every** combination the gate recorded **including the withdrawn
+ones**, which makes it the only artifact in the layer on which an excluded combination appears at
+all (one tidy CSV + JSON per country, a normalised per-combination funnel and a model × method
+validation-survival grid drawing four cell states without collapsing any of them),
+`fidelity/` two-stage map -> score statistical scoring + charts (synthetic vs real), `multivariate_fidelity/` standalone
 multivariate fidelity (recomputes the `multivariate` block over the mapped populations into
 its own `03_Analysis/multivariate_fidelity/` folder), `model_ranking/` cross-model
 ranking of the fidelity reports (models × strategies per country), `method_significance/`
@@ -100,6 +109,19 @@ rates, latency p95/max, success rate, estimated USD cost from `config/analysis/m
 plus per-combo deep diagnostics and per-country cross-factor significance (Kruskal-Wallis + Dunn/Holm
 across the model and method factors), read from the LLM-call telemetry of the **capped mirror**
 (`03_Analysis/population_cap/`, produced by `population_cap`), not `01_Raw` directly,
+`cost_efficiency/` the accuracy-vs-cost join — pairs `model_ranking`'s TV fidelity with the same
+per-call LLM telemetry, but totalled over the **full generated pool in `01_Raw`** rather than over
+the capped mirror, because the discarded personas were paid for: the two bases differ by up to 4.8×
+on the live grid and the gap is widest exactly where retention is worst, so a capped figure flatters
+the models that wasted the most tokens. The basis is a CSV column and is printed on the figure; the
+join key is the run slug reconstructed from `generation_metadata`'s slug-less `model` + `method`
+columns through `manifest_loader.axis_slug` and verified on every read against the slug
+`model_ranking` publishes for the same pair (an unmatched key on either side, or an empty join,
+raises); the output row set is the attrition set **minus** the withdrawals, each withdrawal instead
+reported with the money it cost and the personas it kept; and **no composite score** is computed —
+about a third of the model axis is unmetered (priced `{in: 0, out: 0}`, the local `ollama_*` models)
+and unmetered is not free, so the flag travels as a data column and the scatter draws those models
+in a labelled zero-cost band on a symlog x-axis,
 `persona_realism/` an LLM-as-judge coherence task — judges each individual mapped persona N cold
 rounds (`can_exist` binary + `typicality` 0-10 ordinal + severity-tagged clash issues) and reduces
 round → persona → combination into **that combination's own** impossibility rate (bootstrap CI),
@@ -167,9 +189,15 @@ no capped outputs at all, and its `_mapped/_index.json` entry carries `skipped: 
 `skip_reason`, the predicate every mapped-file consumer already honours, so `--n` is a real
 invariant rather than a ceiling; `generation_metadata` reads the
 mirror's telemetry via `analysis/utils/capped_source.py` and the mapped-file consumers read
-`_mapped/` via `resolve_mapped_dir` (fail-fast, no `01_Raw`/`mapping/` fallback). One process is
-itself chained further: `realism_ranking` declares `depends_on: [persona_realism]` — the only
-analysis node whose upstream is another analysis node rather than the gate. A workflow task's
+`_mapped/` via `resolve_mapped_dir` (fail-fast, no `01_Raw`/`mapping/` fallback). `validation_attrition`
+hangs directly off the gate (`depends_on: [population_cap]`) and re-reads what it wrote, so it is
+the one process whose row grain still includes the combinations the full-N rule withdrew. Two
+processes are chained further still — the only analysis nodes whose upstreams are other analysis
+nodes rather than the gate: `realism_ranking` declares `depends_on: [persona_realism]`, and
+`cost_efficiency` declares `depends_on: [model_ranking, generation_metadata, validation_attrition]`.
+That third edge is why `generation_metadata` is `enabled: true` in the workflow — a disabled task
+never enters `completed_tasks`, so every dependent would sit at `SKIPPED_DEP` and never fire; an
+operator who has already run it ticks `bypass` on that node rather than disabling it. A workflow task's
 per-node **`bypass`** flag is GUI-only orchestration that is invisible to every script and emits no
 CLI flag: it runs nothing yet still unlocks the dependents, asserting with **zero** verification
 that the task's outputs are already on disk — so it is confirmed by an unskippable pre-run modal.

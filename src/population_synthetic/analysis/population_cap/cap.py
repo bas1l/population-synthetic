@@ -16,6 +16,10 @@ The population-cap task runs LAST of the validation gate (``validate_raw`` -> ``
    real reference ``real_{country}.json`` (consumed by fidelity, multivariate, consistency,
    pairwise, real_population_stats and persona_realism).
 
+Every summary the stage returns -- capped or excluded -- also carries ``raw_total``, the
+number of ``persona_*`` directories the cap saw on disk. It is an observation, not a
+verdict: nothing in this module branches on it.
+
 Selection reuses the project's shared without-replacement index draw
 (:func:`population_synthetic.analysis.utils.sampling.select_indices`) over the
 lexicographically sorted clean-persona list, so a fixed ``seed`` is reproducible.
@@ -62,11 +66,21 @@ _PERSONA_GLOB = "persona_*"
 
 
 class CapSummary(TypedDict):
-    """Per-combo result of a :func:`cap_combo` call."""
+    """Per-combo result of a :func:`cap_combo` call.
+
+    ``raw_total`` is the generated pool as observed at cap time -- the number of
+    ``persona_*`` directories under ``01_Raw/{slug}/``. It is deliberately NOT read from
+    ``validate_raw``'s output: ``raw_passed`` already is, which makes it agree with that
+    validator by construction and therefore blind to a pool that grew or shrank after the
+    validator ran. ``raw_total`` is the only independent observation of the pool, so
+    ``raw_total`` disagreeing with what ``validate_raw`` saw is the one available signal
+    that the gate's two halves read different data.
+    """
 
     slug: str
     country: str
     requested_n: int
+    raw_total: int
     raw_passed: int
     mapped_passed: int
     clean_available: int
@@ -88,15 +102,18 @@ class CleanSelection(NamedTuple):
     per-combo cap itself and the CLI's re-run path -- and they must not be able to disagree
     about how many clean personas a combination has. ``dirs`` is already the intersection
     that matters: an id passing both validity CSVs *and* present as a directory under
-    ``01_Raw/{slug}/``. The two raw counts are carried alongside for the exclusion message
-    and the stage index, never for the threshold.
+    ``01_Raw/{slug}/``. The counts are carried alongside for the exclusion message and the
+    stage index, never for the threshold.
 
     Attributes:
+        raw_total: Number of ``persona_*`` directories on disk -- the generated pool,
+            observed independently of either validator (see :class:`CapSummary`).
         raw_passed: Number of ids passing the raw-completeness gate.
         mapped_passed: Number of ids passing the mapped-value gate.
         dirs: The persona directories passing both gates, lexicographically sorted.
     """
 
+    raw_total: int
     raw_passed: int
     mapped_passed: int
     dirs: list[Path]
@@ -115,11 +132,6 @@ def _sorted_persona_dirs(raw_slug_dir: Path) -> list[Path]:
     )
 
 
-def _clean_persona_dirs(raw_slug_dir: Path, clean_ids: set[str]) -> list[Path]:
-    """Return this combo's persona dirs whose name is in ``clean_ids``, sorted by name."""
-    return [p for p in _sorted_persona_dirs(raw_slug_dir) if p.name in clean_ids]
-
-
 def clean_selection(
     raw_slug_dir: Path, validate_raw_csv: Path, validate_mapped_csv: Path
 ) -> CleanSelection:
@@ -128,6 +140,10 @@ def clean_selection(
     A persona is countable only when its id passes BOTH gates *and* it exists as a
     directory under ``raw_slug_dir``: a passing id with no directory is not a persona this
     stage can copy, so it must not count towards the full-N threshold.
+
+    The same single directory listing yields ``raw_total`` -- the generated pool before
+    either gate filtered it -- so the pool and the surviving subset are always observed
+    from one and the same view of the disk.
 
     Args:
         raw_slug_dir: The source ``01_Raw/{slug}/`` combo directory.
@@ -141,13 +157,15 @@ def clean_selection(
         FileNotFoundError: If either validity CSV is absent. A missing gate verdict means
             the gate has not run for this combo -- it is never read as "short".
     """
+    persona_dirs = _sorted_persona_dirs(Path(raw_slug_dir))
     raw_passed = read_passed_ids(validate_raw_csv)
     mapped_passed = read_passed_ids(validate_mapped_csv)
     clean_ids = raw_passed & mapped_passed
     return CleanSelection(
+        raw_total=len(persona_dirs),
         raw_passed=len(raw_passed),
         mapped_passed=len(mapped_passed),
-        dirs=_clean_persona_dirs(Path(raw_slug_dir), clean_ids),
+        dirs=[p for p in persona_dirs if p.name in clean_ids],
     )
 
 
@@ -208,6 +226,11 @@ def withdraw_combo(
     The copied real reference ``real_{country}.json`` is *not* touched: it is shared by
     every combo of that country, so withdrawing one must not disturb its siblings.
 
+    The returned summary carries ``raw_total`` exactly as the full-N path does, and it
+    matters more here: a withdrawn combination has no capped mirror, so nothing downstream
+    ever observes its generated pool again. The summary the caller records is the only
+    place the size of the pool that produced too few clean personas survives.
+
     Args:
         slug: Combo slug (``{country}_{strategy}_{model}``).
         country: Country id, carried through onto the summary.
@@ -249,6 +272,7 @@ def withdraw_combo(
         slug=slug,
         country=country,
         requested_n=n,
+        raw_total=clean.raw_total,
         raw_passed=clean.raw_passed,
         mapped_passed=clean.mapped_passed,
         clean_available=clean.clean_available,
@@ -396,6 +420,7 @@ def cap_combo(
         slug=slug,
         country=country,
         requested_n=n,
+        raw_total=clean.raw_total,
         raw_passed=clean.raw_passed,
         mapped_passed=clean.mapped_passed,
         clean_available=clean_available,
