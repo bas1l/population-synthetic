@@ -14,12 +14,22 @@ The population-cap task runs last of the validation gate (``validate_raw`` -> ``
   ``mapping/`` output.
 
 Note ``mapping`` itself is NOT a consumer of these: it reads the full ``01_Raw`` pool
-(it runs *before* the cap). The capped outputs are a **hard prerequisite** for their
-consumers (enforced upstream by the analysis DAG: all of them depend on
-``population_cap``). There is deliberately **no fallback** to ``01_Raw`` or to the full
-``mapping/`` output: if a capped output is absent, the resolver raises loudly. This keeps
-N a single enforced invariant -- no downstream task can silently read the uncapped
-population.
+(it runs *before* the cap). The capped **stage** and the capped ``_mapped/`` dir are a
+**hard prerequisite** for their consumers (enforced upstream by the analysis DAG: all of
+them depend on ``population_cap``). There is deliberately **no fallback** to ``01_Raw`` or
+to the full ``mapping/`` output: if one of those is absent, the resolver raises loudly.
+This keeps N a single enforced invariant -- no downstream task can silently read the
+uncapped population.
+
+A **per-combo** output, by contrast, may be legitimately absent. ``population_cap``
+enforces a full-N rule: a combination that cannot supply N clean personas is excluded and
+gets neither a ``{slug}/`` mirror nor a ``_mapped/{slug}.json``. That absence is a verdict,
+not a task that failed to run, and it is announced through the ``_mapped/_index.json``
+entry -- ``skipped: true`` plus a ``skip_reason`` naming the shortfall -- which every
+mapped-file consumer already honours, and by the record the cap keeps in its own stage
+``_index.json``. An excluded combo is therefore something a caller enumerates *out of* the
+index or the stage walk; asking :func:`resolve_combo_source` for its mirror by slug still
+raises, because a slug the cap withdrew has no capped population to read.
 
 The resolvers only compute/validate paths; they know nothing about how the cap selects
 or copies personas.
@@ -51,8 +61,9 @@ def resolve_combo_source(slug: str, output_base: str | Path) -> Path:
         ``persona_*`` subdirectories are the capped population for that combo.
 
     Raises:
-        FileNotFoundError: If the capped mirror for ``slug`` does not exist -- the
-            population-cap task has not been run for this combo.
+        FileNotFoundError: If the capped mirror for ``slug`` does not exist -- either the
+            population-cap task has not been run for this combo, or the combo was excluded
+            by the full-N rule and has no capped population at all.
     """
     capped_dir = analysis_output_dir(_CAP_PROCESS_ID, output_base) / slug
     if not capped_dir.is_dir():

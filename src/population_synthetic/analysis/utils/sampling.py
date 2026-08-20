@@ -76,9 +76,11 @@ def subsample_population(population: dict, n: int | None, seed: int = 0) -> dict
             and population reproduce the same subset.
 
     Returns:
-        The population unchanged when ``n`` is ``None`` or when the population
-        already has ``<= n`` individuals (a loud warning is printed in the latter
-        case, since the requested equalised size cannot be met). Otherwise a
+        The population unchanged when ``n`` is ``None``, when the population
+        already holds exactly ``n`` individuals (silently -- the requested size is
+        met, there is simply nothing to draw), or when it holds fewer than ``n``
+        (a loud warning is printed in that case alone, since the requested
+        equalised size cannot be met). Otherwise a
         shallow copy whose ``individuals`` list holds the ``n`` drawn rows (in
         original order, referenced not copied) and whose ``metadata`` copy records
         ``metadata['n'] = n``.
@@ -95,7 +97,10 @@ def subsample_population(population: dict, n: int | None, seed: int = 0) -> dict
     individuals = population["individuals"]
     available = len(individuals)
 
-    if available <= n:
+    if available == n:
+        return population
+
+    if available < n:
         print(
             f"WARNING: requested subsample size n={n} but population has only "
             f"{available} individuals; using the full population (equalised size not met)."

@@ -162,7 +162,9 @@
         "Sverige",
         "SE",
         "Kingdom of Sweden",
-        "Konungariket Sverige"
+        "Konungariket Sverige",
+        "Göteborg",
+        "Täby"
       ],
       "contains": [
         "sverige",
@@ -272,7 +274,8 @@
         "Jugoslavien",
         "Former Yugoslavia",
         "Forna Jugoslavien",
-        "Ex-Yugoslavia"
+        "Ex-Yugoslavia",
+        "Yugoslavia (former)"
       ]
     },
     "India": {

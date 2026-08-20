@@ -24,7 +24,14 @@ all judging, reduction, statistics, and rendering live in the ``persona_realism`
 subpackage (it never reaches into the judge/stats internals). The combo set is
 enumerated from the mapping stage ``_index.json`` (decomposed via the shared axis
 registry), so it needs ``map_populations.py`` (and the population_cap it depends on)
-to have run first. Judge model, rounds, temperature, sampling size, and bootstrap
+to have run first. A combination the ``population_cap`` gate withdrew under its full-N
+rule is marked ``skipped: true`` there: it is reported with its shortfall reason and not
+judged, and a selection resolving to withdrawals only is a **no-op that exits 0** -- the
+GUI dispatches this task one subprocess per combination and fails the task on the first
+nonzero exit, so erroring on a withdrawal would take every later combination and every
+dependent task down with it. Exit 1 is reserved for a selection that matched nothing.
+
+Judge model, rounds, temperature, sampling size, and bootstrap
 params are config-driven (``config/analysis/persona_realism/``); cost per combo
 reuses ``config/analysis/model_pricing.yaml`` (fail-fast on a missing pricing row).
 
@@ -85,6 +92,7 @@ from population_synthetic.analysis.persona_realism.artifacts import (
     write_combo_artifacts,
 )
 from population_synthetic.analysis.persona_realism.config import JudgeConfig
+from population_synthetic.analysis.persona_realism.reduce import has_cached_verdicts
 from population_synthetic.analysis.persona_realism.runner import run_combo_judgements
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
 from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
@@ -256,14 +264,23 @@ def _enumerate_combos(
     axis_ids: tuple[list[str], list[str], list[str]],
     real_sample_size: int | None,
     include_real: bool,
-) -> tuple[list[_Combo], list[tuple[str, str]]]:
+) -> tuple[list[_Combo], list[tuple[str, str]], list[tuple[str, str]]]:
     """Enumerate the selected combinations from the mapping ``_index.json``.
 
-    Returns ``(combos, skipped)`` where *combos* is a sorted list of :class:`_Combo`
-    and *skipped* lists ``(label, reason)`` for units that were selected but not usable
-    (no mapped file / undecomposable slug). Mirrors
+    Returns ``(combos, skipped, withdrawn)`` where *combos* is a sorted list of
+    :class:`_Combo`, *skipped* lists ``(label, reason)`` for units that were selected but
+    are not usable (undecomposable slug / no mapped real population), and *withdrawn*
+    lists ``(label, reason)`` for selected units the upstream ``population_cap`` gate
+    excluded under its full-N rule. Mirrors
     ``model_ranking.loader.load_combo_performances``' discovery walk but stops at the
     mapping stage (no fidelity report is required for this task).
+
+    The two absence lists are kept apart because they mean opposite things to the caller:
+    a *skipped* unit is a selection that could not be honoured, while a *withdrawn* unit
+    is a verdict the gate already reached -- the combination did not reach ``--n`` clean
+    personas, so it has no capped population by design and there is nothing to judge. The
+    axis filters are applied **before** the withdrawal check, so a combination the gate
+    excluded outside the current selection never surfaces.
 
     The ``real_{country}`` competitor is enumerated alongside the synthetic units of
     every selected country, so a broad run judges the full competitor set. An explicit
@@ -283,26 +300,32 @@ def _enumerate_combos(
 
     combos: list[_Combo] = []
     skipped: list[tuple[str, str]] = []
+    withdrawn: list[tuple[str, str]] = []
     seen_countries: list[str] = []
     for entry in entries:
         slug = entry["slug"]
         if slugs and slug not in slugs:
             continue
-        if entry.get("skipped") is True or entry.get("synthetic_file") is None:
-            if not slugs:
-                continue  # unselected + unmapped -> silently out of scope
-            skipped.append((slug, "skipped during mapping (no mapped synthetic file)"))
-            continue
+        # Decompose first so the axis filters can run before any absence is reported:
+        # a combination outside this selection is out of scope whatever its state.
         decomposed = decompose_slug(slug, country_ids, strategy_ids, model_ids)
+        if decomposed is not None:
+            country, strategy, model = decomposed
+            if countries and country not in countries:
+                continue
+            if models and model not in models:
+                continue
+            if strategies and strategy not in strategies:
+                continue
+        # A withdrawal is a verdict the gate already reached, so it outranks the
+        # undecomposable-slug diagnosis when an entry would qualify for both.
+        if entry.get("skipped") is True or entry.get("synthetic_file") is None:
+            withdrawn.append(
+                (slug, entry.get("skip_reason") or "skipped during mapping (no mapped synthetic file)")
+            )
+            continue
         if decomposed is None:
             skipped.append((slug, diagnose_slug(slug, country_ids, strategy_ids, model_ids)))
-            continue
-        country, strategy, model = decomposed
-        if countries and country not in countries:
-            continue
-        if models and model not in models:
-            continue
-        if strategies and strategy not in strategies:
             continue
         combos.append(
             _Combo(label=slug, country=country, strategy=strategy, model=model,
@@ -341,7 +364,7 @@ def _enumerate_combos(
         )
 
     combos.sort(key=lambda c: c.label)
-    return combos, skipped
+    return combos, skipped, withdrawn
 
 
 def _load_individuals(path: Path, *, what: str) -> list[dict[str, Any]]:
@@ -371,8 +394,11 @@ def _run_one_combo(
     rewrite_artifacts: bool = False,
     hard_rules: Any,
     pricing: Any,
-) -> ComboArtifacts:
+) -> ComboArtifacts | None:
     """Judge (top-up if needed) then compute + render one combination's artifacts.
+
+    Returns ``None`` -- writing nothing -- when the combination has no per-persona
+    verdict cache at all (see the empty-cache gate below).
 
     Everything this function reads and writes belongs to *combo* alone; it is called
     once per unit and the units are independent, so the caller may process them in any
@@ -388,6 +414,10 @@ def _run_one_combo(
     Artifacts are re-written when the runner actually did work (wrote or topped up a
     persona), when the report is missing, under *force*, or under *rewrite_artifacts*
     -- otherwise nothing on disk changed and the existing artifacts stand.
+
+    An **empty verdict cache short-circuits the write entirely**: a combination nothing
+    has ever judged (a plan-only run over a never-judged combo, or one whose every round
+    failed) must leave no artifacts at all rather than a zero-persona report.
 
     The two rewrite triggers are deliberately distinct. *force* re-judges from scratch
     (truncating every verdict cache) and therefore costs the full LLM bill;
@@ -414,6 +444,20 @@ def _run_one_combo(
             "combo %s: %d persona(s) had all rounds fail this run (uncached, retryable)",
             combo.label, summary.failed,
         )
+
+    if not has_cached_verdicts(out_dir):
+        # Nothing was judged and nothing is cached, so there is nothing to reduce. Writing
+        # here would publish a report claiming n_personas=0 -- which downstream reads as a
+        # judged competitor holding no data, not as a unit still waiting to be judged, and
+        # which realism_ranking then refuses under a round cap (a cap re-derives every
+        # competitor from the cache this combo does not have). Not writing keeps the
+        # combination honestly absent until it is actually judged.
+        logger.warning(
+            "combo %s: no persona verdict cache on disk (%d selected, %d failed this run) "
+            "-- artifacts NOT written. Re-run without --rewrite-artifacts to judge it.",
+            combo.label, summary.n_selected, summary.failed,
+        )
+        return None
 
     did_work = summary.written > 0 or summary.topped_up > 0
     rewrite = did_work or not report_exists or force or rewrite_artifacts
@@ -462,7 +506,7 @@ def main() -> None:
     mapping_dir = resolve_mapped_dir(output_base)
 
     try:
-        combos, skipped = _enumerate_combos(
+        combos, skipped, withdrawn = _enumerate_combos(
             mapping_dir,
             countries=countries, models=models, strategies=strategies, slugs=slugs,
             axis_ids=(country_ids, strategy_ids, model_ids),
@@ -473,6 +517,12 @@ def main() -> None:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    if withdrawn:
+        print(f"Withdrawn upstream by population_cap -- {len(withdrawn)} combination(s) not judged:")
+        for label, reason in withdrawn:
+            print(f"  {label}: {reason}")
+        print()
+
     if skipped:
         print(f"Skipped {len(skipped)} combination(s):")
         for label, reason in skipped:
@@ -480,6 +530,20 @@ def main() -> None:
         print()
 
     if not combos:
+        # An empty selection is only an error when nothing accounts for it. When the
+        # gate withdrew every selected combination there is nothing left to judge and
+        # nothing went wrong: the full-N rule already decided those units are absent
+        # downstream. Exiting nonzero here would fail the whole per-combo GUI task (one
+        # subprocess per combination, first nonzero exit wins) on a withdrawal the
+        # operator was told about upstream, taking every later combination and every
+        # dependent task down with it.
+        if withdrawn:
+            logger.warning(
+                "persona_realism: nothing to judge -- all %d selected combination(s) were "
+                "withdrawn by population_cap (full-N rule); exiting 0.", len(withdrawn),
+            )
+            print("Combinations judged: 0 (every selected combination was withdrawn upstream).")
+            return
         print(
             "ERROR: no mapped combination matched the selection. "
             "Run scripts/analyze/map_populations.py first (and check your filters).",
@@ -505,6 +569,7 @@ def main() -> None:
     # have produced inside a full batch.
     attrs_by_country: dict[str, list[str]] = {}
     judged = 0
+    unjudged = 0
     for combo in combos:
         if combo.country not in attrs_by_country:
             attrs_by_country[combo.country] = scheme_attributes(combo.country)
@@ -525,6 +590,10 @@ def main() -> None:
             rewrite_artifacts=args.rewrite_artifacts,
             hard_rules=hard_rules, pricing=pricing,
         )
+        if ca is None:
+            print("    NOT judged: no verdict cache -- no artifacts written")
+            unjudged += 1
+            continue
         rate = ca.stats.impossibility.get("rate")
         rate_str = "n/a" if rate is None else f"{rate:.4f}"
         print(f"    n={ca.stats.n_personas} (failed {ca.stats.n_failed})  "
@@ -532,6 +601,9 @@ def main() -> None:
         judged += 1
 
     print()
+    if unjudged:
+        print(f"{unjudged} combination(s) have no verdict cache and were left without "
+              f"artifacts -- re-run without --rewrite-artifacts to judge them.")
     print(f"Combinations judged: {judged}. Cross-combination ranking is a separate task -- "
           f"run scripts/analyze/rank_persona_realism.py.")
 

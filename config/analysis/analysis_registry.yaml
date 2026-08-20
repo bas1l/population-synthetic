@@ -36,13 +36,18 @@ processes:
   population_cap:
     label: "Cap Population (N)"
     description: >
-      Seeded cap of each combination to N VALIDATED personas. Runs last of the validation
-      gate (validate_raw -> mapping -> validate_mapped -> population_cap): it selects N personas
-      that pass BOTH validity CSVs, copies the selected raw persona directories (identity +
-      telemetry + combo logs/metadata) into the capped mirror, and writes a capped mapped file
-      (_mapped/{slug}.json) for the same N. Every downstream analysis consumes this capped clean
-      set, so no task analyzes more than N personas and none analyzes an incomplete or unmapped
-      one.
+      Seeded cap of each combination to N VALIDATED personas, and the pass/fail verdict on
+      whether it reached N at all. Runs last of the validation gate (validate_raw -> mapping
+      -> validate_mapped -> population_cap): it selects N personas that pass BOTH validity
+      CSVs, copies the selected raw persona directories (identity + telemetry + combo
+      logs/metadata) into the capped mirror, and writes a capped mapped file
+      (_mapped/{slug}.json) for the same N. A combination that cannot supply N clean personas
+      is EXCLUDED outright: it gets no capped mirror and no capped mapped file (any left by an
+      earlier run are removed), and its _mapped/_index.json entry carries the shortfall as a
+      skip reason, so it is invisible to every downstream analysis. The full counts stay on
+      record in this stage's own _index.json. Every downstream analysis consumes the capped
+      clean set, so no task analyzes more than N personas, none analyzes an incomplete or
+      unmapped one, and none analyzes a combination that never reached N.
     folder: "population_cap"
     script: "scripts/analyze/cap_populations.py"
     dispatch: "per_combo"

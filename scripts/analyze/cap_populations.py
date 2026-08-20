@@ -2,18 +2,35 @@
 
 The population-cap task runs LAST of the validation gate (validate_raw -> mapping ->
 validate_mapped -> population_cap). For a combination it intersects the two per-combo
-validity CSVs to the clean persona ids, seeded-selects ``--n`` of them, copies the
-selected raw persona directories into the capped mirror under
-``{output_base}/03_Analysis/population_cap/{slug}/`` (telemetry for generation-metadata),
-and writes the capped mapped file + copied real reference under
-``.../population_cap/_mapped/`` (consumed by every mapped-file analysis). No downstream
-task analyzes more than N personas, or an incomplete/unmapped one.
+validity CSVs to the clean persona ids and applies the **full-N rule**: reaching ``--n``
+clean personas is a precondition, not an aspiration.
+
+- **Full-N** (``clean_available >= --n``): seeded-select ``--n`` of the clean personas,
+  copy the selected raw persona directories into the capped mirror under
+  ``{output_base}/03_Analysis/population_cap/{slug}/`` (telemetry for
+  generation-metadata), and write the capped mapped file + copied real reference under
+  ``.../population_cap/_mapped/`` (consumed by every mapped-file analysis).
+- **Short** (``clean_available < --n``): the combination is *excluded*. Its capped mirror
+  and capped mapped file are withdrawn if an earlier run left them behind, so every
+  mapped-file consumer skips it through the skip predicate it already honours. The
+  exclusion is a verdict, not an error: it is logged at WARNING, recorded in both indexes
+  (with the shortfall counts and a ``skip_reason``), and exits 0 so the GUI node completes
+  and its dependents unlock.
+
+No downstream task therefore analyzes more than N personas, an incomplete/unmapped one, or
+a combination that never reached N.
 
 This script is a thin per-combo wrapper: it resolves the combo slug from the axis IDs and
-the source/destination directories, delegates the seeded selection + copy + mapped-filter
-to :func:`population_synthetic.analysis.population_cap.cap_combo`, and records the per-combo
-summary in the stage-level ``_index.json`` (raw mirror) and ``_mapped/_index.json``. It
-knows nothing about how personas are selected or copied, nor about any statistics.
+the source/destination directories, delegates the full-N rule + seeded selection + copy +
+mapped-filter to :func:`population_synthetic.analysis.population_cap.cap_combo`, and records
+the per-combo summary in the stage-level ``_index.json`` (raw mirror) and
+``_mapped/_index.json``. It knows nothing about how personas are selected or copied, nor
+about any statistics.
+
+The rule is re-evaluated on **every** invocation, ``--force`` or not: an existing capped
+mirror means a cap ran, not that a valid one did, so a base populated under the old
+cap-to-whatever-exists behaviour is cleaned by a plain re-run. ``--force`` gates only the
+expensive re-copy of a combination that still passes the rule.
 
 Usage:
     python scripts/analyze/cap_populations.py \
@@ -32,8 +49,9 @@ Usage:
                 valid seed, not "unset").
 --output-base   Base output directory (the run base). Default: output_base from
                 config/synthetic/experiment_defaults.yaml.
---force         Overwrite an existing capped mirror for this combo (default: skip if
-                the mirror already exists).
+--force         Overwrite an existing capped mirror for this combo (default: skip the
+                re-copy when the mirror exists AND the combo still passes the full-N
+                rule; a combo that no longer does is withdrawn either way).
 """
 
 from __future__ import annotations
@@ -45,7 +63,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from population_synthetic.analysis.population_cap import CapSummary, cap_combo
+from population_synthetic.analysis.population_cap import CapSummary, cap_combo, clean_selection
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
@@ -97,7 +115,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite an existing capped mirror for this combo (default: skip if present).",
+        help="Overwrite an existing capped mirror for this combo (default: skip the re-copy "
+        "when the mirror exists and the combo still passes the full-N rule).",
     )
     return parser.parse_args()
 
@@ -129,7 +148,11 @@ def _mapped_index_entry(summary: CapSummary) -> dict[str, Any]:
 
     Mirrors the mapping stage's ``_index.json`` schema
     (``{slug, country, synthetic_file, real_file, n, skipped}``) so the downstream
-    mapped-file consumers iterate the capped index exactly as they did the mapping index.
+    mapped-file consumers iterate the capped index exactly as they did the mapping index,
+    plus ``skip_reason`` -- the reason a skipped entry is skipped, so a consumer reports the
+    shortfall instead of guessing that mapping produced nothing. It is ``None`` for a
+    combination that was not excluded, and the key is **additive**: an index written before
+    the full-N rule existed has no such key, so consumers must tolerate its absence.
     """
     return {
         "slug": summary["slug"],
@@ -138,6 +161,7 @@ def _mapped_index_entry(summary: CapSummary) -> dict[str, Any]:
         "real_file": summary["real_file"],
         "n": summary["mapped_n"],
         "skipped": summary["synthetic_file"] is None,
+        "skip_reason": summary["exclusion_reason"],
     }
 
 
@@ -173,11 +197,18 @@ def main() -> None:
     logger.info("  mapped dest : %s", mapped_dest_dir)
 
     if dest_dir.exists() and not args.force:
-        logger.info(
-            "  SKIP (exists): %s -- pass --force to overwrite the existing capped mirror.",
-            dest_dir,
-        )
-        return
+        # An existing mirror means a cap ran, not that a VALID one did, so it is never on
+        # its own a complete-output marker. Re-evaluate the full-N rule before honouring
+        # it: only a combination that still reaches --n may skip the re-copy. A combination
+        # that no longer does falls through to cap_combo, which returns at its exclusion
+        # branch -- withdrawing the stale mirror and mapped file -- before it ever reaches
+        # its own mirror check, so force=False is safe here.
+        if clean_selection(raw_slug_dir, validate_raw_csv, validate_mapped_csv).clean_available >= args.n:
+            logger.info(
+                "  SKIP (exists): %s -- pass --force to overwrite the existing capped mirror.",
+                dest_dir,
+            )
+            return
 
     summary: CapSummary = cap_combo(
         slug=slug,
@@ -196,14 +227,29 @@ def main() -> None:
     _upsert_index_entry(index_path, dict(summary))
     _upsert_index_entry(mapped_index_path, _mapped_index_entry(summary))
 
-    logger.info(
-        "  capped %d/%d clean persona dir(s) (requested n=%d, truncated=%s); mapped n=%d",
-        summary["selected"],
-        summary["clean_available"],
-        summary["requested_n"],
-        summary["truncated"],
-        summary["mapped_n"],
-    )
+    if summary["excluded"]:
+        # A verdict, not an error: both index entries are written above and the process
+        # exits 0, so the GUI node completes and its dependents still unlock.
+        logger.warning(
+            "  EXCLUDED: only %d clean persona dir(s) available (raw_passed=%d, "
+            "mapped_passed=%d), fewer than the requested n=%d. No capped mirror and no "
+            "capped mapped file were written for %r, and any left by an earlier run were "
+            "removed; every downstream analysis will skip this combination.",
+            summary["clean_available"],
+            summary["raw_passed"],
+            summary["mapped_passed"],
+            summary["requested_n"],
+            slug,
+        )
+    else:
+        logger.info(
+            "  capped %d/%d clean persona dir(s) (requested n=%d, truncated=%s); mapped n=%d",
+            summary["selected"],
+            summary["clean_available"],
+            summary["requested_n"],
+            summary["truncated"],
+            summary["mapped_n"],
+        )
     logger.info("  indexes upserted: %s , %s", index_path, mapped_index_path)
 
 

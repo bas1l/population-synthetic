@@ -469,6 +469,7 @@ def test_cli_combo_dispatch_tops_up_even_when_report_exists(tmp_path, monkeypatc
     out_dir = tmp_path / label
     out_dir.mkdir(parents=True)
     (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")  # report already exists
+    (out_dir / "persona_00000.json").write_text("{}", encoding="utf-8")  # ... over a real cache
 
     calls: dict[str, object] = {}
 
@@ -510,6 +511,7 @@ def test_cli_combo_dispatch_skips_rewrite_when_nothing_changed(tmp_path, monkeyp
     out_dir = tmp_path / label
     out_dir.mkdir(parents=True)
     (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")
+    (out_dir / "persona_00000.json").write_text("{}", encoding="utf-8")
 
     calls: dict[str, object] = {}
 
@@ -780,3 +782,159 @@ def test_integer_ids_are_normalised_to_the_persona_glob_shape(tmp_path):
         path = real_dir / f"persona_{idx:05d}.json"
         assert path.is_file()
         assert json.loads(path.read_text(encoding="utf-8"))["persona_id"] == f"persona_{idx:05d}"
+
+
+def _mapped_dir_with(tmp_path, entries, *, real_country: str | None = None):
+    """Build a capped ``population_cap/_mapped/`` dir whose ``_index.json`` is *entries*.
+
+    This is the read root every mapped-file consumer resolves through
+    ``analysis/utils/capped_source.resolve_mapped_dir``; ``persona_realism`` enumerates
+    its unit of work from exactly this index.
+    """
+    mapped = tmp_path / "03_Analysis" / "population_cap" / "_mapped"
+    mapped.mkdir(parents=True)
+    (mapped / "_index.json").write_text(json.dumps(entries), encoding="utf-8")
+    if real_country is not None:
+        (mapped / f"real_{real_country}.json").write_text(
+            json.dumps({"metadata": {}, "individuals": []}), encoding="utf-8",
+        )
+    return mapped
+
+
+_WITHDRAWN_REASON = (
+    "only 34 clean persona(s) pass both validity gates (raw_passed=150, mapped_passed=34), "
+    "fewer than the requested n=100"
+)
+
+
+def test_enumerate_combos_separates_a_withdrawn_combo_from_an_unusable_one(tmp_path):
+    """A combination ``population_cap`` withdrew under the full-N rule is reported as a
+    WITHDRAWAL, not as a selection that could not be honoured -- and only when it is
+    inside the current selection."""
+    driver = _load_driver()
+    mapped = _mapped_dir_with(
+        tmp_path,
+        [
+            {"slug": "swedish_all_pick_claude_haiku", "synthetic_file": None,
+             "skipped": True, "skip_reason": _WITHDRAWN_REASON},
+            {"slug": "swedish_all_pick_claude_sonnet",
+             "synthetic_file": "swedish_all_pick_claude_sonnet.json"},
+        ],
+        real_country="swedish",
+    )
+    axis_ids = (["swedish"], ["all_pick"], ["claude_haiku", "claude_sonnet"])
+
+    # GUI per_combo dispatch shape: the selection is exactly the withdrawn combination.
+    combos, skipped, withdrawn = driver._enumerate_combos(
+        mapped, countries=["swedish"], models=["claude_haiku"], strategies=["all_pick"],
+        slugs=None, axis_ids=axis_ids, real_sample_size=None, include_real=True,
+    )
+    assert combos == []                                      # nothing to judge ...
+    assert skipped == []                                     # ... and nothing went wrong
+    assert withdrawn == [("swedish_all_pick_claude_haiku", _WITHDRAWN_REASON)]
+
+    # The same withdrawal outside the selection is out of scope, not reported.
+    combos, skipped, withdrawn = driver._enumerate_combos(
+        mapped, countries=["swedish"], models=["claude_sonnet"], strategies=["all_pick"],
+        slugs=None, axis_ids=axis_ids, real_sample_size=None, include_real=True,
+    )
+    assert [c.label for c in combos] == ["real_swedish", "swedish_all_pick_claude_sonnet"]
+    assert (skipped, withdrawn) == ([], [])
+
+
+def test_cli_exits_zero_when_every_selected_combination_was_withdrawn(tmp_path, monkeypatch, capsys):
+    """A withdrawn-only selection is a no-op that exits 0.
+
+    The GUI runs this task one subprocess per combination and fails the whole task on the
+    first nonzero exit, so erroring on a combination the gate already excluded would take
+    every later combination -- and every dependent task -- down with it.
+    """
+    import sys as _sys
+
+    driver = _load_driver()
+    _mapped_dir_with(tmp_path, [
+        {"slug": "swedish_all_pick_claude_haiku", "synthetic_file": None,
+         "skipped": True, "skip_reason": _WITHDRAWN_REASON},
+    ])
+    monkeypatch.setattr(_sys, "argv", [
+        "analyze_persona_realism.py",
+        "--model-id", "claude_haiku", "--strategy-id", "all_pick", "--country-id", "swedish",
+        "--output-base", str(tmp_path),
+    ])
+    monkeypatch.setattr(driver, "_run_one_combo", _fail_if_called)
+
+    driver.main()  # must not raise SystemExit
+
+    out = capsys.readouterr().out
+    assert _WITHDRAWN_REASON in out          # the shortfall is announced, not swallowed
+    assert "Combinations judged: 0" in out
+
+
+def test_cli_still_errors_when_the_selection_matched_nothing(tmp_path, monkeypatch):
+    """Exit 1 stays for a selection nothing accounts for (typo / never mapped)."""
+    import sys as _sys
+
+    driver = _load_driver()
+    _mapped_dir_with(tmp_path, [
+        {"slug": "swedish_all_pick_claude_sonnet",
+         "synthetic_file": "swedish_all_pick_claude_sonnet.json"},
+    ])
+    monkeypatch.setattr(_sys, "argv", [
+        "analyze_persona_realism.py",
+        "--model-id", "claude_haiku", "--strategy-id", "all_pick", "--country-id", "swedish",
+        "--output-base", str(tmp_path),
+    ])
+    monkeypatch.setattr(driver, "_run_one_combo", _fail_if_called)
+
+    with pytest.raises(SystemExit) as exc:
+        driver.main()
+    assert exc.value.code == 1
+
+
+def _fail_if_called(*args, **kwargs):
+    raise AssertionError("no combination should have been judged")
+
+
+def test_an_empty_verdict_cache_publishes_no_artifacts(tmp_path, monkeypatch):
+    """A combination with no cached verdict must leave NO artifacts behind.
+
+    Regression guard for the zero-persona report: a plan-only (``--rewrite-artifacts``)
+    pass over a never-judged combination, or one whose every round failed, used to publish
+    a full artifact set with ``n_personas == 0``. Downstream that reads as a judged
+    competitor holding no data -- and ``realism_ranking`` under a round cap refuses it
+    outright, since a cap re-derives every competitor from the cache this combo lacks.
+    """
+    driver = _load_driver()
+    label = "swedish_all_pick_claude_haiku"
+    out_dir = tmp_path / label
+    out_dir.mkdir(parents=True)
+
+    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False,
+                    plan_only=False, sample_size_override=None, logger=None):
+        return _summary(combo_label, o)  # judged nothing, cached nothing
+
+    monkeypatch.setattr(driver, "run_combo_judgements", _spy_runner)
+    monkeypatch.setattr(driver, "write_combo_artifacts", _fail_if_called)
+
+    result = driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=[{"a": 1}],
+        analyzed_attrs=scheme_attributes("swedish"), out_dir=out_dir, cfg=_cfg(),
+        dpi=80, force=False, rewrite_artifacts=True,
+        hard_rules=(), pricing=_PRICING,
+    )
+    assert result is None
+    assert list(out_dir.iterdir()) == []   # nothing published, not even an empty report
+
+
+def test_has_cached_verdicts_ignores_the_combo_report(tmp_path):
+    """The predicate keys on the verdict-cache glob, not on 'a .json is present'."""
+    from population_synthetic.analysis.persona_realism.reduce import has_cached_verdicts
+
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    combo_dir.mkdir()
+    assert has_cached_verdicts(tmp_path / "does_not_exist") is False
+    assert has_cached_verdicts(combo_dir) is False
+    (combo_dir / "swedish_all_pick_claude_haiku.json").write_text("{}", encoding="utf-8")
+    assert has_cached_verdicts(combo_dir) is False   # the report is not a cache file
+    (combo_dir / "persona_00000.json").write_text("{}", encoding="utf-8")
+    assert has_cached_verdicts(combo_dir) is True

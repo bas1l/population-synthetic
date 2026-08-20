@@ -103,7 +103,8 @@
         "Skogsbruk",
         "Fiske",
         "Jord- och skogsbruk",
-        "Agriculture/Forestry/Fishing"
+        "Agriculture/Forestry/Fishing",
+        "Greenhouse and horticulture (trädgårdsnäring)"
       ],
       "contains": [
         "agricultur",
@@ -130,7 +131,9 @@
         "Energi och miljö",
         "Gruvor och mineralutvinning",
         "Manufacturing/Industry",
-        "Industry"
+        "Industry",
+        "Utvinning av mineral",
+        "Life science och läkemedel"
       ],
       "contains": [
         "tillverkning",
@@ -205,7 +208,8 @@
       "equals": [
         "Transport",
         "Transport och magasinering",
-        "Logistik"
+        "Logistik",
+        "Kurir- och budverksamhet (matleverans)"
       ],
       "contains": [
         "transport",
@@ -295,7 +299,21 @@
         "Professionell, vetenskaplig och teknisk verksamhet",
         "Vetenskaplig och teknisk verksamhet",
         "Verksamhet inom professionell, vetenskaplig och teknisk verksamhet",
-        "Affärsmässig tjänsteverksamhet"
+        "Affärsmässig tjänsteverksamhet",
+        "Företagstjänster och administration",
+        "Administrativa tjänster",
+        "Customer Service",
+        "Administrative support",
+        "Administrative Support Services",
+        "Administrativa kontorstjänster",
+        "HR och personaladministration",
+        "Cleaning and property services",
+        "Cleaning and facility services",
+        "Säkerhetstjänster",
+        "Office Administration",
+        "Personaladministration",
+        "Security Services",
+        "Rengöring"
       ],
       "contains": [
         "finansiell",
@@ -322,7 +340,19 @@
         "accounting",
         "revision",
         "redovisning",
-        "audit"
+        "audit",
+        "bemanning",
+        "personaluthyrning",
+        "personaltjänst",
+        "callcenter",
+        "kundtjänst",
+        "städbransch",
+        "städning",
+        "cleaning service",
+        "bevakning",
+        "kontorsservice",
+        "konferensservice",
+        "administrative and support"
       ]
     },
     "Public Administration": {
@@ -361,7 +391,9 @@
         "Education",
         "Utbildning",
         "Forskning",
-        "Undervisning"
+        "Undervisning",
+        "Skolväsendet",
+        "Skolväsende"
       ],
       "contains": [
         "utbildning",
@@ -427,7 +459,9 @@
         "Kultur, nöje och fritid",
         "Personliga tjänster",
         "Övriga tjänster",
-        "Other Services"
+        "Other Services",
+        "Annan serviceverksamhet",
+        "Other service activities"
       ],
       "contains": [
         "kultur",
@@ -472,7 +506,8 @@
         "studerar",
         "studier",
         "Ej i arbete",
-        "Ej anställd"
+        "Ej anställd",
+        "pensionerad"
       ]
     }
   }

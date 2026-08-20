@@ -90,7 +90,13 @@
         "Inkomst från tjänst",
         "Consulting fees",
         "Konsulttjänster",
-        "Konsultarvoden"
+        "Konsultarvoden",
+        "Inkomst från egen näringsverksamhet",
+        "Inkomst av näringsverksamhet",
+        "Försäljning av konstnärliga verk eller produkter",
+        "Tjänst",
+        "Konsultuppdrag",
+        "Deltidsinkomst"
       ],
       "contains": [
         "wage",
@@ -119,7 +125,9 @@
         "sysselsättning",
         "deltidsarbete",
         "konsultverksamhet",
-        "firma"
+        "firma",
+        "arvode",
+        "subcontracting"
       ]
     },
     "Capital": {
@@ -192,7 +200,10 @@
         "Barnbidrag",
         "Bistånd",
         "Ekonomiskt stöd från föräldrar",
-        "Arbetsförmedlingen"
+        "Arbetsförmedlingen",
+        "Financial support from parents",
+        "Försörjning från förälder",
+        "Aktivitetsstöd"
       ],
       "contains": [
         "insurance",
@@ -238,7 +249,8 @@
         "studentlån",
         "studielån",
         "studentfinansier",
-        "studiefinansier"
+        "studiefinansier",
+        "fickpengar"
       ]
     },
     "Social Assistance": {

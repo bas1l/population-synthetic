@@ -156,7 +156,8 @@
         "Stockholm",
         "Stockholms län",
         "Stockholm County",
-        "Stockholm län"
+        "Stockholm län",
+        "STH"
       ],
       "contains": [
         "stockholm",
@@ -183,7 +184,8 @@
         "Göteborg",
         "Borås",
         "Västra Götarelands län",
-        "Västra Götareland"
+        "Västra Götareland",
+        "Bohuslän County"
       ],
       "contains": [
         "västra götaland",
@@ -252,7 +254,8 @@
     "Örebro": {
       "equals": [
         "Örebro",
-        "Örebro län"
+        "Örebro län",
+        "Närke län"
       ],
       "contains": [
         "örebro"
@@ -261,7 +264,8 @@
     "Jönköping": {
       "equals": [
         "Jönköping",
-        "Jönköpings län"
+        "Jönköpings län",
+        "Jonköping"
       ],
       "contains": [
         "jönköping"
@@ -271,7 +275,8 @@
       "equals": [
         "Gävleborg",
         "Gävleborgs län",
-        "Gävle"
+        "Gävle",
+        "Hälsingland"
       ],
       "contains": [
         "gävleborg",
@@ -356,7 +361,8 @@
       "equals": [
         "Västernorrland",
         "Västernorrlands län",
-        "Sundsvall"
+        "Sundsvall",
+        "Medelpad"
       ],
       "contains": [
         "västernorrland",

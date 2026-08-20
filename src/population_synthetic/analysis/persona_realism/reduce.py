@@ -457,6 +457,27 @@ def load_persona_verdicts(path: str | Path) -> LoadedPersona:
     )
 
 
+#: Glob matching one combo's per-persona verdict-cache files. The leading-digit guard
+#: keeps it from ever matching a sibling combo output such as ``<combo_label>.json``.
+VERDICT_CACHE_GLOB = "persona_[0-9]*.json"
+
+
+def has_cached_verdicts(combo_dir: str | Path) -> bool:
+    """Whether *combo_dir* holds at least one per-persona verdict-cache file.
+
+    The cheap predicate behind "is there anything to reduce here?" -- it stats the
+    directory instead of parsing every cache file, and shares
+    :data:`VERDICT_CACHE_GLOB` with :func:`load_combo_verdicts` so the two can never
+    disagree about what a cache file is. A combo directory that fails this holds no
+    judged persona: reducing it would yield a zero-persona report, which reads
+    downstream as a judged competitor with no data rather than as an unjudged unit.
+    """
+    combo_dir = Path(combo_dir)
+    if not combo_dir.is_dir():
+        return False
+    return any(combo_dir.glob(VERDICT_CACHE_GLOB))
+
+
 def load_combo_verdicts(
     combo_dir: str | Path,
     *,
@@ -480,7 +501,7 @@ def load_combo_verdicts(
     combo_dir = Path(combo_dir)
     found: dict[str, LoadedPersona] = {}
     if combo_dir.is_dir():
-        for cache_file in sorted(combo_dir.glob("persona_[0-9]*.json")):
+        for cache_file in sorted(combo_dir.glob(VERDICT_CACHE_GLOB)):
             loaded = load_persona_verdicts(cache_file)
             found[loaded.persona_id] = loaded
 
