@@ -258,6 +258,17 @@ the truth; an exclusion is not a failure.
       capped outputs as always present for a generated combo.
 - [x] 3.4 — Update the `CLAUDE.md` analysis-registry paragraph describing what
       `population_cap` does.
+- [x] 3.5 — Make a withdrawn-only selection a **no-op that exits 0** in
+      `analyze_persona_realism.py`. It is the only task downstream of the gate with
+      `dispatch: per_combo`, so the GUI narrows its selection to one combination per
+      subprocess: a withdrawn combination emptied the selection and hit the
+      "no mapped combination matched the selection" exit 1, and `workflow_runner.py:146`
+      fails the whole task on the first nonzero exit -- so one excluded combination
+      skipped every later combination and the dependent `realism_ranking`. `_enumerate_combos`
+      now returns `withdrawn` separately from `skipped` (axis filters applied first, so a
+      withdrawal outside the selection stays out of scope), `main` prints the shortfall
+      reasons and returns 0 when withdrawals account for the empty selection, and exit 1
+      is reserved for a selection nothing accounts for.
 
 **Files Modified:**
 - `scripts/analyze/score_fidelity_all.py`, `scripts/analyze/score_multivariate_fidelity.py`,
@@ -288,9 +299,12 @@ output bases.
       consumers' skip predicate and carries a non-empty `skip_reason`.
 - [x] 4.6 — New: `clean_available == n` is full-N (the inclusive boundary) and produces
       normal capped outputs.
+- [x] 4.7 — New (3.5): `_enumerate_combos` classifies a withdrawn entry as `withdrawn`
+      (not `skipped`) and ignores one outside the selection; the CLI exits 0 on a
+      withdrawn-only selection and still exits 1 when nothing accounts for it.
 
 **Files Modified:**
-- `tests/test_population_cap.py`
+- `tests/test_population_cap.py`, `tests/test_persona_realism_smoke.py`
 
 **Dependencies:** Phase 1-2 (4.5 also Phase 2)
 
@@ -314,7 +328,8 @@ output bases.
       does not raise, and no record is produced.
 - [ ] Cap a combo at full N, then short (no `--force` between runs): the second run leaves
       neither artifact behind and both index entries reflect the exclusion.
-- [ ] `analyze_persona_realism`'s combo enumeration omits an excluded slug.
+- [x] `analyze_persona_realism`'s combo enumeration omits an excluded slug, reports it
+      as a withdrawal, and a per-combo invocation selecting only that slug exits 0.
 
 ### Manual Verification
 - [ ] Run the GUI analysis workflow's `population_cap` node with `force: false` on the
@@ -411,4 +426,5 @@ output bases.
 - src/population_synthetic/analysis/population_cap/cap.py
 - src/population_synthetic/analysis/realism_ranking/loader.py
 - src/population_synthetic/analysis/utils/capped_source.py
+- tests/test_persona_realism_smoke.py
 - tests/test_population_cap.py
