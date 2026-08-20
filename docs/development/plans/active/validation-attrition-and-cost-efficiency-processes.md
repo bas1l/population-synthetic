@@ -76,15 +76,15 @@ wrote. F05 and F26 cannot be, because no process writes them:
 
 ## Success Criteria
 
-- [ ] `python scripts/analyze/analyze_validation_attrition.py --country swedish_02` writes
+- [x] `python scripts/analyze/analyze_validation_attrition.py --country swedish_02` writes
       `{country}_attrition.csv`, `{country}_attrition.json`, and both figures under
       `03_Analysis/validation_attrition/`.
-- [ ] The attrition CSV has one row per combination in `population_cap/_index.json` — **65 rows for
+- [x] The attrition CSV has one row per combination in `population_cap/_index.json` — **65 rows for
       `swedish_02`, not 58** — because the withdrawn combinations are the point of the figure.
 - [ ] For each of the 7 withdrawn combinations the row reads `excluded=true`, a non-empty
       `exclusion_reason`, `selected=0`, `generation_multiplier` populated, and
       `cost_per_usable_persona` computable.
-- [ ] `retention_rate` for `all_generate_evaluate_random_pick_v2 × ollama_gemma4_e4b` equals
+- [x] `retention_rate` for `all_generate_evaluate_random_pick_v2 × ollama_gemma4_e4b` equals
       `9/150 = 0.06`, matching `validate_mapped/_summary.csv → pass_rate_pct = 6.0`.
 - [ ] `python scripts/analyze/analyze_cost_efficiency.py --country swedish_02` writes
       `{country}_cost_efficiency.{csv,json}` and the scatter under `03_Analysis/cost_efficiency/`.
@@ -421,19 +421,51 @@ test modules — 39 tests, all passing; `ruff check src/` clean.
 ### Phase 3: the attrition figures and wiring
 **Goal:** F05 becomes a pipeline artifact.
 
-- [ ] 3.1 — `validation_attrition/charts.py`: the per-combination funnel (normalised, printing N)
+- [x] 3.1 — `validation_attrition/charts.py`: the per-combination funnel (normalised, printing N)
       and the mapped-validity model × method grid via `table_style` + `palette`.
-- [ ] 3.2 — `scripts/analyze/analyze_validation_attrition.py` on the house driver skeleton:
+- [x] 3.2 — `scripts/analyze/analyze_validation_attrition.py` on the house driver skeleton:
       module docstring as operator contract, the standard flag set
       (`--country/--model/--strategy/--slug/--output-base/--no-charts/--strict/--force/--dpi`),
       idempotent skip unless `--force`, printed skip list, the nothing-to-do exit convention.
-- [ ] 3.3 — Registry entry (`label/description/folder/script/dispatch: slugs`) and the
+- [x] 3.3 — Registry entry (`label/description/folder/script/dispatch: slugs`) and the
       `_EXPECTED_FOLDERS` map in `tests/test_analysis_registry.py`.
-- [ ] 3.4 — Workflow task with `depends_on: [population_cap]`.
+- [x] 3.4 — Workflow task with `depends_on: [population_cap]`.
 
 **Files Modified:** `charts.py`, the new script, `config/analysis/analysis_registry.yaml`,
-`config/gui/flows/analysis_workflow.yaml`, `tests/test_analysis_registry.py`.
+`config/gui/flows/analysis_workflow.yaml`, `tests/test_analysis_registry.py`,
+`tests/test_validation_attrition_charts.py`, `tests/test_workflow_state.py`.
 **Dependencies:** Phase 2.
+
+#### 3.1–3.4 result — the figures as built
+
+Two renderers in `validation_attrition/charts.py`, both returning an **unsaved** `Figure` (the
+`realism_ranking` convention), plus the driver, the registry entry, the workflow task and 19 tests.
+`ruff check src/` clean; full suite green apart from one pre-existing failure unrelated to this
+phase (`test_axis_facet_defaults.py`, tripped by uncommitted edits to `generate_parallel.yaml`).
+
+- **The grid's cell value is `retention_rate`, read from the document, never recomputed.** It is the
+  only survival quantity the builder derives, so the CSV, the JSON and the figure cannot disagree
+  (`02` §9). It reproduces every audited number: gemma4_e4b × E = 6.0, deepseek_r1_14b × E = 6.7,
+  llama31_8b × E = 7.3, and the hosted A–D range 77.3–100.0. On the live grid `clean / generated`
+  and `mapped_valid / raw_valid` coincide on all 65 combinations, so pinning the published field
+  costs nothing in fidelity to the `validate_mapped` roll-up.
+- **Four cell states, drawn and tested.** `measured` (ramp), `withdrawn` (its **measured** rate on
+  the ramp plus a hatch — never 0, never grey), `undefined` (`generated == 0`, grey with a dotted
+  border and no number), `absent` (plain grey, "not generated"). The withdrawal hatch is drawn
+  independently of the fill, so a withdrawn combination with an empty pool keeps both facts.
+  `test_populated_cell_is_not_rendered_as_missing` asserts the drawn imshow array and the drawn
+  annotation, which is the only way the ADR's silent-grey regression is observable.
+- **Both figures carry their denominators.** Every grid cell prints `clean/generated` beneath its
+  percentage; both marginals are **pooled over persona counts**, not means of the cell rates (the
+  pools differ by 5×); every funnel bar prints `N=` and the document's own `retention_rate`.
+- **The funnel is a partition, not a stack.** Each bar cuts the generated pool into four disjoint
+  slices — failed raw / failed mapped / clean-not-drawn / drawn — which sum to the pool exactly;
+  `_segment_counts` raises rather than drawing a negative slice if the three gate records ever
+  disagree.
+- **Verified live**: `analyze_validation_attrition.py --country swedish_02` wrote
+  `swedish_02_attrition.{csv,json}` (65 rows, 7 excluded, pooled 11616 generated → 8077 clean →
+  5800 selected) and both figures as PNG+SVG under `03_Analysis/validation_attrition/`. Re-running
+  reproduces the CSV and the JSON byte-for-byte; SVG is not byte-stable and no such claim is made.
 
 ### Phase 4: cost over the full pool
 **Goal:** A cost number that is not measured on the capped mirror.
@@ -508,19 +540,19 @@ test modules — 39 tests, all passing; `ruff check src/` clean.
       expected files appear and key numbers match.
 - [ ] Both CLIs invoked **by subprocess** (the flags and argument resolution at the edge are the
       point), asserting `returncode == 0`.
-- [ ] `--no-charts` asserted as a real absence of `*.png` **and** `*.svg`; a second run asserts both
+- [x] `--no-charts` asserted as a real absence of `*.png` **and** `*.svg`; a second run asserts both
       formats appear per figure.
-- [ ] A populated heatmap cell is **not** rendered as missing — the specific regression ADR
+- [x] A populated heatmap cell is **not** rendered as missing — the specific regression ADR
       `2026-08-12` records, where a renderer read `cell["rate"]` by literal key and greyed
       everything without raising.
-- [ ] Re-running twice produces identical CSV/JSON bytes (idempotency; PNG/JSON/CSV only — SVG is
+- [x] Re-running twice produces identical CSV/JSON bytes (idempotency; PNG/JSON/CSV only — SVG is
       not byte-reproducible).
 
 ### Manual Verification
-- [ ] The mapped-validity grid reproduces the audited `swedish_02` numbers: gemma4_e4b × E = 6.0,
+- [x] The mapped-validity grid reproduces the audited `swedish_02` numbers: gemma4_e4b × E = 6.0,
       deepseek_r1_14b × E = 6.7, llama31_8b × E = 7.3, flagship A–D range 77.3–100.0.
-- [ ] All 7 withdrawn combinations are visible and marked as withdrawn, not merely thin.
-- [ ] `matplotlib.use("Agg")` before package imports in every chart test.
+- [x] All 7 withdrawn combinations are visible and marked as withdrawn, not merely thin.
+- [x] `matplotlib.use("Agg")` before package imports in every chart test.
 
 ---
 

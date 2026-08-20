@@ -272,3 +272,27 @@ processes:
     folder: "realism_ranking"
     script: "scripts/analyze/rank_persona_realism.py"
     dispatch: "slugs"
+
+  validation_attrition:
+    label: "Validation Attrition (where the personas went)"
+    description: >
+      Publishes the validation gate's per-combination attrition: the five-stage
+      funnel (generated -> raw-valid -> mapped-valid -> clean -> selected) read
+      back out of population_cap/_index.json and the two validator roll-ups, plus
+      the two rates derived from it -- retention_rate (clean / generated) and
+      generation_multiplier (generated / clean, personas generated per USABLE
+      persona, deliberately not denominated on selected, which is zero for every
+      withdrawn combination). Re-reads what the gate already wrote, performing no
+      validation, no capping and no LLM work. Its row grain is EVERY combination
+      the gate recorded, INCLUDING the ones the full-N rule withdrew: an excluded
+      combination has no capped mirror, no capped mapped file and no
+      generation_metadata row, so this is the only artifact in the analysis layer
+      on which it appears at all. Emits one tidy CSV + JSON per country plus two
+      figures -- a normalised per-combination funnel (absolute pools are not
+      comparable; N is printed on every bar) and a model x method
+      validation-survival grid that draws four cell states without collapsing any
+      of them: a measured rate, a measured rate that was withdrawn, a combination
+      recorded with an empty pool, and a pair that was never generated.
+    folder: "validation_attrition"
+    script: "scripts/analyze/analyze_validation_attrition.py"
+    dispatch: "slugs"

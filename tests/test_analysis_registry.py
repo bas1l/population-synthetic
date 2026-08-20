@@ -39,6 +39,7 @@ _EXPECTED_FOLDERS = {
     "generation_metadata": "generation_metadata",
     "persona_realism": "persona_realism",
     "realism_ranking": "realism_ranking",
+    "validation_attrition": "validation_attrition",
 }
 
 

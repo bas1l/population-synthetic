@@ -145,7 +145,7 @@ tasks:
                                   # invocation also enumerates its country's real_{country}
                                   # competitor (cheap once cached); the cross-combination
                                   # ranking is the separate realism_ranking node below.
-    bypass: false                 # assume already done -> unlock dependents, run nothing
+    bypass: true                  # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force (re-judge + re-write)
     force: false
     options:
@@ -169,17 +169,29 @@ tasks:
     options:
       strict: false               # --strict (fail instead of skipping a non-consumable combo)
       min-combos: '2'             # --min-combos (a one-point ranking is not a ranking)
-      rounds:                     # --rounds (blank = the published artifacts, or the shallowest
+      rounds: '1'                 # --rounds (blank = the published artifacts, or the shallowest
                                   # cached depth when the set differs only on its round count; N
                                   # re-reduces every competitor over its first N cached rounds)
       no-charts: false            # --no-charts (flag when true; charts default ON)
       output-base:                # --output-base (blank = script default)
     depends_on: [persona_realism]
 
+  validation_attrition:           # slugs dispatch -- re-reads the gate's own records, no LLM work
+    enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
+    supports_force: true          # node shows a Force checkbox -> --force (rewrite a country)
+    force: false
+    options:
+      strict: false               # --strict (fail instead of skipping a combo missing from a validator roll-up)
+      no-charts: false            # --no-charts (flag when true; charts default ON)
+      output-base:                # --output-base (blank = script default)
+    depends_on: [population_cap]
+
 selection:                        # shared by ALL tasks in the chain
   models: [claude_haiku, claude_sonnet, ollama_deepseek_r1_14b, 
       ollama_gemma4_e4b, ollama_llama31_8b, ollama_mistral_nemo_12b, 
-      openrouter_glm_52, openrouter_gpt_oss_120b, openrouter_mistral_medium, 
+      openrouter_glm_52, openrouter_gpt56_sol, openrouter_gpt_oss_120b, 
+      openrouter_kimi_k3, openrouter_mistral_medium, openrouter_opus_5, 
       openrouter_qwen35_flash]
   strategies: [all_generate_evaluate_pick_v2, 
       all_generate_evaluate_random_pick_v2, all_generate_pick_v2, 
