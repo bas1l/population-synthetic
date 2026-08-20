@@ -470,15 +470,83 @@ phase (`test_axis_facet_defaults.py`, tripped by uncommitted edits to `generate_
 ### Phase 4: cost over the full pool
 **Goal:** A cost number that is not measured on the capped mirror.
 
-- [ ] 4.1 — `cost_efficiency/raw_cost.py`: total per-combination cost from `01_Raw`
+- [x] 4.1 — `cost_efficiency/raw_cost.py`: total per-combination cost from `01_Raw`
       `llm_interactions.jsonl` telemetry, priced through `model_pricing.yaml`.
-- [ ] 4.2 — Carry pricing provenance (`observed_date`, `source`, `currency`, `[VERIFY]`) through to
+- [x] 4.2 — Carry pricing provenance (`observed_date`, `source`, `currency`, `[VERIFY]`) through to
       the JSON; classify each model `unmetered` vs priced; **absent pricing raises**.
-- [ ] 4.3 — Assert against the known 5.5× case: the `01_Raw` total for
+- [x] 4.3 — Assert against the known 5.5× case: the `01_Raw` total for
       `…_random_pick_v2_openrouter_qwen35_flash` must exceed its capped-mirror total.
 
 **Files Modified:** `raw_cost.py`, `tests/test_cost_efficiency_raw_cost.py`.
 **Dependencies:** Phase 0.3.
+
+#### 4.1–4.3 result — the raw-pool cost reader as built
+
+Two files under `analysis/cost_efficiency/` (`__init__.py` docstring-only, `raw_cost.py`) plus
+`tests/test_cost_efficiency_raw_cost.py` — 21 tests, all passing; `ruff check src/` clean; full
+suite 1759 passed, apart from the same pre-existing `test_axis_facet_defaults.py` failure Phase 3
+recorded (uncommitted `generate_parallel.yaml` edits, unrelated). `generation_metadata` was not
+touched.
+
+- **The pricing accessor is re-implemented here, deliberately.** `generation_metadata/pricing.py`
+  parses the same config and would have been the accessor to reuse, but importing *any* submodule
+  of that package executes its `__init__`, which imports
+  `analysis/utils/capped_source.resolve_stage_source` — measured: after
+  `import …generation_metadata.pricing`, `capped_source` is in `sys.modules`. Reusing it would put
+  the capped-mirror reader back into the import graph of the one module written to avoid it. The
+  contract table's "Must NOT know about: the capped mirror" is therefore satisfied by a minimal
+  local reader; asserted directly — importing `raw_cost` leaves `matplotlib`, `capped_source` and
+  `generation_metadata` all absent from `sys.modules`. The config file remains the single source of
+  truth; only the parser is duplicated.
+- **`raw_cost_for_slug(output_base, slug, model_id, pricing)`** takes `model_id` explicitly rather
+  than decomposing the slug: the axis registries are the loader's business (`axes.decompose_slug`),
+  and Phase 5's loader already holds `(model, method)` because it builds the slug from them.
+- **Four states, never three.** *absent* (`has_token_data == False` → `total_cost_usd is None`),
+  *unmetered* (`{in: 0, out: 0}` → a **measured** `0.0` when telemetry exists), *priced*, and
+  *unpriceable* (no config row → raises). The pricing fact and the telemetry fact stay separable: an
+  unmetered model with no telemetry reports `unmetered=True` **and** `total_cost_usd=None`. Absent
+  pricing raises **before** any telemetry is read, so it cannot be masked by a thin pool.
+- **`[VERIFY]` lives in YAML comments, which `safe_load` discards**, so the tags are lifted out of
+  the raw text per model row and carried as `pricing_flags` (`("VERIFY", "effective/discounted")`,
+  `("verified 2026-08-14",)`, or `()` — an empty tuple is a positive statement that the row is
+  untagged). `pricing_document(pricing, model_ids)` is the JSON-ready block: the three bulk stamps,
+  the config path, `cost_basis`, and per model `{price_in, price_out, unmetered, flags}`, restricted
+  to the models actually analysed, sorted, timestamp-free and therefore byte-reproducible.
+- **The double-counting guard is enforced, not documented.** `(persona_id, call_index)` uniqueness
+  is asserted across the whole pool; a repeat raises naming the persona, the file the key was first
+  seen in and the file that repeated it. The record's own `persona_id` is preferred over the
+  directory name, so a mis-filed log collides rather than hides. Records lacking a `call_index` are
+  outside the assertion and are counted into `n_unkeyed_calls`, a field on the record — the limit of
+  the guard travels as data. Live check on the qwen35_flash pool: 17454 calls, 0 unkeyed, 0
+  duplicates, 0 persona-id mismatches.
+- **`cost_basis` is a field on every record** (`generated_pool_01_raw`), so no consumer can print a
+  cost without its denominator.
+
+##### 4.3 measurement — raw pool vs capped mirror
+
+`swedish_02_all_generate_evaluate_random_pick_v2_openrouter_qwen35_flash`, priced at
+`{in: 0.065, out: 0.26}`:
+
+| Basis | Personas | Input tok | Output tok | Total USD |
+|---|---|---|---|---|
+| `01_Raw` generated pool | 549 | 6,581,464 | 103,294,407 | **27.2843** |
+| capped mirror (`generation_metadata`) | 100 | 1,379,172 | 21,711,233 | **5.7346** |
+
+**Cost ratio 4.758×**, direction as predicted — the assertion holds. The persona ratio is
+549/100 = **5.49×**, which is the figure the plan's "5.5×" names (it is quoted there as
+"549 generated, 100 selected", a pool ratio, not a cost ratio).
+
+The two ratios differ because the **drawn personas are ~15% more expensive each than the pool
+average** (0.05735 vs 0.04970 USD). That is the sign the plan's own reasoning predicts: personas
+fail the mapped gate through truncated generations, and a truncated generation emits fewer output
+tokens, so the discards are systematically *cheaper* than the keeps. It also means the correction is
+**not** the generation multiplier — option (b) would have over-corrected here by 15%, which is a
+second, independent reason the plan's choice of option (a) was the right one.
+
+Cross-checked rather than asserted: summing this module's own reader over only the 100
+`selected_ids` from `population_cap/_index.json` gives **5.73457 USD**, matching
+`generation_metadata`'s `cost_mean × cost_n = 5.7346` to its published rounding. The reader's
+arithmetic is therefore identical to the shipped process's; only the denominator differs.
 
 ### Phase 5: the cost join, figure and wiring
 **Goal:** F26 becomes a pipeline artifact.
@@ -530,7 +598,9 @@ phase (`test_axis_facet_defaults.py`, tripped by uncommitted edits to `generate_
 - [ ] Empty join raises rather than writing an empty CSV.
 - [ ] Unmetered model: `cost_per_usable_persona` is `0.0` and `unmetered` is `true` — never `None`,
       which means absent.
-- [ ] Absent pricing entry raises (distinct from unmetered).
+- [x] Absent pricing entry raises (distinct from unmetered). *(Done in Phase 4 at the raw-cost
+      boundary: it raises before any telemetry is read, so a thin pool cannot mask a config gap.
+      Phase 5 inherits it through the loader.)*
 - [x] Schema round-trip: empty cell reads back as `None`, never `0.0`. *(Done for the attrition
       schema in Phase 2; repeat for `cost_csv.py` in Phase 5.)*
 
