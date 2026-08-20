@@ -330,14 +330,47 @@ on-disk header), with `make_row` / `build_summary_csv` builders.
 ### Phase 1: `raw_total`
 **Goal:** Give the funnel its first stage an authoritative source.
 
-- [ ] 1.1 — Add `raw_total: int` to `CapSummary`, populated by globbing `persona_*` dirs at cap time.
-- [ ] 1.2 — Populate it on the excluded path too (`withdraw_combo`), where it is most needed.
-- [ ] 1.3 — Re-run the gate to backfill `_index.json`, asserting `selected_ids` are unchanged for
+- [x] 1.1 — Add `raw_total: int` to `CapSummary`, populated by globbing `persona_*` dirs at cap time.
+- [x] 1.2 — Populate it on the excluded path too (`withdraw_combo`), where it is most needed.
+- [x] 1.3 — Re-run the gate to backfill `_index.json`, asserting `selected_ids` are unchanged for
       every already-capped combination (the draw is seeded; a changed id set means a real bug).
 
 **Files Modified:** `src/population_synthetic/analysis/population_cap/cap.py`,
 `scripts/analyze/cap_populations.py`, `tests/test_population_cap.py`.
 **Dependencies:** Phase 0.
+
+#### 1.1–1.2 — where the count is taken
+
+`clean_selection()` already lists `01_Raw/{slug}/persona_*` to intersect the two gates, so
+`raw_total` is taken from that **same** listing (`CleanSelection.raw_total`) rather than from a
+second glob: the pool and its surviving subset are then always observed from one view of the disk.
+Both `cap_combo` and `withdraw_combo` copy it onto their summary, so the excluded path carries it
+too — the only place a withdrawn combination's pool survives, since it gets no capped mirror and no
+`generation_metadata` row.
+
+#### 1.3 result — the backfill
+
+`--force` re-run of `scripts/analyze/cap_populations.py` over all 65 `swedish_02` combinations
+(2026-08-20, 214 s, 65/65 exit 0), diffed against a pre-run snapshot of
+`population_cap/_index.json`:
+
+- `selected_ids` **identical in set and order** for all 58 capped combinations; `selected`,
+  `truncated`, `mapped_n`, both gate counts, `excluded` and `exclusion_reason` unchanged on all 65.
+  `_mapped/_index.json` came back equal record-for-record. The only change is the added key.
+- The excluded set is unchanged — still exactly the 7: `ollama_llama31_8b` under all five methods,
+  plus `all_generate_evaluate_random_pick_v2` × {`ollama_deepseek_r1_14b`, `ollama_gemma4_e4b`}.
+  Their pools: 250 (`all_generate_evaluate_pick_v2 × llama31_8b`) and 150 for the other six, against
+  clean counts of 51, 34, 22, 20, 11, 10 and 9 — so
+  `all_generate_evaluate_random_pick_v2 × gemma4_e4b` gives `9/150 = 0.06`, the number the
+  success criteria pin.
+- `raw_total` distribution over the 65: 150 (×42), 110 (×7), 250 (×5), 370 (×4), 190 (×2), and
+  160 / 170 / 191 / 366 / 549 once each. It is **not** a constant, so the funnel's first stage
+  could not have been hardcoded.
+- Cross-checked against `validate_raw/_summary.csv`: `raw_total == n_personas` and
+  `raw_passed == passed` on **all 65** — the pool is currently in sync, which is the baseline
+  Phase 2's completeness gate asserts. Note that the five combinations where
+  `raw_total != raw_passed` (up to 549 vs 488) are genuine raw-gate *failures*, not drift: drift is
+  `raw_total != n_personas`, which is the comparison the loader must make.
 
 ### Phase 2: the attrition contract and derivation
 **Goal:** Counts and rates, tested, with no rendering.

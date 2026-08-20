@@ -27,6 +27,11 @@ the per-combo summary in the stage-level ``_index.json`` (raw mirror) and
 ``_mapped/_index.json``. It knows nothing about how personas are selected or copied, nor
 about any statistics.
 
+The stage ``_index.json`` is the summary verbatim, so it carries every count the cap
+observed -- including ``raw_total``, the generated pool as it was on disk at cap time. For
+an excluded combination that record is the only surviving trace of the pool, since no
+capped mirror is written for it and no downstream process emits a row for it.
+
 The rule is re-evaluated on **every** invocation, ``--force`` or not: an existing capped
 mirror means a cap ran, not that a valid one did, so a base populated under the old
 cap-to-whatever-exists behaviour is cleaned by a plain re-run. ``--force`` gates only the
@@ -231,11 +236,13 @@ def main() -> None:
         # A verdict, not an error: both index entries are written above and the process
         # exits 0, so the GUI node completes and its dependents still unlock.
         logger.warning(
-            "  EXCLUDED: only %d clean persona dir(s) available (raw_passed=%d, "
-            "mapped_passed=%d), fewer than the requested n=%d. No capped mirror and no "
-            "capped mapped file were written for %r, and any left by an earlier run were "
-            "removed; every downstream analysis will skip this combination.",
+            "  EXCLUDED: only %d clean persona dir(s) available out of %d generated "
+            "(raw_passed=%d, mapped_passed=%d), fewer than the requested n=%d. No capped "
+            "mirror and no capped mapped file were written for %r, and any left by an "
+            "earlier run were removed; every downstream analysis will skip this "
+            "combination.",
             summary["clean_available"],
+            summary["raw_total"],
             summary["raw_passed"],
             summary["mapped_passed"],
             summary["requested_n"],
@@ -243,9 +250,11 @@ def main() -> None:
         )
     else:
         logger.info(
-            "  capped %d/%d clean persona dir(s) (requested n=%d, truncated=%s); mapped n=%d",
+            "  capped %d/%d clean persona dir(s) out of %d generated (requested n=%d, "
+            "truncated=%s); mapped n=%d",
             summary["selected"],
             summary["clean_available"],
+            summary["raw_total"],
             summary["requested_n"],
             summary["truncated"],
             summary["mapped_n"],

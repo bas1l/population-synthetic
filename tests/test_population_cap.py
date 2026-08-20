@@ -540,7 +540,7 @@ def test_withdraw_combo_is_idempotent_when_nothing_is_on_disk(tmp_path: Path):
     # the verdict a repeated call returns must not drift.
     dest = _cap_stage(tmp_path) / _SLUG
     mapped_dest = _mapped_dest(tmp_path)
-    clean = CleanSelection(raw_passed=3, mapped_passed=2, dirs=[])
+    clean = CleanSelection(raw_total=5, raw_passed=3, mapped_passed=2, dirs=[])
 
     summaries = [
         withdraw_combo(
@@ -559,6 +559,7 @@ def test_withdraw_combo_is_idempotent_when_nothing_is_on_disk(tmp_path: Path):
     assert summaries[0]["excluded"] is True
     assert summaries[0]["clean_available"] == 0
     assert summaries[0]["requested_n"] == 4
+    assert summaries[0]["raw_total"] == 5
     assert summaries[0]["exclusion_reason"]
     # A withdrawal creates nothing -- least of all an empty capped output.
     assert not dest.exists()
@@ -615,6 +616,92 @@ def test_cli_excluded_mapped_index_entry_reads_as_skipped_with_a_reason(tmp_path
     assert entry["n"] == 0
     assert entry["skip_reason"]
     assert "fewer than the requested" in entry["skip_reason"]
+
+
+# --------------------------------------------------------------------------- #
+# (b5) raw_total -- the generated pool, observed independently of validate_raw
+# --------------------------------------------------------------------------- #
+
+
+def test_cap_combo_records_the_generated_pool_on_the_capped_path(tmp_path: Path):
+    """A capped combo records how many personas were generated, not only how many kept."""
+    raw = _make_raw_combo(tmp_path, _SLUG, m=10)
+    dest = _cap_stage(tmp_path) / _SLUG
+
+    summary = _cap(tmp_path, raw, 4, 0, dest)
+
+    assert summary["raw_total"] == 10
+    assert summary["selected"] == 4
+    # The pool is a count of directories, so it is an int -- never a float or a string.
+    assert isinstance(summary["raw_total"], int)
+
+
+def test_cap_combo_records_the_generated_pool_on_the_excluded_path(tmp_path: Path):
+    """A withdrawn combo records its pool too -- the only place it survives.
+
+    An excluded combination gets no capped mirror, and every downstream process reads the
+    mirror, so nothing after this point can observe how many personas it took to fall
+    short. The summary is the last chance to record it.
+    """
+    raw = _make_raw_combo(tmp_path, _SLUG, m=3)
+    dest = _cap_stage(tmp_path) / _SLUG
+
+    summary = _cap(tmp_path, raw, 5, 0, dest)
+
+    assert summary["excluded"] is True
+    assert summary["selected"] == 0
+    assert summary["raw_total"] == 3
+
+
+def test_cli_stage_index_records_the_generated_pool_for_an_excluded_combo(tmp_path: Path):
+    # The stage index is what a cross-combination reader consumes, so the count has to
+    # survive the summary -> _index.json write, not merely exist in memory.
+    raw = _make_raw_combo(tmp_path, _SLUG, m=3)
+    _write_gate_inputs(tmp_path, _SLUG, raw)
+
+    result = _run_cap_cli(tmp_path, 5)
+    assert result.returncode == 0, result.stderr
+
+    entry = _index_entry(_cap_stage(tmp_path) / "_index.json")
+    assert entry["excluded"] is True
+    assert entry["raw_total"] == 3
+
+
+def test_raw_total_diverges_from_raw_passed_when_the_pool_grew_after_validation(
+    tmp_path: Path,
+):
+    """The drift signal the field exists for.
+
+    ``raw_passed`` is counted out of ``validate_raw``'s own CSV, so it agrees with that
+    validator by construction and can never report a pool that changed after the validator
+    ran. Here two personas are generated *after* validation: the gate's two halves are
+    looking at different data, and ``raw_total`` is the only count that says so.
+    """
+    raw = _make_raw_combo(tmp_path, _SLUG, m=4)
+    vr_csv, vm_csv, mapping_dir = _write_gate_inputs(tmp_path, _SLUG, raw)
+
+    # Two more personas land in 01_Raw after both validity CSVs were written.
+    _make_raw_combo(tmp_path, _SLUG, m=6)
+    assert len(_persona_dirs(raw)) == 6
+
+    summary = cap_combo(
+        slug=_SLUG,
+        country=_COUNTRY,
+        raw_slug_dir=raw,
+        mapping_dir=mapping_dir,
+        validate_raw_csv=vr_csv,
+        validate_mapped_csv=vm_csv,
+        n=4,
+        seed=0,
+        dest_dir=_cap_stage(tmp_path) / _SLUG,
+        mapped_dest_dir=_mapped_dest(tmp_path),
+    )
+
+    assert summary["raw_total"] == 6
+    assert summary["raw_passed"] == 4
+    # The unseen personas are not clean, so they change neither the threshold nor the draw.
+    assert summary["clean_available"] == 4
+    assert summary["selected"] == 4
 
 
 # --------------------------------------------------------------------------- #
