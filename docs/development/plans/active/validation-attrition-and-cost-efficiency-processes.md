@@ -375,18 +375,48 @@ too — the only place a withdrawn combination's pool survives, since it gets no
 ### Phase 2: the attrition contract and derivation
 **Goal:** Counts and rates, tested, with no rendering.
 
-- [ ] 2.1 — `analysis/utils/attrition_csv.py`: frozen `AttritionRow`, `FIELDNAMES` derived from
+- [x] 2.1 — `analysis/utils/attrition_csv.py`: frozen `AttritionRow`, `FIELDNAMES` derived from
       `fields(...)`, `SCHEMA_VERSION = 1` with an inline "what and why required" comment, named
       remedy strings, `write_*`/`read_*` on the `tidy_csv` primitives.
-- [ ] 2.2 — `validation_attrition/loader.py`: read the `_index.json` + two `_summary.csv` triple;
+- [x] 2.2 — `validation_attrition/loader.py`: read the `_index.json` + two `_summary.csv` triple;
       **completeness gate** — a combination is consumable only if present in all three *and* the
       counts agree; disagreement is a hard error naming both files and the regeneration command.
-- [ ] 2.3 — `validation_attrition/builder.py`: derive both rates per the Definitions, returning
+- [x] 2.3 — `validation_attrition/builder.py`: derive both rates per the Definitions, returning
       `None` (not 0, not inf) at every undefined denominator.
 
 **Files Modified:** the two new modules + `tests/test_validation_attrition_loader.py`,
 `tests/test_validation_attrition_builder.py`.
 **Dependencies:** Phase 1.
+
+#### 2.1–2.3 result — the contract as built
+
+Four files: `analysis/utils/attrition_csv.py` (schema v1, 15 columns),
+`validation_attrition/{__init__,loader,builder}.py` (`__init__` docstring-only), plus the two
+test modules — 39 tests, all passing; `ruff check src/` clean.
+
+- **Columns** (order == `AttritionRow` field order): `slug, country, model, strategy, requested_n,
+  generated, raw_valid, mapped_valid, clean, selected, retention_rate, generation_multiplier,
+  excluded, exclusion_reason, had_surplus`. `model`/`strategy` are carried rather than left to be
+  re-parsed downstream — neither id is `_`-free, so a naive split is wrong — and they are what
+  Phase 3's model × method grid and Phase 5's join key are built from. `exclusion_reason` is text
+  with `""` for "not excluded"; `excluded` is the authoritative flag, never the reason's emptiness.
+- **The drift predicate is `raw_total == validate_raw.n_personas`**, per the Phase 1 measurement.
+  The loader additionally checks `raw_passed == passed` and `mapped_passed == passed`, which are
+  tautological while the index is fresh and stop being so the moment a validator is re-run without
+  re-running the cap. It does **not** compare `raw_total` against `raw_passed` (five live
+  combinations legitimately differ) and does not compare `validate_mapped.n_personas` against
+  anything: that count is the mapped pool, which equals `raw_passed` on all 65 rows but is a
+  mapping-layer relationship rather than part of the gate's contract.
+- **Missing** from a validator roll-up is a skip with a machine-readable reason (`strict` raises);
+  **disagreeing** counts always raise, naming both files and the ordered re-run. Script names in
+  every message come from `registry.get_process(id).script`, not from literals.
+- **Verified against the live grid** (`load_attrition_records` + `build_rows` over the real output
+  base): 65 records, 0 skipped, 7 excluded — and
+  `all_generate_evaluate_random_pick_v2 × ollama_gemma4_e4b` reads `generated=150, clean=9,
+  selected=0, retention_rate=0.06, generation_multiplier=16.666…`, the success criterion's number.
+  Pooled totals: 11616 generated → 8077 clean → 5800 selected.
+- **The builder's document carries no timestamp**, so it is byte-reproducible for a fixed input;
+  the Phase 3 driver stamps `generated_at` if it wants one.
 
 ### Phase 3: the attrition figures and wiring
 **Goal:** F05 becomes a pipeline artifact.
@@ -450,20 +480,27 @@ too — the only place a withdrawn combination's pool survives, since it gets no
 ## Testing Plan
 
 ### Unit Tests
-- [ ] Hand-computed five-stage funnel fixture: known counts in, known `retention_rate` and
+- [x] Hand-computed five-stage funnel fixture: known counts in, known `retention_rate` and
       `generation_multiplier` out (`pytest.approx`, never exact float equality).
-- [ ] Excluded combination (`selected = 0`, `clean = 9`): `generation_multiplier` is populated
+- [x] Excluded combination (`selected = 0`, `clean = 9`): `generation_multiplier` is populated
       (150/9), `retention_rate` is 0.06, nothing divides by zero.
-- [ ] Degenerate `clean = 0`: both ratios are `None`, the row still exists, and nothing is 0 or inf.
-- [ ] `generated = 0`: `retention_rate` is `None`, no `ZeroDivisionError`.
-- [ ] Missing `raw_total` raises, and the message names the re-run command.
-- [ ] Counts disagreeing across `_index.json` and `_summary.csv` raises naming both files.
+- [x] Degenerate `clean = 0` over a non-empty pool: `generation_multiplier` is `None`, the row still
+      exists, and nothing is inf. **Corrected while implementing Phase 2:** this bullet originally
+      read "both ratios are `None`", which contradicts the binding Definitions above —
+      `retention_rate = clean / generated` is `None` only when `generated == 0`, so `0/150` is a
+      measured `0.0`, and it is the strongest finding this artifact can report about a combination
+      (it generated a pool and kept none of it). Reporting it as absent would erase exactly that.
+      Both ratios are `None` only in the `generated = 0` case below.
+- [x] `generated = 0`: both rates are `None`, no `ZeroDivisionError`.
+- [x] Missing `raw_total` raises, and the message names the re-run command.
+- [x] Counts disagreeing across `_index.json` and `_summary.csv` raises naming both files.
 - [ ] Unmatched `model`/`method` in the cost join raises naming the key and both files.
 - [ ] Empty join raises rather than writing an empty CSV.
 - [ ] Unmetered model: `cost_per_usable_persona` is `0.0` and `unmetered` is `true` — never `None`,
       which means absent.
 - [ ] Absent pricing entry raises (distinct from unmetered).
-- [ ] Schema round-trip: empty cell reads back as `None`, never `0.0`.
+- [x] Schema round-trip: empty cell reads back as `None`, never `0.0`. *(Done for the attrition
+      schema in Phase 2; repeat for `cost_csv.py` in Phase 5.)*
 
 ### Integration Tests
 - [ ] End-to-end on a `tmp_path` fixture built through `analysis_output_dir` (never path literals),
