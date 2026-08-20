@@ -93,8 +93,18 @@ consumers + `generation_metadata` + `validation_attrition`:
   `utils/capped_source.resolve_mapped_dir(output_base)`. Both resolvers **raise `FileNotFoundError`
   when their source is absent — there is no fallback** (`generation_metadata` never falls back to
   `01_Raw`; the mapped-file consumers never fall back to `mapping/`), so no downstream task can analyze
-  more than N personas. When fewer than N clean personas exist, `cap_combo` cap-shorts with a loud
-  warning (a visible, clean shortfall); it never fails the batch.
+  more than N personas. Reaching N is a **precondition, not a ceiling**: a combination holding fewer
+  than N clean personas is *excluded* outright — neither output is written, `withdraw_combo` deletes
+  any that an earlier run left behind, the shortfall is logged at WARNING, and the summary carries
+  `excluded: true` + `exclusion_reason` into `population_cap/_index.json`. Its `_mapped/_index.json`
+  entry then reads `synthetic_file: null`, `skipped: true` and that reason — the skip predicate every
+  mapped-file consumer already honours — so the combination is simply absent downstream. The threshold
+  is strict (`clean_available >= n`, boundary inclusive; no tolerance band, no config knob, no
+  override) and is evaluated before the mirror/`force` check on every invocation, so neither a library
+  caller nor a pre-existing mirror can bypass it and an output base capped under the old
+  cap-to-whatever-exists behaviour is cleaned without `force`. The exclusion is a **verdict, not an
+  error**: `mapping/` and the raw sources are never mutated and the CLI exits 0, so the batch survives,
+  the GUI node completes, and the dependents still unlock.
 - **`validation_attrition/`** -- The gate's own report on what it discarded (driven by
   `analyze_validation_attrition.py`, `slugs` dispatch, `depends_on: [population_cap]`). It re-reads
   `population_cap/_index.json` plus the `validate_raw` / `validate_mapped` roll-ups and publishes the
