@@ -106,7 +106,12 @@
         "Grundskoleexamen",
         "Grundskoleutbildning (9-årig)",
         "Grundskoleutbildning (9 år)",
-        "Grundskoleutbildning, 9 år"
+        "Grundskoleutbildning, 9 år",
+        "Realexamen",
+        "Realexamen (intermediate school leaving certificate, older system)",
+        "Realskola (äldre system)",
+        "Grundskolexamen",
+        "Grundskoleutbildning/realexamen (9 år)"
       ],
       "contains": [
         "lower secondary",
@@ -129,7 +134,9 @@
         "Yrkesskola",
         "Handelsskola",
         "Handelsskolutbildning",
-        "Gymnasial utbildning, högst 2 år"
+        "Gymnasial utbildning, högst 2 år",
+        "Handelsutbildning",
+        "Home economics/household school (husmodersskola)"
       ],
       "contains": [
         "upper secondary",
@@ -151,7 +158,8 @@
         "secondary",
         "Komvux",
         "Folkhögskola",
-        "Kommunal vuxenutbildning"
+        "Kommunal vuxenutbildning",
+        "Adult education (voksenutbildning) diploma"
       ],
       "contains": [
         "upper secondary 3",
@@ -248,7 +256,20 @@
         "Förskollärarexamen",
         "Juristexamen",
         "Civilingenjörsexamen (Uppsala/KTH)",
-        "Civilingenjörsexamen (300 hp)"
+        "Civilingenjörsexamen (300 hp)",
+        "Gandidatexamen",
+        "Akademiexamen",
+        "Högre examen",
+        "Avancerad nivå",
+        "Förskollärarutbildning",
+        "Ekonomutbildning",
+        "Ekonomexamen från högskola",
+        "Arbetsterapeututbildning",
+        "Socialarbetarutbildning",
+        "Juridik (juristexamen)",
+        "Kompletterande högre utbildning",
+        "Post-secondary technical education (3+ years)",
+        "Lärarutbildning"
       ],
       "contains": [
         "post-secondary 3",

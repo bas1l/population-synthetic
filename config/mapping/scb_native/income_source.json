@@ -93,7 +93,10 @@
         "Konsultarvoden",
         "Inkomst från egen näringsverksamhet",
         "Inkomst av näringsverksamhet",
-        "Försäljning av konstnärliga verk eller produkter"
+        "Försäljning av konstnärliga verk eller produkter",
+        "Tjänst",
+        "Konsultuppdrag",
+        "Deltidsinkomst"
       ],
       "contains": [
         "wage",
@@ -123,7 +126,8 @@
         "deltidsarbete",
         "konsultverksamhet",
         "firma",
-        "arvode"
+        "arvode",
+        "subcontracting"
       ]
     },
     "Capital": {

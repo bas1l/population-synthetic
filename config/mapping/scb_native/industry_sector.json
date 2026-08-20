@@ -103,7 +103,8 @@
         "Skogsbruk",
         "Fiske",
         "Jord- och skogsbruk",
-        "Agriculture/Forestry/Fishing"
+        "Agriculture/Forestry/Fishing",
+        "Greenhouse and horticulture (trädgårdsnäring)"
       ],
       "contains": [
         "agricultur",
@@ -131,7 +132,8 @@
         "Gruvor och mineralutvinning",
         "Manufacturing/Industry",
         "Industry",
-        "Utvinning av mineral"
+        "Utvinning av mineral",
+        "Life science och läkemedel"
       ],
       "contains": [
         "tillverkning",
@@ -206,7 +208,8 @@
       "equals": [
         "Transport",
         "Transport och magasinering",
-        "Logistik"
+        "Logistik",
+        "Kurir- och budverksamhet (matleverans)"
       ],
       "contains": [
         "transport",
@@ -297,7 +300,20 @@
         "Vetenskaplig och teknisk verksamhet",
         "Verksamhet inom professionell, vetenskaplig och teknisk verksamhet",
         "Affärsmässig tjänsteverksamhet",
-        "Företagstjänster och administration"
+        "Företagstjänster och administration",
+        "Administrativa tjänster",
+        "Customer Service",
+        "Administrative support",
+        "Administrative Support Services",
+        "Administrativa kontorstjänster",
+        "HR och personaladministration",
+        "Cleaning and property services",
+        "Cleaning and facility services",
+        "Säkerhetstjänster",
+        "Office Administration",
+        "Personaladministration",
+        "Security Services",
+        "Rengöring"
       ],
       "contains": [
         "finansiell",
@@ -375,7 +391,9 @@
         "Education",
         "Utbildning",
         "Forskning",
-        "Undervisning"
+        "Undervisning",
+        "Skolväsendet",
+        "Skolväsende"
       ],
       "contains": [
         "utbildning",
@@ -488,7 +506,8 @@
         "studerar",
         "studier",
         "Ej i arbete",
-        "Ej anställd"
+        "Ej anställd",
+        "pensionerad"
       ]
     }
   }

@@ -75,7 +75,16 @@
         "Äga bostad",
         "äga sin bostad",
         "bostad med hypotek",
-        "Hypotek"
+        "Hypotek",
+        "Bostadsägning",
+        "Fastighet",
+        "Parhus",
+        "Eigehus",
+        "hypothek",
+        "Friliggande hus",
+        "Eget bostad",
+        "Egenbostad",
+        "Hus i ägo"
       ],
       "contains": [
         "villa",
@@ -168,7 +177,17 @@
         "Municipal housing",
         "kommunalt boende",
         "Subletting a room as a lodger (inneboende)",
-        "Kommunalt kontrakt/socialt kontrakt via kommunen"
+        "Kommunalt kontrakt/socialt kontrakt via kommunen",
+        "Subsidized housing (bostadsbidrag)",
+        "public housing (allmännyttan)",
+        "Delat boende med kompisar (kollektiv)",
+        "Allmännyttan",
+        "Allmännyttig bostad",
+        "Kommunal bostad",
+        "Subsidized housing",
+        "Delat boende",
+        "Hyrorätt",
+        "studerboende"
       ],
       "contains": [
         "rental",

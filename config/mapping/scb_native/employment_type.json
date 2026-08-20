@@ -187,7 +187,9 @@
         "anställd",
         "anställning",
         "full-time",
-        "heltid"
+        "heltid",
+        "Fast tjänst",
+        "Sysselsatt"
       ],
       "contains": [
         "tillsvidareanställning",
@@ -260,7 +262,8 @@
       "equals": [
         "tillsvidareanställning, deltid",
         "permanent part-time",
-        "deltidsanställd"
+        "deltidsanställd",
+        "Halvtid"
       ],
       "contains": [
         "deltidsanställ",
@@ -310,7 +313,8 @@
       ],
       "equals": [
         "visstidsanställning, heltid",
-        "temporary full-time"
+        "temporary full-time",
+        "Project-based"
       ],
       "contains": [
         "visstidsanställning",
@@ -366,7 +370,9 @@
       "equals": [
         "visstidsanställning, deltid",
         "timanställning",
-        "temporary part-time"
+        "temporary part-time",
+        "studiejobb",
+        "Casual worker"
       ],
       "contains": [
         "timanställ",
@@ -523,7 +529,9 @@
         "none",
         "Volunteer work",
         "voluntary work",
-        "unemployed"
+        "unemployed",
+        "Study grant recipient",
+        "Inte i arbete"
       ],
       "contains": [
         "ej tillämpligt",

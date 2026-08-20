@@ -109,7 +109,17 @@
         "Självständig",
         "Fast anställning",
         "arbetad",
-        "Provanställning"
+        "Provanställning",
+        "Fulltidsanställning",
+        "Praktik",
+        "arbete",
+        "Forvärvsarbetande",
+        "Arbetande i anställning",
+        "Aktivt arbete",
+        "Arbetande (fulltid)",
+        "I anställning",
+        "Projektbaserad anställning",
+        "Vikarie"
       ],
       "contains": [
         "parental leave",
@@ -177,7 +187,13 @@
         "Hushållsansvarig",
         "Hemmafrånvaro",
         "Hemmafrånvarande (av val)",
-        "Arbetsmarknadsåtgärd/praktik via Arbetsförmedlingen"
+        "Arbetsmarknadsåtgärd/praktik via Arbetsförmedlingen",
+        "Deltar i arbetsmarknadsåtgärd",
+        "Participant in labour market program (arbetsmarknadsåtgärd)",
+        "Informal caregiver for family member (anhörigvårdare)",
+        "Labor market programme via Arbetsförmedlingen",
+        "Labour market programme or internship (arbetsmarknadsåtgärd/praktik via Arbetsförmedlingen)",
+        "In a labour-market programme (arbetsmarknadsåtgärd)"
       ],
       "contains": [
         "sick leave",
@@ -200,7 +216,8 @@
         "homemaker",
         "hemmaman",
         "hemarbetande",
-        "hemvårdare"
+        "hemvårdare",
+        "arbetsmarknadsåtgärd"
       ]
     },
     "Student": {
@@ -208,7 +225,8 @@
         "Student",
         "Studerande",
         "Full-time student",
-        "Part-time student"
+        "Part-time student",
+        "Gymnasieelev"
       ],
       "contains": [
         "student",

@@ -173,7 +173,9 @@
         "en mor och en far",
         "pappa_mamma",
         "tvåföräldrige familj",
-        "two biological opposite-sex parents"
+        "two biological opposite-sex parents",
+        "Både föräldrar",
+        "Förälder och förälder"
       ],
       "contains": [
         "biological parents",
@@ -294,7 +296,11 @@
         "Endast mamma",
         "one parent (mother)",
         "Enkel förälder (mamma)",
-        "Ensamstående biologisk mamma"
+        "Ensamstående biologisk mamma",
+        "Divorced parents, lived with mother",
+        "divorced parents (lived with mother)",
+        "divorced parents (living with mother)",
+        "divorced parents (mother primary custodian)"
       ],
       "contains": [
         "single mother",
@@ -337,7 +343,9 @@
         "father and grandfather",
         "father and grandmother",
         "Single-parent household (father)",
-        "Enkel förälder (far)"
+        "Enkel förälder (far)",
+        "Divorced parents, lived with father",
+        "single parent (father)"
       ],
       "contains": [
         "single father",

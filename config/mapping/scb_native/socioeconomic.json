@@ -54,7 +54,8 @@
         "Arbetande fattig",
         "Lägre inkomstskikt",
         "Lägre inkomstskikt i storstadsregion",
-        "Låg individuell inkomst"
+        "Låg individuell inkomst",
+        "Marginalized labor-market participant"
       ],
       "contains": [
         "poverty",
@@ -95,7 +96,10 @@
         "övre arbetsarklass",
         "Arbetsclass",
         "Skilled manual worker",
-        "Lower socioeconomic class"
+        "Lower socioeconomic class",
+        "Arbetande klass",
+        "Skilled manual worker class",
+        "Lägre klass"
       ],
       "contains": [
         "working class",
@@ -204,7 +208,15 @@
         "pensioner class",
         "Teknisk specialistklass",
         "Intermediate non-manual employee",
-        "Småföretagarklass"
+        "Småföretagarklass",
+        "Högutbildad klass",
+        "Teknisk specialist",
+        "Small business owner",
+        "Entrepreneurial Class",
+        "Academic-intellectual class",
+        "Lower salaried public-sector employee class",
+        "Public sector salaried employee",
+        "Technical specialist class"
       ],
       "contains": [
         "middle class",
@@ -281,7 +293,8 @@
         "Höginkomst",
         "high",
         "upper",
-        "Högstatus"
+        "Högstatus",
+        "Välbeställd"
       ],
       "contains": [
         "wealthy",

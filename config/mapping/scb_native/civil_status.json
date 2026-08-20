@@ -45,7 +45,10 @@
         "Förlovad",
         "Ugift",
         "Unmarried",
-        "engaged"
+        "engaged",
+        "ogrift",
+        "Singe",
+        "Engagerad"
       ],
       "contains": [
         "singel",
@@ -79,7 +82,12 @@
         "Civilstånd: Gift",
         "Civilstånd: Giftermål",
         "Sammanboende med barn",
-        "Sammanboende utan barn"
+        "Sammanboende utan barn",
+        "Samsbo",
+        "Sammanlevande",
+        "Sammanboendesituation",
+        "Samregistrerad",
+        "Co-habiter"
       ],
       "contains": [
         "gift",
@@ -104,7 +112,9 @@
         "Skild",
         "Frånskild",
         "Separerad",
-        "Separat"
+        "Separat",
+        "skilsedd",
+        "Separerad under process"
       ],
       "contains": [
         "skild",
