@@ -537,7 +537,12 @@
         "pensionär",
         "pensioner",
         "arbetslös",
-        "unemploy"
+        "unemploy",
+        "retired",
+        "frivilligarbete",
+        "ej anställd",
+        "no employment contract",
+        "no current employment contract"
       ]
     }
   }

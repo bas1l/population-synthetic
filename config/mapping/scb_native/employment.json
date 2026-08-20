@@ -108,7 +108,8 @@
         "consultant",
         "Självständig",
         "Fast anställning",
-        "arbetad"
+        "arbetad",
+        "Provanställning"
       ],
       "contains": [
         "parental leave",
@@ -175,7 +176,8 @@
         "Husmor",
         "Hushållsansvarig",
         "Hemmafrånvaro",
-        "Hemmafrånvarande (av val)"
+        "Hemmafrånvarande (av val)",
+        "Arbetsmarknadsåtgärd/praktik via Arbetsförmedlingen"
       ],
       "contains": [
         "sick leave",

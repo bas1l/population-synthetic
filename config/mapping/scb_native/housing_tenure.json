@@ -166,7 +166,9 @@
         "Socialbostad",
         "Municipal housing tenant",
         "Municipal housing",
-        "kommunalt boende"
+        "kommunalt boende",
+        "Subletting a room as a lodger (inneboende)",
+        "Kommunalt kontrakt/socialt kontrakt via kommunen"
       ],
       "contains": [
         "rental",

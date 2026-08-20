@@ -103,7 +103,10 @@
         "Realskoleexamen",
         "Förgymnasial utbildning, 9 (10) år",
         "Grundskoleutbildning",
-        "Grundskoleexamen"
+        "Grundskoleexamen",
+        "Grundskoleutbildning (9-årig)",
+        "Grundskoleutbildning (9 år)",
+        "Grundskoleutbildning, 9 år"
       ],
       "contains": [
         "lower secondary",
@@ -239,7 +242,13 @@
         "Civilekonomexamen",
         "Högskola (3 år)",
         "Högskola (3 år eller mer)",
-        "Högskola 3 år eller mer"
+        "Högskola 3 år eller mer",
+        "Lärarexamen (grundskollärare)",
+        "Grundskollärarexamen/Lärarexamen",
+        "Förskollärarexamen",
+        "Juristexamen",
+        "Civilingenjörsexamen (Uppsala/KTH)",
+        "Civilingenjörsexamen (300 hp)"
       ],
       "contains": [
         "post-secondary 3",

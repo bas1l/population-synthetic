@@ -50,7 +50,11 @@
         "Fattig",
         "Lågklass",
         "Socioekonomisk underklass",
-        "Underklassen"
+        "Underklassen",
+        "Arbetande fattig",
+        "Lägre inkomstskikt",
+        "Lägre inkomstskikt i storstadsregion",
+        "Låg individuell inkomst"
       ],
       "contains": [
         "poverty",
@@ -89,7 +93,9 @@
         "Working-class",
         "arbetsarklass",
         "övre arbetsarklass",
-        "Arbetsclass"
+        "Arbetsclass",
+        "Skilled manual worker",
+        "Lower socioeconomic class"
       ],
       "contains": [
         "working class",
@@ -195,7 +201,10 @@
         "Mellanstand",
         "Mittelklasse",
         "Mitten",
-        "pensioner class"
+        "pensioner class",
+        "Teknisk specialistklass",
+        "Intermediate non-manual employee",
+        "Småföretagarklass"
       ],
       "contains": [
         "middle class",

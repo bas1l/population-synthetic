@@ -130,7 +130,8 @@
         "Energi och miljö",
         "Gruvor och mineralutvinning",
         "Manufacturing/Industry",
-        "Industry"
+        "Industry",
+        "Utvinning av mineral"
       ],
       "contains": [
         "tillverkning",
@@ -295,7 +296,8 @@
         "Professionell, vetenskaplig och teknisk verksamhet",
         "Vetenskaplig och teknisk verksamhet",
         "Verksamhet inom professionell, vetenskaplig och teknisk verksamhet",
-        "Affärsmässig tjänsteverksamhet"
+        "Affärsmässig tjänsteverksamhet",
+        "Företagstjänster och administration"
       ],
       "contains": [
         "finansiell",
@@ -322,7 +324,19 @@
         "accounting",
         "revision",
         "redovisning",
-        "audit"
+        "audit",
+        "bemanning",
+        "personaluthyrning",
+        "personaltjänst",
+        "callcenter",
+        "kundtjänst",
+        "städbransch",
+        "städning",
+        "cleaning service",
+        "bevakning",
+        "kontorsservice",
+        "konferensservice",
+        "administrative and support"
       ]
     },
     "Public Administration": {
@@ -427,7 +441,9 @@
         "Kultur, nöje och fritid",
         "Personliga tjänster",
         "Övriga tjänster",
-        "Other Services"
+        "Other Services",
+        "Annan serviceverksamhet",
+        "Other service activities"
       ],
       "contains": [
         "kultur",

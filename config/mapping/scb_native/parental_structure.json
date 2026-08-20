@@ -233,7 +233,8 @@
         "Mamma med bonuspappa/styvpappa",
         "Mor och flera styvföräldrar över tid",
         "Mor och stefar",
-        "En forfar med stegförälder"
+        "En forfar med stegförälder",
+        "Biologisk mamma och styvpappa"
       ],
       "contains": [
         "mother and stepfather",
@@ -292,7 +293,8 @@
         "Endast mor",
         "Endast mamma",
         "one parent (mother)",
-        "Enkel förälder (mamma)"
+        "Enkel förälder (mamma)",
+        "Ensamstående biologisk mamma"
       ],
       "contains": [
         "single mother",
@@ -304,7 +306,19 @@
         "ensamstående mamma",
         "widowed mother",
         "madre sola",
-        "single mum"
+        "single mum",
+        "mainly with mother",
+        "primarily with mother",
+        "primarily living with mother",
+        "primarily by mother",
+        "primarily biological mother",
+        "huvudsakligen hos mamman"
+      ],
+      "none_of": [
+        "stepfather",
+        "styvfar",
+        "styvpappa",
+        "bonusfamilj"
       ]
     },
     "Single Father": {
@@ -335,7 +349,15 @@
         "ensamstående pappa",
         "widowed father",
         "padre solo",
-        "single dad"
+        "single dad",
+        "mainly with father",
+        "primarily living with father",
+        "primarily biological father"
+      ],
+      "none_of": [
+        "stepmother",
+        "styvmor",
+        "bonusfamilj"
       ]
     },
     "Other Than Parents": {
