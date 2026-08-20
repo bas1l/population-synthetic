@@ -45,9 +45,12 @@ def test_cap_smaller_than_len_exact_count_and_order():
     assert set(ids) <= {ind["id"] for ind in pop["individuals"]}
 
 
-def test_cap_equal_to_len_returns_full():
+def test_cap_equal_to_len_returns_full(capsys):
     pop = _population(15)
     result = subsample_population(pop, 15, seed=0)
+    # The requested size is met exactly -- nothing to draw, and nothing to warn
+    # about: the shortfall warning belongs to available < n alone.
+    assert "WARNING" not in capsys.readouterr().out
     assert len(result["individuals"]) == 15
     assert result["metadata"]["n"] == 15
     assert [i["id"] for i in result["individuals"]] == list(range(15))
