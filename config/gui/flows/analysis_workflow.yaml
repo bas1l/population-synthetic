@@ -129,8 +129,13 @@ tasks:
     options: {}
     depends_on: [population_cap]
 
-  generation_metadata:            # independent -- isolated node (slugs dispatch)
-    enabled: false
+  generation_metadata:            # slugs dispatch -- LLM telemetry roll-up over the capped mirror
+    enabled: true                 # ENABLED because cost_efficiency depends on its per-country
+                                  # summary CSV. A disabled dependency is never marked complete,
+                                  # so its dependents are dep-blocked and silently never run --
+                                  # leaving this false would ship a cost_efficiency node that
+                                  # cannot fire. An operator who has already run it can tick
+                                  # `bypass` here instead of turning the node off.
     bypass: false                 # assume already done -> unlock dependents, run nothing
     supports_force: true          # node shows a Force checkbox -> --force
     force: false
@@ -186,6 +191,21 @@ tasks:
       no-charts: false            # --no-charts (flag when true; charts default ON)
       output-base:                # --output-base (blank = script default)
     depends_on: [population_cap]
+
+  cost_efficiency:                # slugs dispatch -- joins accuracy x cost, no LLM work
+    enabled: true
+    bypass: false                 # assume already done -> unlock dependents, run nothing
+    supports_force: true          # node shows a Force checkbox -> --force (rewrite a country)
+    force: false
+    options:
+      no-charts: false            # --no-charts (flag when true; charts default ON)
+      output-base:                # --output-base (blank = script default)
+    # Three declared inputs, all of them on-disk artifacts of other tasks: the fidelity
+    # ranking's accuracy, the gate's attrition counts (the only artifact carrying the
+    # WITHDRAWN combinations), and the generation-metadata telemetry roll-up. The plotted
+    # cost itself is read from the full 01_Raw pool by this task, not from
+    # generation_metadata's capped-mirror figures.
+    depends_on: [model_ranking, generation_metadata, validation_attrition]
 
 selection:                        # shared by ALL tasks in the chain
   models: [claude_haiku, claude_sonnet, ollama_deepseek_r1_14b, 

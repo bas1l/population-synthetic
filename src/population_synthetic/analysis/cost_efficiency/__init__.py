@@ -22,4 +22,18 @@ contract untouched.
 Module boundaries (see each module's docstring for the exact contract):
 - ``raw_cost.py`` -- per-combination cost over the full ``01_Raw`` pool, priced
   through ``config/analysis/model_pricing.yaml``, with pricing provenance.
+- ``loader.py`` -- reads the fidelity ranking, the validation-attrition contract and
+  the generation-metadata summary, reconstructs the join key through
+  ``manifest_loader.axis_slug``, reconciles the three row sets, and returns one typed
+  record per joined combination plus the withdrawn ones.
+- ``builder.py`` -- pure derivation of ``cost_per_usable_persona`` and the JSON/CSV
+  documents. No composite score is computed here or anywhere else.
+- ``charts.py`` -- the accuracy-vs-cost scatter, returning an unsaved ``Figure``.
+
+The three inputs legitimately hold **different row sets**: the attrition CSV records
+every combination the gate saw, withdrawals included, while a withdrawn combination
+has neither a fidelity report nor a capped mirror and therefore appears in neither of
+the other two. The output row set is the attrition set minus the withdrawals, the
+withdrawals are reported (with the money they cost) rather than inner-joined away, and
+any other difference between the three raises.
 """

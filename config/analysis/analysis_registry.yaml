@@ -296,3 +296,36 @@ processes:
     folder: "validation_attrition"
     script: "scripts/analyze/analyze_validation_attrition.py"
     dispatch: "slugs"
+
+  cost_efficiency:
+    label: "Cost Efficiency (fidelity vs generation cost)"
+    description: >
+      Joins the fidelity ranking's accuracy with the LLM cost of the runs that produced
+      it, per country x model x method, and emits a tidy CSV, a JSON report and an
+      accuracy-vs-cost scatter. THE DENOMINATOR IS THE POINT: generation_metadata totals
+      its cost over the capped mirror -- the ~100 personas each combination was
+      subsampled down to -- whereas this task totals the same per-call telemetry over the
+      FULL generated pool in 01_Raw, because the discarded personas were paid for. The
+      two bases differ by up to 4.8x on the live grid, and the gap is largest exactly
+      where retention is worst, so a capped figure flatters the models that wasted the
+      most tokens. The basis travels as a CSV column and is printed on the figure. The
+      join key is the run slug, reconstructed from generation_metadata's slug-less
+      model + method columns through manifest_loader.axis_slug and verified on every
+      read against the slug model_ranking publishes for the same pair; any unmatched key
+      on either side raises naming the key and both files, and an empty join raises
+      rather than writing an empty CSV. The three inputs legitimately disagree on
+      membership -- validation_attrition records every combination the gate saw,
+      including the withdrawals, while a withdrawn combination has neither a fidelity
+      report nor a capped mirror -- so the output row set is the attrition set MINUS the
+      withdrawals, and each withdrawn combination is reported with the money it cost and
+      the personas it kept rather than being inner-joined away. NO composite score is
+      computed: about a third of the model axis is unmetered (priced {in: 0, out: 0}, the
+      local ollama_* models), so accuracy-per-dollar is undefined for it, and a composite
+      would bury an exchange rate between fidelity and dollars inside arithmetic no
+      reader can inspect. Unmetered is not free either -- local inference has a real cost
+      the pricing config does not model -- so the flag is a data column and the scatter
+      draws those models in a labelled zero-cost band on a symlog x-axis, the only
+      scaling that can show a measured zero beside a four-order-of-magnitude spread.
+    folder: "cost_efficiency"
+    script: "scripts/analyze/analyze_cost_efficiency.py"
+    dispatch: "slugs"

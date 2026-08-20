@@ -48,6 +48,7 @@ __all__ = [
     "parse_bool",
     "parse_int",
     "parse_optional_float",
+    "parse_optional_int",
     "stale_schema_error",
     "write_rows",
 ]
@@ -140,6 +141,29 @@ def parse_optional_float(
         raise _cell_error(
             path=path, unit=unit, column=column, raw=raw,
             complaint="neither empty (undefined) nor a number", remedy=remedy,
+        ) from exc
+
+
+def parse_optional_int(
+    raw: str, *, column: str, path: Path, unit: str, remedy: str = ""
+) -> int | None:
+    """Parse an optional count: empty -> ``None`` (undefined), never ``0``.
+
+    The integer counterpart of :func:`parse_optional_float`, for a count that a
+    producer may legitimately not have observed at all -- a token total over a run
+    that reported no token telemetry, say. ``0`` would claim the run consumed no
+    tokens, which is a measurement; the empty cell claims nothing. Counts stay
+    integers on the way back in, so an absent count and a present one never differ in
+    type as well as in value (guide 02 sect. 3).
+    """
+    if raw == "":
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise _cell_error(
+            path=path, unit=unit, column=column, raw=raw,
+            complaint="neither empty (undefined) nor an integer count", remedy=remedy,
         ) from exc
 
 

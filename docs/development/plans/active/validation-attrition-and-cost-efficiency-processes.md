@@ -81,20 +81,25 @@ wrote. F05 and F26 cannot be, because no process writes them:
       `03_Analysis/validation_attrition/`.
 - [x] The attrition CSV has one row per combination in `population_cap/_index.json` — **65 rows for
       `swedish_02`, not 58** — because the withdrawn combinations are the point of the figure.
-- [ ] For each of the 7 withdrawn combinations the row reads `excluded=true`, a non-empty
+- [x] For each of the 7 withdrawn combinations the row reads `excluded=true`, a non-empty
       `exclusion_reason`, `selected=0`, `generation_multiplier` populated, and
-      `cost_per_usable_persona` computable.
+      `cost_per_usable_persona` computable. *(The first four are the attrition CSV row; the
+      cost is published in `{country}_cost_efficiency.json`'s `withdrawn_combinations`
+      rather than in the cost CSV, whose row grain is the combinations that have **both**
+      accuracy and cost. See the Phase 5 result block.)*
 - [x] `retention_rate` for `all_generate_evaluate_random_pick_v2 × ollama_gemma4_e4b` equals
       `9/150 = 0.06`, matching `validate_mapped/_summary.csv → pass_rate_pct = 6.0`.
-- [ ] `python scripts/analyze/analyze_cost_efficiency.py --country swedish_02` writes
+- [x] `python scripts/analyze/analyze_cost_efficiency.py --country swedish_02` writes
       `{country}_cost_efficiency.{csv,json}` and the scatter under `03_Analysis/cost_efficiency/`.
-- [ ] Every row of the cost join is matched on both sides; an unmatched `model`/`method` on either
+- [x] Every row of the cost join is matched on both sides; an unmatched `model`/`method` on either
       side raises, naming the offending key and both files. An empty join is never a valid result.
-- [ ] The cost figure and the JSON both state the cost basis verbatim; the basis is a CSV **column**,
+- [x] The cost figure and the JSON both state the cost basis verbatim; the basis is a CSV **column**,
       not only prose.
-- [ ] `pytest` passes, including a hand-computed funnel fixture and an unmatched-key fixture that
-      must raise.
-- [ ] `ruff check src/` clean.
+- [x] `pytest` passes, including a hand-computed funnel fixture and an unmatched-key fixture that
+      must raise. *(1846 passed; the one failure is the pre-existing
+      `test_axis_facet_defaults.py` case Phases 3 and 4 also recorded, tripped by the
+      uncommitted `generate_parallel.yaml` edits and unrelated to this feature.)*
+- [x] `ruff check src/` clean.
 
 ## Definitions
 
@@ -551,19 +556,124 @@ arithmetic is therefore identical to the shipped process's; only the denominator
 ### Phase 5: the cost join, figure and wiring
 **Goal:** F26 becomes a pipeline artifact.
 
-- [ ] 5.1 — `analysis/utils/cost_csv.py` (schema, incl. `cost_basis` and `unmetered` columns).
-- [ ] 5.2 — `cost_efficiency/loader.py`: reconstruct the slug via `axis_slug`, join accuracy + cost
+- [x] 5.1 — `analysis/utils/cost_csv.py` (schema, incl. `cost_basis` and `unmetered` columns).
+- [x] 5.2 — `cost_efficiency/loader.py`: reconstruct the slug via `axis_slug`, join accuracy + cost
       + the attrition CSV, **assert one-to-one and raise on any unmatched key on either side**,
       naming the key and both files. An empty join is never valid.
-- [ ] 5.3 — `cost_efficiency/builder.py`: `cost_per_usable_persona`; no composite "value" score.
-- [ ] 5.4 — `cost_efficiency/charts.py`: symlog x-axis with the labelled unmetered band; the cost
+- [x] 5.3 — `cost_efficiency/builder.py`: `cost_per_usable_persona`; no composite "value" score.
+- [x] 5.4 — `cost_efficiency/charts.py`: symlog x-axis with the labelled unmetered band; the cost
       basis printed on the figure.
-- [ ] 5.5 — `scripts/analyze/analyze_cost_efficiency.py`; registry entry; workflow task with
+- [x] 5.5 — `scripts/analyze/analyze_cost_efficiency.py`; registry entry; workflow task with
       `depends_on: [model_ranking, generation_metadata, validation_attrition]`.
 
 **Files Modified:** the new modules and script, both config files,
-`tests/test_analysis_registry.py`, `tests/test_cost_efficiency_*.py`.
+`tests/test_analysis_registry.py`, `tests/test_cost_efficiency_*.py`. Plus, as built:
+`src/population_synthetic/analysis/utils/tidy_csv.py` (one added cell codec,
+`parse_optional_int`), `src/population_synthetic/analysis/cost_efficiency/__init__.py`
+(the package docstring now names all five modules and the membership rule),
+`tests/test_workflow_state.py` (the shipped-DAG ordering assertions),
+`tests/test_cost_csv.py` and `tests/_cost_efficiency_fixtures.py`.
 **Dependencies:** Phases 3 and 4.
+
+#### 5.1-5.5 result -- the join, the figure and the wiring as built
+
+Four new modules (`analysis/utils/cost_csv.py`, `cost_efficiency/{loader,builder,charts}.py`)
+plus `scripts/analyze/analyze_cost_efficiency.py`, the registry entry, the workflow task, one
+shared fixture module and four test modules -- **70 new tests, all passing**; `ruff check src/`
+clean; full suite **1846 passed**, with the same single pre-existing
+`test_axis_facet_defaults.py` failure Phases 3 and 4 recorded (uncommitted
+`generate_parallel.yaml` edits, unrelated).
+
+- **Columns** (order == `CostRow` field order, schema v1, 22 columns): `slug, country, model,
+  strategy, overall_tv_similarity, n_scored, generated, clean, selected,
+  generation_multiplier, n_calls, input_tokens, output_tokens, total_tokens, total_cost_usd,
+  cost_per_usable_persona, cost_basis, unmetered, has_token_data, price_in, price_out,
+  pricing_flags`. Every ratio ships beside the counts it is a quotient of.
+  `generation_multiplier` is **read from the attrition contract, not recomputed** -- it is the
+  same quotient over the same two counts, and deriving it twice is how two artifacts come to
+  disagree about one combination. It is carried for interpretation only: per Phase 4's
+  measurement it is emphatically *not* the correction factor, because the cost here is
+  measured over the generated pool directly.
+- **`parse_optional_int` was added to `utils/tidy_csv.py`** -- the integer counterpart of the
+  existing `parse_optional_float`, so a token total that no call reported reads back as `None`
+  rather than as a fabricated `0`. It is a cell codec, which is exactly what that module holds.
+- **The membership rule, stated in the schema, in the JSON and in the tests.** The output row
+  set is *the attrition row set minus the withdrawals*, and it must equal the `model_ranking`
+  and `generation_metadata` row sets **exactly**. On the live grid that is 65 - 7 = 58 = 58 =
+  58, published as a `membership` block so the row count is auditable rather than merely
+  asserted. Four failure modes raise, each naming the key and both files: a survivor missing
+  from either file; a scored combination the attrition CSV records as *withdrawn* (a
+  contradiction -- a withdrawal has no capped mapped file to score); a scored combination
+  absent from the attrition CSV entirely; and an empty join, which would otherwise publish an
+  empty cost figure that reads as a measured absence of cost.
+- **A withdrawal is reported with the money it cost.** It cannot be plotted -- it has no
+  accuracy score -- so it travels in `withdrawn_combinations` (slug, reason, generated, clean,
+  `total_cost_usd`, `unmetered`), in `withdrawn_totals`, in the figure's caption and in the
+  driver's stdout. On `swedish_02` all seven are `ollama_*`, so their metered spend is **0.00
+  USD across 0 metered combinations** over 1150 generated personas that yielded 157 clean ones:
+  the withdrawals cost GPU time, not money, and the artifact now says which.
+- **The reconstruction is verified, not trusted.** `generation_metadata`'s summary has no slug
+  column, so its key is rebuilt from `model` + `method` through `manifest_loader.axis_slug`.
+  The *same* rebuild is applied to the `model_ranking` CSV, which publishes its own slug, and a
+  disagreement raises -- a live proof, executed on every read and on this very data, that the
+  rule reproduces the producer's slug. Reconstructed keys are also asserted unique within each
+  file, so the join cannot silently become many-to-one.
+- **One integrity check the plan did not name, added because it is free.**
+  `generation_metadata`'s `has_token_data` is measured over the capped mirror, which is copied
+  out of the `01_Raw` pool; `True` there with no telemetry in the pool is therefore impossible
+  and raises. The converse -- the pool reports tokens and the mirror does not -- is legitimate
+  and is not raised.
+- **No composite score, asserted rather than merely omitted.** The document declares
+  `non_composite` with its reason, and two tests walk every column name and every JSON key to
+  assert that no `*_per_dollar` / `value_score` / `efficiency_score` field ever reappears.
+- **The chart.** Symlog x with a shaded, labelled zero-cost band; the left limit stops exactly
+  at the band edge so the symlog axis' negative logarithmic branch (a tick reading `-10^-4` on
+  a cost axis) can never appear, and no tick labels a position *inside* the band, which holds
+  one value. Colour is the method (ColorBrewer Dark2, qualitative, ordered in the legend by
+  `strategy_complexity_order`), marker shape is the hosting class, and every point is labelled
+  with its model id. The thirteen zero-cost points are spread horizontally *within* the band by
+  fidelity rank -- otherwise they stack on one vertical line and their labels are unreadable --
+  and the band's own on-figure text says the spread is legibility rather than measurement, and
+  that every point in it is a **measured 0.00 USD**. Every caveat printed is read from the
+  document (`cost_basis`, `unmetered_note`, `non_composite_reason`, both withdrawal totals),
+  never written as a literal, so the figure and the table cannot disagree.
+- **Verified live**: `analyze_cost_efficiency.py --country swedish_02` wrote
+  `swedish_02_cost_efficiency.{csv,json}` (58 rows) and `swedish_02_cost_vs_fidelity.png/.svg`
+  under `03_Analysis/cost_efficiency/`. Re-running reproduces the CSV and the JSON
+  byte-for-byte; SVG is not byte-stable and no such claim is made.
+
+##### The measurement
+
+| Quantity | Value |
+|---|---|
+| Joined combinations | 58 of 65 (7 withdrawn) |
+| Pooled pool | 10,466 generated -> 7,920 clean -> 5,800 selected |
+| Metered subtotal | 45 combinations, **606.61 USD** over 6,028 clean personas = **0.1006 USD / usable persona** |
+| Unmetered | 13 combinations, a measured 0.0 -- not free |
+| No token data | 0 combinations |
+| Withdrawn | 7 combinations, 1,150 generated -> 157 clean, **0.00 USD** (all seven local) |
+
+Phase 4's headline case reproduces exactly through the join:
+`..._random_pick_v2_openrouter_qwen35_flash` reads **27.28434 USD over 549 generated**, 132
+clean, **0.2067 USD / usable persona**. The grid's accuracy maximum,
+`openrouter_kimi_k3 x all_generate_evaluate_random_pick_v2` at **0.841979**, is also its most
+expensive point at **0.7171 USD / usable persona** -- against the cheapest metered point,
+`openrouter_gpt_oss_120b x all_pick_v2` at **0.000408 USD** for **0.512** fidelity. That is a
+**1,758x** cost span across a 0.33 fidelity span, which is the trade-off the figure exists to
+put in front of a reader and deliberately does not resolve into a score. The best local model,
+`ollama_mistral_nemo_12b x all_generate_evaluate_random_pick_v2` at **0.754234**, sits at a
+measured zero on the metered axis.
+
+##### The disabled-dependency decision
+
+`generation_metadata` was `enabled: false` in `analysis_workflow.yaml`. A disabled task is
+never added to `completed_tasks`, so every dependent is `SKIPPED_DEP` and never runs --
+shipping `cost_efficiency` against a disabled upstream would have shipped a node that cannot
+fire, silently. **It is now `enabled: true`**, with the reason recorded inline beside the flag.
+That is the honest wiring: its summary CSV is a declared input, it has already run
+successfully for this grid (Phase 0.3), and it performs no LLM work. An operator who has
+already run it ticks `bypass` on that node rather than turning it off, which unlocks the
+dependent without re-running anything.
 
 ### Phase 6: documentation and restaging
 **Goal:** The deck stops carrying hand-built figures.
@@ -594,22 +704,28 @@ arithmetic is therefore identical to the shipped process's; only the denominator
 - [x] `generated = 0`: both rates are `None`, no `ZeroDivisionError`.
 - [x] Missing `raw_total` raises, and the message names the re-run command.
 - [x] Counts disagreeing across `_index.json` and `_summary.csv` raises naming both files.
-- [ ] Unmatched `model`/`method` in the cost join raises naming the key and both files.
-- [ ] Empty join raises rather than writing an empty CSV.
-- [ ] Unmetered model: `cost_per_usable_persona` is `0.0` and `unmetered` is `true` — never `None`,
+- [x] Unmatched `model`/`method` in the cost join raises naming the key and both files.
+- [x] Empty join raises rather than writing an empty CSV.
+- [x] Unmetered model: `cost_per_usable_persona` is `0.0` and `unmetered` is `true` — never `None`,
       which means absent.
 - [x] Absent pricing entry raises (distinct from unmetered). *(Done in Phase 4 at the raw-cost
       boundary: it raises before any telemetry is read, so a thin pool cannot mask a config gap.
       Phase 5 inherits it through the loader.)*
 - [x] Schema round-trip: empty cell reads back as `None`, never `0.0`. *(Done for the attrition
-      schema in Phase 2; repeat for `cost_csv.py` in Phase 5.)*
+      schema in Phase 2; repeated for `cost_csv.py` in Phase 5, where the same test also pins
+      the converse — an unmetered model's **measured** `0.0` must not come back as `None`.)*
 
 ### Integration Tests
-- [ ] End-to-end on a `tmp_path` fixture built through `analysis_output_dir` (never path literals),
+- [x] End-to-end on a `tmp_path` fixture built through `analysis_output_dir` (never path literals),
       mirroring `test_realism_ranking_e2e.py`: gate artifacts → attrition → cost, asserting the
-      expected files appear and key numbers match.
-- [ ] Both CLIs invoked **by subprocess** (the flags and argument resolution at the edge are the
-      point), asserting `returncode == 0`.
+      expected files appear and key numbers match. *(Built in
+      `tests/_cost_efficiency_fixtures.py`. It starts from the **attrition contract** rather
+      than from the gate's raw `_index.json`: that contract is `cost_efficiency`'s declared
+      input, and the gate → attrition half already has its own end-to-end coverage from
+      Phase 2. Running the gate here would test that half twice and this one no better.)*
+- [x] Both CLIs invoked **by subprocess** (the flags and argument resolution at the edge are the
+      point), asserting `returncode == 0`. *(Plus the negative case: a broken join must exit 1
+      with the reconciliation message on stderr.)*
 - [x] `--no-charts` asserted as a real absence of `*.png` **and** `*.svg`; a second run asserts both
       formats appear per figure.
 - [x] A populated heatmap cell is **not** rendered as missing — the specific regression ADR
