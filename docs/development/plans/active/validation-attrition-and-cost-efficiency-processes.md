@@ -678,12 +678,57 @@ dependent without re-running anything.
 ### Phase 6: documentation and restaging
 **Goal:** The deck stops carrying hand-built figures.
 
-- [ ] 6.1 — `CLAUDE.md`: both processes in the analysis-layer paragraph and the DAG description.
-- [ ] 6.2 — `docs/architecture/sub-packages.md` + `commands.md`.
-- [ ] 6.3 — Update the manuscript folder's `figures selection/SOURCES.md` to move F05 and F26 from
+- [x] 6.1 — `CLAUDE.md`: both processes in the analysis-layer paragraph and the DAG description.
+- [x] 6.2 — `docs/architecture/sub-packages.md` + `commands.md`.
+- [x] 6.3 — Update the manuscript folder's `figures selection/SOURCES.md` to move F05 and F26 from
       "hand-made" to the pipeline-backed table, with their new source paths.
 
-**Files Modified:** docs only. **Dependencies:** Phase 5.
+**Files Modified:** `CLAUDE.md`, `docs/architecture/sub-packages.md`,
+`docs/architecture/commands.md`, the new ADR
+`docs/development/decisions/2026-08-20-cost-denominator-and-reconstructed-join-key.md`, and — outside
+the repository — `.../40_llm-population-fidelity-benchmark/figures selection/SOURCES.md`.
+**Dependencies:** Phase 5.
+
+#### 6.1-6.3 result — what the docs now say
+
+- **`CLAUDE.md`.** `validation_attrition/` is inserted immediately after `population_cap/` in the
+  analysis-layer paragraph (it re-reads the gate), `cost_efficiency/` immediately after
+  `generation_metadata/` (it re-reads that telemetry over a different denominator). The registry/DAG
+  paragraph no longer says `realism_ranking` is the *only* chained node: `validation_attrition` is
+  named as hanging directly off the gate and as the one process whose row grain includes the
+  withdrawals, and `cost_efficiency` as the second node whose upstreams are analysis nodes, with its
+  three declared inputs and the reason `generation_metadata` had to be flipped to `enabled: true`
+  (a disabled task never enters `completed_tasks`, so every dependent sits at `SKIPPED_DEP`).
+- **`docs/architecture/sub-packages.md`.** Two bullets in the existing per-process format, placed to
+  match: `validation_attrition/` after `population_cap/`, `cost_efficiency/` after
+  `realism_ranking/`. The header's package list and its one-line DAG sketch both name them. The
+  `utils/` sub-list gains one bullet for `attrition_csv.py` / `cost_csv.py`, which is where the
+  absent-vs-zero property and the "`generation_multiplier` is read, not recomputed" seam are stated.
+- **`docs/architecture/commands.md`.** Two rows in the registry table (appended, matching the
+  registry YAML's own order), two commented invocation blocks in the `bash` catalog, and one new
+  prose subsection, *Attrition and cost: two processes that carry their denominator*, sized to match
+  the existing *Persona realism: two tasks, one seam*.
+- **The ADR**, `2026-08-20-cost-denominator-and-reconstructed-join-key.md`, in the house
+  context/decision/consequences shape of the three existing ones. Decision 1 is the cost denominator,
+  carrying the measured 4.758× table and the finding that kills option (b) twice over — undefined for
+  withdrawals, and wrong by ~15% in a retention-correlated direction where it *is* defined. Decision 2
+  is the reconstructed join key: why the honest alternative (a `slug` column on
+  `generation_metadata`'s summary) was rejected, and why reconstruction is acceptable *here
+  specifically* — one of the three inputs publishes both spellings, so the rule is proved against
+  live data on every read rather than trusted.
+- **`SOURCES.md`** (outside git). F05 → `validation_attrition/swedish_02_mapped_validity_grid.*` and
+  F26 → `cost_efficiency/swedish_02_cost_vs_fidelity.*` now sit in the pipeline-backed table; the
+  pending-plan paragraph is replaced by a dated note recording what each staged image currently gets
+  wrong (F05's two pre-full-N percentages and its three withdrawn-not-thin cells; F26's superseded
+  8-model sweep). `swedish_02_attrition_funnel.*` is added to *artifacts that exist but are not
+  staged* — it is new and has no F-number, and inventing one would put a number in the deck's
+  vocabulary that no slide uses. **No image was copied**: the file says so explicitly and names the
+  run order for the operator who does it.
+
+One staleness was found and **not** fixed, because it belongs to another branch's plan: the
+`population_cap/` bullet in `sub-packages.md` still ends "When fewer than N clean personas exist,
+`cap_combo` cap-shorts with a loud warning ... it never fails the batch", which the full-N rule
+replaced with outright exclusion. It is adjacent to, but not part of, this feature.
 
 ---
 
@@ -744,12 +789,14 @@ dependent without re-running anything.
 
 ## Documentation Plan
 
-- [ ] `CLAUDE.md` — both processes in the analysis-layer description and the DAG.
-- [ ] `docs/architecture/sub-packages.md`, `docs/architecture/commands.md`.
-- [ ] ADR for the two decisions that will otherwise be re-litigated: the reconstructed join key
+- [x] `CLAUDE.md` — both processes in the analysis-layer description and the DAG.
+- [x] `docs/architecture/sub-packages.md`, `docs/architecture/commands.md`.
+- [x] ADR for the two decisions that will otherwise be re-litigated: the reconstructed join key
       (rather than adding a slug column upstream), and the cost-denominator choice
       (`05` §9: record context / decision / consequences).
-- [ ] `figures selection/SOURCES.md` in the manuscript folder.
+      *(`docs/development/decisions/2026-08-20-cost-denominator-and-reconstructed-join-key.md`.)*
+- [x] `figures selection/SOURCES.md` in the manuscript folder. *(Provenance only — restaging the
+      PNGs themselves stays the separate operator copy step this plan scoped out.)*
 
 ---
 
@@ -800,6 +847,7 @@ dependent without re-running anything.
 - Supersedes: `docs/development/plans/pending/pipeline-model-method-cost-and-attrition-figures.md`
 - Prerequisite: `docs/development/plans/active/enforce-full-n-cap-exclusion.md`
 - Shipped predecessor: `docs/development/plans/completed/model-method-tv-heatmap.md`
+- ADR written by this plan: `docs/development/decisions/2026-08-20-cost-denominator-and-reconstructed-join-key.md`
 - ADRs: `docs/development/decisions/2026-08-07-persona-realism-per-combination-split.md`,
   `2026-08-07-per-clash-contract-and-severity-drivers.md`,
   `2026-08-12-self-contained-typicality-axis.md`

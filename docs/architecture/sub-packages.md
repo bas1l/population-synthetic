@@ -52,11 +52,12 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
   [Aborted and resumed runs](../development/aborted-and-resumed-runs.md).
 
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
-(`validate_raw/`, `mapping/`, `validate_mapped/`, `population_cap/`, `fidelity/`,
-`multivariate_fidelity/`, `model_ranking/`, `method_significance/`, `real_population_stats/`,
-`generation_metadata/`, plus a shared `utils/`). The DAG is a **validation gate**:
+(`validate_raw/`, `mapping/`, `validate_mapped/`, `population_cap/`, `validation_attrition/`,
+`fidelity/`, `multivariate_fidelity/`, `model_ranking/`, `method_significance/`,
+`real_population_stats/`, `generation_metadata/`, `cost_efficiency/`, plus a shared `utils/`). The
+DAG is a **validation gate**:
 `validate_raw` (root) -> `mapping` -> `validate_mapped` -> `population_cap` -> the mapped-file
-consumers + `generation_metadata`:
+consumers + `generation_metadata` + `validation_attrition`:
 
 - **`validate_raw/`** -- The analysis-DAG **root**, a non-destructive validation gate. It
   atomistically checks each combo's `01_Raw/{slug}/persona_*` and writes one CSV per combo
@@ -94,6 +95,27 @@ consumers + `generation_metadata`:
   `01_Raw`; the mapped-file consumers never fall back to `mapping/`), so no downstream task can analyze
   more than N personas. When fewer than N clean personas exist, `cap_combo` cap-shorts with a loud
   warning (a visible, clean shortfall); it never fails the batch.
+- **`validation_attrition/`** -- The gate's own report on what it discarded (driven by
+  `analyze_validation_attrition.py`, `slugs` dispatch, `depends_on: [population_cap]`). It re-reads
+  `population_cap/_index.json` plus the `validate_raw` / `validate_mapped` roll-ups and publishes the
+  five-stage per-combination funnel -- generated (`CapSummary.raw_total`, the pool globbed at cap
+  time and the only observation of it independent of the validators) -> raw-valid -> mapped-valid ->
+  clean -> selected -- together with the two rates derived from it: `retention_rate` (clean /
+  generated) and `generation_multiplier` (generated / clean, personas generated per *usable* persona,
+  deliberately **not** denominated on `selected`, which is zero for every withdrawn combination).
+  `loader.py` reads the three sources and gates on them agreeing (a missing roll-up is a skip with a
+  machine-readable reason, `--strict` raises; disagreeing counts always raise, naming both files and
+  the ordered re-run); `builder.py` derives both rates, returning `None` -- never `0`, never `inf` --
+  at each undefined denominator; `charts.py` returns unsaved Figures for the normalised funnel (a
+  four-way partition of the pool, printing `N=` on every bar) and the model × method
+  validation-survival grid. Its row grain is **every** combination the gate recorded, **including the
+  ones the full-N rule withdrew**: a withdrawn combination has no capped mirror, no capped mapped
+  file and no `generation_metadata` row, so this is the only artifact in the analysis layer on which
+  it appears at all. The grid therefore draws **four** cell states rather than three -- a measured
+  rate, a measured rate that was *withdrawn* (on the ramp plus a hatch, never greyed and never zeroed),
+  a combination recorded with an empty pool, and a pair never generated. It validates nothing, caps
+  nothing and performs no LLM work; the schema of its tidy CSV lives in `utils/attrition_csv.py`,
+  which is also `cost_efficiency`'s declared input.
 - **`fidelity/`** -- Statistical evaluation and charting (population quality vs the real population):
   - `StatisticalEvaluator` (`evaluator.py`) computes per-field chi-squared tests and total variation distances
   - `charts` generates bar-chart and radar-chart PNGs via matplotlib
@@ -188,12 +210,50 @@ consumers + `generation_metadata`:
   is in the annotations, never in the hue); the axis does **not** replace
   `axis_b.dispersion_contrast`, which stays the tested contrast.
   It performs **no LLM work** — re-running it is free and touches no verdict cache.
+- **`cost_efficiency/`** -- The accuracy-vs-cost join (driven by `analyze_cost_efficiency.py`,
+  `slugs` dispatch, `depends_on: [model_ranking, generation_metadata, validation_attrition]`) -- the
+  second analysis node whose upstreams are other analysis nodes rather than the gate. **The
+  denominator is the point:** `generation_metadata` totals cost over the capped mirror, i.e. the ~100
+  personas each combination was subsampled down to, whereas `raw_cost.py` totals the same
+  `llm_interactions.jsonl` telemetry over the **full generated pool in `01_Raw`**, because the
+  discarded personas were paid for. The two bases differ by up to 4.8× on the live grid and the gap
+  is largest exactly where retention is worst, so a capped figure flatters the models that wasted the
+  most tokens; the basis (`generated_pool_01_raw`) is a field on every record, a CSV column and a
+  caption on the figure. `raw_cost.py` deliberately re-implements the `model_pricing.yaml` accessor
+  rather than importing `generation_metadata.pricing`, whose package `__init__` would pull
+  `utils/capped_source` back into the import graph of the one module written to avoid the mirror; it
+  asserts `(persona_id, call_index)` uniqueness across the pool (the resume protocol's guarantee,
+  enforced rather than documented) and keeps four states apart -- absent telemetry, *unmetered*
+  (`{in: 0, out: 0}`, a **measured** `0.0`), priced, and unpriceable (no config row, which raises
+  before any telemetry is read). `loader.py` reconstructs the run slug from `generation_metadata`'s
+  slug-less `model` + `method` columns through `manifest_loader.axis_slug` and verifies it on every
+  read against the slug `model_ranking` publishes for the same pair; the output row set is the
+  attrition row set **minus** the withdrawals and must equal the other two row sets exactly, with any
+  unmatched key, any scored-but-withdrawn contradiction and any empty join raising and naming both
+  files. `builder.py` derives `cost_per_usable_persona` (cost over the generated pool ÷ clean) and
+  **no composite score** -- about a third of the model axis is unmetered, so accuracy-per-dollar is
+  undefined for it and a composite would bury an exchange rate between fidelity and dollars inside
+  arithmetic no reader can inspect; two tests walk every column and JSON key to keep it that way.
+  Unmetered is not free either (local inference has a real cost the pricing config does not model),
+  so `charts.py` draws those combinations in a labelled zero-cost band on a symlog x-axis, the only
+  scaling that shows a measured zero beside a four-order-of-magnitude spread. A withdrawn combination
+  cannot be plotted -- it has no accuracy score -- so it is reported with the money it cost in
+  `withdrawn_combinations` rather than inner-joined away. Schema in `utils/cost_csv.py`; see the
+  [ADR](../development/decisions/2026-08-20-cost-denominator-and-reconstructed-join-key.md) for both
+  load-bearing decisions.
 - **`utils/`** -- cross-process shared infra:
   - `realism_csv.py` -- the per-persona tidy schema shared by the two persona-realism tasks
     (writer used by the producer, reader by the consumer, one definition). Keeps *absent* distinct
     from *zero* (a persona with no typicality reads back `None`, never `0.0`), round-trips counts as
     `int`, and validates on read: a missing column, an unparseable count, or a row count disagreeing
     with the report's `n_personas` raises, naming the file.
+  - `attrition_csv.py` / `cost_csv.py` -- the two tidy per-combination schemas of the attrition and
+    cost processes (frozen row dataclass, `FIELDNAMES` derived from `fields(...)`, `SCHEMA_VERSION`,
+    writer + validating reader over the `tidy_csv.py` cell codecs). Every ratio column ships beside
+    the counts it is a quotient of, and an empty cell reads back as `None` while an unmetered model's
+    measured `0.0` reads back as `0.0` -- absent and zero never collapse. `attrition_csv.py` is the
+    seam between the two: `cost_efficiency` reads `generation_multiplier` from it rather than
+    recomputing the same quotient over the same two counts.
   - `registry.py` -- the **analysis registry** accessor: loads/validates
     `config/analysis/analysis_registry.yaml` (the single source of truth mapping each process's
     canonical id → label/description/folder/script/dispatch) and exposes `AnalysisProcess`,
