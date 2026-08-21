@@ -87,9 +87,9 @@ def _by_ms(combos):
 # --------------------------------------------------------------------------- #
 
 
-def test_default_config_loads_with_significant_only_mode():
+def test_default_config_loads_with_vs_most_complex_mode():
     cfg = load_comparison_config()
-    assert cfg["pairs_mode"] == "significant-only"
+    assert cfg["pairs_mode"] == "vs-most-complex"
     assert cfg["pairs_mode"] in cfg["allowed_pairs_modes"]
     assert cfg["star_thresholds"]
     assert isinstance(cfg["ns_symbol"], str)
@@ -218,8 +218,11 @@ def test_block_shape_and_metadata():
     assert block["pairs_mode"] == "adjacent"
     assert set(block["panels"]) == set(ATTRS) | {"overall"}
     panel = block["panels"]["trend_attr"]
-    assert set(panel) >= {"n_models", "n_dropped", "means", "omnibus", "pairwise_p", "insufficient_n"}
-    assert panel["omnibus"]["test"] == "friedman"
+    assert set(panel) >= {"n_models", "n_dropped", "means", "omnibus", "pairwise_p",
+                          "pairwise_detail", "omnibus_friedman", "pairwise_p_nemenyi",
+                          "correction", "insufficient_n"}
+    assert panel["omnibus"]["test"] == "rm_anova"
+    assert panel["omnibus_friedman"]["test"] == "friedman"
 
 
 def test_category_panels_carry_level_count_from_config():
@@ -275,7 +278,7 @@ def test_nan_cell_drops_model_from_that_panel_only():
     assert shift["n_models"] == len(MODELS) - 1
 
 
-def test_friedman_p_matches_direct_scipy():
+def test_friedman_retained_and_matches_direct_scipy():
     by_ms, models, methods = _by_ms(_full_grid())
     block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
     panel = block["panels"]["trend_attr"]
@@ -286,15 +289,16 @@ def test_friedman_p_matches_direct_scipy():
         dtype=float,
     )
     chi2, p = stats.friedmanchisquare(*matrix.T)
-    assert panel["omnibus"]["statistic"] == pytest.approx(float(chi2))
-    assert panel["omnibus"]["p"] == pytest.approx(float(p))
-    assert 0.0 <= panel["omnibus"]["kendall_w"] <= 1.0
+    friedman = panel["omnibus_friedman"]
+    assert friedman["statistic"] == pytest.approx(float(chi2))
+    assert friedman["p"] == pytest.approx(float(p))
+    assert 0.0 <= friedman["kendall_w"] <= 1.0
 
 
 def test_nemenyi_pairwise_symmetric_and_keyed_by_methods():
     by_ms, models, methods = _by_ms(_full_grid())
     block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
-    pairwise = block["panels"]["trend_attr"]["pairwise_p"]
+    pairwise = block["panels"]["trend_attr"]["pairwise_p_nemenyi"]
     # k=5 methods -> C(5,2)=10 unordered pairs.
     assert len(pairwise) == 10
     for a, b in zip(methods[:-1], methods[1:]):

@@ -132,7 +132,11 @@ def test_the_shipped_pricing_config_loads(tmp_path: Path) -> None:
     pricing = load_raw_pricing()
     assert pricing.provenance.currency
     assert pricing.rates
-    assert pricing.is_unmetered("ollama_gemma4_e4b") is True
+    # The four local models in the live grid now carry a rented-equivalent rate
+    # (what the same model costs to rent per token), so they are no longer
+    # unmetered. The untouched, un-researched locals still are.
+    assert pricing.is_unmetered("ollama_gemma4_e4b") is False
+    assert pricing.is_unmetered("ollama_qwen3_14b") is True
     assert pricing.is_unmetered("openrouter_qwen35_flash") is False
 
 

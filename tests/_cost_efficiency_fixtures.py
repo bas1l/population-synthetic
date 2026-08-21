@@ -36,7 +36,10 @@ COUNTRY = "swedish_02"
 #: A hosted (metered) model and a local (unmetered) one, so every test set covers both
 #: sides of the distinction the figure is built around.
 METERED_MODEL = "claude_haiku"
-UNMETERED_MODEL = "ollama_llama31_8b"
+# A local model still priced {in: 0, out: 0} in the shipped config. The four
+# locals in the live swedish_02 grid now carry a rented-equivalent rate, so
+# they are metered; this one is deliberately one that does not.
+UNMETERED_MODEL = "ollama_qwen3_14b"
 
 SIMPLE_STRATEGY = "all_pick_v2"
 COMPLEX_STRATEGY = "all_generate_pick_v2"

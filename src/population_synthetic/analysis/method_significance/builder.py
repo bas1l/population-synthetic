@@ -54,6 +54,8 @@ from population_synthetic.analysis.utils.stats_tests import (
     nemenyi_pairwise,
     nemenyi_posthoc,
     page_trend_test,
+    paired_t_pairwise,
+    rm_anova_within,
 )
 
 # Config-driven method-comparison figure settings (bracketed-pair mode + star
@@ -186,6 +188,9 @@ def resolve_pairs(
     * ``adjacent`` -- consecutive complexity steps ``(m_i, m_{i+1})``.
     * ``all`` -- every unordered pair.
     * ``vs-baseline`` -- every method vs the simplest (``methods[0]``).
+    * ``vs-most-complex`` -- every method vs the most complex (``methods[-1]``),
+      the reference-vs-rest family. Four comparisons on a five-method ladder
+      rather than ten, and the one that matches the question the ladder poses.
     * ``significant-only`` -- **every** unordered pair (not just adjacent) filtered
       to those whose Nemenyi p (from *pairwise_p*) is ``<= alpha``; requires both
       *pairwise_p* (a ``"a|b" -> p`` map) and *alpha* (the config-derived
@@ -206,6 +211,11 @@ def resolve_pairs(
             return []
         base = methods[0]
         return [(base, m) for m in methods[1:]]
+    if pairs_mode == "vs-most-complex":
+        if not methods:
+            return []
+        ref = methods[-1]
+        return [(m, ref) for m in methods[:-1]]
     if pairs_mode == "significant-only":
         if pairwise_p is None:
             raise ValueError("pairs_mode 'significant-only' needs pairwise_p to select pairs")
@@ -222,7 +232,7 @@ def resolve_pairs(
         return selected
     raise ValueError(
         f"Unknown pairs_mode {pairs_mode!r}; expected one of "
-        "'adjacent', 'all', 'vs-baseline', 'significant-only'."
+        "'adjacent', 'all', 'vs-baseline', 'vs-most-complex', 'significant-only'."
     )
 
 
@@ -607,23 +617,49 @@ def _method_panel(
     }
 
     if n < 2 or k < 2:
-        omnibus = {"test": "friedman", "statistic": None, "p": None, "p_bh": None,
-                   "kendall_w": None,
+        omnibus = {"test": "rm_anova", "statistic": None, "p": None, "p_bh": None,
+                   "df1": None, "df2": None, "partial_eta_sq": None,
                    "note": f"need >=2 methods and >=2 complete models, got {k} methods / {n} models"}
         pairwise_p: dict[str, float] = {}
+        pairwise_detail: dict[str, Any] = {}
+        omnibus_friedman: dict[str, Any] = {"test": "friedman", "statistic": None,
+                                            "p": None, "kendall_w": None}
+        pairwise_p_nemenyi: dict[str, float] = {}
     else:
-        friedman = friedman_test(matrix)
-        omnibus = {"test": "friedman", "statistic": friedman.get("chi2"),
-                   "p": friedman.get("p"), "p_bh": None,
-                   "kendall_w": friedman.get("kendalls_w")}
-        if "note" in friedman:
-            omnibus["note"] = friedman["note"]
-        nemenyi = nemenyi_pairwise(matrix, labels=methods)
+        # Headline: the value-based test. Friedman ranks within a block, so a
+        # treatment winning every block by a wide margin is indistinguishable
+        # from one winning every block by a hair -- on this grid that cost the
+        # two evaluation-based methods their contrast entirely (Nemenyi p=0.53
+        # on a 10/10 sweep worth +0.25 mean TV). The rank-based pair is kept
+        # alongside, under its own keys, so the earlier numbers stay recoverable.
+        anova = rm_anova_within(matrix)
+        omnibus = {"test": "rm_anova", "statistic": anova.get("F"),
+                   "p": anova.get("p"), "p_bh": None,
+                   "df1": anova.get("df1"), "df2": anova.get("df2"),
+                   "partial_eta_sq": anova.get("partial_eta_sq")}
+        if "note" in anova:
+            omnibus["note"] = anova["note"]
+
+        paired = paired_t_pairwise(matrix, labels=methods)
         pairwise_p = {}
+        pairwise_detail: dict[str, Any] = {}
+        for key, rec in paired.get("pairs", {}).items():
+            pairwise_detail[key] = rec
+            if rec.get("p_holm") is not None:
+                pairwise_p[key] = float(rec["p_holm"])
+
+        friedman = friedman_test(matrix)
+        omnibus_friedman = {"test": "friedman", "statistic": friedman.get("chi2"),
+                            "p": friedman.get("p"),
+                            "kendall_w": friedman.get("kendalls_w")}
+        if "note" in friedman:
+            omnibus_friedman["note"] = friedman["note"]
+        nemenyi = nemenyi_pairwise(matrix, labels=methods)
+        pairwise_p_nemenyi: dict[str, float] = {}
         p_matrix = nemenyi.get("p_matrix")
         if p_matrix is not None:
             for i, j in combinations(range(k), 2):
-                pairwise_p[_pair_key(methods[i], methods[j])] = float(p_matrix[i][j])
+                pairwise_p_nemenyi[_pair_key(methods[i], methods[j])] = float(p_matrix[i][j])
 
     panel: dict[str, Any] = {
         "n_models": n,
@@ -633,6 +669,10 @@ def _method_panel(
         "per_model": per_model,
         "omnibus": omnibus,
         "pairwise_p": pairwise_p,
+        "pairwise_detail": pairwise_detail,
+        "omnibus_friedman": omnibus_friedman,
+        "pairwise_p_nemenyi": pairwise_p_nemenyi,
+        "correction": {"method": "holm", "scope": "all-pairs"},
         "insufficient_n": n < _MIN_COMPLETE_MODELS,
     }
     if n < _MIN_COMPLETE_MODELS:
