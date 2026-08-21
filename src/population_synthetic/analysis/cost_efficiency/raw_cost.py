@@ -108,6 +108,13 @@ INTERACTION_FILENAMES = ("llm_interactions.jsonl", "llm_interactions.json")
 #: (the capped mirror) differs from this one by up to 5.5x.
 COST_BASIS = "generated_pool_01_raw"
 
+#: Config declaring per-persona costs measured on a comparable API for models whose
+#: own run telemetry cannot be priced. See the JSON's own description for why the
+#: claude_* runs qualify.
+CALIBRATION_CONFIG_PATH = (
+    PROJECT_ROOT / "config" / "analysis" / "cost_efficiency" / "cost_calibration.json"
+)
+
 #: The pricing config. Same file ``generation_metadata`` reads; see the module
 #: docstring for why it is parsed here rather than imported.
 PRICING_PATH = PROJECT_ROOT / "config" / "analysis" / "model_pricing.yaml"
@@ -515,11 +522,61 @@ def load_telemetry_floor(path: str | Path = TELEMETRY_CONFIG_PATH) -> int:
     return floor
 
 
+def load_cost_calibration(path: str | Path = CALIBRATION_CONFIG_PATH) -> dict[str, Any]:
+    """Per-persona calibrated costs, from config (fail-fast).
+
+    Returns the parsed document. Raises :class:`FileNotFoundError` when absent and
+    :class:`ValueError` when it lacks ``cost_basis`` or ``models`` -- a calibrated
+    figure that cannot name its own basis must never reach a row, because the whole
+    point of the basis is that this number is not a measurement of the run.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Cost-calibration config not found: {path}. Expected "
+            "config/analysis/cost_efficiency/cost_calibration.json."
+        )
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = json.load(fh)
+    if not isinstance(raw, dict) or not raw.get("cost_basis") or not isinstance(raw.get("models"), dict):
+        raise ValueError(
+            f"Cost-calibration config {path} must be an object carrying a non-empty "
+            "'cost_basis' and a 'models' mapping."
+        )
+    return raw
+
+
+def calibrated_persona_cost(model_id: str, strategy_id: str,
+                            calibration: dict[str, Any]) -> tuple[float, str] | None:
+    """``(usd_per_persona, cost_basis)`` for this cell, or ``None`` when uncalibrated.
+
+    Absence is the normal case -- almost every model prices from its own telemetry --
+    so this returns ``None`` rather than raising. A model that IS listed but lacks
+    this method raises: a partial calibration silently pricing four methods and
+    dropping the fifth is the kind of gap that reads downstream as "this cell had no
+    cost" when in fact nobody measured it.
+    """
+    entry = calibration["models"].get(model_id)
+    if entry is None:
+        return None
+    methods = entry.get("methods") or {}
+    row = methods.get(strategy_id)
+    if row is None:
+        raise ValueError(
+            f"Model {model_id!r} is calibrated but has no entry for method {strategy_id!r} "
+            f"(has: {sorted(methods)}). Add it or remove the model from the calibration."
+        )
+    return float(row["usd_per_persona"]), str(calibration["cost_basis"])
+
+
 def raw_cost_for_slug(
     output_base: Path | str,
     slug: str,
     model_id: str,
     pricing: RawPricing,
+    *,
+    strategy_id: str | None = None,
+    calibration: dict[str, Any] | None = None,
 ) -> RawCostTotals:
     """Total one combination's LLM cost over its full ``01_Raw`` pool.
 
@@ -647,9 +704,23 @@ def raw_cost_for_slug(
             )
             has_token_data = False
 
-    if not has_token_data:
+    # Exception path: a model whose own telemetry cannot be priced, but for which a
+    # per-persona cost was measured on a comparable API. Scaled by the pool this
+    # combination actually generated, and stamped with the calibration's own basis so
+    # it can never be summed with measured spend as though it were the same quantity.
+    calibrated: tuple[float, str] | None = None
+    if not has_token_data and calibration is not None and strategy_id is not None:
+        calibrated = calibrated_persona_cost(model_id, strategy_id, calibration)
+
+    if calibrated is not None:
+        per_persona, basis = calibrated
+        total_cost_usd = per_persona * len(persona_dirs)
+        cost_basis = basis
+    elif not has_token_data:
         total_cost_usd = None
+        cost_basis = COST_BASIS
     else:
+        cost_basis = COST_BASIS
         cost = (input_tokens or 0) * price_in / _PER_MILLION
         cost += (output_tokens or 0) * price_out / _PER_MILLION
         if cache_read_tokens or cache_creation_tokens:
@@ -661,7 +732,7 @@ def raw_cost_for_slug(
     return RawCostTotals(
         slug=slug,
         model=model_id,
-        cost_basis=COST_BASIS,
+        cost_basis=cost_basis,
         n_personas=len(persona_dirs),
         n_personas_with_interactions=n_with_interactions,
         n_personas_with_tokens=n_with_tokens,

@@ -94,6 +94,7 @@ from typing import Any, Mapping, Sequence
 from population_synthetic.analysis.cost_efficiency.raw_cost import (
     RawCostTotals,
     RawPricing,
+    load_cost_calibration,
     load_raw_pricing,
     raw_cost_for_slug,
 )
@@ -553,6 +554,8 @@ def load_cost_records(
     """
     sources = resolve_sources(output_base, country)
     pricing = load_raw_pricing() if pricing is None else pricing
+    # Loaded once at the boundary and passed down, never re-read per combination.
+    calibration = load_cost_calibration()
 
     attrition_rows = read_attrition_csv(sources.attrition)
     foreign = sorted({row.country for row in attrition_rows} - {country})
@@ -620,7 +623,8 @@ def load_cost_records(
             strategy=by_slug[slug].strategy,
             accuracy=accuracy[slug],
             attrition=by_slug[slug],
-            cost=raw_cost_for_slug(sources.output_base, slug, by_slug[slug].model, pricing),
+            cost=raw_cost_for_slug(sources.output_base, slug, by_slug[slug].model, pricing,
+                                   strategy_id=by_slug[slug].strategy, calibration=calibration),
             capped_has_token_data=telemetry[slug],
         )
         for slug in sorted(expected_slugs)
@@ -655,7 +659,8 @@ def load_cost_records(
             reason=by_slug[slug].exclusion_reason,
             generated=by_slug[slug].generated,
             clean=by_slug[slug].clean,
-            cost=raw_cost_for_slug(sources.output_base, slug, by_slug[slug].model, pricing),
+            cost=raw_cost_for_slug(sources.output_base, slug, by_slug[slug].model, pricing,
+                                   strategy_id=by_slug[slug].strategy, calibration=calibration),
         )
         for slug in sorted(withdrawn_slugs)
     ]
