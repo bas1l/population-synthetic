@@ -7,6 +7,18 @@
 # These figures are a static, dated snapshot -- not fetched live. Verify the
 # rows flagged [VERIFY] before using cost figures in a publication, and confirm
 # list-vs-effective pricing for the rows marked "effective/discounted".
+#
+# `observed_date` dates the bulk snapshot. Rows added later carry their own
+# inline [verified YYYY-MM-DD] tag; an untagged row was observed on that bulk
+# date and nothing here re-verifies it, so the two must not be conflated.
+#
+# Two pricing BASES coexist here and must not be read as the same quantity:
+#   billed            -- what the provider charges us. Every hosted row.
+#   rented-equivalent -- what the same model would cost to rent per token, used for
+#                        models we run on our own GPUs and are billed nothing for.
+#                        Tagged [rented-equivalent YYYY-MM-DD] on every such row.
+# A rented-equivalent figure is an estimate of a counterfactual, not a measurement
+# of a transaction. Do not sum the two into one "total spend" without saying so.
 observed_date: "2026-07-29"
 source: "OpenRouter model pages + platform.claude.com pricing (see plan appendix)"
 currency: "USD_per_1M_tokens"
@@ -40,20 +52,42 @@ models:
   gemini_flash:             {in: 0.30,  out: 2.50}    # google/gemini-2.5-flash (OpenRouter)
   openrouter_deepseek_v4:      {in: 0.435, out: 0.87}    # deepseek/deepseek-v4-pro [effective/discounted]
   openrouter_deepseek_v4_flash: {in: 0.14, out: 0.28}    # deepseek/deepseek-v4-flash
+  openrouter_fable_5:          {in: 10.00, out: 50.00}   # anthropic/claude-fable-5 [verified 2026-08-14]
   openrouter_gemini_flash_lite: {in: 0.10, out: 0.40}    # google/gemini-2.5-flash-lite
   openrouter_glm_52:           {in: 0.739, out: 2.323}   # z-ai/glm-5.2 [effective/discounted]
+  openrouter_gpt56_sol:        {in: 5.00,  out: 30.00}   # openai/gpt-5.6-sol [verified 2026-08-14]
   openrouter_gpt_oss_120b:     {in: 0.037, out: 0.17}    # openai/gpt-oss-120b
+  openrouter_kimi_k3:          {in: 2.80,  out: 14.00}   # moonshotai/kimi-k3 [verified 2026-08-14]
   openrouter_mistral_medium:   {in: 1.50,  out: 7.50}    # mistralai/mistral-medium-3-5
   openrouter_nemotron3_super:  {in: 0.085, out: 0.40}    # nvidia/nemotron-3-super-120b-a12b
+  openrouter_opus_5:           {in: 5.00,  out: 25.00}   # anthropic/claude-opus-5 [verified 2026-08-14]
+  openrouter_haiku_45:         {in: 1.00,  out: 5.00}    # anthropic/claude-haiku-4.5 [verified 2026-08-21]
+  openrouter_sonnet_5:         {in: 2.00,  out: 10.00}   # anthropic/claude-sonnet-5 [verified 2026-08-21]
   openrouter_qwen35_flash:     {in: 0.065, out: 0.26}    # qwen/qwen3.5-flash-02-23
   openrouter_qwen37_max:       {in: 1.475, out: 4.425}   # qwen/qwen3.7-max [effective/discounted]
-  # --- local models: no API cost ---
-  ollama_deepseek_r1_14b:   {in: 0, out: 0}
-  ollama_gemma2_9b:         {in: 0, out: 0}
-  ollama_gemma4_e4b:        {in: 0, out: 0}
-  ollama_llama31_8b:        {in: 0, out: 0}
-  ollama_llama32_3b:        {in: 0, out: 0}
-  ollama_llama33_70b:       {in: 0, out: 0}
-  ollama_lucie_7b:          {in: 0, out: 0}
-  ollama_mistral_nemo_12b:  {in: 0, out: 0}
-  ollama_qwen3_14b:         {in: 0, out: 0}
+  # --- local models: priced by RENTED EQUIVALENT, not by what we were billed ---
+  # We are billed nothing for these: they run on our own GPUs. A zero rate said so
+  # honestly but made every local run free on the cost axis, which is the one place
+  # the cheap-vs-good comparison actually lives -- so a zero there is not neutral,
+  # it decides the argument. These rows now carry what the SAME model costs to rent
+  # per token from a hosted provider, observed 2026-08-21.
+  #
+  # Two caveats that apply to every row below, and are why each is tagged:
+  #  - QUANTISATION. We run Ollama q4_K_M (4-bit). Every hosted price here is fp8 or
+  #    bf16, i.e. a higher-precision model than the one that produced our results.
+  #    The proxy therefore prices a BETTER model than we ran; the bias is systematic
+  #    and upward, so a local model's true cost advantage is if anything understated.
+  #  - This is a rent-equivalent, not a measured local cost. The defensible local
+  #    figure is $/GPU-hour divided by measured tokens/s per (model x card); nobody
+  #    publishes throughput for these models on consumer cards, so it must be measured.
+  ollama_deepseek_r1_14b:   {in: 0.18, out: 0.18}  # deepseek-r1-distill-qwen-14b, Together AI [rented-equivalent 2026-08-21] [q4-run-priced-at-fp8] [VERIFY] no live OpenRouter endpoint exists; single confirmable source
+  ollama_gemma4_e4b:        {in: 0.02, out: 0.10}  # google/gemma-4-E4B-it, DeepInfra [rented-equivalent 2026-08-21] [q4-run-priced-at-bf16] [single-provider] not on OpenRouter; one provider worldwide
+  ollama_llama31_8b:        {in: 0.05, out: 0.08}  # meta-llama/llama-3.1-8b-instruct, median of 5 OpenRouter providers (range in 0.02-0.22, out 0.04-0.287) [rented-equivalent 2026-08-21] [q4-run-priced-at-fp8]
+  ollama_mistral_nemo_12b:  {in: 0.02, out: 0.03}  # mistralai/mistral-nemo, DeepInfra fp8 and Mistral's own API agree [rented-equivalent 2026-08-21] [q4-run-priced-at-fp8]
+  # Not in any current grid and not researched. A zero here is an ABSENCE of a
+  # researched rate, not a claim that the model is free -- price it before use.
+  ollama_gemma2_9b:         {in: 0, out: 0}   # [unresearched]
+  ollama_llama32_3b:        {in: 0, out: 0}   # [unresearched]
+  ollama_llama33_70b:       {in: 0, out: 0}   # [unresearched]
+  ollama_lucie_7b:          {in: 0, out: 0}   # [unresearched]
+  ollama_qwen3_14b:         {in: 0, out: 0}   # [unresearched]
