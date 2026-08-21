@@ -128,6 +128,31 @@ def _linthresh(costs: Sequence[float]) -> float:
     return min(positive) * _LINTHRESH_FRACTION
 
 
+def _rented_equivalent_note(entries: Sequence[Mapping[str, Any]]) -> list[str] | None:
+    """Caption line naming the models priced by rented equivalent, or ``None``.
+
+    A rented-equivalent rate estimates a counterfactual -- what the same model
+    would cost to rent per token -- rather than measuring a transaction, and it
+    prices an fp8/bf16 build while a local run is 4-bit quantised. Both facts are
+    already columns on the row (the pricing flags); this lifts them onto the
+    figure, because the figure travels without the table.
+    """
+    flagged = sorted({
+        str(entry["model"])
+        for entry in entries
+        for flag in (entry["cost"].get("pricing_flags") or ())
+        if str(flag).startswith("rented-equivalent")
+    })
+    if not flagged:
+        return None
+    return [
+        f"{len(flagged)} model(s) are priced by RENTED EQUIVALENT, not by what was billed: "
+        f"{', '.join(flagged)}. They run locally and are billed nothing; the rate is what "
+        f"the same model costs to rent per token, for an fp8/bf16 build while the run was "
+        f"4-bit quantised -- so the proxy prices a better model than was used.",
+    ]
+
+
 def _caption(
     document: Mapping[str, Any],
     *,
@@ -148,11 +173,14 @@ def _caption(
         f"validity gates). y = overall_tv_similarity over n_scored personas. "
         f"{n_drawn} combination(s) drawn; pooled {totals['generated']} generated -> "
         f"{totals['clean']} clean. The x-axis is logarithmic outside the shaded band and "
-        f"linear inside it; every point inside the band cost a measured 0.00 USD and is "
-        f"spread horizontally for legibility only.",
+        f"linear inside it"
+        + ("; every point inside the band cost a measured 0.00 USD and is spread "
+           "horizontally for legibility only." if n_unmetered else
+           ". No combination is unmetered on this grid, so the band is empty."),
         f"Metered subtotal: {metered['n_combinations']} combination(s), "
         f"{metered['total_cost_usd']:.2f} USD over {metered['clean']} clean personas. "
         f"{n_unmetered} combination(s) are unmetered. {document['unmetered_note']}",
+        *(_rented_equivalent_note(document['combinations']) or []),
     ]
     if n_no_cost:
         lines.append(
@@ -310,13 +338,18 @@ def plot_cost_vs_accuracy(
     ax.set_axisbelow(True)
 
     n_unmetered = sum(1 for entry in entries if entry["cost"]["unmetered"])
-    ax.annotate(
-        f"unmetered (priced 0/0), n={n_unmetered}\nevery point here is a measured 0.00 USD\n"
-        "horizontal position inside the band is\nspread for legibility, not measured",
-        xy=(0.0, 1.0), xycoords=("data", "axes fraction"),
-        xytext=(0, -8), textcoords="offset points",
-        ha="center", va="top", fontsize=7.0, color="#555555", zorder=2,
-    )
+    # Only label the band when something is in it. Every local model in the live
+    # grid now carries a rented-equivalent rate, so the band is routinely empty --
+    # and a label reading "every point here is a measured 0.00 USD" over an empty
+    # band asserts something about points that are not there.
+    if n_unmetered:
+        ax.annotate(
+            f"unmetered (priced 0/0), n={n_unmetered}\nevery point here is a measured 0.00 USD\n"
+            "horizontal position inside the band is\nspread for legibility, not measured",
+            xy=(0.0, 1.0), xycoords=("data", "axes fraction"),
+            xytext=(0, -8), textcoords="offset points",
+            ha="center", va="top", fontsize=7.0, color="#555555", zorder=2,
+        )
 
     method_handles = [
         Line2D([], [], linestyle="none", marker="o", markersize=7,

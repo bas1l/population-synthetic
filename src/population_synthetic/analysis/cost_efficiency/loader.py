@@ -631,7 +631,13 @@ def load_cost_records(
         # reported tokens" cannot be true while "the pool reported tokens" is false. The
         # reverse is legitimate and interesting (the discarded personas carried the only
         # telemetry), and is reported by the builder rather than raised.
-        if record.capped_has_token_data and not record.cost.has_token_data:
+        # One legitimate way the two can disagree: the pool DID report counts, and
+        # raw_cost rejected them as implausible (a provider that does not account
+        # usage still writes a token field). That is a deliberate downgrade to
+        # absent, not staleness, and it carries its own reason -- so it must not be
+        # read as a contradiction between the two artifacts.
+        if (record.capped_has_token_data and not record.cost.has_token_data
+                and record.cost.implausible_telemetry is None):
             raise ValueError(
                 f"Combination {record.slug!r}: {sources.telemetry} reports "
                 f"{_TELEMETRY_TOKEN_FLAG_COLUMN}=True over the capped mirror, but no LLM call "

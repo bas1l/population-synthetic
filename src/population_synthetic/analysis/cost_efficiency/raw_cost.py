@@ -85,6 +85,13 @@ __all__ = [
 #: structural constant of the pipeline layout, not a tunable value. Declared locally,
 #: as ``generation_metadata/__init__.py`` and ``scripts/analyze/cap_populations.py``
 #: both do -- there is no shared accessor for it.
+#: Config declaring the token-telemetry plausibility floor. A literal here would
+#: be a tuning constant hiding in code; the JSON carries the measurement that
+#: justifies the number and the reason it exists.
+TELEMETRY_CONFIG_PATH = (
+    PROJECT_ROOT / "config" / "analysis" / "cost_efficiency" / "telemetry.json"
+)
+
 RAW_STAGE_DIR = "01_Raw"
 
 #: Combo subdirectories holding one persona each.
@@ -234,6 +241,10 @@ class RawCostTotals:
     #: True when any persona reported prompt or completion tokens -- the same
     #: predicate ``generation_metadata`` publishes per combo. Gates the cost.
     has_token_data: bool
+    #: Why the telemetry was rejected as implausible, or ``None`` when it was not.
+    #: Present-but-too-small counts become absent; the reason travels as data so a
+    #: reader of the artifact sees why a combination has no cost.
+    implausible_telemetry: str | None
     #: True when the model is priced ``{in: 0, out: 0}``. Unmetered is not free.
     unmetered: bool
     price_in: float
@@ -479,6 +490,31 @@ def _persona_dirs(slug_dir: Path) -> list[Path]:
     return sorted((p for p in slug_dir.glob(PERSONA_GLOB) if p.is_dir()), key=lambda p: p.name)
 
 
+def load_telemetry_floor(path: str | Path = TELEMETRY_CONFIG_PATH) -> int:
+    """The minimum believable mean input tokens per call, from config (fail-fast).
+
+    Raises :class:`FileNotFoundError` when the config is missing and
+    :class:`ValueError` when ``min_input_tokens_per_call`` is absent or is not a
+    positive integer. There is no default: a silent fallback would decide, without
+    saying so, which provider's telemetry is trusted.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Telemetry config not found: {path}. Expected "
+            "config/analysis/cost_efficiency/telemetry.json."
+        )
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = json.load(fh)
+    floor = raw.get("min_input_tokens_per_call") if isinstance(raw, dict) else None
+    if not isinstance(floor, int) or isinstance(floor, bool) or floor <= 0:
+        raise ValueError(
+            f"Telemetry config {path} must carry a positive integer "
+            f"'min_input_tokens_per_call', got {floor!r}."
+        )
+    return floor
+
+
 def raw_cost_for_slug(
     output_base: Path | str,
     slug: str,
@@ -595,6 +631,22 @@ def raw_cost_for_slug(
     cache_creation_tokens = total(_CACHE_CREATION_FIELD)
     has_token_data = input_tokens is not None or output_tokens is not None
 
+    # A present-but-implausible input count is worse than an absent one: priced,
+    # it yields a confidently wrong dollar figure that nothing downstream can
+    # detect. Below the configured floor the telemetry is recorded as absent,
+    # with the reason carried on the record.
+    implausible_reason: str | None = None
+    if has_token_data and n_calls > 0 and input_tokens is not None:
+        per_call = input_tokens / n_calls
+        floor = load_telemetry_floor()
+        if per_call < floor:
+            implausible_reason = (
+                f"mean input tokens per call {per_call:.1f} is below the plausibility "
+                f"floor of {floor}; the provider does not report usage, so the counts "
+                f"are treated as absent rather than priced"
+            )
+            has_token_data = False
+
     if not has_token_data:
         total_cost_usd = None
     else:
@@ -621,6 +673,7 @@ def raw_cost_for_slug(
         cache_read_tokens=cache_read_tokens,
         cache_creation_tokens=cache_creation_tokens,
         has_token_data=has_token_data,
+        implausible_telemetry=implausible_reason,
         unmetered=unmetered,
         price_in=price_in,
         price_out=price_out,
