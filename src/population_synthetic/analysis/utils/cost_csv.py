@@ -87,7 +87,10 @@ __all__ = [
 #: which is the exact defect this process exists to correct. A missing ``unmetered``
 #: would default to false, turning nine local models' measured zero into an apparent
 #: free lunch on a metered axis.
-SCHEMA_VERSION = 1
+# v2 (2026-08-21): added cost_per_100_usable_personas. Required rather than optional
+# because a reader that tolerated its absence would have to rescale the per-persona
+# column itself, which is exactly the hand-multiplication this column exists to remove.
+SCHEMA_VERSION = 2
 
 #: Separator for the pricing config's caveat tags inside the single ``pricing_flags``
 #: cell. Semicolon rather than comma so the cell never needs CSV quoting to be read by
@@ -169,6 +172,11 @@ class CostRow:
     total_tokens: int | None
     total_cost_usd: float | None
     cost_per_usable_persona: float | None
+    #: The same quantity per 100 usable personas -- the unit the figures and the
+    #: manuscript quote, because a per-persona cost of 0.0049 USD is unreadable and
+    #: invites a silent factor-of-100 slip when someone rescales it by hand. Derived
+    #: in the builder, never at render time.
+    cost_per_100_usable_personas: float | None
     cost_basis: str
     unmetered: bool
     has_token_data: bool
@@ -188,6 +196,7 @@ _OPTIONAL_FLOAT_FIELDS = (
     "generation_multiplier",
     "total_cost_usd",
     "cost_per_usable_persona",
+    "cost_per_100_usable_personas",
 )
 _TEXT_FIELDS = ("slug", "country", "model", "strategy", "cost_basis", "pricing_flags")
 
