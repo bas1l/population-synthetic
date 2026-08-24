@@ -17,7 +17,14 @@ from population_synthetic.analysis.fidelity.evaluator import attr_value
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.figures import save_figure
 from population_synthetic.analysis.utils.marginals import compute_proportions
-from population_synthetic.analysis.utils.palette import heatmap_cmap, text_color_on
+from population_synthetic.analysis.utils.palette import (
+    ACCENT_PAIR,
+    CATEGORICAL_SERIES,
+    MUTED_GREY,
+    SECONDARY_GREY,
+    heatmap_cmap,
+    text_color_on,
+)
 
 # ------------------------------------------------------------------
 # Chart styling constants
@@ -31,25 +38,18 @@ _HIGH_CARDINALITY_FIELDS = frozenset({
     "birth_country_detail",
 })
 
-_ATTR_COLORS = (
-    "#4878CF",
-    "#D65F5F",
-)
+# One slot of the house categorical series per compared population, in the order the
+# populations are passed. Positional, not semantic: nothing here knows which country
+# sits in which slot.
+_ATTR_COLORS = CATEGORICAL_SERIES[:2]
+_ATTR_COLORS_3WAY = CATEGORICAL_SERIES[:3]
 
-_ATTR_COLORS_3WAY = (
-    "#4878CF",  # blue  (Sweden)
-    "#D65F5F",  # red   (Norway)
-    "#6AB187",  # green (Italy)
-)
+# The radar overlays two filled polygons on the same axes, so its two series take the
+# palette's overlay accent pair rather than the first two slots of the series above.
+_RADAR_TV_COLOR, _RADAR_CHI_COLOR = ACCENT_PAIR
 
-_RADAR_TV_COLOR = "#2A9D8F"
-_RADAR_CHI_COLOR = "#E9C46A"
-
-_RADAR_3WAY_COLORS = ("#4878CF", "#D65F5F", "#6AB187")
+_RADAR_3WAY_COLORS = CATEGORICAL_SERIES[:3]
 _RADAR_3WAY_STYLES = ("solid", "dashed", "dotted")
-
-# Shared categorical palette (kept in step with analysis/{model_ranking,multivariate_fidelity}/charts.py).
-_COLOR_SERIES = ("#4878CF", "#D65F5F", "#6AB187", "#E8935A", "#E9C46A", "#8172B2", "#64B5CD")
 
 
 # ------------------------------------------------------------------
@@ -706,10 +706,10 @@ def plot_c2st(
     balanced_n = c2st.get("balanced_n", "?")
 
     fig, ax = plt.subplots(figsize=(4.5, 5.0))
-    ax.bar([0], [auc], width=0.5, color=_COLOR_SERIES[0], edgecolor="white", linewidth=0.6, zorder=3)
-    ax.axhline(0.5, color="#888888", linestyle="--", linewidth=1.0, zorder=1)
+    ax.bar([0], [auc], width=0.5, color=CATEGORICAL_SERIES[0], edgecolor="white", linewidth=0.6, zorder=3)
+    ax.axhline(0.5, color=MUTED_GREY, linestyle="--", linewidth=1.0, zorder=1)
     ax.text(0.0, 0.5, "  0.5 = indistinguishable joint", va="bottom", ha="center",
-            fontsize=7.5, color="#666666")
+            fontsize=7.5, color=SECONDARY_GREY)
     ax.text(0.0, auc, f"{auc:.3f}", va="bottom", ha="center", fontsize=10, fontweight="bold")
 
     p_str = "nan" if p_value is None or (isinstance(p_value, float) and np.isnan(p_value)) else f"{p_value:.3f}"
@@ -765,7 +765,7 @@ def plot_joint_fidelity(
     labels = [f"{p['attr_x']}×{p['attr_y']}" for p in plottable]
     values = [float(p["joint_tv"]) for p in plottable]
     grounded = [bool(p.get("grounded")) for p in plottable]
-    colors = [_COLOR_SERIES[2] if g else _COLOR_SERIES[3] for g in grounded]
+    colors = [CATEGORICAL_SERIES[2] if g else CATEGORICAL_SERIES[3] for g in grounded]
     hatches = ["" if g else "//" for g in grounded]
 
     y_pos = np.arange(len(plottable))
@@ -783,8 +783,8 @@ def plot_joint_fidelity(
 
     from matplotlib.patches import Patch
     legend_handles = [
-        Patch(facecolor=_COLOR_SERIES[2], label="grounded"),
-        Patch(facecolor=_COLOR_SERIES[3], hatch="//", label="reference"),
+        Patch(facecolor=CATEGORICAL_SERIES[2], label="grounded"),
+        Patch(facecolor=CATEGORICAL_SERIES[3], hatch="//", label="reference"),
     ]
     ax.legend(handles=legend_handles, fontsize=7.5, title="basis", title_fontsize=8)
 
@@ -832,11 +832,11 @@ def plot_combination_plausibility(
     y_pos = np.arange(len(plottable))
     fig, ax = plt.subplots(figsize=(9.0, max(3.0, len(plottable) * 0.6 + 1.5)))
     left_imp = [p + r for p, r in zip(frac_plausible, frac_rare)]
-    ax.barh(y_pos, frac_plausible, color=_COLOR_SERIES[2],
+    ax.barh(y_pos, frac_plausible, color=CATEGORICAL_SERIES[2],
             edgecolor="white", linewidth=0.6, label="plausible")
-    ax.barh(y_pos, frac_rare, left=frac_plausible, color=_COLOR_SERIES[4],
+    ax.barh(y_pos, frac_rare, left=frac_plausible, color=CATEGORICAL_SERIES[4],
             edgecolor="white", linewidth=0.6, label="rare")
-    ax.barh(y_pos, frac_impossible, left=left_imp, color=_COLOR_SERIES[1],
+    ax.barh(y_pos, frac_impossible, left=left_imp, color=CATEGORICAL_SERIES[1],
             edgecolor="white", linewidth=0.6, label="impossible")
 
     ax.set_yticks(y_pos)
@@ -891,14 +891,14 @@ def plot_joint_chi_sq(
 
     labels = [k.replace("_x_", "×") for k, _ in items]
     values = [float(v) for _, v in items]
-    colors = [_COLOR_SERIES[1] if v < 0.05 else _COLOR_SERIES[0] for v in values]
+    colors = [CATEGORICAL_SERIES[1] if v < 0.05 else CATEGORICAL_SERIES[0] for v in values]
 
     x_pos = np.arange(len(items))
     fig, ax = plt.subplots(figsize=(max(6.0, len(items) * 1.1 + 2), 5.0))
     ax.bar(x_pos, values, width=0.6, color=colors, edgecolor="white", linewidth=0.6, zorder=3)
-    ax.axhline(0.05, color="#D65F5F", linestyle="--", linewidth=1.0, zorder=1)
+    ax.axhline(0.05, color=CATEGORICAL_SERIES[1], linestyle="--", linewidth=1.0, zorder=1)
     ax.text(len(items) - 0.5, 0.05, " 0.05 significance", va="bottom", ha="right",
-            fontsize=7.5, color="#666666")
+            fontsize=7.5, color=SECONDARY_GREY)
 
     ax.set_xticks(x_pos)
     ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=7)
@@ -948,7 +948,7 @@ def plot_coherence(
     ax1.pie(
         [n_plausible, n_flagged],
         labels=[f"plausible\n{n_plausible}", f"flagged\n{n_flagged}"],
-        colors=[_COLOR_SERIES[2], _COLOR_SERIES[1]],
+        colors=[CATEGORICAL_SERIES[2], CATEGORICAL_SERIES[1]],
         autopct=lambda pct: f"{pct:.1f}%" if pct > 0 else "",
         startangle=90,
         wedgeprops={"width": 0.42, "edgecolor": "white"},
@@ -956,13 +956,13 @@ def plot_coherence(
     )
     score_str = "nan" if score is None else f"{score:.2f}"
     ax1.text(0, 0, score_str, ha="center", va="center", fontsize=16, fontweight="bold",
-             color=_COLOR_SERIES[2])
+             color=CATEGORICAL_SERIES[2])
     ax1.set_title("Coherence score", fontsize=10, fontweight="bold")
 
     probs = [f.get("probability", 0.0) for f in flagged
              if f.get("probability") is not None]
     if probs:
-        ax2.hist(probs, bins=min(20, max(3, len(set(probs)))), color=_COLOR_SERIES[1],
+        ax2.hist(probs, bins=min(20, max(3, len(set(probs)))), color=CATEGORICAL_SERIES[1],
                  edgecolor="white", linewidth=0.5)
         ax2.set_xlabel("combination probability in real A", fontsize=8)
         ax2.set_ylabel("flagged individuals", fontsize=8)

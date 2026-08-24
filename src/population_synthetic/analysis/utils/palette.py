@@ -1,10 +1,14 @@
-"""palette.py -- The shared colour vocabulary for every analysis-layer heatmap.
+"""palette.py -- The shared colour vocabulary for every analysis-layer figure.
 
-One definition of the house ramp, so the grids scattered across ``03_Analysis/``
-(fidelity, model_ranking, generation_metadata, realism_ranking) read as one figure
-family rather than as four unrelated ones. Before this module each chart module
-named its own colormap at its own ``imshow`` call, and the same quantity -- a
-model x method mean -- was drawn on viridis in one folder and on Reds in another.
+One definition of the house ramp *and* of every categorical hue and grey the layer
+draws with, so the figures scattered across ``03_Analysis/`` (fidelity, model_ranking,
+generation_metadata, realism_ranking, ...) read as one figure family rather than as a
+dozen unrelated ones. Before this module each chart module named its own colormap at its
+own ``imshow`` call, and the same quantity -- a model x method mean -- was drawn on
+viridis in one folder and on Reds in another. Categorical colour then followed the same
+path: the seven-hue series below was copy-pasted verbatim into five chart modules and
+renamed into a sixth, and roughly twenty-five greys were written as bare hex literals at
+the call site that used them.
 
 **The ramp is sequential, and every heatmap in the layer now uses it** -- including the
 two whose quantity is genuinely two-sided (``realism_ranking``'s typicality statistic,
@@ -27,9 +31,23 @@ colour's relative luminance. A hand-tuned "white above 60% of the range" thresho
 is a property of one ramp's luminance profile, and silently produces unreadable
 text when the ramp changes -- inferno is bright at its top end where Reds is dark,
 so the two want opposite rules.
+
+**What this module knows nothing about.** Which metric is plotted, which country is
+analysed, which analysis process or which figure is being drawn, what the models,
+strategies, severities or funnel stages are called, or how any value was computed. It
+holds colour *roles* -- the names below say what a colour is *for*, never what hue it is
+-- and a caller maps its own domain vocabulary onto them. That is why, for example, the
+severity levels ``S1``/``S2``/``S3`` do not appear here: ``persona_realism`` owns that
+mapping and reaches into :data:`SEVERITY_SERIES` for the hues. It also imports nothing
+from any analysis subpackage, and imports matplotlib lazily inside the one function that
+needs it, so importing it never pulls in a backend.
 """
 
 from __future__ import annotations
+
+# ------------------------------------------------------------------
+# The sequential ramp
+# ------------------------------------------------------------------
 
 #: The house sequential heatmap ramp. ``inferno`` because the manuscript fidelity
 #: tables (``{country}_models_table``) already publish on it, and those are the
@@ -43,6 +61,164 @@ HEATMAP_CMAP = "inferno"
 #: unmeasured cell at the ramp's low end would present "never measured" as "measured
 #: and lowest", which is the most damaging misreading a grid can produce.
 MISSING_COLOR = "#DDDDDD"
+
+# ------------------------------------------------------------------
+# Categorical colour
+# ------------------------------------------------------------------
+
+#: The house categorical series, cycled positionally by every chart that draws several
+#: unordered series at once. Seven hues because that is the point past which position in
+#: a cycled series stops being recognisable anyway; a chart with more series than this
+#: wraps and must carry identity by something other than hue as well (see
+#: :data:`LARGE_CATEGORICAL_CMAP`).
+#:
+#: Qualitative, **not** the sequential ramp: an element's index is a slot, not a
+#: magnitude, and neighbouring entries are deliberately far apart in hue so adjacent
+#: bars separate without relying on a legend.
+CATEGORICAL_SERIES: tuple[str, ...] = (
+    "#4878CF",
+    "#D65F5F",
+    "#6AB187",
+    "#E8935A",
+    "#E9C46A",
+    "#8172B2",
+    "#64B5CD",
+)
+
+#: A second two-hue categorical accent, for a pair of series overlaid on the *same* axes
+#: as filled shapes rather than set side by side. Distinct from
+#: ``CATEGORICAL_SERIES[:2]`` so a two-series overlay drawn on top of other categorical
+#: content cannot be misread as the first two slots of that series.
+ACCENT_PAIR: tuple[str, str] = ("#2A9D8F", "#E9C46A")
+
+#: A qualitative series for a set of categories that *has* an order which is read off the
+#: legend rather than off the hue. ColorBrewer Dark2. Deliberately not the sequential
+#: ramp: a sequential ramp would additionally imply that the distance between two
+#: adjacent categories is a magnitude, which for an ordered-but-not-numeric factor it is
+#: not.
+ORDERED_QUALITATIVE_SERIES: tuple[str, ...] = (
+    "#1B9E77",
+    "#D95F02",
+    "#7570B3",
+    "#E7298A",
+    "#66A61E",
+)
+
+#: A four-step series for the disjoint slices of a funnel or partition, in stage order.
+#: ColorBrewer's 4-class RdBu: these encode **which stage** a unit left at -- a category
+#: with a direction, not a score -- so they are deliberately not the sequential score
+#: ramp, and the pair of blues (the retained stages) reads against the pair of reds (the
+#: lost ones) without relying on hue discrimination alone.
+STAGE_SERIES: tuple[str, ...] = ("#0571B0", "#92C5DE", "#F4A582", "#CA0020")
+
+#: An ordered three-step alert series, **severest first**, ending on a neutral grey.
+#: The grey is load-bearing: the last step is the one that is reported but never counted
+#: as a defect, and giving it a hue would enlist it into the reading that the other two
+#: carry.
+SEVERITY_SERIES: tuple[str, str, str] = ("#C44E52", "#DD8452", "#8C8C8C")
+
+#: The single series singled out for contrast against a field of
+#: :data:`CATEGORICAL_SERIES` members -- a reference competitor among ordinary ones, or
+#: the tail of a distribution against its body. Shares its hue with
+#: ``SEVERITY_SERIES[0]``; the two roles are independent and may be retuned separately.
+HIGHLIGHT_ACCENT = "#C44E52"
+
+#: Provenance colours for the hosted/local split. Colourblind-safe categorical hues that
+#: encode *category* (hosting class), not score, and are deliberately distinct from the
+#: sequential score ramp. Drawn as a tick-label colour and a legend swatch, never as a
+#: data mark, so the two entries only have to separate from each other.
+HOST_COLORS: dict[str, str] = {"hosted": "#4878CF", "local": "#E8935A"}
+
+#: Colormap a chart samples when it has more series than :data:`CATEGORICAL_SERIES` can
+#: name -- ``tab20`` is qualitative and twenty wide. Sampling a *ramp* would be worse
+#: still, so this is the escape hatch, not an invitation: a figure needing it should also
+#: separate its series by marker or position.
+LARGE_CATEGORICAL_CMAP = "tab20"
+
+# ------------------------------------------------------------------
+# Greys and furniture
+# ------------------------------------------------------------------
+
+#: Near-black rule marking a distinguished cell (the best in its column). Near-black
+#: rather than pure black so it reads as a rule on the bright end of the ramp without
+#: vibrating on the dark end.
+BEST_CELL_EDGE = "#111111"
+
+#: A baseline or reference series drawn alongside a set of :data:`CATEGORICAL_SERIES`
+#: members. Outside that series by construction, so the thing being compared *against*
+#: never reads as one of the things being compared.
+BASELINE_DARK = "#222222"
+
+#: Primary in-figure annotation text on a light ground, and short near-black rules that
+#: belong to the annotation layer rather than to the data.
+ANNOTATION_GREY = "#333333"
+
+#: Subtitle and caption text sitting immediately beside a title -- one step back from
+#: :data:`ANNOTATION_GREY` so it reads as subordinate to it.
+CAPTION_GREY = "#444444"
+
+#: Footnote text at the figure margin: the caveats and provenance notes that travel with
+#: the figure but are not read alongside the data.
+FOOTNOTE_GREY = "#555555"
+
+#: Secondary inline notes inside the data area -- a "n/a" standing in for an absent
+#: value, or the label naming a reference line.
+SECONDARY_GREY = "#666666"
+
+#: Reference rules and de-emphasised notes: a threshold line the data is read against,
+#: and text saying something was omitted.
+MUTED_GREY = "#888888"
+
+#: A neutral, non-judging categorical step -- an interval whisker, or a category that is
+#: deliberately given no valence. Distinct from :data:`MUTED_GREY`, which de-emphasises;
+#: this one is a full-strength member of a series that simply has no hue.
+NEUTRAL_GREY = "#8C8C8C"
+
+#: The unexplained remainder of a decomposition. Grey because the residual is what is
+#: *left over* after every named component, and a hue would enlist it as one of them.
+RESIDUAL_GREY = "#BBBBBB"
+
+#: Background grid rule behind the data. Shares its value with :data:`MISSING_COLOR`;
+#: the two roles are independent -- one is furniture, the other is a datum -- and either
+#: may be retuned without the other.
+GRID_RULE = "#DDDDDD"
+
+#: Dark outline separating abutting filled bars, boxes and patches from each other and
+#: from the ground.
+BAR_EDGE = "#33486F"
+
+#: Error bars and interval whiskers drawn *over* a filled mark: dark enough to read on
+#: the fill, one step back from :data:`ANNOTATION_GREY` so it does not compete with the
+#: labels beside it. Shares its value with :data:`CAPTION_GREY`; the roles are
+#: independent -- one is furniture over the data, the other is text beside it.
+ERROR_BAR_GREY = "#444444"
+
+#: Pale fill for a summary bar that individual observations are drawn on top of: light
+#: enough that the overlaid points stay readable, saturated enough to still read as a bar.
+PALE_FILL = "#BFD1EA"
+
+#: Faint connector drawn between paired observations, to show the pairing without letting
+#: the connectors dominate the points they join.
+FAINT_LINK = "#8899AA"
+
+#: Fill and edge of an annotated *region* of the axes -- a band whose horizontal or
+#: vertical extent is a statement about the scale rather than about any datum.
+BAND_FILL = "#E8E8E8"
+BAND_EDGE = "#9A9A9A"
+
+#: The figure surface itself, named so a hollow marker or an emptied cell says "nothing
+#: is here" by matching the ground rather than by carrying a fill of its own.
+SURFACE = "#FFFFFF"
+
+#: Light edge around a :data:`SURFACE`-filled cell, so an emptied cell still has a
+#: boundary and cannot be mistaken for a gap in the grid.
+HOLLOW_EDGE = "#CCCCCC"
+
+#: Text/edge and box fill of an in-axes notice saying the panel *cannot* be drawn.
+#: Deliberately outside every data series: it is a statement about the figure, not a
+#: value in it.
+WARNING_TEXT = "#B00020"
+WARNING_FILL = "#FDECEC"
 
 
 def heatmap_cmap(name: str = HEATMAP_CMAP, *, missing: str = MISSING_COLOR):
@@ -63,16 +239,58 @@ def heatmap_cmap(name: str = HEATMAP_CMAP, *, missing: str = MISSING_COLOR):
     return cmap
 
 
+#: Relative-luminance crossover between white and black text, from WCAG 2 contrast:
+#: white gives ``1.05 / (L + 0.05)`` and black gives ``(L + 0.05) / 0.05``, so the two
+#: are equal where ``(L + 0.05) ** 2 == 1.05 * 0.05``. Solving gives this value. Below
+#: it white wins, above it black wins -- and picking the winner is exactly the point,
+#: because the loser can fall under the 4.5:1 AA floor while the winner does not.
+_TEXT_CONTRAST_CROSSOVER = 0.17912878474779202
+
+
+def _linearize_srgb_channel(channel: float) -> float:
+    """One gamma-encoded sRGB channel in [0, 1] to its linear-light value.
+
+    The sRGB transfer function (IEC 61966-2-1, and the identical definition in WCAG 2):
+    a short linear segment near black, a 2.4-power curve above it.
+    """
+    if not 0.0 <= channel <= 1.0:
+        raise ValueError(
+            f"sRGB channel out of range: {channel!r}. Channels must be floats in [0, 1] "
+            "-- matplotlib colormaps and 'matplotlib.colors.to_rgb' both produce that "
+            "scale; a 0-255 value has not been converted."
+        )
+    if channel <= 0.04045:
+        return channel / 12.92
+    return ((channel + 0.055) / 1.055) ** 2.4
+
+
+def relative_luminance(rgb) -> float:
+    """WCAG 2 relative luminance of gamma-encoded sRGB *rgb*.
+
+    Linearises each channel and weights the result with the BT.709 primaries
+    (0.2126 / 0.7152 / 0.0722). Both halves matter and both were previously wrong here:
+    applying luma weights to *gamma-encoded* values overstates the luminance of dark
+    colours, and BT.601's weights describe a different set of primaries than sRGB uses.
+
+    Any alpha channel is ignored -- the caller has already resolved what was painted.
+    """
+    r, g, b = (_linearize_srgb_channel(float(rgb[i])) for i in range(3))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
 def text_color_for_rgb(rgb) -> str:
     """``"white"`` or ``"black"`` -- whichever reads on a fill of colour *rgb*.
 
-    Relative luminance (ITU-R BT.601 weights), not the raw value: the eye is far
-    more sensitive to green than to blue, so an unweighted mean calls a saturated
-    blue light and a saturated yellow dark, which is backwards for both.
+    Implements the WCAG 2 contrast model: sRGB channels are linearised, weighted into a
+    relative luminance by the BT.709 coefficients, and compared against the crossover at
+    which white and black text give equal contrast ratios
+    (:data:`_TEXT_CONTRAST_CROSSOVER`, ~0.179).
+
+    Relative luminance rather than the raw value, because the eye is far more sensitive
+    to green than to blue: an unweighted mean calls a saturated blue light and a
+    saturated yellow dark, which is backwards for both.
     """
-    r, g, b = float(rgb[0]), float(rgb[1]), float(rgb[2])
-    luminance = 0.299 * r + 0.587 * g + 0.114 * b
-    return "white" if luminance < 0.5 else "black"
+    return "white" if relative_luminance(rgb) < _TEXT_CONTRAST_CROSSOVER else "black"
 
 
 def text_color_on(im, value: float) -> str:

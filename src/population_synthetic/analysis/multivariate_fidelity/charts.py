@@ -19,15 +19,10 @@ from typing import Any
 
 from population_synthetic.analysis.fidelity.charts import plot_association_heatmap
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
-
-_COLOR_SERIES = (
-    "#4878CF",
-    "#D65F5F",
-    "#6AB187",
-    "#E8935A",
-    "#E9C46A",
-    "#8172B2",
-    "#64B5CD",
+from population_synthetic.analysis.utils.palette import (
+    CATEGORICAL_SERIES,
+    MUTED_GREY,
+    SECONDARY_GREY,
 )
 
 
@@ -72,7 +67,7 @@ def plot_c2st_vs_grounded_tv(
     with no grounded pair) are skipped. Returns ``None`` when no combo has a plottable point.
     """
     strategies = _ordered_strategies(sorted({r["strategy"] for r in rows if r["strategy"]}))
-    color_for = {s: _COLOR_SERIES[i % len(_COLOR_SERIES)] for i, s in enumerate(strategies)}
+    color_for = {s: CATEGORICAL_SERIES[i % len(CATEGORICAL_SERIES)] for i, s in enumerate(strategies)}
 
     by_strategy: dict[str, list[tuple[float, float, str]]] = {}
     for row in rows:
@@ -106,11 +101,11 @@ def plot_c2st_vs_grounded_tv(
             edgecolor="white", linewidth=0.6, alpha=0.9, zorder=3,
         )
 
-    ax.axvline(0.5, color="#888888", linestyle="--", linewidth=1.0, zorder=1)
+    ax.axvline(0.5, color=MUTED_GREY, linestyle="--", linewidth=1.0, zorder=1)
     ax.text(
         0.5, 0.01, "0.5 = indistinguishable joint",
         transform=ax.get_xaxis_transform(), va="bottom", ha="left",
-        rotation=90, fontsize=7.5, color="#666666",
+        rotation=90, fontsize=7.5, color=SECONDARY_GREY,
     )
 
     ax.set_xlabel("C2ST ROC-AUC (joint discriminability; 0.5 best)", fontsize=9)

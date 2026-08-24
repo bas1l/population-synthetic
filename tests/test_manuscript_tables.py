@@ -8,7 +8,7 @@ snippet emitters, and the empty / all-NaN ``None`` contract. Figures / snippets
 are written to a pytest ``tmp_path``, never the repo.
 
 A second group pins the *visual grammar* now shared with
-:mod:`population_synthetic.analysis.model_ranking.table_style`: the grid values
+:mod:`population_synthetic.analysis.utils.table_style`: the grid values
 actually drawn, the row and column order, the annotation text, the best-cell
 boxing and bolding, the Overall divider, the host label colours, and the
 extracted helpers' own contracts. These are structural assertions on the rendered
@@ -29,15 +29,18 @@ from population_synthetic.analysis.model_ranking.manuscript_tables import (
     write_method_fidelity_latex,
     write_model_fidelity_latex,
 )
-from population_synthetic.analysis.model_ranking.table_style import (
+from population_synthetic.analysis.utils.palette import (
+    HEATMAP_CMAP,
     HOST_COLORS,
+    MISSING_COLOR,
+)
+from population_synthetic.analysis.utils.table_style import (
     add_percentage_colorbar,
     best_cells_per_column,
     categories_on_top,
     inferno_cmap,
     vertical_divider,
 )
-from population_synthetic.analysis.utils.palette import HEATMAP_CMAP, MISSING_COLOR
 from tests._performance_fixtures import ATTRIBUTES, make_combo
 
 

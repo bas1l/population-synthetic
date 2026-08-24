@@ -10,8 +10,8 @@ restyle, which is precisely the failure these figures exist to avoid.
 The module owns the *presentation* decisions and nothing else: the ramp with its
 NaN grey, the annotation font size and best-cell box edge, the percentage
 colourbar, the best-per-column argmax, the column divider, the top-placed column
-labels, and the hosted/local provenance colours and legend text. It takes style
-parameters and plain numeric arrays and returns matplotlib primitives.
+labels, and the hosted/local provenance legend text. It takes style parameters and
+plain numeric arrays and returns matplotlib primitives.
 
 It deliberately knows nothing about **which metric** is plotted, which country is
 being analysed, what the models / strategies / attributes are called, how many
@@ -22,9 +22,11 @@ other.
 
 The layer-wide colour vocabulary stays in
 :mod:`population_synthetic.analysis.utils.palette` (the house ramp, its ``set_bad``
-policy, and the luminance-derived text-contrast rule), which every analysis-layer
-heatmap shares, not just the manuscript family. This module builds on it rather
-than restating it, so there is still exactly one definition of the ramp.
+policy, the categorical series and named greys, and the luminance-derived
+text-contrast rule), which every analysis-layer figure shares, not just the
+manuscript family. This module builds on it rather than restating it: every colour
+it names below is *bound* from the palette, never written out again, so there is
+still exactly one definition of each.
 
 Follows the project charting conventions: no module-level matplotlib import, so
 importing this module never pulls in a backend; the callers select ``Agg`` and
@@ -35,20 +37,18 @@ from __future__ import annotations
 
 import numpy as np
 
-from population_synthetic.analysis.utils.palette import heatmap_cmap
+from population_synthetic.analysis.utils.palette import BEST_CELL_EDGE, heatmap_cmap
 
-#: Border drawn around a best-per-column cell. Near-black rather than pure black
-#: so it reads as a rule on the bright end of the ramp without vibrating on the
-#: dark end.
-BOX_EDGE = "#111111"
+#: This family's name for the palette's distinguished-cell rule, drawn around the
+#: best-per-column cell. Bound rather than restated so the value has exactly one
+#: definition; the name stays because the call sites read as grid furniture.
+BOX_EDGE = BEST_CELL_EDGE
 
 #: Point size of the in-cell annotations. Sized for a printed table, not a slide.
 ANNOT_FONTSIZE = 7.0
 
-#: Colourblind-safe categorical hues for the provenance side-marker (figures) and
-#: the LaTeX ``Host`` column swatch. These encode *category* (hosting class), not
-#: score, and are deliberately distinct from the sequential score ramp.
-HOST_COLORS = {"hosted": "#4878CF", "local": "#E8935A"}
+#: Legend text for the provenance side-marker (figures) and the LaTeX ``Host`` column
+#: swatch. The hues those labels stand beside are the palette's ``HOST_COLORS``.
 HOST_LABELS = {"hosted": "hosted (API)", "local": "local (Ollama)"}
 
 #: Hosting class assumed for a model absent from ``metadata.model_hosting`` (e.g.

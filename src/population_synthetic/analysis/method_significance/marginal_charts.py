@@ -32,7 +32,6 @@ from pathlib import Path
 
 from population_synthetic.analysis.fidelity.charts import _HIGH_CARDINALITY_FIELDS
 from population_synthetic.analysis.fidelity.scheme import load_scheme
-from population_synthetic.analysis.method_significance.charts import _COLOR_SERIES
 from population_synthetic.analysis.utils.axes import (
     decompose_slug,
     diagnose_slug,
@@ -41,6 +40,7 @@ from population_synthetic.analysis.utils.axes import (
 from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.figures import save_figure
 from population_synthetic.analysis.utils.marginals import compute_proportions
+from population_synthetic.analysis.utils.palette import BASELINE_DARK, CATEGORICAL_SERIES
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 logger = logging.getLogger(__name__)
@@ -49,9 +49,9 @@ logger = logging.getLogger(__name__)
 # distinct from the method-progression series).
 REAL_SERIES_LABEL = "real"
 
-# Colour of the baseline series -- deliberately outside ``_COLOR_SERIES`` so the
+# Colour of the baseline series -- deliberately outside ``CATEGORICAL_SERIES`` so the
 # real distribution reads as distinct from the method-progression ramp.
-_BASELINE_COLOR = "#222222"
+_BASELINE_COLOR = BASELINE_DARK
 
 # Type alias for the assembled structure returned by load_marginal_series.
 PreparedSeries = dict[str, dict[str, list[tuple[str, dict[str, float]]]]]
@@ -224,10 +224,10 @@ def load_marginal_series(
 
 
 def _series_color(index: int) -> str:
-    """Colour for the *index*-th series: baseline distinct, methods ramp _COLOR_SERIES."""
+    """Colour for the *index*-th series: baseline distinct, methods ramp CATEGORICAL_SERIES."""
     if index == 0:
         return _BASELINE_COLOR
-    return _COLOR_SERIES[(index - 1) % len(_COLOR_SERIES)]
+    return CATEGORICAL_SERIES[(index - 1) % len(CATEGORICAL_SERIES)]
 
 
 def plot_marginal_progression(
@@ -240,7 +240,7 @@ def plot_marginal_progression(
     Pure visualization sink over the structure from :func:`load_marginal_series`:
     each figure overlays the real baseline (drawn distinct) with the method series
     (colour-ramped from
-    :data:`~population_synthetic.analysis.method_significance.charts._COLOR_SERIES`)
+    :data:`~population_synthetic.analysis.utils.palette.CATEGORICAL_SERIES`)
     as offset bar groups at every category on the scheme axis. Proportions use a
     fixed ``[0, 1]`` scale; high-cardinality attributes
     (:data:`~population_synthetic.analysis.fidelity.charts._HIGH_CARDINALITY_FIELDS`)

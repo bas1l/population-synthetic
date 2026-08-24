@@ -30,7 +30,16 @@ from population_synthetic.analysis.utils._stats import median as _median
 from population_synthetic.analysis.utils._stats import percentile as _percentile
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.figures import save_figure
-from population_synthetic.analysis.utils.palette import heatmap_cmap, text_color_on
+from population_synthetic.analysis.utils.palette import (
+    BAR_EDGE,
+    CAPTION_GREY,
+    CATEGORICAL_SERIES,
+    ERROR_BAR_GREY,
+    MUTED_GREY,
+    SECONDARY_GREY,
+    heatmap_cmap,
+    text_color_on,
+)
 
 __all__ = ["render_metric_heatmaps", "plot_run_charts", "plot_run_comparison"]
 
@@ -42,11 +51,14 @@ _DPI = 150
 # Chart styling constants
 # ------------------------------------------------------------------
 
-_COLOR_BLUE   = "#4878CF"
-_COLOR_ORANGE = "#E8935A"
-_COLOR_RED    = "#D65F5F"
-_COLOR_GREEN  = "#6AB187"
-_COLOR_YELLOW = "#E9C46A"
+# Slots of the house categorical series, named for the part each plays in this
+# module's figures. The palette owns the hue; what it means here is this module's.
+_SERIES_PRIMARY = CATEGORICAL_SERIES[0]        # the single or leading series
+_SERIES_SECONDARY = CATEGORICAL_SERIES[3]      # the second part of a two-part split
+_SERIES_ALTERNATE = CATEGORICAL_SERIES[2]      # the typical end of an ordered triple,
+                                               # and a summary bar that is not the primary
+_SERIES_INTERMEDIATE = CATEGORICAL_SERIES[4]   # that triple's middle step
+_SERIES_ADVERSE = CATEGORICAL_SERIES[1]        # its worst end, and a rate of failure
 
 # Human-facing axis/title labels per metric id (presentation only; the metric ids
 # themselves remain the single source of truth in METRIC_NAMES).
@@ -148,7 +160,7 @@ def render_metric_heatmaps(
                 if np.isnan(means[i, j]):
                     # Distinguish "combo absent" from "combo present, metric ungated".
                     if (models[i], methods[j]) in by_cell:
-                        ax.text(j, i, "n/a", ha="center", va="center", fontsize=6.5, color="#666666")
+                        ax.text(j, i, "n/a", ha="center", va="center", fontsize=6.5, color=SECONDARY_GREY)
                     continue
                 color = text_color_on(im, means[i, j])
                 ax.text(
@@ -193,7 +205,7 @@ def _plot_category_call_count(metrics: dict, output_dir: Path) -> Path | None:
     n_cats = len(cats_sorted)
 
     fig, ax = plt.subplots(figsize=(10, max(4, n_cats * 0.45 + 2)))
-    ax.barh(range(n_cats), vals, color=_COLOR_BLUE, edgecolor="white", linewidth=0.4)
+    ax.barh(range(n_cats), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
     ax.set_yticks(range(n_cats))
     ax.set_yticklabels(cats_sorted, fontsize=8)
     ax.set_xlabel("Call count", fontsize=9)
@@ -227,7 +239,7 @@ def _plot_category_retry_rate(metrics: dict, output_dir: Path) -> Path | None:
     x_max = max(0.05, max_rate * 1.15) if max_rate > 0 else 0.10
 
     fig, ax = plt.subplots(figsize=(10, max(4, n_cats * 0.45 + 2)))
-    ax.barh(range(n_cats), vals, color=_COLOR_RED, edgecolor="white", linewidth=0.4)
+    ax.barh(range(n_cats), vals, color=_SERIES_ADVERSE, edgecolor="white", linewidth=0.4)
     ax.set_yticks(range(n_cats))
     ax.set_yticklabels(cats_sorted, fontsize=8)
     ax.set_xlabel("Retry rate", fontsize=9)
@@ -262,7 +274,7 @@ def _plot_value_diversity_entropy(metrics: dict, output_dir: Path) -> Path | Non
     vals = [vd[c]["entropy_bits"] for c in cats_sorted]
 
     fig, ax = plt.subplots(figsize=(10, max(4, n_cats * 0.45 + 2)))
-    ax.barh(range(n_cats), vals, color=_COLOR_BLUE, edgecolor="white", linewidth=0.4)
+    ax.barh(range(n_cats), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
     ax.set_yticks(range(n_cats))
     ax.set_yticklabels(cats_sorted, fontsize=8)
     ax.set_xlabel("Entropy (bits)", fontsize=9)
@@ -305,13 +317,13 @@ def _plot_method_distribution(metrics: dict, output_dir: Path) -> Path | None:
         methods_plot = list(reversed(methods))  # largest at top
         vals_plot = list(reversed(vals))
         fig, ax = plt.subplots(figsize=(10, max(4, n_methods * 0.45 + 2)))
-        ax.barh(range(n_methods), vals_plot, color=_COLOR_BLUE, edgecolor="white", linewidth=0.4)
+        ax.barh(range(n_methods), vals_plot, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
         ax.set_yticks(range(n_methods))
         ax.set_yticklabels(methods_plot, fontsize=8)
         ax.set_xlabel("Call count", fontsize=9)
     else:
         fig, ax = plt.subplots(figsize=(max(6, n_methods * 1.0 + 2), 5))
-        ax.bar(range(n_methods), vals, color=_COLOR_BLUE, edgecolor="white", linewidth=0.4)
+        ax.bar(range(n_methods), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
         ax.set_xticks(range(n_methods))
         ax.set_xticklabels(methods, rotation=30, ha="right", fontsize=8)
         ax.set_ylabel("Call count", fontsize=9)
@@ -357,12 +369,12 @@ def _plot_prompt_size_growth(metrics: dict, output_dir: Path) -> Path | None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(positions, medians, color=_COLOR_BLUE, linewidth=2, label="Median")
+    ax.plot(positions, medians, color=_SERIES_PRIMARY, linewidth=2, label="Median")
 
     if compute_band:
         p25_vals = [_percentile(pos_lens[p], 25) for p in positions]
         p75_vals = [_percentile(pos_lens[p], 75) for p in positions]
-        ax.fill_between(positions, p25_vals, p75_vals, alpha=0.15, color=_COLOR_BLUE)
+        ax.fill_between(positions, p25_vals, p75_vals, alpha=0.15, color=_SERIES_PRIMARY)
 
     ax.set_xlabel("Chain position", fontsize=9)
     ax.set_ylabel("Prompt length (chars)", fontsize=9)
@@ -399,7 +411,7 @@ def _plot_wall_clock_per_persona(metrics: dict, output_dir: Path) -> Path | None
     n_pids = len(pids_sorted)
 
     fig, ax = plt.subplots(figsize=(10, max(4, n_pids * 0.45 + 2)))
-    ax.barh(range(n_pids), vals, color=_COLOR_BLUE, edgecolor="white", linewidth=0.4)
+    ax.barh(range(n_pids), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
     ax.set_yticks(range(n_pids))
     ax.set_yticklabels(pids_sorted, fontsize=8)
     ax.set_xlabel("Wall-clock time (s)", fontsize=9)
@@ -432,9 +444,9 @@ def _plot_token_consumption_by_category(metrics: dict, output_dir: Path) -> Path
 
     fig, ax = plt.subplots(figsize=(10, max(4, n_cats * 0.45 + 2)))
     y_pos = range(n_cats)
-    ax.barh(y_pos, prompt_vals, color=_COLOR_BLUE, label="Prompt",
+    ax.barh(y_pos, prompt_vals, color=_SERIES_PRIMARY, label="Prompt",
             edgecolor="white", linewidth=0.4)
-    ax.barh(y_pos, completion_vals, left=prompt_vals, color=_COLOR_ORANGE,
+    ax.barh(y_pos, completion_vals, left=prompt_vals, color=_SERIES_SECONDARY,
             label="Completion", edgecolor="white", linewidth=0.4)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(cats_sorted, fontsize=8)
@@ -472,9 +484,9 @@ def _plot_token_budget_by_step_type(metrics: dict, output_dir: Path) -> Path | N
     bar_width = 0.35
 
     fig, ax = plt.subplots(figsize=(max(6, n_types * 1.0 + 2), 5))
-    ax.bar(x - bar_width / 2, prompt_vals, width=bar_width, color=_COLOR_BLUE,
+    ax.bar(x - bar_width / 2, prompt_vals, width=bar_width, color=_SERIES_PRIMARY,
            label="Prompt", edgecolor="white", linewidth=0.4)
-    ax.bar(x + bar_width / 2, completion_vals, width=bar_width, color=_COLOR_ORANGE,
+    ax.bar(x + bar_width / 2, completion_vals, width=bar_width, color=_SERIES_SECONDARY,
            label="Completion", edgecolor="white", linewidth=0.4)
 
     ax.set_xticks(x)
@@ -533,11 +545,11 @@ def _plot_latency_by_category(metrics: dict, output_dir: Path) -> Path | None:
 
     fig, ax = plt.subplots(figsize=(10, max(4, n_cats * 0.9 + 2)))
     ax.barh([y + bar_height for y in y_base], median_vals, height=bar_height,
-            color=_COLOR_GREEN,  label="Median",  edgecolor="white", linewidth=0.3)
+            color=_SERIES_ALTERNATE,  label="Median",  edgecolor="white", linewidth=0.3)
     ax.barh([y              for y in y_base], p95_vals,    height=bar_height,
-            color=_COLOR_YELLOW, label="p95",     edgecolor="white", linewidth=0.3)
+            color=_SERIES_INTERMEDIATE, label="p95",     edgecolor="white", linewidth=0.3)
     ax.barh([y - bar_height for y in y_base], max_vals,    height=bar_height,
-            color=_COLOR_RED,    label="Max",     edgecolor="white", linewidth=0.3)
+            color=_SERIES_ADVERSE,    label="Max",     edgecolor="white", linewidth=0.3)
 
     ax.set_yticks(list(y_base))
     ax.set_yticklabels(cats_plot, fontsize=8)
@@ -644,9 +656,9 @@ def _plot_box_grouped(
         medianprops={"color": "black", "linewidth": 1.4},
     )
     for patch in bp["boxes"]:
-        patch.set_facecolor(_COLOR_BLUE)
+        patch.set_facecolor(_SERIES_PRIMARY)
         patch.set_alpha(0.55)
-        patch.set_edgecolor("#33486F")
+        patch.set_edgecolor(BAR_EDGE)
 
     # Overlay individual observations (jittered) -- N per group is small.
     rng = np.random.default_rng(0)
@@ -655,7 +667,7 @@ def _plot_box_grouped(
         jitter = rng.uniform(-0.14, 0.14, size=len(vals))
         ax.scatter(
             np.full(len(vals), i + 1) + jitter, vals,
-            s=14, color=_COLOR_ORANGE, alpha=0.7, edgecolor="white", linewidth=0.3, zorder=3,
+            s=14, color=_SERIES_SECONDARY, alpha=0.7, edgecolor="white", linewidth=0.3, zorder=3,
         )
 
     ax.set_xticks(positions)
@@ -665,7 +677,7 @@ def _plot_box_grouped(
     ax.set_title(f"{metric_label} by {factor_label}", fontsize=12, fontweight="bold")
     ax.text(
         0.5, 1.015, _kruskal_subtitle(block["kruskal"]),
-        transform=ax.transAxes, ha="center", va="bottom", fontsize=8, color="#444444",
+        transform=ax.transAxes, ha="center", va="bottom", fontsize=8, color=CAPTION_GREY,
     )
     ax.grid(axis="y", linestyle=":", alpha=0.4)
 
@@ -698,7 +710,7 @@ def _plot_box_grouped(
     if omitted:
         ax.text(
             0.99, 0.01, f"+{omitted} more significant pair(s) omitted",
-            transform=ax.transAxes, ha="right", va="bottom", fontsize=7, color="#888888",
+            transform=ax.transAxes, ha="right", va="bottom", fontsize=7, color=MUTED_GREY,
         )
         print(f"  note: {out_path.name}: {omitted} significant pair(s) omitted from brackets")
 
@@ -733,8 +745,8 @@ def _plot_grouped_bar_errorbars(
     fig, ax = plt.subplots(figsize=(_figwidth(len(order)), 6))
     ax.bar(
         positions, means, yerr=stds, capsize=4,
-        color=_COLOR_GREEN, edgecolor="#33486F", linewidth=0.5, alpha=0.85,
-        error_kw={"elinewidth": 1.0, "ecolor": "#444444"},
+        color=_SERIES_ALTERNATE, edgecolor=BAR_EDGE, linewidth=0.5, alpha=0.85,
+        error_kw={"elinewidth": 1.0, "ecolor": ERROR_BAR_GREY},
     )
     ax.set_xticks(positions)
     ax.set_xticklabels(order, rotation=35, ha="right", fontsize=8)
@@ -743,7 +755,7 @@ def _plot_grouped_bar_errorbars(
     ax.set_title(f"{metric_label} by {factor_label} (mean +/- SD)", fontsize=12, fontweight="bold")
     ax.text(
         0.5, 1.015, _kruskal_subtitle(block["kruskal"]),
-        transform=ax.transAxes, ha="center", va="bottom", fontsize=8, color="#444444",
+        transform=ax.transAxes, ha="center", va="bottom", fontsize=8, color=CAPTION_GREY,
     )
     ax.grid(axis="y", linestyle=":", alpha=0.4)
 

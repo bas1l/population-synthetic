@@ -35,7 +35,7 @@ NaN -> grey, ``dpi=150``, white Overall divider, category labels on top) and
 persists via the shared
 :func:`population_synthetic.analysis.utils.figures.save_figure` (PNG + SVG pair).
 The visual grammar those conventions describe is not defined here: it lives in
-:mod:`population_synthetic.analysis.model_ranking.table_style`, shared with the
+:mod:`population_synthetic.analysis.utils.table_style`, shared with the
 other manuscript-style grids so they cannot drift apart.
 """
 
@@ -46,10 +46,15 @@ from typing import Any
 
 import numpy as np
 
-from population_synthetic.analysis.model_ranking.table_style import (
+from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.palette import (
+    HOST_COLORS,
+    MISSING_COLOR,
+    text_color_for_rgb,
+)
+from population_synthetic.analysis.utils.table_style import (
     ANNOT_FONTSIZE,
     BOX_EDGE,
-    HOST_COLORS,
     HOST_DEFAULT_CLASS,
     HOST_LABELS,
     add_percentage_colorbar,
@@ -58,8 +63,6 @@ from population_synthetic.analysis.model_ranking.table_style import (
     inferno_cmap,
     vertical_divider,
 )
-from population_synthetic.analysis.utils.figures import save_figure
-from population_synthetic.analysis.utils.palette import MISSING_COLOR, text_color_for_rgb
 
 # ------------------------------------------------------------------
 # Table-specific private helpers

@@ -16,8 +16,9 @@ from __future__ import annotations
 import math
 
 from population_synthetic.analysis.real_population_stats.stats import CategoryStat
+from population_synthetic.analysis.utils.palette import CATEGORICAL_SERIES
 
-_BAR_COLOR = "#4878CF"
+_BAR_COLOR = CATEGORICAL_SERIES[0]
 _REFERENCE_LINES = (25, 50, 75, 100)
 
 

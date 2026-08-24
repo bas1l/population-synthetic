@@ -31,10 +31,11 @@ from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.model_ranking.builder import build_performance_comparison
 from population_synthetic.analysis.model_ranking.charts import plot_model_method_heatmap
 from population_synthetic.analysis.model_ranking.loader import scheme_attributes
-from population_synthetic.analysis.model_ranking.table_style import BOX_EDGE, HOST_COLORS
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.cap_index import INDEX_FILENAME, CapIndex
+from population_synthetic.analysis.utils.palette import HOST_COLORS
 from population_synthetic.analysis.utils.registry import analysis_output_dir
+from population_synthetic.analysis.utils.table_style import BOX_EDGE
 from tests._performance_fixtures import ATTRIBUTES, build_workspace, make_combo, make_report
 
 # The cap every fixture combination was drawn against. Deliberately not 100.

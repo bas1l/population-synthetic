@@ -149,11 +149,10 @@ consumers + `generation_metadata` + `validation_attrition`:
   `hosting.py` (config-driven provider → `local`/`hosted` classification),
   `manuscript_tables.py` (two print-oriented, pure-consumer heatmap-tables emitted as PNG + SVG:
   a **models** table at the global-best strategy with hosted/local hue, and a **methods** table
-  of mean-over-models TV-similarity per strategy), and `table_style.py` (the visual grammar those
-  manuscript-style grids share — ramp with NaN grey, best-per-column argmax, column divider,
-  top-placed column labels, percentage colourbar, hosted/local provenance colours — holding the
-  presentation decisions only, so it knows nothing about the metric, the country, or the names of
-  models, strategies and attributes; the layer-wide ramp itself stays in `utils/palette.py`).
+  of mean-over-models TV-similarity per strategy). The visual grammar those manuscript-style
+  grids share lives in `utils/table_style.py` (ramp with NaN grey, best-per-column argmax,
+  column divider, top-placed column labels, percentage colourbar, hosted/local provenance
+  legend text), and every colour it draws with in `utils/palette.py`.
   Never recomputes from populations.
 - **`method_significance/`** -- Per-category method/model significance (sits after the compare stage;
   driven by `analyze_method_significance.py`). Reuses `model_ranking`'s `loader` to obtain the
@@ -293,7 +292,11 @@ consumers + `generation_metadata` + `validation_attrition`:
     opposite directions. Degenerate input **raises** rather than returning a sentinel -- unlike
     `stats_tests.py`, which reports skipped-with-a-reason: this is the arithmetic underneath, and the
     "unmeasurable" decision belongs to the caller that knows what an absent measurement means
-  - `palette.py` -- the one colour vocabulary every analysis heatmap draws from: `HEATMAP_CMAP`
+  - `palette.py` -- the one colour vocabulary every analysis **figure** draws from, sequential
+    ramp and categorical hues and named greys alike, so no chart module holds a hex literal of
+    its own: the categorical `CATEGORICAL_SERIES` / `ACCENT_PAIR` / `ORDERED_QUALITATIVE_SERIES` /
+    `STAGE_SERIES` / `SEVERITY_SERIES` / `HOST_COLORS`, the named furniture and text greys
+    (`ANNOTATION_GREY`, `CAPTION_GREY`, `GRID_RULE`, `BAR_EDGE`, ...), and the ramp: `HEATMAP_CMAP`
     (`inferno`, matching the published `{country}_models_table` manuscript figures), `MISSING_COLOR`
     for the off-ramp "never measured" fill, `heatmap_cmap()` (a private copy with `set_bad`, because
     matplotlib hands every caller the same registry object), and `text_color_on(im, value)`, which
@@ -308,6 +311,12 @@ consumers + `generation_metadata` + `validation_attrition`:
     caption saying the side is not in the colour. A future two-sided heatmap does the same or keeps
     its own diverging ramp; adopting this one and leaving the sign implicit produces a figure that
     looks complete while having dropped half its content
+  - `table_style.py` -- the visual grammar of the manuscript-style grids (dividers, best-cell
+    boxes, top-placed category headers, the percentage colourbar, the annotation size and the
+    hosted/local legend text), shared by `model_ranking`, `cost_efficiency` and
+    `validation_attrition`. Takes style params plus plain numeric arrays and returns matplotlib
+    primitives; knows nothing about the metric, the country or what anything is called, and
+    binds every colour it names from `palette.py` rather than restating it
   - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected) for generation_metadata /
     model_ranking, plus the repeated-measures family for `method_significance` (Friedman +
     Iman-Davenport + Kendall's W, Page's L trend, Nemenyi post-hoc + CD, Benjamini-Hochberg FDR,

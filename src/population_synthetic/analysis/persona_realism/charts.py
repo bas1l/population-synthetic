@@ -27,16 +27,26 @@ from __future__ import annotations
 from typing import Sequence
 
 from population_synthetic.analysis.persona_realism.reduce import ClashKey
+from population_synthetic.analysis.utils.palette import (
+    CATEGORICAL_SERIES,
+    HIGHLIGHT_ACCENT,
+    NEUTRAL_GREY,
+    SEVERITY_SERIES,
+)
 from population_synthetic.analysis.utils.realism_csv import SEVERITY_LEVELS, SEVERITY_RANK
 
 # Severity -> bar colour / legend caption for the clash taxonomy (S3 hard
 # contradiction reddest). These are protocol-fixed severity labels (see judge.py),
 # so the mappings are structural presentation constants, not tunables; the *order*
 # they are drawn in comes from SEVERITY_LEVELS, the one definition of it.
-_SEVERITY_COLORS: dict[str, str] = {"S3": "#C44E52", "S2": "#DD8452", "S1": "#8C8C8C"}
+_SEVERITY_COLORS: dict[str, str] = {
+    "S3": SEVERITY_SERIES[0],
+    "S2": SEVERITY_SERIES[1],
+    "S1": SEVERITY_SERIES[2],
+}
 _SEVERITY_CAPTIONS: dict[str, str] = {"S3": "S3 (hard)", "S2": "S2 (near)", "S1": "S1 (unusual)"}
-_TYPICALITY_COLOR = "#4878CF"
-_TAIL_COLOR = "#C44E52"
+_TYPICALITY_COLOR = CATEGORICAL_SERIES[0]
+_TAIL_COLOR = HIGHLIGHT_ACCENT
 
 # The 0-10 ordinal typicality domain (prompt-schema constant, mirrors judge.py).
 _TYPICALITY_MIN = 0
@@ -115,7 +125,7 @@ def plot_clash_taxonomy(clash_taxonomy: dict[ClashKey, int], combo_label: str):
     )
     labels = [_clash_label(k) for k, _ in items]
     counts = [v for _, v in items]
-    colors = [_SEVERITY_COLORS.get(k.severity, "#8C8C8C") for k, _ in items]
+    colors = [_SEVERITY_COLORS.get(k.severity, NEUTRAL_GREY) for k, _ in items]
 
     fig, ax = plt.subplots(figsize=(9, max(3.0, len(items) * 0.4 + 1.5)))
     y_pos = range(len(items))

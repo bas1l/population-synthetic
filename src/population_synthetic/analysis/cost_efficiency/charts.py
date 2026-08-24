@@ -46,12 +46,22 @@ from __future__ import annotations
 import textwrap
 from typing import Any, Mapping, Sequence
 
-from population_synthetic.analysis.model_ranking.table_style import (
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
+from population_synthetic.analysis.utils.palette import (
+    ANNOTATION_GREY,
+    BAND_EDGE,
+    BAND_FILL,
+    CAPTION_GREY,
+    FOOTNOTE_GREY,
+    GRID_RULE,
     HOST_COLORS,
+    ORDERED_QUALITATIVE_SERIES,
+    SURFACE,
+)
+from population_synthetic.analysis.utils.table_style import (
     HOST_DEFAULT_CLASS,
     HOST_LABELS,
 )
-from population_synthetic.analysis.utils.axes import strategy_complexity_order
 
 __all__ = [
     "HOST_MARKERS",
@@ -65,12 +75,10 @@ __all__ = [
 #: unmetered band at all.
 HOST_MARKERS = {"hosted": "o", "local": "s"}
 
-#: Colour series for the generation methods, cycled in complexity order. ColorBrewer
-#: Dark2: a **qualitative** palette, deliberately not the house sequential ramp. The
-#: methods do have an order, but it is read off the legend -- which is printed in that
-#: order -- rather than off the hue, and a sequential ramp would additionally imply that
-#: the distance between two methods is a magnitude, which it is not.
-METHOD_COLORS = ("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E")
+#: Colour series for the generation methods, cycled in complexity order. The palette's
+#: ordered-qualitative series: the methods do have an order, but it is read off the
+#: legend -- which is printed in that order -- rather than off the hue.
+METHOD_COLORS = ORDERED_QUALITATIVE_SERIES
 
 #: Fraction of the smallest positive cost used as the symlog linear threshold. Small
 #: enough that no metered point falls inside the linear band (so every drawn distance
@@ -87,8 +95,8 @@ _LINTHRESH_FRACTION = 0.2
 _BAND_SPREAD = 0.72
 
 #: Fill and edge for the unmetered band.
-_BAND_COLOR = "#E8E8E8"
-_BAND_EDGE = "#9A9A9A"
+_BAND_COLOR = BAND_FILL
+_BAND_EDGE = BAND_EDGE
 
 #: Fallback linear threshold when *every* combination is unmetered and there is no
 #: positive cost to scale against. The axis is then entirely inside the band, which is
@@ -315,7 +323,7 @@ def plot_cost_vs_accuracy(
             xytext=(5, 4 if label_side[(model, strategy)] > 0 else -10),
             textcoords="offset points",
             fontsize=5.6,
-            color="#333333",
+            color=ANNOTATION_GREY,
             zorder=4,
             clip_on=True,
         )
@@ -359,7 +367,7 @@ def plot_cost_vs_accuracy(
         f"({document['n_combinations']} combinations)",
         fontsize=13, fontweight="bold", pad=14,
     )
-    ax.grid(True, which="major", axis="both", color="#DDDDDD", linewidth=0.6, zorder=0)
+    ax.grid(True, which="major", axis="both", color=GRID_RULE, linewidth=0.6, zorder=0)
     ax.set_axisbelow(True)
 
     # Only label the band when something is in it. Every local model in the live
@@ -372,7 +380,7 @@ def plot_cost_vs_accuracy(
             "horizontal position inside the band is\nspread for legibility, not measured",
             xy=(0.0, 1.0), xycoords=("data", "axes fraction"),
             xytext=(0, -8), textcoords="offset points",
-            ha="center", va="top", fontsize=7.0, color="#555555", zorder=2,
+            ha="center", va="top", fontsize=7.0, color=FOOTNOTE_GREY, zorder=2,
         )
 
     method_handles = [
@@ -383,7 +391,7 @@ def plot_cost_vs_accuracy(
     host_classes = [h for h in HOST_MARKERS if any(d[4] == h for d in drawn)]
     host_handles = [
         Line2D([], [], linestyle="none", marker=HOST_MARKERS[h], markersize=7,
-               markerfacecolor="#FFFFFF", markeredgecolor=HOST_COLORS[h],
+               markerfacecolor=SURFACE, markeredgecolor=HOST_COLORS[h],
                label=HOST_LABELS[h])
         for h in host_classes
     ]
@@ -409,7 +417,7 @@ def plot_cost_vs_accuracy(
         0.01, -0.02,
         _caption(document, n_drawn=len(drawn), n_no_cost=len(no_cost),
                  n_unmetered=n_unmetered),
-        ha="left", va="top", fontsize=7.0, color="#444444",
+        ha="left", va="top", fontsize=7.0, color=CAPTION_GREY,
     )
     # No tight_layout: both legends are anchored outside the axes, and the driver saves
     # with bbox_inches="tight", which already expands the canvas around them.

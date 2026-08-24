@@ -50,10 +50,17 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from population_synthetic.analysis.model_ranking.table_style import (
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
+from population_synthetic.analysis.utils.palette import (
+    HOST_COLORS,
+    MISSING_COLOR,
+    STAGE_SERIES,
+    text_color_for_rgb,
+    text_color_on,
+)
+from population_synthetic.analysis.utils.table_style import (
     ANNOT_FONTSIZE,
     BOX_EDGE,
-    HOST_COLORS,
     HOST_DEFAULT_CLASS,
     HOST_LABELS,
     add_percentage_colorbar,
@@ -62,12 +69,6 @@ from population_synthetic.analysis.model_ranking.table_style import (
     horizontal_divider,
     inferno_cmap,
     vertical_divider,
-)
-from population_synthetic.analysis.utils.axes import strategy_complexity_order
-from population_synthetic.analysis.utils.palette import (
-    MISSING_COLOR,
-    text_color_for_rgb,
-    text_color_on,
 )
 
 __all__ = [
@@ -94,15 +95,15 @@ _WITHDRAWN_HATCH = "xxx"
 _UNDEFINED_EDGE_STYLE = (0, (1, 1.6))
 
 #: The funnel's four disjoint slices of the generated pool, in draw order (widest stage
-#: of the funnel last). ColorBrewer's 4-class RdBu: these encode **which stage** a
+#: of the funnel last), on the palette's stage series: these encode **which stage** a
 #: persona left at -- a category with a direction, not a score -- so they are
 #: deliberately not the sequential score ramp, and the pair of blues (kept) reads against
 #: the pair of reds (lost) without relying on hue discrimination alone.
 _SEGMENTS: tuple[tuple[str, str, str], ...] = (
-    ("selected", "#0571B0", "selected (drawn by the cap)"),
-    ("clean_unselected", "#92C5DE", "clean, not drawn"),
-    ("failed_mapped", "#F4A582", "failed the mapped-value gate"),
-    ("failed_raw", "#CA0020", "failed the raw-completeness gate"),
+    ("selected", STAGE_SERIES[0], "selected (drawn by the cap)"),
+    ("clean_unselected", STAGE_SERIES[1], "clean, not drawn"),
+    ("failed_mapped", STAGE_SERIES[2], "failed the mapped-value gate"),
+    ("failed_raw", STAGE_SERIES[3], "failed the raw-completeness gate"),
 )
 
 #: Fill for a combination whose generated pool is empty: there is no composition to draw,

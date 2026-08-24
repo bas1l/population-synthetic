@@ -1,9 +1,11 @@
-"""Tests for the shared analysis-layer heatmap palette.
+"""Tests for the shared analysis-layer colour vocabulary.
 
-Three properties, each one a bug that has a silent failure mode: the ramp is shared
-by every sequential grid, ``heatmap_cmap`` never hands back the registry's own object,
-and annotation colour is derived from the painted colour rather than from a threshold
-tuned to one ramp.
+Every property here has a silent failure mode: the ramp is shared by every sequential
+grid, ``heatmap_cmap`` never hands back the registry's own object, the categorical series
+are stable (chart modules cycle them *positionally* and hold no copy of their own, so
+reordering or shortening one silently recolours every figure that uses it) and internally
+distinct, and annotation colour is derived from the painted colour by a contrast model
+rather than by a threshold tuned to one ramp.
 """
 
 from __future__ import annotations
@@ -16,13 +18,34 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
 
+from population_synthetic.analysis.utils import palette  # noqa: E402
 from population_synthetic.analysis.utils.palette import (  # noqa: E402
+    ACCENT_PAIR,
+    CATEGORICAL_SERIES,
     HEATMAP_CMAP,
+    HOST_COLORS,
     MISSING_COLOR,
+    ORDERED_QUALITATIVE_SERIES,
+    SEVERITY_SERIES,
+    STAGE_SERIES,
     heatmap_cmap,
+    relative_luminance,
     text_color_for_rgb,
     text_color_on,
 )
+
+#: The categorical roles, as ``(name, expected length, values)``. Listed rather than
+#: discovered so that *removing* one is a failure too.
+_CATEGORICAL_ROLES = [
+    ("CATEGORICAL_SERIES", 7, CATEGORICAL_SERIES),
+    ("ACCENT_PAIR", 2, ACCENT_PAIR),
+    ("ORDERED_QUALITATIVE_SERIES", 5, ORDERED_QUALITATIVE_SERIES),
+    ("STAGE_SERIES", 4, STAGE_SERIES),
+    ("SEVERITY_SERIES", 3, SEVERITY_SERIES),
+    ("HOST_COLORS", 2, tuple(HOST_COLORS.values())),
+]
+
+_ROLE_IDS = [role[0] for role in _CATEGORICAL_ROLES]
 
 
 def test_heatmap_cmap_is_a_copy_not_the_registry_object():
@@ -85,3 +108,141 @@ def test_text_colour_on_a_diverging_ramp_needs_no_special_case():
     assert text_color_on(im, 1.0) == "white"
     assert text_color_on(im, 0.0) == "black"
     plt.close(fig)
+
+
+# ------------------------------------------------------------------
+# The categorical roles
+# ------------------------------------------------------------------
+
+@pytest.mark.parametrize("name, length, values", _CATEGORICAL_ROLES, ids=_ROLE_IDS)
+def test_categorical_role_is_non_empty_and_the_expected_length(name, length, values):
+    """A cycled series is indexed by position, so its length is part of its contract.
+
+    A series that quietly shrinks does not raise: the caller's ``i % len(...)`` simply
+    wraps sooner, and two categories that were distinct start sharing a colour.
+    """
+    assert values, f"{name} is empty"
+    assert len(values) == length
+
+
+@pytest.mark.parametrize("name, length, values", _CATEGORICAL_ROLES, ids=_ROLE_IDS)
+def test_categorical_role_entries_are_distinct(name, length, values):
+    """Two equal entries make two categories indistinguishable, with no error anywhere."""
+    normalised = [matplotlib.colors.to_hex(v).lower() for v in values]
+    assert len(set(normalised)) == len(normalised), f"{name} repeats a colour: {normalised}"
+
+
+@pytest.mark.parametrize("name, length, values", _CATEGORICAL_ROLES, ids=_ROLE_IDS)
+def test_categorical_role_entries_are_parseable_colours(name, length, values):
+    """Every entry resolves through matplotlib, so a mistyped hex fails here, not on a canvas."""
+    for value in values:
+        assert len(matplotlib.colors.to_rgb(value)) == 3
+
+
+def test_the_house_categorical_series_is_stable():
+    """Pinned literally: chart modules index it positionally and hold no copy of their own.
+
+    Reordering or retuning it is a deliberate, layer-wide restyle -- which is exactly the
+    change this assertion exists to make visible rather than silent.
+    """
+    assert CATEGORICAL_SERIES == (
+        "#4878CF", "#D65F5F", "#6AB187", "#E8935A", "#E9C46A", "#8172B2", "#64B5CD",
+    )
+
+
+def test_host_colours_are_slots_of_the_house_series():
+    """The provenance split is a categorical role, not a colour vocabulary of its own."""
+    assert set(HOST_COLORS) == {"hosted", "local"}
+    assert HOST_COLORS["hosted"] == CATEGORICAL_SERIES[0]
+    assert HOST_COLORS["local"] == CATEGORICAL_SERIES[3]
+
+
+def test_the_sequential_ramp_is_the_only_ramp():
+    """Settled by ADR 2026-08-12: one house ramp, off-ramp grey for the unmeasured cells."""
+    assert HEATMAP_CMAP == "inferno"
+    assert MISSING_COLOR == "#DDDDDD"
+
+
+# ------------------------------------------------------------------
+# The WCAG relative-luminance model
+# ------------------------------------------------------------------
+
+def test_relative_luminance_matches_the_reference_points():
+    """Black is 0, white is 1, and each primary carries its BT.709 weight exactly."""
+    assert relative_luminance((0.0, 0.0, 0.0)) == pytest.approx(0.0)
+    assert relative_luminance((1.0, 1.0, 1.0)) == pytest.approx(1.0)
+    assert relative_luminance((1.0, 0.0, 0.0)) == pytest.approx(0.2126)
+    assert relative_luminance((0.0, 1.0, 0.0)) == pytest.approx(0.7152)
+    assert relative_luminance((0.0, 0.0, 1.0)) == pytest.approx(0.0722)
+
+
+def test_relative_luminance_linearises_rather_than_weighting_gamma_encoded_values():
+    """Mid-grey is ~0.214 in linear light, not the 0.5 its encoded value suggests.
+
+    This is the whole of the corrected bug: weighting gamma-encoded sRGB overstates the
+    luminance of dark fills, which is how the previous rule came to hand white text to
+    fills that black reads on considerably better.
+    """
+    assert relative_luminance((0.5, 0.5, 0.5)) == pytest.approx(0.2140, abs=5e-4)
+
+
+def test_relative_luminance_rejects_an_out_of_range_channel():
+    """0-255 input is the plausible mistake, and it must fail rather than be clamped."""
+    with pytest.raises(ValueError, match="out of range"):
+        relative_luminance((255, 255, 255))
+
+
+def _grey_with_luminance(luminance: float) -> tuple[float, float, float]:
+    """The neutral grey whose relative luminance is *luminance* (inverse sRGB transfer)."""
+    if luminance <= 0.0031308:
+        channel = luminance * 12.92
+    else:
+        channel = 1.055 * luminance ** (1 / 2.4) - 0.055
+    return (channel, channel, channel)
+
+
+def _contrast_ratio(luminance: float, text: str) -> float:
+    """WCAG contrast ratio between a fill of *luminance* and white or black *text*."""
+    text_luminance = 1.0 if text == "white" else 0.0
+    lighter, darker = max(luminance, text_luminance), min(luminance, text_luminance)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def test_the_crossover_is_the_equal_contrast_luminance():
+    """Solving ``(L + 0.05) ** 2 == 1.05 * 0.05`` -- the L at which the two options tie."""
+    crossover = palette._TEXT_CONTRAST_CROSSOVER
+
+    assert crossover == pytest.approx(0.1791287847, abs=1e-9)
+    assert (crossover + 0.05) ** 2 == pytest.approx(1.05 * 0.05)
+    assert _contrast_ratio(crossover, "white") == pytest.approx(_contrast_ratio(crossover, "black"))
+
+
+def test_text_colour_switches_across_the_crossover():
+    """Below it white wins; above it black does. The old rule switched at 0.5 instead."""
+    crossover = palette._TEXT_CONTRAST_CROSSOVER
+
+    assert text_color_for_rgb(_grey_with_luminance(crossover - 0.01)) == "white"
+    assert text_color_for_rgb(_grey_with_luminance(crossover + 0.01)) == "black"
+
+
+@pytest.mark.parametrize("cmap_name", ["inferno", "viridis", "PuOr"])
+def test_text_colour_picks_the_higher_contrast_option_across_a_whole_ramp(cmap_name):
+    """Not merely "a readable colour" but *the better of the two*, at every sample.
+
+    Asserted over a whole ramp rather than at hand-picked points, because the failure
+    mode is a band of the ramp on which the rule selects the loser -- which no single
+    sample reveals. The band the old BT.601-on-gamma rule got wrong sat just below its
+    0.5 threshold.
+    """
+    cmap = plt.get_cmap(cmap_name)
+    for i in range(65):
+        rgb = cmap(i / 64.0)[:3]
+        chosen = text_color_for_rgb(rgb)
+        other = "black" if chosen == "white" else "white"
+        luminance = relative_luminance(rgb)
+        assert _contrast_ratio(luminance, chosen) >= _contrast_ratio(luminance, other)
+
+
+def test_the_off_ramp_missing_fill_takes_dark_annotation_text():
+    """The "never measured" grey is light, so its wording must be the dark option."""
+    assert text_color_for_rgb(matplotlib.colors.to_rgb(MISSING_COLOR)) == "black"

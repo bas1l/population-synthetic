@@ -52,8 +52,17 @@ import textwrap
 from typing import Any
 
 from population_synthetic.analysis.utils.palette import (
+    ANNOTATION_GREY,
+    CATEGORICAL_SERIES,
+    FOOTNOTE_GREY,
     HEATMAP_CMAP,
+    HIGHLIGHT_ACCENT,
+    HOLLOW_EDGE,
+    LARGE_CATEGORICAL_CMAP,
     MISSING_COLOR,
+    NEUTRAL_GREY,
+    SECONDARY_GREY,
+    SURFACE,
     heatmap_cmap,
     text_color_on,
 )
@@ -68,9 +77,9 @@ __all__ = [
     "plot_typicality_heatmap",
 ]
 
-_COMPETITOR_COLOR = "#4878CF"
-_REAL_COLOR = "#C44E52"
-_CI_COLOR = "#8C8C8C"
+_COMPETITOR_COLOR = CATEGORICAL_SERIES[0]
+_REAL_COLOR = HIGHLIGHT_ACCENT
+_CI_COLOR = NEUTRAL_GREY
 
 # The house sequential ramp, shared with every other grid in ``03_Analysis`` (see
 # ``analysis/utils/palette.py``). Used for every monotone quantity this module draws:
@@ -328,7 +337,7 @@ def _render_grid_heatmap(
             cell = grid["cells"].get(model, {}).get(method)
             if cell is None or cell.get("rate") is None:
                 ax.text(j, i, "n/a", ha="center", va="center", fontsize=7.5,
-                        color="#666666", style="italic")
+                        color=SECONDARY_GREY, style="italic")
                 continue
             value = float(cell["rate"])
             ax.text(
@@ -368,7 +377,7 @@ def _render_grid_heatmap(
         # below the axes without reserved space collides with the rotated tick labels.
         reserved = 0.07 + 0.035 * text.count("\n")
         fig.tight_layout(rect=(0.0, reserved, 1.0, 1.0))
-        fig.text(0.5, 0.015, text, ha="center", va="bottom", fontsize=7, color="#555555")
+        fig.text(0.5, 0.015, text, ha="center", va="bottom", fontsize=7, color=FOOTNOTE_GREY)
     else:
         fig.tight_layout()
     return fig
@@ -477,7 +486,7 @@ def _place_footnote(fig, ax, sentences: list[str]) -> None:
     box = ax.get_tightbbox(fig.canvas.get_renderer()).transformed(fig.transFigure.inverted())
     fig.text(
         0.5, box.y0 - _FOOTNOTE_GAP_IN / fig.get_figheight(), text,
-        ha="center", va="top", fontsize=7, color="#555555",
+        ha="center", va="top", fontsize=7, color=FOOTNOTE_GREY,
     )
 
 
@@ -575,7 +584,7 @@ def _empty_pair_summary(summary: dict[str, Any], title: str):
         f"No {summary['severity']} clash was raised by any consumed competitor.\n"
         "There is nothing to rank at this level -- this is a measured absence, "
         "not a missing figure.",
-        transform=ax.transAxes, ha="center", va="center", fontsize=10, color="#333333",
+        transform=ax.transAxes, ha="center", va="center", fontsize=10, color=ANNOTATION_GREY,
     )
     _place_footnote(fig, ax, _pair_summary_footnotes(summary))
     return fig
@@ -662,7 +671,7 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
 
     for pos, pair, value in zip(positions, pairs, values):
         share = "n/a" if pair["prevalence"] is None else f"{value:.4f}"
-        _column(ax, pos, _COLUMN_SYNTHETIC_PT, f"{share}   n={pair['n_personas']}", "#333333")
+        _column(ax, pos, _COLUMN_SYNTHETIC_PT, f"{share}   n={pair['n_personas']}", ANNOTATION_GREY)
         if pair["real_prevalence"] is not None:
             _column(
                 ax, pos, _COLUMN_REAL_PT,
@@ -740,16 +749,16 @@ _REFERENCE_RULE_WIDTH = 2.0
 #: semi-transparent for the same reason -- a dense hatch strikes through the number it is
 #: qualifying, and the number is still the cell's point.
 _UNDER_POWERED_HATCH = "//"
-_UNDER_POWERED_EDGE = "#333333"
+_UNDER_POWERED_EDGE = ANNOTATION_GREY
 _UNDER_POWERED_ALPHA = 0.35
 
 #: Fill + overlay for a cell whose competitor was judged but carries NO typicality-bearing
 #: persona (every persona was judged impossible). The fourth state on this figure, and
 #: deliberately neither the ramp (there is no value), nor ``_MISSING_COLOR`` (that pair was
 #: never judged), nor the under-powered hatch (that one has a value).
-_NO_TYPICALITY_COLOR = "#FFFFFF"
+_NO_TYPICALITY_COLOR = SURFACE
 _NO_TYPICALITY_HATCH = "xx"
-_NO_TYPICALITY_EDGE = "#CCCCCC"
+_NO_TYPICALITY_EDGE = HOLLOW_EDGE
 
 #: Ceiling the ramp falls back to when every consumed competitor sits at the statistic's
 #: floor. The range is then genuinely zero-width; a ramp cannot be built on it and
@@ -761,7 +770,7 @@ _FLAT_RANGE_CEILING = 1.0
 #: Qualitative colours for the per-model marks on the methods-on-x figure. Qualitative,
 #: because model identity is nominal: a sequential ramp over an alphabetical model list
 #: would encode an order that does not exist.
-_MODEL_CMAP = "tab20"
+_MODEL_CMAP = LARGE_CATEGORICAL_CMAP
 
 #: ``tab20`` entries withheld from the model palette: its red pair. Red is this folder's
 #: identity colour for the real population (``_REAL_COLOR`` on the forest plot, the pair
@@ -979,7 +988,7 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
             cell = grid["cells"][model][method]
             if cell is None:
                 ax.text(j, i, "not judged", ha="center", va="center", fontsize=7.5,
-                        color="#666666", style="italic")
+                        color=SECONDARY_GREY, style="italic")
                 continue
             if cell["value"] is None:
                 # Judged, but no persona survived to carry a typicality: a measurement
@@ -990,7 +999,7 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
                     linewidth=0.0, zorder=2,
                 ))
                 ax.text(j, i, f"no typicality\nof {cell['n_personas']} personas",
-                        ha="center", va="center", fontsize=7, color="#555555",
+                        ha="center", va="center", fontsize=7, color=FOOTNOTE_GREY,
                         style="italic", zorder=4)
                 continue
             value = float(cell["value"])
@@ -1189,7 +1198,7 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
             va="bottom", ha="left", fontsize=7.5, color=_REAL_COLOR,
         )
     if any_under_powered:
-        handles.append(Line2D([], [], color="#555555", marker="o", markersize=6,
+        handles.append(Line2D([], [], color=FOOTNOTE_GREY, marker="o", markersize=6,
                               markerfacecolor="none", markeredgewidth=1.2, linestyle="none",
                               label=f"hollow = under-powered (n < {block['min_n']})"))
 

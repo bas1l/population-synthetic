@@ -17,15 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-_COLOR_SERIES = (
-    "#4878CF",
-    "#D65F5F",
-    "#6AB187",
-    "#E8935A",
-    "#E9C46A",
-    "#8172B2",
-    "#64B5CD",
-)
+from population_synthetic.analysis.utils.palette import CATEGORICAL_SERIES
 
 
 def plot_violation_rates(
@@ -79,7 +71,7 @@ def plot_violation_rates(
         offset = (i - (n_pop - 1) / 2) * width
         ax.bar(
             x + offset, heights, width, label=population,
-            color=_COLOR_SERIES[i % len(_COLOR_SERIES)], edgecolor="white", linewidth=0.6,
+            color=CATEGORICAL_SERIES[i % len(CATEGORICAL_SERIES)], edgecolor="white", linewidth=0.6,
         )
 
     ax.set_xticks(x)

@@ -19,7 +19,7 @@ and renders, per country:
 Follows the project charting conventions (deferred ``Agg`` matplotlib import,
 ``dpi=150``/``bbox_inches="tight"``, ``plt.close`` on every path). The model x
 method heatmap additionally styles itself as a sibling of the manuscript tables
-by calling :mod:`population_synthetic.analysis.model_ranking.table_style` and
+by calling :mod:`population_synthetic.analysis.utils.table_style` and
 :mod:`population_synthetic.analysis.utils.palette` for every colour and contrast
 decision, so it can never drift from them.
 """
@@ -33,10 +33,24 @@ from typing import Any
 
 import numpy as np
 
-from population_synthetic.analysis.model_ranking.table_style import (
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
+from population_synthetic.analysis.utils.cap_index import CapIndex
+from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.palette import (
+    ANNOTATION_GREY,
+    BAR_EDGE,
+    CATEGORICAL_SERIES,
+    HOST_COLORS,
+    MISSING_COLOR,
+    MUTED_GREY,
+    SECONDARY_GREY,
+    heatmap_cmap,
+    text_color_for_rgb,
+    text_color_on,
+)
+from population_synthetic.analysis.utils.table_style import (
     ANNOT_FONTSIZE,
     BOX_EDGE,
-    HOST_COLORS,
     HOST_DEFAULT_CLASS,
     HOST_LABELS,
     add_percentage_colorbar,
@@ -44,25 +58,6 @@ from population_synthetic.analysis.model_ranking.table_style import (
     horizontal_divider,
     inferno_cmap,
     vertical_divider,
-)
-from population_synthetic.analysis.utils.axes import strategy_complexity_order
-from population_synthetic.analysis.utils.cap_index import CapIndex
-from population_synthetic.analysis.utils.figures import save_figure
-from population_synthetic.analysis.utils.palette import (
-    MISSING_COLOR,
-    heatmap_cmap,
-    text_color_for_rgb,
-    text_color_on,
-)
-
-_COLOR_SERIES = (
-    "#4878CF",
-    "#D65F5F",
-    "#6AB187",
-    "#E8935A",
-    "#E9C46A",
-    "#8172B2",
-    "#64B5CD",
 )
 
 
@@ -171,13 +166,13 @@ def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -
     fig, ax = plt.subplots(figsize=(9.0, max(3.5, len(ranking) * 0.45 + 1.8)))
     ax.barh(
         positions, means,
-        color=_COLOR_SERIES[0], edgecolor="#33486F", linewidth=0.5, alpha=0.85, height=0.65,
+        color=CATEGORICAL_SERIES[0], edgecolor=BAR_EDGE, linewidth=0.5, alpha=0.85, height=0.65,
     )
     for pos, mean, coherence in zip(positions, means, coherences):
         if mean == mean:
             ax.text(
                 mean, pos, f"  {mean:.3f}  (coh {coherence:.3f})",
-                va="center", ha="left", fontsize=7.5, color="#333333",
+                va="center", ha="left", fontsize=7.5, color=ANNOTATION_GREY,
             )
 
     ax.set_yticks(positions)
@@ -215,7 +210,7 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
     """
     combos: dict[str, Any] = result.get("combos", {})
     strategies = _ordered_strategies(result["metadata"]["strategies"])
-    color_for = {s: _COLOR_SERIES[i % len(_COLOR_SERIES)] for i, s in enumerate(strategies)}
+    color_for = {s: CATEGORICAL_SERIES[i % len(CATEGORICAL_SERIES)] for i, s in enumerate(strategies)}
 
     by_strategy: dict[str, list[tuple[float, float, str]]] = {}
     for combo in combos.values():
@@ -249,11 +244,11 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
             edgecolor="white", linewidth=0.6, alpha=0.9, zorder=3,
         )
 
-    ax.axhline(0.5, color="#888888", linestyle="--", linewidth=1.0, zorder=1)
+    ax.axhline(0.5, color=MUTED_GREY, linestyle="--", linewidth=1.0, zorder=1)
     ax.text(
         0.01, 0.5, "0.5 = indistinguishable joint",
         transform=ax.get_yaxis_transform(), va="bottom", ha="left",
-        fontsize=7.5, color="#666666",
+        fontsize=7.5, color=SECONDARY_GREY,
     )
 
     ax.set_xlabel("mean TV-similarity across attributes (marginal fidelity)", fontsize=9)
@@ -317,8 +312,8 @@ def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Pat
             offsets = x - 0.4 + width * (m_idx + 0.5)
             ax.bar(
                 offsets, heights, width=width,
-                label=model, color=_COLOR_SERIES[m_idx % len(_COLOR_SERIES)],
-                edgecolor="#33486F", linewidth=0.4, alpha=0.85,
+                label=model, color=CATEGORICAL_SERIES[m_idx % len(CATEGORICAL_SERIES)],
+                edgecolor=BAR_EDGE, linewidth=0.4, alpha=0.85,
             )
 
         ax.set_xticks(x)

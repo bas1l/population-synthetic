@@ -43,19 +43,21 @@ from population_synthetic.analysis.method_significance.builder import (
 )
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils.figures import save_figure
-from population_synthetic.analysis.utils.palette import heatmap_cmap, text_color_on
+from population_synthetic.analysis.utils.palette import (
+    ANNOTATION_GREY,
+    BAR_EDGE,
+    CATEGORICAL_SERIES,
+    FAINT_LINK,
+    MUTED_GREY,
+    PALE_FILL,
+    RESIDUAL_GREY,
+    WARNING_FILL,
+    WARNING_TEXT,
+    heatmap_cmap,
+    text_color_on,
+)
 
 logger = logging.getLogger(__name__)
-
-_COLOR_SERIES = (
-    "#4878CF",
-    "#D65F5F",
-    "#6AB187",
-    "#E8935A",
-    "#E9C46A",
-    "#8172B2",
-    "#64B5CD",
-)
 
 
 def _tv_distance(record: ComboPerformance, attr: str) -> float | None:
@@ -124,7 +126,7 @@ def plot_method_trends(
             ys = [np.nan if v is None else v for v in ys]
             ax.plot(
                 x, ys, marker="o", markersize=5, linewidth=1.6,
-                color=_COLOR_SERIES[m_idx % len(_COLOR_SERIES)], label=model, alpha=0.9,
+                color=CATEGORICAL_SERIES[m_idx % len(CATEGORICAL_SERIES)], label=model, alpha=0.9,
             )
 
         ax.set_xticks(x)
@@ -299,9 +301,9 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
         side_left = idx < k / 2.0
         edge = axis_lo if side_left else axis_hi
         ha = "right" if side_left else "left"
-        ax.plot([rank, rank], [axis_y, y], color=_COLOR_SERIES[idx % len(_COLOR_SERIES)],
+        ax.plot([rank, rank], [axis_y, y], color=CATEGORICAL_SERIES[idx % len(CATEGORICAL_SERIES)],
                 linewidth=1.3)
-        ax.plot([rank, edge], [y, y], color=_COLOR_SERIES[idx % len(_COLOR_SERIES)],
+        ax.plot([rank, edge], [y, y], color=CATEGORICAL_SERIES[idx % len(CATEGORICAL_SERIES)],
                 linewidth=1.3)
         label = f"{name} ({rank:.2f})"
         ax.text(edge, y, f"{label} " if ha == "right" else f" {label}",
@@ -317,7 +319,7 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
             j += 1
         if j > i:
             ax.plot([ranks[i] - 0.02, ranks[j] + 0.02], [bar_y - drawn * 0.03] * 2,
-                    color="#333333", linewidth=3.0, solid_capstyle="round")
+                    color=ANNOTATION_GREY, linewidth=3.0, solid_capstyle="round")
             drawn += 1
             i = j
         else:
@@ -325,7 +327,7 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
 
     # CD scale bar (top-left) showing the critical difference magnitude.
     ax.plot([axis_lo, axis_lo + cd], [axis_y + 0.18, axis_y + 0.18],
-            color="#333333", linewidth=2.0)
+            color=ANNOTATION_GREY, linewidth=2.0)
     ax.text(axis_lo + cd / 2.0, axis_y + 0.20, f"CD = {cd:.2f}",
             ha="center", va="bottom", fontsize=8)
 
@@ -372,15 +374,15 @@ def plot_factor_dominance(result: dict[str, Any], out_path: str | Path) -> Path 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     positions = list(range(len(order)))[::-1]
-    colors = {"model": "#4878CF", "method": "#D65F5F",
-              "category": "#6AB187", "residual": "#BBBBBB"}
+    colors = {"model": CATEGORICAL_SERIES[0], "method": CATEGORICAL_SERIES[1],
+              "category": CATEGORICAL_SERIES[2], "residual": RESIDUAL_GREY}
 
     fig, ax = plt.subplots(figsize=(8.0, max(2.6, len(order) * 0.55 + 1.4)))
-    ax.barh(positions, shares, color=[colors.get(k, "#888888") for k in order],
-            edgecolor="#33486F", linewidth=0.5, alpha=0.9, height=0.6)
+    ax.barh(positions, shares, color=[colors.get(k, MUTED_GREY) for k in order],
+            edgecolor=BAR_EDGE, linewidth=0.5, alpha=0.9, height=0.6)
     for pos, share in zip(positions, shares):
         ax.text(share, pos, f"  {share * 100:.1f}%", va="center", ha="left",
-                fontsize=8, color="#333333")
+                fontsize=8, color=ANNOTATION_GREY)
 
     ax.set_yticks(positions)
     ax.set_yticklabels(order, fontsize=9)
@@ -446,7 +448,7 @@ def _draw_sig_bracket(
     text: str,
     *,
     tick: float,
-    color: str = "#333333",
+    color: str = ANNOTATION_GREY,
     linewidth: float = 1.1,
     fontsize: float = 8.0,
 ) -> None:
@@ -555,15 +557,15 @@ def _draw_method_panel(
         ax.text(
             (len(methods) - 1) / 2.0, 0.5,
             f"insufficient n (n<3)\nn={n_models} complete model(s)",
-            ha="center", va="center", fontsize=10, color="#B00020", fontweight="bold",
-            bbox={"boxstyle": "round", "facecolor": "#FDECEC", "edgecolor": "#B00020"},
+            ha="center", va="center", fontsize=10, color=WARNING_TEXT, fontweight="bold",
+            bbox={"boxstyle": "round", "facecolor": WARNING_FILL, "edgecolor": WARNING_TEXT},
         )
         ax.set_title(title, fontsize=9.5, fontweight="bold")
         return
 
     means = panel.get("means", {})
     heights = [means.get(s) if means.get(s) is not None else 0.0 for s in methods]
-    ax.bar(x, heights, width=0.62, color="#BFD1EA", edgecolor="#33486F",
+    ax.bar(x, heights, width=0.62, color=PALE_FILL, edgecolor=BAR_EDGE,
            linewidth=0.6, zorder=1)
 
     # Individual model points + faint paired lines (the paired/blocked structure).
@@ -573,8 +575,8 @@ def _draw_method_panel(
         ys = [row.get(s) for s in methods]
         ys = [np.nan if (v is None or v != v) else float(v) for v in ys]
         jitter = (rng.random(len(methods)) - 0.5) * 0.18
-        ax.plot(x + jitter, ys, color="#8899AA", linewidth=0.6, alpha=0.35, zorder=2)
-        ax.scatter(x + jitter, ys, s=14, color="#4878CF", alpha=0.75,
+        ax.plot(x + jitter, ys, color=FAINT_LINK, linewidth=0.6, alpha=0.35, zorder=2)
+        ax.scatter(x + jitter, ys, s=14, color=CATEGORICAL_SERIES[0], alpha=0.75,
                    edgecolors="white", linewidths=0.4, zorder=3)
 
     # Significance brackets over the configured pairs.
@@ -721,7 +723,7 @@ def plot_method_comparison(
 
     key_text = _star_key_text(thresholds, ns_symbol, pairs_mode)
     fig.text(0.5, 0.005, "key -- " + key_text, ha="center", va="bottom", fontsize=8,
-             color="#333333")
+             color=ANNOTATION_GREY)
 
     fig.tight_layout(rect=(0.0, 0.03, 1.0, 0.97))
     return save_figure(fig, Path(out_path), dpi=150)
