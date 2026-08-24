@@ -98,7 +98,7 @@ Fixing these one at a time leaves ~15 places for the next drift to appear.
 - [ ] Method axes render as A–E with an in-figure key.
 - [ ] `{country}_mapped_validity_grid_clean.{png,svg,eps}` exists beside the annotated F05, produced
       by the same renderer with a different annotation policy.
-- [ ] `labels.resolve()` raises on an unknown id; a unit test asserts the raise.
+- [x] `labels.resolve()` raises on an unknown id; a unit test asserts the raise.
 - [ ] Every emitted EPS is within 19.05 by 22.23 cm and under 10 MB — asserted by a test.
 - [ ] A generated model-provenance table exists as a CSV artifact.
 - [ ] `pytest` passes, including the existing seven chart test modules and `test_palette.py`.
@@ -298,14 +298,53 @@ times up to five strategy columns, previously ~17.5 in wide), `real_population_s
 ### Phase 3: The label resolver
 **Goal:** Ids stop reaching the canvas.
 
-- [ ] 3.1 — Create `analysis/utils/labels.py`, reading axis YAML `label:` fields directly, mirroring `axes.py`'s direct-read discipline since importing `manifest_loader` would be circular. No id-to-string table in code.
-- [ ] 3.2 — Implement `UnknownAxisValue`, raised with the offending id and the files searched. No `.get(id, id)`.
-- [ ] 3.3 — Strip provider prefixes for display, sourced from an explicit `display:` block added to each model axis YAML — not by string-splitting on `openrouter_`.
-- [ ] 3.4 — Implement `method_letters()` and `method_key_lines()` over `strategy_complexity_order`, including the version-marker rule.
-- [ ] 3.5 — Implement `model_provenance_rows()` and a script emitting the provenance CSV.
-- [ ] 3.6 — Unit tests: known ids resolve; an unknown id raises; letters follow `_families.yaml` order; reordering that file reorders the letters; a mixed-version set yields subscripted letters.
+**Started:** 2026-08-24
+**Completed:** 2026-08-24
 
-**Files Modified:** `analysis/utils/labels.py` (new), `config/synthetic/axes/models/*.yaml` (add `display:`), `scripts/analyze/` (provenance emitter), `tests/test_labels.py` (new)
+- [x] 3.1 — Create `analysis/utils/labels.py`, reading axis YAML `label:` fields directly, mirroring `axes.py`'s direct-read discipline since importing `manifest_loader` would be circular. No id-to-string table in code.
+- [x] 3.2 — Implement `UnknownAxisValue`, raised with the offending id and the files searched. No `.get(id, id)`.
+- [x] 3.3 — Strip provider prefixes for display, sourced from an explicit `display:` block added to each model axis YAML — not by string-splitting on `openrouter_`.
+- [x] 3.4 — Implement `method_letters()` and `method_key_lines()` over `strategy_complexity_order`, including the version-marker rule.
+- [x] 3.5 — Implement `model_provenance_rows()` and a script emitting the provenance CSV.
+- [x] 3.6 — Unit tests: known ids resolve; an unknown id raises; letters follow `_families.yaml` order; reordering that file reorders the letters; a mixed-version set yields subscripted letters.
+
+**Notes.** Nothing is wired into a chart module — that is Phase 4 and later; this phase
+builds the resolver, adds the config it reads, and emits the table.
+
+*The version marker is a plain digit, not a subscript.* Arial carries no U+2080–2089
+glyph (verified against `C:\Windows\Fonts\arial.ttf`), so a true subscript would render
+as a missing-glyph box or silently pull a second typeface in through matplotlib's
+per-glyph fallback — the class of silent-wrong-output this layer exists to remove.
+Mathtext (`$B_1$`) renders, but is matplotlib syntax and `labels.py`'s contract forbids
+it knowing a renderer exists. `method_letters` therefore returns `B1`/`B2`, and the key
+line disambiguates in words (`B1 — All Pick DAG (v1)`). The rule was flagged for review
+in the conventions above; this is the renderable form of it.
+
+*Letters are absolute, not dense.* A letter is the family's rank in `_families.yaml`, so
+a figure omitting a family shows `A` and `C` rather than renumbering to `A` and `B` —
+two figures drawn over different arms stay readable against each other. The version
+marker is the opposite and is a property of the id *set*, exactly as specified.
+
+*Two additions the task list did not name.* `axes.py` gains `strategy_families()`, the
+public sibling of its existing `strategy_versions()` — the letter needs the family, and
+the alternatives were importing `axes._strategy_family_version` or duplicating the read.
+And `attribute_label()` needed a home for strings that exist nowhere in config today:
+`config/analysis/attribute_labels.yaml`, country-agnostic, because the keys are canonical
+mapped-schema names shared by all four mapping tiers and a `label` in each tier's
+per-attribute JSON would be four copies of one string. This is not the `figure_labels.yaml`
+rejected above — that was rejected for *duplicating* the axis YAMLs' existing `label:`,
+which this file does not touch. A test asserts every attribute of every tier's `_index.json`
+resolves.
+
+*The provenance CSV's folder is deliberately unregistered.* `model_provenance/` sits under
+`03_Analysis/` (stage segment from the registry, never a literal) but is not an
+analysis-registry process: registry entries are DAG nodes with run inputs, a GUI task and
+dependents, and this table is derived from the axis config alone.
+
+**Files Modified:** `analysis/utils/labels.py` (new), `analysis/utils/axes.py`
+(`strategy_families`), `config/synthetic/axes/models/*.yaml` (add `display:`),
+`config/analysis/attribute_labels.yaml` (new),
+`scripts/analyze/export_model_provenance.py` (new), `tests/test_labels.py` (new)
 
 **Dependencies:** Phase 1
 
@@ -356,8 +395,8 @@ times up to five strategy columns, previously ~17.5 in wide), `real_population_s
 
 ### Unit Tests
 - [ ] `palette`: categorical roles are stable and distinct; the corrected luminance crosses at 0.179; every ramp sample yields text at 4.5:1 or above, or is reported.
-- [ ] `labels`: known ids resolve; an unknown one raises `UnknownAxisValue` naming the id; no `.get` fallback exists in the resolve path.
-- [ ] `labels`: A–E follow `_families.yaml`; reordering the file reorders the letters; mixed-version sets subscript.
+- [x] `labels`: known ids resolve; an unknown one raises `UnknownAxisValue` naming the id; no `.get` fallback exists in the resolve path.
+- [x] `labels`: A–E follow `_families.yaml`; reordering the file reorders the letters; mixed-version sets subscript.
 - [ ] `style`: no rcParam admits sub-8 pt text or sub-0.25 pt strokes; the size vocabulary stays within the caps.
 - [ ] `grid_annotations`: each policy declares `required_keys`; a mismatched cell record raises rather than rendering blank.
 
@@ -374,10 +413,10 @@ times up to five strategy columns, previously ~17.5 in wide), `real_population_s
 
 ### Edge Cases
 - [ ] A figure with one model and one method (degenerate grid).
-- [ ] A method axis containing only v2 strategies — bare letters, no subscripts.
+- [x] A method axis containing only v2 strategies — bare letters, no subscripts.
 - [ ] A withdrawn combination — the hatch and grey survive the refactor.
 - [ ] A very long attribute label at single-column width.
-- [ ] A model axis YAML with `label:` present but empty — must raise, not render blank.
+- [x] A model axis YAML with `label:` present but empty — must raise, not render blank.
 
 ---
 

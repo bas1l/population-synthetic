@@ -1,5 +1,10 @@
 id: "openrouter_gemini_flash_lite"
 label: "OpenRouter Gemini 2.5 Flash Lite"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "Gemini 2.5 Flash Lite"
 model_config:
   provider: "openrouter"
   model: "google/gemini-2.5-flash-lite"

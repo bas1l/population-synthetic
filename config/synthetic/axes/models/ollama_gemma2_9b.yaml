@@ -1,5 +1,10 @@
 id: "ollama_gemma2_9b"
 label: "Ollama Gemma2 9B"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "Gemma2 9B"
 discarded: true            # retired from the sweep; absent key == active
 model_config:
   provider: "ollama"
