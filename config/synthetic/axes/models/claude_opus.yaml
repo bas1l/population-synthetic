@@ -1,8 +1,12 @@
+# The CLI alias "opus" resolves to whatever the current Opus release is, so an
+# arm declared that way silently changes model under a fixed slug and pools two
+# different models into one method level. Pinned to the release every persona on
+# disk under this slug was generated with; newer Opus releases get their own id.
 id: "claude_opus"
-label: "Claude Opus"
+label: "Claude Opus 4.8"
 model_config:
   provider: "claude"
-  model: "opus"
+  model: "claude-opus-4-8"
   generation_config:
     temperature: null
     top_p: null
