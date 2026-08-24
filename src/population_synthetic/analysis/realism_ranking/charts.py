@@ -51,6 +51,8 @@ from __future__ import annotations
 import textwrap
 from typing import Any
 
+from population_synthetic.analysis.utils.grid_annotations import RateWithCountsPolicy
+from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.palette import (
     ANNOTATION_GREY,
     CATEGORICAL_SERIES,
@@ -89,6 +91,26 @@ __all__ = [
     "plot_typicality_by_method",
     "plot_typicality_heatmap",
 ]
+
+#: The impossibility / severity grids' cell annotation: the rate at its own 0--1 scale
+#: over the personas it was taken across. The rate is not a quotient of two counts the
+#: figure prints, so the base is named ``n=`` rather than as a fraction.
+_RATE_CELL_POLICY = RateWithCountsPolicy(
+    value_key="value", numerator_key=None, denominator_key="denominator",
+    scale=1.0, number_format=".3f",
+)
+
+#: The typicality grid's cell annotation: the statistic, its parenthesised signed
+#: distance to the real population, and the survivor count it rests on. The delta is
+#: read from the record, not derived here: it is a function of a *second* competitor's
+#: value, so the chart -- which owns the reference -- formats it and the policy prints
+#: what it is handed. That keeps the reference out of every cell's arithmetic while
+#: leaving it visible in the rendering, which is the whole of ADR 2026-08-12's
+#: Decision 2.
+_TYPICALITY_CELL_POLICY = RateWithCountsPolicy(
+    value_key="value", numerator_key=None, denominator_key="denominator",
+    scale=1.0, number_format=".3f", qualifier_key="delta",
+)
 
 _COMPETITOR_COLOR = CATEGORICAL_SERIES[0]
 _REAL_COLOR = HIGHLIGHT_ACCENT
@@ -293,6 +315,7 @@ def _render_grid_heatmap(
     Returns the ``Figure`` unsaved and open. Raises ``ValueError`` when nothing has a
     defined value, matching the sibling charts.
     """
+    import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -331,9 +354,29 @@ def _render_grid_heatmap(
             grow_height(n_rows, per_item=0.55, padding=2.4, minimum=3.2),
         ),
     )
-    im = ax.imshow(
-        np.ma.masked_invalid(plotted), aspect="auto",
-        cmap=heatmap_cmap(_SEQUENTIAL_CMAP, missing=_MISSING_COLOR), vmin=0.0, vmax=vmax,
+    # One record per judged competitor cell. An unjudged pair carries none: its wording
+    # is a statement about the absence of a judgement rather than about a value, and it
+    # is written below in the grey the figure reserves for exactly that. The real band's
+    # row carries no record either -- it is annotated once across the full width, because
+    # it is not decomposed by method.
+    cells: list[list[dict[str, Any] | None]] = []
+    for i in range(n_rows):
+        row: list[dict[str, Any] | None] = []
+        for j in range(max(len(methods), 1)):
+            value = plotted[i, j]
+            in_grid = i < len(models) and j < len(methods)
+            row.append(
+                {"value": float(value), "denominator": grid["cells"][models[i]][methods[j]]["denominator"]}
+                if in_grid and np.isfinite(value) else None
+            )
+        cells.append(row)
+
+    im = render_grid(
+        ax, plotted, cells,
+        policy=_RATE_CELL_POLICY,
+        cmap=heatmap_cmap(_SEQUENTIAL_CMAP, missing=_MISSING_COLOR),
+        norm=mcolors.Normalize(vmin=0.0, vmax=vmax),
+        aspect="auto", fontsize=ANNOTATION,
     )
 
     row_labels = list(models)
@@ -344,20 +387,13 @@ def _render_grid_heatmap(
     ax.set_yticks(range(n_rows))
     ax.set_yticklabels(row_labels, fontsize=TICK_LABEL)
 
-    # Annotate each cell with its value and denominator; grey cells say so explicitly.
+    # The grey cells say so explicitly; the measured ones were annotated by the shared
+    # renderer above.
     for i, model in enumerate(models):
         for j, method in enumerate(methods):
-            cell = grid["cells"].get(model, {}).get(method)
-            if cell is None or cell.get("rate") is None:
+            if cells[i][j] is None:
                 ax.text(j, i, "n/a", ha="center", va="center", fontsize=ANNOTATION,
                         color=SECONDARY_GREY, style="italic")
-                continue
-            value = float(cell["rate"])
-            ax.text(
-                j, i, f"{value:.3f}\nn={cell['denominator']}",
-                ha="center", va="center", fontsize=ANNOTATION,
-                color=text_color_on(im, value),
-            )
 
     if real_rate is not None:
         row = n_rows - 1
@@ -936,6 +972,7 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
     Returns the ``Figure`` unsaved and open. Raises ``ValueError`` when no competitor has
     a defined statistic, matching the sibling charts.
     """
+    import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
     import numpy as np
     from matplotlib.patches import Rectangle
@@ -968,13 +1005,31 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
 
     n_rows = len(models) + (1 if real_value is not None else 0)
     plotted = np.full((n_rows, max(len(methods), 1)), np.nan)
+    # A record only where the statistic exists. The two states that have no value -- a
+    # judged competitor holding no typicality-bearing persona, and an unjudged pair --
+    # are annotated below in their own wording and their own fill, because collapsing
+    # either into a number would publish a claim nobody made. The signed distance to the
+    # reference is pre-formatted here rather than in the policy: it needs a second unit's
+    # value, which no cell's own record carries.
+    cells: list[list[dict[str, Any] | None]] = []
     for i, model in enumerate(models):
+        row: list[dict[str, Any] | None] = []
         for j, method in enumerate(methods):
             cell = grid["cells"][model][method]
             if cell is not None and cell["value"] is not None:
-                plotted[i, j] = float(cell["value"])
+                value = float(cell["value"])
+                plotted[i, j] = value
+                row.append({
+                    "value": value,
+                    "denominator": cell["denominator"],
+                    "delta": _delta(value),
+                })
+            else:
+                row.append(None)
+        cells.append(row)
     if real_value is not None:
         plotted[-1, :] = float(real_value)
+        cells.append([None] * max(len(methods), 1))
 
     fig, ax = plt.subplots(
         figsize=(
@@ -982,9 +1037,12 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
             grow_height(n_rows, per_item=0.55, padding=2.4, minimum=3.2),
         ),
     )
-    im = ax.imshow(
-        np.ma.masked_invalid(plotted), aspect="auto",
-        cmap=heatmap_cmap(_SEQUENTIAL_CMAP, missing=_MISSING_COLOR), vmin=vmin, vmax=vmax,
+    im = render_grid(
+        ax, plotted, cells,
+        policy=_TYPICALITY_CELL_POLICY,
+        cmap=heatmap_cmap(_SEQUENTIAL_CMAP, missing=_MISSING_COLOR),
+        norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
+        aspect="auto", fontsize=ANNOTATION, zorder=4,
     )
 
     row_labels = list(models)
@@ -1015,20 +1073,14 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
                         ha="center", va="center", fontsize=ANNOTATION, color=FOOTNOTE_GREY,
                         style="italic", zorder=4)
                 continue
-            value = float(cell["value"])
             if cell["under_powered"]:
+                # Under the annotation the shared renderer already drew at zorder 4: the
+                # hatch qualifies the number and must not strike through it.
                 ax.add_patch(Rectangle(
                     (j - 0.5, i - 0.5), 1, 1, fill=False, edgecolor=_UNDER_POWERED_EDGE,
                     hatch=_UNDER_POWERED_HATCH, alpha=_UNDER_POWERED_ALPHA,
                     linewidth=0.0, zorder=2,
                 ))
-            # Above the hatch, always: the hatch qualifies the number and must not be
-            # allowed to strike through it.
-            ax.text(
-                j, i, f"{value:.3f}{_delta(value)}\nn={cell['denominator']}",
-                ha="center", va="center", fontsize=ANNOTATION, zorder=4,
-                color=text_color_on(im, value),
-            )
 
     if real_value is not None:
         row = n_rows - 1

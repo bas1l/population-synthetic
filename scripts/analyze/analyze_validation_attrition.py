@@ -30,6 +30,13 @@ Outputs, per country, under the analysis-stage validation_attrition folder:
     {country}_attrition.json    counts, both rates, totals, the withdrawn list, provenance
     {country}_attrition_funnel.png/.svg          per-combination normalised funnel
     {country}_mapped_validity_grid.png/.svg      model x method validation-survival grid
+    {country}_mapped_validity_grid_clean.png/.svg  the same grid, rate-only annotations
+
+The grid is published twice from ONE renderer: the annotated variant prints each rate
+over the two counts it is the quotient of, the clean variant prints the rate alone at a
+larger size. They share their rows, columns, extent, colour scale and markings by
+construction -- the only difference is the annotation policy handed to the shared draw
+loop -- so the camera-ready figure can never drift from the diagnostic one.
 
 The JSON carries no timestamp, so re-running over unchanged gate records rewrites the
 CSV and the JSON byte-for-byte. That claim covers the PNGs too but NOT the SVG siblings:
@@ -70,6 +77,7 @@ from population_synthetic.analysis.validation_attrition.builder import (
     build_rows,
 )
 from population_synthetic.analysis.validation_attrition.charts import (
+    GRID_VARIANTS,
     plot_attrition_funnel,
     plot_mapped_validity_grid,
 )
@@ -132,6 +140,32 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dpi", type=int, default=200, help="PNG render resolution. Default: 200.")
     return parser.parse_args()
+
+
+#: The variant published under the bare grid filename. Every other variant is suffixed
+#: with its own name, so the historical artifact keeps its path and a new variant cannot
+#: silently take it over.
+_DEFAULT_GRID_VARIANT = "annotated"
+
+
+def _grid_variant_suffixes() -> list[tuple[str, object]]:
+    """``(filename_suffix, variant)`` for every publishable grid variant.
+
+    The default variant keeps the unsuffixed filename it has always had; the rest are
+    written beside it as ``_{name}``. Raises when the chart module no longer publishes
+    the default variant, rather than silently renaming the artifact every downstream
+    reference points at.
+    """
+    if _DEFAULT_GRID_VARIANT not in GRID_VARIANTS:
+        raise KeyError(
+            f"the validity grid no longer publishes a {_DEFAULT_GRID_VARIANT!r} variant; "
+            f"known variants are {sorted(GRID_VARIANTS)}. The unsuffixed "
+            "{country}_mapped_validity_grid artifact is named after it."
+        )
+    return [
+        ("" if name == _DEFAULT_GRID_VARIANT else f"_{name}", GRID_VARIANTS[name])
+        for name in GRID_VARIANTS
+    ]
 
 
 def _split_csv(values: list[str] | None) -> list[str] | None:
@@ -260,11 +294,18 @@ def main() -> None:
         if not args.no_charts:
             charts = [
                 (f"{country}_attrition_funnel", lambda: plot_attrition_funnel(document)),
-                (
-                    f"{country}_mapped_validity_grid",
-                    lambda: plot_mapped_validity_grid(document, hosting=model_hosting),
-                ),
             ]
+            # One entry per grid variant, enumerated from the chart module rather than
+            # named here: adding a variant there publishes it without touching the CLI.
+            for suffix, variant in _grid_variant_suffixes():
+                charts.append((
+                    f"{country}_mapped_validity_grid{suffix}",
+                    # `variant` is bound per iteration; a closure over the loop name
+                    # would render the last variant under every filename.
+                    lambda variant=variant: plot_mapped_validity_grid(
+                        document, hosting=model_hosting, variant=variant,
+                    ),
+                ))
             for name, build in charts:
                 try:
                     saved = save_figure(build(), attrition_dir / f"{name}.png", dpi=args.dpi)

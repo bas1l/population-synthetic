@@ -30,6 +30,12 @@ from population_synthetic.analysis.utils._stats import median as _median
 from population_synthetic.analysis.utils._stats import percentile as _percentile
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.grid_annotations import (
+    COMPACT_NUMBER_FORMAT,
+    RateOnlyPolicy,
+    RateWithCountsPolicy,
+)
+from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.palette import (
     BAR_EDGE,
     CAPTION_GREY,
@@ -38,7 +44,6 @@ from population_synthetic.analysis.utils.palette import (
     MUTED_GREY,
     SECONDARY_GREY,
     heatmap_cmap,
-    text_color_on,
 )
 from population_synthetic.analysis.utils.style import (
     ANNOTATION,
@@ -93,11 +98,20 @@ def _ordered_methods(strategies: set[str]) -> list[str]:
     return strategy_complexity_order(sorted(strategies))
 
 
-def _fmt_mean(value: float) -> str:
-    """Compact cell label for a mean (integers plain, small/large floats via %g)."""
-    if abs(value) >= 1000 or (value and abs(value) < 0.01):
-        return f"{value:.3g}"
-    return f"{value:.2f}"
+#: The metric grids' cell annotation: the mean over the personas it rests on, with that
+#: count beneath it. The mean is not a quotient of two printed counts, so the base is
+#: named ``n=`` rather than as a fraction. The compact format is the module's own
+#: long-standing rule -- two decimals through the readable range, three significant
+#: figures for the token counts in the thousands and the costs in thousandths.
+_MEAN_CELL_POLICY = RateWithCountsPolicy(
+    value_key="value", numerator_key=None, denominator_key="denominator",
+    scale=1.0, number_format=COMPACT_NUMBER_FORMAT,
+)
+
+#: The per-combo diagnostic heatmap's cell annotation: the cell statistic alone, three
+#: significant figures. It carries no count -- the matrix it is built from publishes one
+#: value per cell and no base.
+_MATRIX_CELL_POLICY = RateOnlyPolicy(value_key="value", scale=1.0, number_format=".3g")
 
 
 @house_style
@@ -160,8 +174,20 @@ def render_metric_heatmaps(
                 grow_height(len(models), per_item=0.55, padding=2.0, minimum=3.5),
             ),
         )
-        masked = np.ma.masked_invalid(means)
-        im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap())
+        cells = [
+            [
+                None if np.isnan(means[i, j]) else {
+                    "value": float(means[i, j]), "denominator": int(counts[i, j]),
+                }
+                for j in range(len(methods))
+            ]
+            for i in range(len(models))
+        ]
+        im = render_grid(
+            ax, means, cells,
+            policy=_MEAN_CELL_POLICY, cmap=heatmap_cmap(), aspect="auto",
+            fontsize=ANNOTATION,
+        )
 
         ax.set_xticks(range(len(methods)))
         ax.set_xticklabels(methods, rotation=30, ha="right", fontsize=TICK_LABEL)
@@ -171,18 +197,13 @@ def render_metric_heatmaps(
         cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
         cbar.set_label(_METRIC_LABELS.get(metric, metric), fontsize=AXIS_TITLE)
 
+        # The two reasons a cell has no mean are not the same fact, so they are not drawn
+        # alike: a combination that was never run leaves its cell bare, while one that ran
+        # and produced no gated observation says so.
         for i in range(len(models)):
             for j in range(len(methods)):
-                if np.isnan(means[i, j]):
-                    # Distinguish "combo absent" from "combo present, metric ungated".
-                    if (models[i], methods[j]) in by_cell:
-                        ax.text(j, i, "n/a", ha="center", va="center", fontsize=ANNOTATION, color=SECONDARY_GREY)
-                    continue
-                color = text_color_on(im, means[i, j])
-                ax.text(
-                    j, i, f"{_fmt_mean(means[i, j])}\nn={counts[i, j]}",
-                    ha="center", va="center", fontsize=ANNOTATION, color=color,
-                )
+                if np.isnan(means[i, j]) and (models[i], methods[j]) in by_cell:
+                    ax.text(j, i, "n/a", ha="center", va="center", fontsize=ANNOTATION, color=SECONDARY_GREY)
 
         ax.set_title(
             f"{country}: {_METRIC_LABELS.get(metric, metric)} (mean per model x method)",
@@ -800,8 +821,15 @@ def _plot_heatmap(
             grow_height(len(models), per_item=0.5, padding=2.5, minimum=5.0),
         ),
     )
-    masked = np.ma.masked_invalid(values)
-    im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap())
+    cells = [
+        [None if np.isnan(value) else {"value": float(value)} for value in row]
+        for row in values
+    ]
+    im = render_grid(
+        ax, values, cells,
+        policy=_MATRIX_CELL_POLICY, cmap=heatmap_cmap(), aspect="auto",
+        fontsize=ANNOTATION,
+    )
 
     ax.set_xticks(range(len(methods)))
     ax.set_xticklabels(methods, rotation=35, ha="right", fontsize=TICK_LABEL)
@@ -812,14 +840,6 @@ def _plot_heatmap(
     label = f"{agg} {metric_label}" + (f" ({unit})" if unit else "")
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label(label, fontsize=AXIS_TITLE)
-
-    for i in range(len(models)):
-        for j in range(len(methods)):
-            v = values[i, j]
-            if np.isnan(v):
-                continue
-            ax.text(j, i, f"{v:.3g}", ha="center", va="center", fontsize=ANNOTATION,
-                    color=text_color_on(im, v))
 
     ax.set_title(f"{metric_label}: model x method", fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()

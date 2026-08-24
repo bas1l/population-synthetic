@@ -47,6 +47,8 @@ from typing import Any
 import numpy as np
 
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.grid_annotations import RateOnlyPolicy
+from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.palette import (
     HOST_COLORS,
     MISSING_COLOR,
@@ -78,38 +80,40 @@ from population_synthetic.analysis.utils.table_style import (
 # Table-specific private helpers
 # ------------------------------------------------------------------
 
-def _annotate_and_box(ax, values: np.ndarray, cmap, norm, best_cells: set[tuple[int, int]]) -> None:
-    """Write ``f"{v*100:.1f}"`` per finite cell; bold + draw a border on the best-per-column cells.
+#: The tables' cell annotation: the TV-similarity rescaled to a 0--100 percentage, one
+#: decimal. Colour and the best-per-column argmax stay on the underlying 0--1 value --
+#: only the printed number is rescaled.
+_CELL_POLICY = RateOnlyPolicy(value_key="value", scale=100.0, number_format=".1f")
 
-    The displayed number is the TV-similarity rescaled to a 0--100 percentage
-    (one decimal), while colour (``cmap(norm(v))``) and the best-per-column argmax
-    stay on the underlying 0--1 value -- only the annotation text is rescaled.
-    Text colour is chosen from the actual inferno cell colour by relative
-    luminance, so annotations stay legible on both the near-black low end and the
-    bright-yellow high end of the ramp.
+
+def _render_table(ax, values: np.ndarray, cmap, norm, best_cells: set[tuple[int, int]]):
+    """Draw the table grid, annotate it, and box the best cell of each column.
+
+    The image and the annotations come from the shared draw loop, so the text colour is
+    read off what the ramp actually painted rather than tuned to one ramp's luminance
+    profile, and a cell record that does not match the annotation policy raises instead
+    of rendering as an unmeasured cell. The box and the bold are this figure's own
+    emphasis and are handed over as plain cell coordinates.
     """
     from matplotlib.patches import Rectangle
 
-    n_rows, n_cols = values.shape
-    for i in range(n_rows):
-        for j in range(n_cols):
-            v = values[i, j]
-            if np.isnan(v):
-                continue
-            is_best = (i, j) in best_cells
-            ax.text(
-                j, i, f"{v * 100:.1f}",
-                ha="center", va="center", fontsize=ANNOT_FONTSIZE,
-                color=text_color_for_rgb(cmap(norm(v))),
-                fontweight="bold" if is_best else "normal",
+    cells = [
+        [None if np.isnan(value) else {"value": float(value)} for value in row]
+        for row in values
+    ]
+    im = render_grid(
+        ax, values, cells,
+        policy=_CELL_POLICY, cmap=cmap, norm=norm, aspect="auto",
+        fontsize=ANNOT_FONTSIZE, bold_cells=best_cells,
+    )
+    for i, j in best_cells:
+        ax.add_patch(
+            Rectangle(
+                (j - 0.5, i - 0.5), 1, 1,
+                fill=False, edgecolor=BOX_EDGE, linewidth=2.0, zorder=5,
             )
-            if is_best:
-                ax.add_patch(
-                    Rectangle(
-                        (j - 0.5, i - 0.5), 1, 1,
-                        fill=False, edgecolor=BOX_EDGE, linewidth=2.0, zorder=5,
-                    )
-                )
+        )
+    return im
 
 
 def _global_best_strategy(matrix: dict[str, Any]) -> str | None:
@@ -261,7 +265,7 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
             grow_height(len(row_models), per_item=0.5, padding=2.5, minimum=4.0),
         ),
     )
-    im = ax.imshow(np.ma.masked_invalid(values), cmap=cmap, norm=norm, aspect="auto")
+    im = _render_table(ax, values, cmap, norm, best_cells_per_column(values))
 
     categories_on_top(ax, attributes + ["overall"])
     ax.set_yticks(range(len(row_models)))
@@ -272,7 +276,6 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
         label.set_color(HOST_COLORS[hosting.get(model, HOST_DEFAULT_CLASS)])
 
     vertical_divider(ax, len(attributes))
-    _annotate_and_box(ax, values, cmap, norm, best_cells_per_column(values))
 
     add_percentage_colorbar(fig, im, ax, "TV-similarity (%)")
 
@@ -328,13 +331,12 @@ def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> 
             grow_height(len(ordered), per_item=0.5, padding=2.5, minimum=3.0),
         ),
     )
-    im = ax.imshow(np.ma.masked_invalid(values), cmap=cmap, norm=norm, aspect="auto")
+    im = _render_table(ax, values, cmap, norm, best_cells_per_column(values))
 
     categories_on_top(ax, attributes + ["overall"])
     ax.set_yticks(range(len(ordered)))
     ax.set_yticklabels(ordered, fontsize=TICK_LABEL)
     vertical_divider(ax, len(attributes))
-    _annotate_and_box(ax, values, cmap, norm, best_cells_per_column(values))
 
     add_percentage_colorbar(fig, im, ax, "TV-similarity (%, mean over models)")
 

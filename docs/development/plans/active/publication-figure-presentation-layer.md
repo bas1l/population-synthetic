@@ -96,8 +96,9 @@ Fixing these one at a time leaves ~15 places for the next drift to appear.
 - [ ] No axis tick label, legend entry or title in any emitted figure contains an underscore.
 - [ ] No axis label contains `openrouter`, `ollama`, `claude_`, or any other provider token.
 - [ ] Method axes render as A–E with an in-figure key.
-- [ ] `{country}_mapped_validity_grid_clean.{png,svg,eps}` exists beside the annotated F05, produced
-      by the same renderer with a different annotation policy.
+- [x] `{country}_mapped_validity_grid_clean.{png,svg,eps}` exists beside the annotated F05, produced
+      by the same renderer with a different annotation policy. *(PNG and SVG today; the EPS
+      sibling arrives with Phase 5's export branch.)*
 - [x] `labels.resolve()` raises on an unknown id; a unit test asserts the raise.
 - [ ] Every emitted EPS is within 19.05 by 22.23 cm and under 10 MB — asserted by a test.
 - [ ] A generated model-provenance table exists as a CSV artifact.
@@ -351,14 +352,62 @@ dependents, and this table is derived from the axis config alone.
 ### Phase 4: The heatmap renderer and F05
 **Goal:** One draw loop, pluggable annotations, and the clean F05 variant.
 
-- [ ] 4.1 — Create `analysis/utils/grid_annotations.py` with the four policies and the `required_keys` contract.
-- [ ] 4.2 — Create `analysis/utils/grids.py::render_grid`, validating the first cell record against `policy.required_keys` and raising on a mismatch.
-- [ ] 4.3 — Refactor `validation_attrition/charts.py:352 plot_mapped_validity_grid` to call it, with `RateWithCountsPolicy` reproducing today's output exactly.
-- [ ] 4.4 — Emit the clean F05 as the same call with `RateOnlyPolicy`, at 8 pt or above — room freed by dropping the count line — to `{country}_mapped_validity_grid_clean.*`.
-- [ ] 4.5 — Migrate the other 10 heatmap call sites onto `render_grid`.
-- [ ] 4.6 — Substitutability test: both policies over the same input produce identical dimensions, extent and colour scale, differing only in cell text.
+**Started:** 2026-08-24
+**Completed:** 2026-08-24
 
-**Files Modified:** `analysis/utils/grids.py` (new), `analysis/utils/grid_annotations.py` (new), the 11 heatmap-bearing `charts.py`, `scripts/analyze/analyze_validation_attrition.py`, `tests/test_grids.py` (new), `tests/test_validation_attrition_charts.py`
+- [x] 4.1 — Create `analysis/utils/grid_annotations.py` with the four policies and the `required_keys` contract.
+- [x] 4.2 — Create `analysis/utils/grids.py::render_grid`, validating the first cell record against `policy.required_keys` and raising on a mismatch.
+- [x] 4.3 — Refactor `validation_attrition/charts.py:352 plot_mapped_validity_grid` to call it, with `RateWithCountsPolicy` reproducing today's output exactly.
+- [x] 4.4 — Emit the clean F05 as the same call with `RateOnlyPolicy`, at 8 pt or above — room freed by dropping the count line — to `{country}_mapped_validity_grid_clean.*`.
+- [x] 4.5 — Migrate the other 10 heatmap call sites onto `render_grid`.
+- [x] 4.6 — Substitutability test: both policies over the same input produce identical dimensions, extent and colour scale, differing only in cell text.
+
+**Notes.** `grep -rn "\.imshow(" src/` now matches exactly one line, in `grids.py`. All
+eleven grids share the draw loop, the annotation-colour rule and the missing-cell
+treatment; the ramp, the norm and every piece of furniture (dividers, boxes, hatches,
+marginals, colourbars, captions, legends) stay with the caller, so `grids.py` still knows
+nothing about which quantity is drawn.
+
+*Validation is on every record, not the first.* The task list said the first; a block can
+be uniform in its first row and ragged afterwards, and the cell that silently loses its
+number is exactly the one a first-record-only check would skip. The cost is one dict
+subtraction per cell.
+
+*The policies are key-declaring, not key-fixed.* Each takes the record keys it reads as
+fields (`value_key`, `denominator_key`, ...) and derives `required_keys` from that
+declaration. This is not the banned key-guessing — nothing falls back to a second key or
+reads through `.get(key, default)`; a caller *states* the shape and a typo still raises.
+It is what let eleven differently-shaped blocks share four policies. Two knobs earned
+their place the same way: `RateWithCountsPolicy.numerator_key=None` prints the base as
+`n=` rather than as a fraction (the value is then not a quotient of two printed counts),
+and `qualifier_key` names an already-formatted suffix — the typicality grid's signed
+distance to the real population, which needs a *second* unit's value and so is formatted
+by the chart that owns the reference, never derived in the policy. `COMPACT_NUMBER_FORMAT`
+is a named formatting rule rather than a format spec, which is what preserved
+`generation_metadata`'s existing mixed-magnitude cell labels byte-for-byte.
+
+*The clean F05 is a `GridVariant` record, not a boolean.* The annotated and clean figures
+differ in three things — the policy, the annotation size, and one sentence of the caption
+— and the caption sentence *describes* the policy, so a clean figure captioned "printed
+with the two counts it is the quotient of" would be a figure disagreeing with itself. The
+three travel together in one frozen record; the CLI enumerates `GRID_VARIANTS` rather than
+naming the variants, and the default variant keeps the historical unsuffixed filename so
+no downstream reference moves.
+
+*Tick labels: F05 only, deliberately.* The validity grid now draws model display labels
+and method letters A–E with the key in the graphic — it was being rebuilt anyway. The
+other ten grids still print ids, for two reasons. `test_model_ranking_charts.py` and
+`test_method_significance_charts.py` build their figures from synthetic ids (`model_a`,
+`model_b`) that `labels.py` rejects *by design*, so relabelling those grids means
+rewriting two fixture sets and the ordering assertions that rest on them. And relabelling
+is a visible change to the manuscript figure family, which task 6.1 exists to review as
+one diff; landing it in fragments across two phases would give that review a moving
+target. Moved to Phase 6, where the compliance test that enforces it also lands.
+
+**Files Modified:** `analysis/utils/grids.py` (new), `analysis/utils/grid_annotations.py` (new),
+`analysis/{fidelity,generation_metadata,method_significance,model_ranking,realism_ranking,validation_attrition}/charts.py`,
+`analysis/model_ranking/manuscript_tables.py`, `scripts/analyze/analyze_validation_attrition.py`,
+`tests/test_grids.py` (new), `tests/test_validation_attrition_charts.py`
 
 **Dependencies:** Phases 1–3
 
@@ -398,10 +447,10 @@ dependents, and this table is derived from the axis config alone.
 - [x] `labels`: known ids resolve; an unknown one raises `UnknownAxisValue` naming the id; no `.get` fallback exists in the resolve path.
 - [x] `labels`: A–E follow `_families.yaml`; reordering the file reorders the letters; mixed-version sets subscript.
 - [ ] `style`: no rcParam admits sub-8 pt text or sub-0.25 pt strokes; the size vocabulary stays within the caps.
-- [ ] `grid_annotations`: each policy declares `required_keys`; a mismatched cell record raises rather than rendering blank.
+- [x] `grid_annotations`: each policy declares `required_keys`; a mismatched cell record raises rather than rendering blank.
 
 ### Integration Tests
-- [ ] Both F05 policies over one input: identical dimensions, extent and colour scale; only cell text differs.
+- [x] Both F05 policies over one input: identical dimensions, extent and colour scale; only cell text differs.
 - [ ] Every figure-producing entry point emits PNG, SVG and EPS within the size and file-size budget.
 - [ ] A run whose model axis lacks a `display:` block fails before any figure is written.
 
@@ -414,7 +463,7 @@ dependents, and this table is derived from the axis config alone.
 ### Edge Cases
 - [ ] A figure with one model and one method (degenerate grid).
 - [x] A method axis containing only v2 strategies — bare letters, no subscripts.
-- [ ] A withdrawn combination — the hatch and grey survive the refactor.
+- [x] A withdrawn combination — the hatch and grey survive the refactor.
 - [ ] A very long attribute label at single-column width.
 - [x] A model axis YAML with `label:` present but empty — must raise, not render blank.
 

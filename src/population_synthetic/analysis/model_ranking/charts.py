@@ -36,6 +36,11 @@ import numpy as np
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.cap_index import CapIndex
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.grid_annotations import (
+    RateOnlyPolicy,
+    RateWithCountsPolicy,
+)
+from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.palette import (
     ANNOTATION_GREY,
     BAR_EDGE,
@@ -46,7 +51,6 @@ from population_synthetic.analysis.utils.palette import (
     SECONDARY_GREY,
     heatmap_cmap,
     text_color_for_rgb,
-    text_color_on,
 )
 from population_synthetic.analysis.utils.style import (
     ANNOTATION,
@@ -72,6 +76,18 @@ from population_synthetic.analysis.utils.table_style import (
     horizontal_divider,
     inferno_cmap,
     vertical_divider,
+)
+
+#: The combo table's cell annotation: TV-similarity at its own 0--1 scale, two decimals.
+_COMBO_CELL_POLICY = RateOnlyPolicy(value_key="value", scale=1.0, number_format=".2f")
+
+#: The model x method grid's cell annotation: TV-similarity as a percentage over the
+#: persona count the cell rests on. Not a quotient of two printed counts, so the base is
+#: named ``n=``; a combination that was scored on no axis prints the count it does have
+#: beneath an explicit dash rather than a number it never measured.
+_GRID_CELL_POLICY = RateWithCountsPolicy(
+    value_key="value", numerator_key=None, denominator_key="n",
+    scale=100.0, number_format=".1f", absent_text="--",
 )
 
 
@@ -119,8 +135,15 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
             grow_height(len(ranking), per_item=0.45, padding=2.5, minimum=4.0),
         ),
     )
-    masked = np.ma.masked_invalid(values)
-    im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap())
+    cells = [
+        [None if np.isnan(value) else {"value": float(value)} for value in row]
+        for row in values
+    ]
+    im = render_grid(
+        ax, values, cells,
+        policy=_COMBO_CELL_POLICY, cmap=heatmap_cmap(), aspect="auto",
+        fontsize=ANNOTATION,
+    )
 
     ax.set_xticks(range(len(attributes) + 1))
     ax.set_xticklabels(attributes + ["overall"], rotation=40, ha="right", fontsize=TICK_LABEL)
@@ -130,14 +153,6 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
     cbar.set_label("TV-similarity (1 - TV distance)", fontsize=AXIS_TITLE)
-
-    for i in range(values.shape[0]):
-        for j in range(values.shape[1]):
-            v = values[i, j]
-            if np.isnan(v):
-                continue
-            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=ANNOTATION,
-                    color=text_color_on(im, v))
 
     country = result["metadata"]["country"]
     ax.set_title(
@@ -660,12 +675,33 @@ def plot_model_method_heatmap(
     )
 
     def _draw_block(block: list[_ModelRow], y_top: float):
-        """One imshow per tier block, so the break between them is a real gap."""
+        """One render per tier block, so the break between them is a real gap.
+
+        The cell records carry the value and the count it rests on; a combination absent
+        from the run carries none at all, so it is painted grey and left unannotated
+        rather than being given a dash it could be read as a measurement of. A thin cell's
+        annotation is set on a patch of its own fill, which is what keeps the hatch that
+        marks it from crossing the number it qualifies.
+        """
         block_values = np.vstack([row.values for row in block])
-        return ax.imshow(
-            np.ma.masked_invalid(block_values), cmap=cmap, norm=norm, aspect="auto",
+        cells = [
+            [
+                None if row.counts[j] is None else {
+                    "value": None if np.isnan(row.values[j]) else float(row.values[j]),
+                    "n": row.counts[j],
+                }
+                for j in range(n_methods)
+            ]
+            for row in block
+        ]
+        text_on_fill = [[not row.full[j] for j in range(n_methods)] for row in block]
+        return render_grid(
+            ax, block_values, cells,
+            policy=_GRID_CELL_POLICY, cmap=cmap, norm=norm, aspect="auto",
             interpolation="nearest",
             extent=(-0.5, n_methods - 0.5, y_top + len(block) - 0.5, y_top - 0.5),
+            row_origin=y_top, fontsize=ANNOT_FONTSIZE, linespacing=1.35,
+            text_on_fill=text_on_fill,
         )
 
     im = _draw_block(tier1, 0.0) if tier1 else _draw_block(tier2, 0.0)
@@ -686,37 +722,25 @@ def plot_model_method_heatmap(
         if row.tier == 2:
             label.set_fontstyle("italic")
 
-    # --- cells: value, n, and the thin marking.
+    # --- the thin marking, drawn under the annotations the blocks above already wrote
+    # (text sits at zorder 3), so the marking never costs the reader the value and the
+    # count it is qualifying.
     missing_text_color = text_color_for_rgb(mcolors.to_rgb(MISSING_COLOR))
     for i, row in enumerate(ordered):
         y = row_y[i]
         for j in range(n_methods):
-            n = row.counts[j]
-            if n is None:  # combination absent from the run -- grey, no value, no marking
+            if row.counts[j] is None or row.full[j]:
                 continue
             v = float(row.values[j])
             measured = not np.isnan(v)
-            fill = cmap(norm(v)) if measured else MISSING_COLOR
             color = text_color_for_rgb(cmap(norm(v))) if measured else missing_text_color
-            # A thin cell's annotation is set on a patch of the cell's own colour, so
-            # the hatch that marks the cell reads across the rest of it without
-            # crossing the number and the count it is qualifying.
-            bbox = None if row.full[j] else {"facecolor": fill, "edgecolor": "none", "pad": 1.4}
-            ax.text(
-                j, y, f"{v * 100:.1f}\nn={n}" if measured else f"--\nn={n}",
-                ha="center", va="center", fontsize=ANNOT_FONTSIZE, color=color,
-                linespacing=1.35, bbox=bbox,
-            )
-            if not row.full[j]:
-                # Under the annotation (text sits at zorder 3), so the marking never
-                # costs the reader the value and the count it is qualifying.
-                ax.add_patch(
-                    Rectangle(
-                        (j - 0.5, y - 0.5), 1, 1, fill=False, linewidth=0.0,
-                        hatch=_THIN_HATCH,
-                        edgecolor=color if measured else BOX_EDGE, zorder=2,
-                    )
+            ax.add_patch(
+                Rectangle(
+                    (j - 0.5, y - 0.5), 1, 1, fill=False, linewidth=0.0,
+                    hatch=_THIN_HATCH,
+                    edgecolor=color if measured else BOX_EDGE, zorder=2,
                 )
+            )
 
     # --- the break between the tiers: a gap, a dashed dark rule inside it, and the reason.
     if tier1 and tier2:

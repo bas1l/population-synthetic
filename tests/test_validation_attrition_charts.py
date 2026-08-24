@@ -37,10 +37,18 @@ import pytest  # noqa: E402
 from population_synthetic._paths import PROJECT_ROOT  # noqa: E402
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from population_synthetic.analysis.utils.cap_index import INDEX_FILENAME  # noqa: E402
+from population_synthetic.analysis.utils.labels import (  # noqa: E402
+    method_key_lines,
+    method_letters,
+    model_label,
+)
 from population_synthetic.analysis.utils.palette import MISSING_COLOR  # noqa: E402
 from population_synthetic.analysis.utils.registry import analysis_output_dir  # noqa: E402
 from population_synthetic.analysis.validation_attrition.charts import (  # noqa: E402
     CELL_STATES,
+    GRID_VARIANT_ANNOTATED,
+    GRID_VARIANT_CLEAN,
+    GRID_VARIANTS,
     _cell_state,
     _segment_counts,
     plot_attrition_funnel,
@@ -149,6 +157,16 @@ def _annotation_at(ax, x: float, y: float) -> str:
     raise AssertionError(f"no annotation drawn at cell ({x}, {y})")
 
 
+def _row_index(ax, model_id: str) -> int:
+    """Row of *model_id* on the grid, found by the display label the axis carries.
+
+    The rows are labelled from the model axis YAMLs, so the test looks the id up the same
+    way the figure does rather than expecting the id itself on the canvas.
+    """
+    labels = [label.get_text() for label in ax.get_yticklabels()]
+    return labels.index(model_label(model_id))
+
+
 def _hatched_cells(ax) -> set[tuple[int, int]]:
     """``(row, column)`` of every cell carrying the withdrawal hatch."""
     cells = set()
@@ -230,8 +248,7 @@ def test_grid_draws_all_four_states_distinguishably() -> None:
     ax = fig.axes[0]
     array = ax.get_images()[0].get_array()
     mask = np.ma.getmaskarray(array)
-    models = [label.get_text() for label in ax.get_yticklabels()]
-    haiku, gemini = models.index("claude_haiku"), models.index("gemini_flash")
+    haiku, gemini = _row_index(ax, "claude_haiku"), _row_index(ax, "gemini_flash")
 
     # measured and withdrawn both carry a painted value; the two grey states do not.
     assert not mask[haiku, 0] and not mask[haiku, 1]
@@ -264,7 +281,14 @@ def test_grid_columns_follow_the_config_complexity_order() -> None:
     fig = plot_mapped_validity_grid(document)
     ax = fig.axes[0]
 
-    assert [label.get_text() for label in ax.get_xticklabels()] == list(_METHODS)
+    letters = method_letters(_METHODS)
+    assert [label.get_text() for label in ax.get_xticklabels()] == [
+        letters[method] for method in _METHODS
+    ]
+    # ... and the key that makes those letters readable travels on the figure itself.
+    drawn = chr(10).join(_annotations(ax))
+    for line in method_key_lines(_METHODS):
+        assert line in drawn
 
     import matplotlib.pyplot as plt
     plt.close(fig)
@@ -281,11 +305,13 @@ def test_grid_rows_cover_every_model_including_a_fully_withdrawn_one() -> None:
     fig = plot_mapped_validity_grid(document)
     ax = fig.axes[0]
 
-    assert sorted(label.get_text() for label in ax.get_yticklabels()) == [
-        "claude_haiku", "gemini_flash",
-    ]
+    assert sorted(label.get_text() for label in ax.get_yticklabels()) == sorted(
+        [model_label("claude_haiku"), model_label("gemini_flash")]
+    )
     # Worst pooled survival last.
-    assert [label.get_text() for label in ax.get_yticklabels()][-1] == "gemini_flash"
+    assert [label.get_text() for label in ax.get_yticklabels()][-1] == model_label(
+        "gemini_flash"
+    )
 
     import matplotlib.pyplot as plt
     plt.close(fig)
@@ -491,7 +517,7 @@ def workspace(tmp_path: Path) -> Path:
     ])
 
 
-def test_cli_writes_both_tables_and_both_figures(workspace: Path) -> None:
+def test_cli_writes_both_tables_and_every_figure(workspace: Path) -> None:
     result = _run_cli(workspace)
     assert result.returncode == 0, result.stderr
     out_dir = analysis_output_dir("validation_attrition", workspace)
@@ -506,9 +532,17 @@ def test_cli_writes_both_tables_and_both_figures(workspace: Path) -> None:
     assert withdrawn[0]["retention_rate"] == str(9 / 150)
     assert withdrawn[0]["generation_multiplier"] == str(150 / 9)
 
-    for stem in (f"{_COUNTRY}_attrition_funnel", f"{_COUNTRY}_mapped_validity_grid"):
+    stems = [
+        f"{_COUNTRY}_attrition_funnel",
+        f"{_COUNTRY}_mapped_validity_grid",
+        f"{_COUNTRY}_mapped_validity_grid_clean",
+    ]
+    for stem in stems:
         assert (out_dir / f"{stem}.png").is_file()
         assert (out_dir / f"{stem}.svg").is_file()
+    # The clean grid is an addition beside the annotated one, never a replacement of it:
+    # every downstream reference to the historical filename keeps resolving.
+    assert len(list(out_dir.glob("*.png"))) == len(stems)
 
 
 def test_cli_no_charts_writes_no_png_and_no_svg(workspace: Path) -> None:
@@ -520,10 +554,12 @@ def test_cli_no_charts_writes_no_png_and_no_svg(workspace: Path) -> None:
     assert list(out_dir.glob("*.png")) == []
     assert list(out_dir.glob("*.svg")) == []
 
-    # ... and a second, ordinary run then produces both formats for both figures.
+    # ... and a second, ordinary run then produces both formats for every figure: the
+    # funnel plus one grid per publishable variant.
     assert _run_cli(workspace, "--force").returncode == 0
-    assert len(list(out_dir.glob("*.png"))) == 2
-    assert len(list(out_dir.glob("*.svg"))) == 2
+    expected = 1 + len(GRID_VARIANTS)
+    assert len(list(out_dir.glob("*.png"))) == expected
+    assert len(list(out_dir.glob("*.svg"))) == expected
 
 
 def test_cli_is_idempotent_and_skips_without_force(workspace: Path) -> None:

@@ -16,6 +16,8 @@ import numpy as np
 from population_synthetic.analysis.fidelity.evaluator import attr_value
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.grid_annotations import RateOnlyPolicy
+from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.marginals import compute_proportions
 from population_synthetic.analysis.utils.palette import (
     ACCENT_PAIR,
@@ -23,7 +25,6 @@ from population_synthetic.analysis.utils.palette import (
     MUTED_GREY,
     SECONDARY_GREY,
     heatmap_cmap,
-    text_color_on,
 )
 from population_synthetic.analysis.utils.style import (
     ANNOTATION,
@@ -292,6 +293,12 @@ def plot_radar_comparison(
 # Multivariate association-fidelity heatmap (|Delta V|)
 # ------------------------------------------------------------------
 
+#: The association heatmap's cell annotation: |Delta V| printed at its own scale, two
+#: decimals. Not a percentage -- it is a difference of two Cramer's V values, and
+#: rescaling it would invent a unit the statistic does not carry.
+_ASSOCIATION_CELL_POLICY = RateOnlyPolicy(value_key="value", scale=1.0, number_format=".2f")
+
+
 @house_style
 def plot_association_heatmap(
     report: dict[str, Any],
@@ -316,6 +323,7 @@ def plot_association_heatmap(
     if not pairs:
         return None
 
+    import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
 
     # Attribute order: the config axis when supplied (stable across combos),
@@ -348,6 +356,10 @@ def plot_association_heatmap(
     masked = np.ma.masked_invalid(grid)
     if masked.count() == 0:
         return None
+    cells = [
+        [None if np.isnan(value) else {"value": float(value)} for value in row]
+        for row in grid
+    ]
 
     fig, ax = plt.subplots(
         figsize=(
@@ -356,7 +368,15 @@ def plot_association_heatmap(
         ),
     )
     vmax = max(float(masked.max()), 1e-6)
-    im = ax.imshow(masked, cmap=heatmap_cmap(), vmin=0.0, vmax=vmax)
+    # Anchored at a true zero: |Delta V| = 0 is identical association, a real floor, so a
+    # cell at the ramp's low end always means "no discrepancy" and never "least in this
+    # particular combo".
+    im = render_grid(
+        ax, grid, cells,
+        policy=_ASSOCIATION_CELL_POLICY, cmap=heatmap_cmap(),
+        norm=mcolors.Normalize(vmin=0.0, vmax=vmax),
+        fontsize=ANNOTATION,
+    )
 
     ax.set_xticks(range(n))
     ax.set_xticklabels(attrs, rotation=40, ha="right", fontsize=TICK_LABEL)
@@ -365,14 +385,6 @@ def plot_association_heatmap(
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
     cbar.set_label("|Delta V|  (Cramer's V: real vs synthetic)", fontsize=AXIS_TITLE)
-
-    for i in range(n):
-        for j in range(n):
-            v = grid[i, j]
-            if np.isnan(v):
-                continue
-            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=ANNOTATION,
-                    color=text_color_on(im, v))
 
     title = "Pairwise association fidelity  |Delta V|"
     if prefix:

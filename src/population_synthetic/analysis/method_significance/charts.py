@@ -43,6 +43,8 @@ from population_synthetic.analysis.method_significance.builder import (
 )
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.grid_annotations import SignedValuePolicy
+from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.palette import (
     ANNOTATION_GREY,
     BAR_EDGE,
@@ -178,6 +180,14 @@ def plot_method_trends(
 # Slope heatmap (attribute x model) -- descriptive interaction view
 # ------------------------------------------------------------------
 
+#: The slope grid's cell annotation. The sign is not decoration: the house ramp is
+#: sequential and orders cells by magnitude alone, so two slopes of equal size and
+#: opposite direction are drawn differently and neither drawing says which was which.
+#: The printed sign, the colourbar label and the rule at zero are the only places the
+#: direction appears.
+_SLOPE_CELL_POLICY = SignedValuePolicy(value_key="value", scale=1.0, number_format=".3f")
+
+
 @house_style
 def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Attribute x model heatmap of the descriptive TV(method) trend slope.
@@ -209,6 +219,7 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
     if np.all(np.isnan(values)):
         return None
 
+    import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
 
     out_path = Path(out_path)
@@ -229,7 +240,16 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
     # always lands at the same point of the ramp across figures. The ramp orders by
     # magnitude, not by sign, so the sign is carried by the signed cell annotations, the
     # colourbar label and the rule drawn at zero below -- never by the colour.
-    im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap(), vmin=-bound, vmax=bound)
+    cells = [
+        [None if np.isnan(value) else {"value": float(value)} for value in row]
+        for row in values
+    ]
+    im = render_grid(
+        ax, values, cells,
+        policy=_SLOPE_CELL_POLICY, cmap=heatmap_cmap(),
+        norm=mcolors.Normalize(vmin=-bound, vmax=bound),
+        aspect="auto", fontsize=ANNOTATION,
+    )
 
     ax.set_xticks(range(len(models)))
     ax.set_xticklabels(models, rotation=40, ha="right", fontsize=TICK_LABEL)
@@ -239,14 +259,6 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
     cbar.set_label("TV(method) slope (+ = worsens, - = improves)", fontsize=AXIS_TITLE)
     cbar.ax.axhline(0.0, color=text_color_on(im, 0.0), linewidth=2.0)
-
-    for i in range(values.shape[0]):
-        for j in range(values.shape[1]):
-            v = values[i, j]
-            if np.isnan(v):
-                continue
-            ax.text(j, i, f"{v:+.3f}", ha="center", va="center", fontsize=ANNOTATION,
-                    color=text_color_on(im, v))
 
     country = result["metadata"]["country"]
     ax.set_title(
