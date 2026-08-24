@@ -6,7 +6,8 @@ plotter here takes the flat summary rows
 produced and draws them; it does not touch a raw population or a rule.
 
 Follows the project charting conventions (deferred ``Agg`` matplotlib import,
-``dpi=150``/``bbox_inches="tight"``, ``plt.close`` on every path) and returns
+persistence delegated to ``analysis/utils/figures.py::save_figure``, which writes
+the PNG+SVG+EPS trio and closes the figure) and returns
 ``None`` -- writing nothing -- when there is no data to plot, matching the "skip a
 chart only when the underlying data is genuinely empty" rule the other analysis
 charts follow.
@@ -17,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from population_synthetic.analysis.utils.figures import save_figure
 from population_synthetic.analysis.utils.palette import CATEGORICAL_SERIES
 from population_synthetic.analysis.utils.style import (
     AXIS_TITLE,
@@ -97,6 +99,4 @@ def plot_violation_rates(
         title = f"{country}: {title}"
     ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)

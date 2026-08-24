@@ -348,6 +348,6 @@ def plot_marginal_progression(
             fig.tight_layout()
 
             out_path = root / model / f"{attr}.png"
-            written.append(save_figure(fig, out_path, dpi=150))
+            written.append(save_figure(fig, out_path))
 
     return written

@@ -89,18 +89,22 @@ Fixing these one at a time leaves ~15 places for the next drift to appear.
 ## Success Criteria
 
 - [ ] `grep -rn "matplotlib.use\|plt.rcParams\|plt.style.use" src/` matches only `analysis/utils/style.py`.
-- [ ] `grep -rn "fig.savefig" src/` matches only `analysis/utils/figures.py`.
-- [ ] Every figure-producing call site emits PNG, SVG and EPS.
+- [x] `grep -rn "fig.savefig" src/` matches only `analysis/utils/figures.py`.
+- [x] Every figure-producing call site emits PNG, SVG and EPS. *(Every call site routes
+      through the one writer, which emits all three or writes nothing; the nine figures
+      listed in Phase 5's notes currently write nothing, pending task 6.7.)*
 - [ ] No literal hex colour string outside `analysis/utils/palette.py`.
 - [ ] No `fontsize=` numeric literal below 8.0 anywhere in `src/`.
 - [ ] No axis tick label, legend entry or title in any emitted figure contains an underscore.
 - [ ] No axis label contains `openrouter`, `ollama`, `claude_`, or any other provider token.
 - [ ] Method axes render as A–E with an in-figure key.
 - [x] `{country}_mapped_validity_grid_clean.{png,svg,eps}` exists beside the annotated F05, produced
-      by the same renderer with a different annotation policy. *(PNG and SVG today; the EPS
-      sibling arrives with Phase 5's export branch.)*
+      by the same renderer with a different annotation policy. *(All three formats, once
+      task 6.7 brings the validity grid under the printable width.)*
 - [x] `labels.resolve()` raises on an unknown id; a unit test asserts the raise.
-- [ ] Every emitted EPS is within 19.05 by 22.23 cm and under 10 MB — asserted by a test.
+- [x] Every emitted EPS is within 19.05 by 22.23 cm and under 10 MB — asserted by a test.
+      *(Enforced on write, not merely asserted: an over-budget figure raises and nothing
+      reaches disk. `tests/test_figures.py` covers both budgets and the raise.)*
 - [ ] A generated model-provenance table exists as a CSV artifact.
 - [ ] `pytest` passes, including the existing seven chart test modules and `test_palette.py`.
 
@@ -414,13 +418,81 @@ target. Moved to Phase 6, where the compliance test that enforces it also lands.
 ### Phase 5: Export
 **Goal:** Every figure emits vector, in every required format, within budget.
 
-- [ ] 5.1 — Extend `figures.py::save_figure` with an EPS branch: fonts embedded or outlined, RGB.
-- [ ] 5.2 — Route the ~20 direct `fig.savefig(..., dpi=150)` calls through it; remove the `dpi=180` outlier.
-- [ ] 5.3 — Unify DPI to one source, replacing the 150/180/200 regimes and the five `--dpi` CLI defaults.
-- [ ] 5.4 — Validate on write: canvas within 19.05 by 22.23 cm and file under 10 MB, raising on violation.
-- [ ] 5.5 — Test asserting all three formats appear and satisfy the budget.
+**Started:** 2026-08-24
+**Completed:** 2026-08-24
 
-**Files Modified:** `analysis/utils/figures.py`, `analysis/{fidelity,method_significance,model_ranking,consistency,multivariate_fidelity}/charts.py`, the five `scripts/analyze/*.py` carrying `--dpi`, `tests/test_figures.py` (new)
+- [x] 5.1 — Extend `figures.py::save_figure` with an EPS branch: fonts embedded or outlined, RGB.
+- [x] 5.2 — Route the ~20 direct `fig.savefig(..., dpi=150)` calls through it; remove the `dpi=180` outlier.
+- [x] 5.3 — Unify DPI to one source, replacing the 150/180/200 regimes and the five `--dpi` CLI defaults.
+- [x] 5.4 — Validate on write: canvas within 19.05 by 22.23 cm and file under 10 MB, raising on violation.
+- [x] 5.5 — Test asserting all three formats appear and satisfy the budget.
+
+**Notes.** `grep -rn "fig.savefig" src/` now matches one line, inside `save_figure` itself.
+The 19 direct writers are routed; `RASTER_DPI` in `figures.py` is the layer's only
+resolution and the five `--dpi` flags default to it rather than to a literal (a test
+asserts both, and that no chart module carries a `dpi=<number>` at all). Its value is
+**300**, which unifies *upwards* — no figure loses resolution against the 150/180/200 it
+replaces. The standards document's 600 dpi is for unavoidable raster content, of which
+this layer has none: every figure is line art whose submission artifact is the EPS.
+
+*The budgets are checked on the rendered bytes, and a rejection writes nothing.* All
+three formats are rendered to memory first, the canvas is measured from the EPS
+`%%HiResBoundingBox` and each format's length against the 10 MB ceiling, and only then is
+anything written — so a figure that breaks a budget leaves no partial output. The canvas
+is measured from the *written* file rather than from `fig.get_size_inches()` because
+`bbox_inches="tight"` is what decides the written extent: it trims unused margin, and it
+grows past the figure rectangle for any artist placed outside it. The figure's nominal
+size is therefore not the size the printer receives, and the budget applies to the latter.
+
+*`pad_inches` is pinned to zero.* matplotlib adds 0.1 in of whitespace on each side of the
+tight box, so a figure drawn exactly at the printable cap was written 0.5 cm over it and
+Phase 2's size vocabulary was unreachable by construction. At zero, the written canvas is
+the content extent, so it can exceed the cap only when an artist genuinely overflows the
+figure rectangle — which is the case worth failing on. This is a visible change to every
+figure's crop (tighter), and is part of what task 6.1 reviews.
+
+*The three grids flagged in Phase 2 resolved two-to-one.* `fidelity::plot_radar_grid` now
+fits at 18.30 x 22.04 cm and `real_population_stats::plot_overview_panel` at 18.86 x 21.49 cm
+on synthetic labels — both were only over by the padding. `method_significance::plot_method_comparison`
+still fails, at 19.71 cm: with three columns at the cap, the rightmost panel's two-line title
+is centred on a column whose centre leaves less than half the title's width to the page edge.
+Widening is impossible (it is already at the cap) and narrowing makes the overhang worse, so
+the fix is a layout change, not a size reduction.
+
+*Enforcement found six more figures the plan had not counted*, all overflowing the printable
+**width** by drawing text (a caption, a legend, a label column) wider than the canvas itself:
+
+| Figure | Rendered canvas | What overflows |
+|--------|-----------------|----------------|
+| `method_significance::plot_method_comparison` | 19.71 cm | rightmost panel title |
+| `model_ranking::plot_model_method_heatmap` | 21.60 cm | marginal column, colourbar and legend |
+| `validation_attrition::plot_mapped_validity_grid` (F05) | 23.18 cm | caption line and legend entry |
+| `validation_attrition::plot_attrition_funnel` | 26.63 cm | caption and legend |
+| `cost_efficiency::plot_cost_vs_accuracy` | 21.86 x 25.20 cm | model labels and two annotation blocks (both axes over) |
+| `realism_ranking::plot_typicality_heatmap` | 23.24 cm | caption and colourbar furniture |
+| `realism_ranking::plot_impossibility_forest` | 19.16 cm | competitor labels |
+| `fidelity::plot_radar_comparison` | 19.53 cm | attribute labels and legend outside the polar axes |
+| `real_population_stats::plot_overview_panel` (real labels) | 20.04 cm | outermost panels' category labels |
+
+None is a new defect — each figure's content was always wider than the printable page, and
+`bbox_inches="tight"` silently grew the canvas to fit it. Nothing was clamped to accommodate
+them: the fix is per-figure layout work, added as task 6.7. Of the 47 tests that render them,
+14 are marked `xfail(strict=True)` carrying the measured size and the cause, so each breaks
+again the moment its figure is fixed. The other 33 are `model_ranking`'s: its `_render` helper
+swallows that one budget rejection and nothing else, so every structural assertion about what
+was drawn keeps running, and only its two persistence tests are marked.
+
+*EPS fidelity, verified.* Hatching survives — the withdrawn-cell hatch in F05 is written as a
+PostScript pattern, not dropped. Transparency does **not**: the PostScript backend logs
+"partially transparent artists will be rendered opaque" and flattens every `alpha=`, so the
+EPS differs from its PNG and SVG siblings wherever alpha is used (grid lines, radar fills,
+scatter points). That is the risk row already recorded in this plan; the opaque-equivalent
+replacement is task 6.8. Fonts are embedded as TrueType (`FontType 42` plus the `sfnts`
+program) even when a chart module returns an unsaved `Figure` and its driver saves it outside
+`apply_house_style`, because `save_figure` installs the save-time `rcParams` subset itself —
+read from the house style rather than restated.
+
+**Files Modified:** `analysis/utils/figures.py`, `analysis/{fidelity,method_significance,model_ranking,consistency,multivariate_fidelity,generation_metadata}/charts.py`, `analysis/model_ranking/manuscript_tables.py`, `analysis/{persona_realism,real_population_stats}/artifacts.py`, the five `scripts/analyze/*.py` carrying `--dpi`, `tests/test_figures.py` (new), `tests/test_{comparison_artifacts,cost_efficiency_charts,method_comparison_chart,model_ranking_charts,real_population_stats_integration,realism_ranking_e2e,validation_attrition_charts}.py`
 
 **Dependencies:** Phase 2
 
@@ -433,6 +505,8 @@ target. Moved to Phase 6, where the compliance test that enforces it also lands.
 - [ ] 6.4 — Add a thin cell stroke to grid heatmaps: abutting tiles cause simultaneous contrast (Crameri et al. 2020, citing Wong 2010), and `imshow` currently draws no separator.
 - [ ] 6.5 — Update `CLAUDE.md`, `docs/architecture/sub-packages.md` and `docs/architecture/design-principles.md`.
 - [ ] 6.6 — Write `docs/development/figure-conventions.md`: the standards-doc constraints, the labelling conventions and their sources, and the A–E key.
+- [ ] 6.7 — Bring the nine over-cap figures under the printable width (table in Phase 5's notes): each draws a caption, legend or label column wider than the canvas, so the fix is wrapping or relocating that text, never shrinking the figure. Clearing one un-`xfail`s its tests — the markers are `strict=True` and will fail loudly if left behind.
+- [ ] 6.8 — Replace every `alpha=` in the chart modules with an opaque equivalent: the PostScript backend flattens transparency, so the submitted EPS currently differs from its PNG and SVG siblings wherever alpha is used.
 
 **Files Modified:** `CLAUDE.md`, `docs/architecture/*.md`, `docs/development/figure-conventions.md` (new), `scripts/analyze/rank_persona_realism.py`, `analysis/utils/grids.py`, `tests/test_figure_compliance.py` (new)
 
@@ -451,7 +525,7 @@ target. Moved to Phase 6, where the compliance test that enforces it also lands.
 
 ### Integration Tests
 - [x] Both F05 policies over one input: identical dimensions, extent and colour scale; only cell text differs.
-- [ ] Every figure-producing entry point emits PNG, SVG and EPS within the size and file-size budget.
+- [x] Every figure-producing entry point emits PNG, SVG and EPS within the size and file-size budget.
 - [ ] A run whose model axis lacks a `display:` block fails before any figure is written.
 
 ### Manual Verification

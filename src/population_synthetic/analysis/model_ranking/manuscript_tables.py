@@ -31,9 +31,10 @@ for *presentation only*; this is a presentation default, not a data default --
 no computed value is affected.
 
 Follows the project charting conventions (deferred ``Agg`` matplotlib import,
-NaN -> grey, ``dpi=150``, white Overall divider, category labels on top) and
+NaN -> grey, white Overall divider, category labels on top) and
 persists via the shared
-:func:`population_synthetic.analysis.utils.figures.save_figure` (PNG + SVG pair).
+:func:`population_synthetic.analysis.utils.figures.save_figure` (PNG+SVG+EPS trio,
+at that module's single raster resolution).
 The visual grammar those conventions describe is not defined here: it lives in
 :mod:`population_synthetic.analysis.utils.table_style`, shared with the
 other manuscript-style grids so they cannot drift apart.
@@ -296,7 +297,7 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
         fontsize=FIGURE_TITLE, fontweight="bold", pad=28,
     )
     fig.tight_layout()
-    return save_figure(fig, Path(out_path), dpi=150)
+    return save_figure(fig, Path(out_path))
 
 
 # ------------------------------------------------------------------
@@ -346,7 +347,7 @@ def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> 
         fontsize=FIGURE_TITLE, fontweight="bold", pad=28,
     )
     fig.tight_layout()
-    return save_figure(fig, Path(out_path), dpi=150)
+    return save_figure(fig, Path(out_path))
 
 
 # ------------------------------------------------------------------

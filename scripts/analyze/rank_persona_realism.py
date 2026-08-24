@@ -128,7 +128,7 @@ Usage:
 --typicality-min-n    Typicality-bearing personas a competitor needs before its cell is read
                 as powered. Default: 30. Below it the cell is flagged and counted, never dropped.
 --typicality-tail-threshold  k0 of the secondary P(typicality <= k0) column. Default: 5.
---dpi           PNG render resolution. Default: 200.
+--dpi           PNG render resolution. Default: the layer's one raster resolution (``figures.RASTER_DPI``).
 """
 
 import argparse
@@ -160,7 +160,7 @@ from population_synthetic.analysis.realism_ranking.charts import (
     plot_typicality_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors
-from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.figures import RASTER_DPI, save_figure
 from population_synthetic.analysis.utils.realism_csv import SEVERITY_LEVELS
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
@@ -284,7 +284,7 @@ def _parse_args() -> argparse.Namespace:
         "tail_coverage): at k0=3 a sixth of the swedish_02 cells sit at exactly 0.000 and "
         "the column carries almost nothing.",
     )
-    parser.add_argument("--dpi", type=int, default=200, help="PNG render resolution. Default: 200.")
+    parser.add_argument("--dpi", type=int, default=RASTER_DPI, help=f"PNG render resolution. Default: {RASTER_DPI}.")
     return parser.parse_args()
 
 

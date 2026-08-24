@@ -7,7 +7,8 @@ cross-combo scatter is a self-contained variant of
 come from the multivariate block (no marginal-TV dependency).
 
 Follows the project charting conventions (deferred ``Agg`` matplotlib import,
-``dpi=150``/``bbox_inches="tight"``, ``plt.close`` on every path) and the categorical-colour
+persistence delegated to ``analysis/utils/figures.py::save_figure``, which writes
+the PNG+SVG+EPS trio and closes the figure) and the categorical-colour
 rule from the dataviz skill: strategy hues are assigned in a fixed complexity order, never
 cycled, so colour follows the strategy entity rather than its rank.
 """
@@ -19,6 +20,7 @@ from typing import Any
 
 from population_synthetic.analysis.fidelity.charts import plot_association_heatmap
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
+from population_synthetic.analysis.utils.figures import save_figure
 from population_synthetic.analysis.utils.palette import (
     CATEGORICAL_SERIES,
     MUTED_GREY,
@@ -131,6 +133,4 @@ def plot_c2st_vs_grounded_tv(
         title = f"{country}: {title}"
     ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)

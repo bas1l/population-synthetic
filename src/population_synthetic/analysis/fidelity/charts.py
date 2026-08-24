@@ -183,8 +183,7 @@ def plot_comparison_charts(
 
         fname = f"{prefix}_{attr}.png" if prefix else f"{attr}.png"
         out_path = output_dir / fname
-        fig.savefig(out_path, dpi=150, bbox_inches="tight")
-        plt.close(fig)
+        save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -286,7 +285,7 @@ def plot_radar_comparison(
         ax.legend(loc="lower left", bbox_to_anchor=(-0.1, -0.05), fontsize=LEGEND_LABEL)
 
     out_path = Path(output_dir) / (f"{prefix}_radar.png" if prefix else "radar.png")
-    return save_figure(fig, out_path, dpi=150)
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -396,9 +395,7 @@ def plot_association_heatmap(
     output_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{prefix}_association_heatmap.png" if prefix else "association_heatmap.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -492,8 +489,7 @@ def plot_3way_comparison_charts(
 
         plt.tight_layout()
         fname = f"{prefix}_{attr}.png" if prefix else f"{attr}.png"
-        fig.savefig(output_dir / fname, dpi=150, bbox_inches="tight")
-        plt.close(fig)
+        save_figure(fig, output_dir / fname)
 
 
 # ------------------------------------------------------------------
@@ -565,9 +561,7 @@ def plot_3way_radar(
     output_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{prefix}_radar_3way.png" if prefix else "radar_3way.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -698,7 +692,7 @@ def plot_radar_grid(
     plt.tight_layout(rect=[0, 0, 1, 0.98])
 
     out_path = Path(output_dir) / (f"{prefix}_radar_grid.png" if prefix else "radar_grid.png")
-    return save_figure(fig, out_path, dpi=180)
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -708,7 +702,7 @@ def plot_radar_grid(
 # Each mirrors :func:`plot_association_heatmap`: reads one report block, returns
 # ``None`` (before importing matplotlib) when there is nothing plottable -- an
 # absent block or all-NaN values from a tiny/failed synthetic population -- and
-# otherwise writes a single ``{prefix}_<metric>.png`` at dpi 150.
+# otherwise writes a single ``{prefix}_<metric>`` figure through ``save_figure``.
 
 
 @house_style
@@ -760,9 +754,7 @@ def plot_c2st(
 
     fname = f"{prefix}_c2st.png" if prefix else "c2st.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 @house_style
@@ -828,9 +820,7 @@ def plot_joint_fidelity(
 
     fname = f"{prefix}_joint_fidelity.png" if prefix else "joint_fidelity.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 @house_style
@@ -885,9 +875,7 @@ def plot_combination_plausibility(
 
     fname = f"{prefix}_combination_plausibility.png" if prefix else "combination_plausibility.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -944,9 +932,7 @@ def plot_joint_chi_sq(
 
     fname = f"{prefix}_joint_chi_sq.png" if prefix else "joint_chi_sq.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 @house_style
@@ -1011,6 +997,4 @@ def plot_coherence(
 
     fname = f"{prefix}_coherence.png" if prefix else "coherence.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)

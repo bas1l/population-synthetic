@@ -2,8 +2,8 @@
 
 The renderer takes the document
 :func:`~population_synthetic.analysis.cost_efficiency.builder.build_document` assembled
-and **returns** an unsaved ``Figure``; the driver owns the path, the dpi and the PNG+SVG
-pair (``analysis/utils/figures.py::save_figure``). Nothing here opens a file, resolves an
+and **returns** an unsaved ``Figure``; the driver owns the path, the dpi and the
+PNG+SVG+EPS trio (``analysis/utils/figures.py::save_figure``). Nothing here opens a file, resolves an
 output directory or knows which country it is drawing -- the country travels in the
 document like every other value.
 

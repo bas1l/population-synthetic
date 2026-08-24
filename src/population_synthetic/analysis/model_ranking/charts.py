@@ -17,7 +17,8 @@ and renders, per country:
   the ranking.
 
 Follows the project charting conventions (deferred ``Agg`` matplotlib import,
-``dpi=150``/``bbox_inches="tight"``, ``plt.close`` on every path). The model x
+persistence delegated to ``analysis/utils/figures.py::save_figure``, which writes
+the PNG+SVG+EPS trio and closes the figure). The model x
 method heatmap additionally styles itself as a sibling of the manuscript tables
 by calling :mod:`population_synthetic.analysis.utils.table_style` and
 :mod:`population_synthetic.analysis.utils.palette` for every colour and contrast
@@ -160,9 +161,7 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
         fontsize=FIGURE_TITLE, fontweight="bold",
     )
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -216,9 +215,7 @@ def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -
     country = result["metadata"]["country"]
     ax.set_title(f"{country}: model x strategy leaderboard", fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -294,9 +291,7 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
         fontsize=FIGURE_TITLE, fontweight="bold",
     )
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -358,9 +353,7 @@ def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Pat
                      fontsize=PANEL_TITLE, fontweight="bold")
         out_path = out_dir / f"{attr}_bars.png"
         fig.tight_layout()
-        fig.savefig(out_path, dpi=150, bbox_inches="tight")
-        plt.close(fig)
-        written.append(out_path)
+        written.append(save_figure(fig, out_path))
 
     return written
 
@@ -825,4 +818,4 @@ def plot_model_method_heatmap(
     # Hatch stroke width is an rcParam read at *draw* time, so it is set around the
     # save rather than on the patches, and scoped so no other figure inherits it.
     with plt.rc_context({"hatch.linewidth": _HATCH_LINEWIDTH}):
-        return save_figure(fig, Path(out_path), dpi=150)
+        return save_figure(fig, Path(out_path))

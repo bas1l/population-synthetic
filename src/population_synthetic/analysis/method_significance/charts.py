@@ -25,7 +25,8 @@ returns ``None`` (logged as a skip by the caller) when its data is genuinely
 empty rather than emitting a misleading empty axes.
 
 Follows the project charting conventions (deferred ``Agg`` matplotlib import,
-``dpi=150`` / ``bbox_inches="tight"``, ``plt.close`` on every path).
+persistence delegated to ``analysis/utils/figures.py::save_figure``, which writes
+the PNG+SVG+EPS trio and closes the figure).
 """
 
 from __future__ import annotations
@@ -169,9 +170,7 @@ def plot_method_trends(
         )
         out_path = out_dir / f"{attr}_method_trend.png"
         fig.tight_layout()
-        fig.savefig(out_path, dpi=150, bbox_inches="tight")
-        plt.close(fig)
-        written.append(out_path)
+        written.append(save_figure(fig, out_path))
 
     return written
 
@@ -266,9 +265,7 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
         fontsize=PANEL_TITLE, fontweight="bold",
     )
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -370,9 +367,7 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
         fontsize=PANEL_TITLE, fontweight="bold",
     )
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -428,9 +423,7 @@ def plot_factor_dominance(result: dict[str, Any], out_path: str | Path) -> Path 
         fontsize=PANEL_TITLE, fontweight="bold",
     )
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -759,4 +752,4 @@ def plot_method_comparison(
              color=ANNOTATION_GREY)
 
     fig.tight_layout(rect=(0.0, 0.03, 1.0, 0.97))
-    return save_figure(fig, Path(out_path), dpi=150)
+    return save_figure(fig, Path(out_path))

@@ -21,12 +21,12 @@ Outputs, per country, under the analysis-stage model_ranking folder:
                                   models x methods overall TV-similarity, each cell
                                   annotated with its persona count n; cells below the
                                   requested cap hatched, models with no full-n cell
-                                  partitioned out of the ranking (PNG + SVG)
+                                  partitioned out of the ranking (PNG + SVG + EPS)
     {country}_models_table.png    manuscript table: models at the global-best strategy x
                                   axes (+ overall), single inferno ramp with a
-                                  hosted/local provenance side-marker (PNG + SVG)
+                                  hosted/local provenance side-marker (PNG + SVG + EPS)
     {country}_methods_table.png   manuscript table: strategies x axes (+ overall),
-                                  mean-over-models TV-similarity, inferno ramp (PNG + SVG)
+                                  mean-over-models TV-similarity, inferno ramp (PNG + SVG + EPS)
     {country}_models_table.tex    manuscript LaTeX snippet mirroring the models table
                                   (booktabs tabular, inferno cell colours, best-per-column bold)
     {country}_methods_table.tex   manuscript LaTeX snippet mirroring the methods table

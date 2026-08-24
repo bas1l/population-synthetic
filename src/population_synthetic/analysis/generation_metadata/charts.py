@@ -2,7 +2,7 @@
 
 Three families of charts live here, all pure rendering downstream of
 already-computed numbers and all persisted through
-``analysis/utils/figures.py::save_figure`` (PNG+SVG pair), never a private
+``analysis/utils/figures.py::save_figure`` (PNG+SVG+EPS trio), never a private
 ``savefig``:
 
 * :func:`render_metric_heatmaps` -- one model x method mean-heatmap per metric in
@@ -61,10 +61,6 @@ from population_synthetic.analysis.utils.style import (
 )
 
 __all__ = ["render_metric_heatmaps", "plot_run_charts", "plot_run_comparison"]
-
-# PNG raster resolution forwarded to save_figure (the SVG sibling is vector and
-# ignores it); matches the dpi=150 used across the analysis chart modules.
-_DPI = 150
 
 # ------------------------------------------------------------------
 # Chart styling constants
@@ -210,7 +206,7 @@ def render_metric_heatmaps(
             fontsize=PANEL_TITLE, fontweight="bold",
         )
         fig.tight_layout()
-        written.append(save_figure(fig, out_dir / f"{country}_{metric}.png", dpi=_DPI))
+        written.append(save_figure(fig, out_dir / f"{country}_{metric}.png"))
 
     return written
 
@@ -249,7 +245,7 @@ def _plot_category_call_count(metrics: dict, output_dir: Path) -> Path | None:
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     fig.tight_layout()
-    return save_figure(fig, output_dir / "category_call_count.png", dpi=_DPI)
+    return save_figure(fig, output_dir / "category_call_count.png")
 
 
 @house_style
@@ -286,7 +282,7 @@ def _plot_category_retry_rate(metrics: dict, output_dir: Path) -> Path | None:
     ax.text(0.10, n_cats - 0.5, "10%", va="top", ha="left", fontsize=ANNOTATION, color="gray", alpha=0.8)
 
     fig.tight_layout()
-    return save_figure(fig, output_dir / "category_retry_rate.png", dpi=_DPI)
+    return save_figure(fig, output_dir / "category_retry_rate.png")
 
 
 @house_style
@@ -323,7 +319,7 @@ def _plot_value_diversity_entropy(metrics: dict, output_dir: Path) -> Path | Non
         ax.text(val + x_offset, idx, f"({unique} unique)", va="center", fontsize=ANNOTATION)
 
     fig.tight_layout()
-    return save_figure(fig, output_dir / "value_diversity_entropy.png", dpi=_DPI)
+    return save_figure(fig, output_dir / "value_diversity_entropy.png")
 
 
 @house_style
@@ -365,7 +361,7 @@ def _plot_method_distribution(metrics: dict, output_dir: Path) -> Path | None:
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     fig.tight_layout()
-    return save_figure(fig, output_dir / "method_distribution.png", dpi=_DPI)
+    return save_figure(fig, output_dir / "method_distribution.png")
 
 
 @house_style
@@ -416,7 +412,7 @@ def _plot_prompt_size_growth(metrics: dict, output_dir: Path) -> Path | None:
         ax.legend(["Median (p25–p75 band)"], fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
-    return save_figure(fig, output_dir / "prompt_size_growth.png", dpi=_DPI)
+    return save_figure(fig, output_dir / "prompt_size_growth.png")
 
 
 @house_style
@@ -450,7 +446,7 @@ def _plot_wall_clock_per_persona(metrics: dict, output_dir: Path) -> Path | None
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     fig.tight_layout()
-    return save_figure(fig, output_dir / "wall_clock_per_persona.png", dpi=_DPI)
+    return save_figure(fig, output_dir / "wall_clock_per_persona.png")
 
 
 @house_style
@@ -486,7 +482,7 @@ def _plot_token_consumption_by_category(metrics: dict, output_dir: Path) -> Path
     ax.legend(fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
-    return save_figure(fig, output_dir / "token_consumption_by_category.png", dpi=_DPI)
+    return save_figure(fig, output_dir / "token_consumption_by_category.png")
 
 
 @house_style
@@ -526,7 +522,7 @@ def _plot_token_budget_by_step_type(metrics: dict, output_dir: Path) -> Path | N
     ax.legend(fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
-    return save_figure(fig, output_dir / "token_budget_by_step_type.png", dpi=_DPI)
+    return save_figure(fig, output_dir / "token_budget_by_step_type.png")
 
 
 @house_style
@@ -587,7 +583,7 @@ def _plot_latency_by_category(metrics: dict, output_dir: Path) -> Path | None:
     ax.legend(fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
-    return save_figure(fig, output_dir / "latency_by_category.png", dpi=_DPI)
+    return save_figure(fig, output_dir / "latency_by_category.png")
 
 
 def plot_run_charts(metrics: dict, output_dir: Path) -> list[Path]:
@@ -742,7 +738,7 @@ def _plot_box_grouped(
         print(f"  note: {out_path.name}: {omitted} significant pair(s) omitted from brackets")
 
     fig.tight_layout()
-    return save_figure(fig, out_path, dpi=_DPI)
+    return save_figure(fig, out_path)
 
 
 @house_style
@@ -786,7 +782,7 @@ def _plot_grouped_bar_errorbars(
     ax.grid(axis="y", linestyle=":", alpha=0.4)
 
     fig.tight_layout()
-    return save_figure(fig, out_path, dpi=_DPI)
+    return save_figure(fig, out_path)
 
 
 @house_style
@@ -843,7 +839,7 @@ def _plot_heatmap(
 
     ax.set_title(f"{metric_label}: model x method", fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
-    return save_figure(fig, out_path, dpi=_DPI)
+    return save_figure(fig, out_path)
 
 
 def plot_run_comparison(result: dict[str, Any], output_dir: str | Path) -> list[Path]:

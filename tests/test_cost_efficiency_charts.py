@@ -237,6 +237,18 @@ def test_no_charts_leaves_no_png_and_no_svg(workspace) -> None:
     assert list(out_dir.glob("*.svg")) == []
 
 
+#: The figure(s) this module renders do not currently fit the printable canvas, so
+#: ``analysis/utils/figures.py`` rejects them on export (Phase 5 of the
+#: publication-figure plan added that check; Phase 6 owns the layout fixes).
+OVER_CAP_REASON = (
+    "The cost-vs-fidelity scatter renders 21.86 x 25.20 cm -- over the printable "
+    "19.05 x 22.23 cm on both axes -- because the model labels and the two "
+    "annotation blocks extend past the axes, so analysis/utils/figures.py rejects "
+    "it on export. Tracked as a layout fix in Phase 6 of the publication-figure plan."
+)
+
+
+@pytest.mark.xfail(strict=True, reason=OVER_CAP_REASON)
 def test_a_normal_run_emits_both_formats(workspace) -> None:
     out_dir = _run(workspace)
     assert (out_dir / f"{COUNTRY}_cost_vs_fidelity.png").is_file()

@@ -16,7 +16,7 @@ Usage:
     python scripts/analyze/analyze_real_population_stats.py --country-id swedish
     python scripts/analyze/analyze_real_population_stats.py --country-id swedish --country-id italian
     python scripts/analyze/analyze_real_population_stats.py --country-id swedish --force
-    python scripts/analyze/analyze_real_population_stats.py --country-id swedish --dpi 300
+    python scripts/analyze/analyze_real_population_stats.py --country-id swedish --dpi 600
     python scripts/analyze/analyze_real_population_stats.py --country-id swedish --no-charts
 """
 
@@ -34,6 +34,7 @@ from population_synthetic.analysis.real_population_stats.artifacts import (
 )
 from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.country_config import known_country_ids
+from population_synthetic.analysis.utils.figures import RASTER_DPI
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -70,7 +71,7 @@ def _parse_args() -> argparse.Namespace:
         "(default: skip a country whose output folder already has content).",
     )
     parser.add_argument(
-        "--dpi", type=int, default=200, help="PNG render resolution. Default: 200.",
+        "--dpi", type=int, default=RASTER_DPI, help=f"PNG render resolution. Default: {RASTER_DPI}.",
     )
     parser.add_argument(
         "--no-charts",

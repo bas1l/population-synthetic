@@ -52,7 +52,7 @@ Flags:
 --no-charts     Skip both figures (the CSV and the JSON are still written).
 --strict        Fail instead of skipping a combination missing from a validator roll-up.
 --force         Rewrite a country whose {country}_attrition.json already exists.
---dpi           PNG render resolution. Default: 200.
+--dpi           PNG render resolution. Default: the layer's one raster resolution (``figures.RASTER_DPI``).
 """
 
 import argparse
@@ -66,7 +66,7 @@ from population_synthetic.analysis.model_ranking.hosting import (
     load_hosting_config,
 )
 from population_synthetic.analysis.utils.attrition_csv import write_attrition_csv
-from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.figures import RASTER_DPI, save_figure
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -138,7 +138,7 @@ def _parse_args() -> argparse.Namespace:
         help="Rewrite a country even if its {country}_attrition.json already exists "
         "(default: skip that country if present).",
     )
-    parser.add_argument("--dpi", type=int, default=200, help="PNG render resolution. Default: 200.")
+    parser.add_argument("--dpi", type=int, default=RASTER_DPI, help=f"PNG render resolution. Default: {RASTER_DPI}.")
     return parser.parse_args()
 
 

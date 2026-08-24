@@ -1,7 +1,7 @@
 """artifacts.py -- orchestrate one country's real-population reference artifacts.
 
 Iterates the scheme's analyzed axis (``scheme.attributes``), computes per-attribute
-stats (``stats.py``), renders + saves the PNG+SVG bar figure (``charts.py`` +
+stats (``stats.py``), renders + saves the PNG+SVG+EPS bar figure (``charts.py`` +
 ``analysis/utils/figures.py::save_figure``), writes the proportion CSV
 (``csv_writer.py``), and finally builds + saves the combined overview panel.
 
@@ -43,7 +43,7 @@ def write_real_population_stats(
     via ``compute_category_stats(real_pop["individuals"], attr, scheme.categories[attr])``;
     an all-null attribute (every row's ``total == 0``) is skipped with a logged
     ``WARNING`` -- no all-zero figure/CSV is emitted for it. Otherwise writes
-    ``{attr}.png``/``{attr}.svg`` (via ``plot_category_bars`` + ``save_figure``,
+    ``{attr}.png``/``{attr}.svg``/``{attr}.eps`` (via ``plot_category_bars`` + ``save_figure``,
     unless *charts* is ``False``) and ``{attr}.csv`` (via ``write_proportions_csv``)
     under *out_dir*, skipping any of the three that already exist unless *force*.
     After the loop, builds and saves ``overview.png``/``overview.svg`` over every

@@ -70,7 +70,7 @@ Usage:
 --real-sample              Cap personas judged for the real competitor (real_{country}).
 --rounds                   Override the config judge rounds per persona (n_rounds; must be >= 1).
 --judge-model              Override the config judge model (must be in model_options).
---dpi                      PNG render resolution. Default: 200.
+--dpi                      PNG render resolution. Default: the layer's one raster resolution (``figures.RASTER_DPI``).
 """
 
 from __future__ import annotations
@@ -96,6 +96,7 @@ from population_synthetic.analysis.persona_realism.reduce import has_cached_verd
 from population_synthetic.analysis.persona_realism.runner import run_combo_judgements
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
 from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
+from population_synthetic.analysis.utils.figures import RASTER_DPI
 from population_synthetic.analysis.utils.registry import analysis_output_dir, resolve_output_base
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
@@ -175,7 +176,7 @@ def _parse_args() -> argparse.Namespace:
                         help="Judge rounds per persona (blank = config default, currently 3). Must be >= 1.")
     parser.add_argument("--judge-model", dest="judge_model", default=None,
                         help="Override the config judge model (must be in the config model_options).")
-    parser.add_argument("--dpi", type=int, default=200, help="PNG render resolution. Default: 200.")
+    parser.add_argument("--dpi", type=int, default=RASTER_DPI, help=f"PNG render resolution. Default: {RASTER_DPI}.")
     return parser.parse_args()
 
 
