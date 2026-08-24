@@ -132,7 +132,11 @@ def test_the_shipped_pricing_config_loads(tmp_path: Path) -> None:
     pricing = load_raw_pricing()
     assert pricing.provenance.currency
     assert pricing.rates
-    assert pricing.is_unmetered("ollama_gemma4_e4b") is True
+    # The four local models in the live grid now carry a rented-equivalent rate
+    # (what the same model costs to rent per token), so they are no longer
+    # unmetered. The untouched, un-researched locals still are.
+    assert pricing.is_unmetered("ollama_gemma4_e4b") is False
+    assert pricing.is_unmetered("ollama_qwen3_14b") is True
     assert pricing.is_unmetered("openrouter_qwen35_flash") is False
 
 
@@ -405,3 +409,49 @@ def test_raw_pool_cost_exceeds_the_capped_mirror_cost() -> None:
     # The gap tracks the pool/cap ratio (549/100); anything near 1.0 would mean the
     # reader had silently landed on the capped mirror after all.
     assert totals.total_cost_usd / capped > 3.0
+
+
+# ----------------------------------------------------------------------
+# Calibrated exception path -- models priced from a comparable API because
+# their own telemetry cannot be priced (see cost_calibration.json).
+# ----------------------------------------------------------------------
+
+def test_the_shipped_calibration_config_loads() -> None:
+    from population_synthetic.analysis.cost_efficiency.raw_cost import load_cost_calibration
+
+    doc = load_cost_calibration()
+    assert doc["cost_basis"] == "calibrated_openrouter_2026-08-21"
+    # The basis must differ from the measured one, or a consumer summing the two
+    # could not tell an estimate from a measurement.
+    assert doc["cost_basis"] != "generated_pool_01_raw"
+    assert set(doc["models"]) == {"claude_haiku", "claude_sonnet"}
+    for entry in doc["models"].values():
+        assert len(entry["methods"]) == 5
+        for row in entry["methods"].values():
+            assert row["usd_per_persona"] > 0
+            assert row["n"] == 10
+
+
+def test_a_calibrated_cell_resolves_and_an_uncalibrated_one_returns_none() -> None:
+    from population_synthetic.analysis.cost_efficiency.raw_cost import (
+        calibrated_persona_cost,
+        load_cost_calibration,
+    )
+
+    doc = load_cost_calibration()
+    hit = calibrated_persona_cost("claude_haiku", "all_pick_v2", doc)
+    assert hit is not None
+    per_persona, basis = hit
+    assert per_persona > 0 and basis == doc["cost_basis"]
+    # Every other model prices from its own telemetry; absence is the normal case.
+    assert calibrated_persona_cost("openrouter_kimi_k3", "all_pick_v2", doc) is None
+
+
+def test_a_calibrated_model_missing_a_method_raises() -> None:
+    from population_synthetic.analysis.cost_efficiency.raw_cost import calibrated_persona_cost
+
+    doc = {"cost_basis": "x", "models": {"m": {"methods": {"a": {"usd_per_persona": 1.0}}}}}
+    # Silently returning None here would read downstream as "this cell had no cost"
+    # when in truth nobody measured it -- the exact zero-vs-absent confusion.
+    with pytest.raises(ValueError, match="calibrated but has no entry"):
+        calibrated_persona_cost("m", "b", doc)

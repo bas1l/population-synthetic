@@ -1,0 +1,93 @@
+{
+  "description": "Per-persona generation cost for the claude_* models, MEASURED on OpenRouter rather than read from their own run telemetry. Those runs used the Claude Code CLI, whose cost is not comparable with any other model in the grid: measured 2026-08-21, the CLI ships a ~27,000-token harness prompt on every call and runs with extended thinking, so 94% of billed output is reasoning rather than the answer -- a call returning {\"value\": \"Sweden\"} (18 tokens) billed 289. The same work costs 21x less through the API. The CLI runs also never persisted their cache-token counts, so their true input is unrecoverable. Rather than price a number known to be wrong, or leave a third of the grid absent, each claude_* combination is priced from a calibration run of the SAME model and method through OpenRouter. This is a reproduction cost -- what this work costs to run today on a comparable API -- not what the original runs were billed. It therefore carries its own cost_basis and must never be summed with generated_pool_01_raw figures as one spend total.",
+  "cost_basis": "calibrated_openrouter_2026-08-21",
+  "observed_date": "2026-08-21",
+  "currency": "USD_per_persona_generated",
+  "provenance": {
+    "method": "10 personas generated per (model x method) through OpenRouter with the same strategy configs as the graded runs; cost = input*rate_in/1e6 + output*rate_out/1e6",
+    "n_personas_per_cell": 10,
+    "country_id": "swedish_02"
+  },
+  "models": {
+    "claude_haiku": {
+      "calibrated_from": {
+        "axis_id": "openrouter_haiku_45",
+        "openrouter_slug": "anthropic/claude-haiku-4.5",
+        "price_in_per_1m": 1.0,
+        "price_out_per_1m": 5.0
+      },
+      "methods": {
+        "all_pick_v2": {
+          "usd_per_persona": 0.004867,
+          "sd": 2.319e-05,
+          "n": 10,
+          "calls_per_persona": 14
+        },
+        "all_pick_dag_v2": {
+          "usd_per_persona": 0.0054743,
+          "sd": 7.933e-05,
+          "n": 10,
+          "calls_per_persona": 14
+        },
+        "all_generate_pick_v2": {
+          "usd_per_persona": 0.0239386,
+          "sd": 0.00107275,
+          "n": 10,
+          "calls_per_persona": 28
+        },
+        "all_generate_evaluate_pick_v2": {
+          "usd_per_persona": 0.0386564,
+          "sd": 0.00152355,
+          "n": 10,
+          "calls_per_persona": 42
+        },
+        "all_generate_evaluate_random_pick_v2": {
+          "usd_per_persona": 0.0285869,
+          "sd": 0.00155231,
+          "n": 10,
+          "calls_per_persona": 27
+        }
+      }
+    },
+    "claude_sonnet": {
+      "calibrated_from": {
+        "axis_id": "openrouter_sonnet_5",
+        "openrouter_slug": "anthropic/claude-sonnet-5",
+        "price_in_per_1m": 2.0,
+        "price_out_per_1m": 10.0
+      },
+      "methods": {
+        "all_pick_v2": {
+          "usd_per_persona": 0.013003,
+          "sd": 4.27e-05,
+          "n": 10,
+          "calls_per_persona": 14
+        },
+        "all_pick_dag_v2": {
+          "usd_per_persona": 0.015074,
+          "sd": 0.00028416,
+          "n": 10,
+          "calls_per_persona": 14
+        },
+        "all_generate_pick_v2": {
+          "usd_per_persona": 0.0506,
+          "sd": 0.00366383,
+          "n": 10,
+          "calls_per_persona": 28
+        },
+        "all_generate_evaluate_pick_v2": {
+          "usd_per_persona": 0.0786566,
+          "sd": 0.00416068,
+          "n": 10,
+          "calls_per_persona": 42
+        },
+        "all_generate_evaluate_random_pick_v2": {
+          "usd_per_persona": 0.0532152,
+          "sd": 0.00350039,
+          "n": 10,
+          "calls_per_persona": 27
+        }
+      }
+    }
+  }
+}

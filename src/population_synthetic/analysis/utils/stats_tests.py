@@ -938,3 +938,171 @@ def variance_equality_test(
         }
     return {"statistic": float(stat), "p": float(p), "k": len(usable),
             "center": center, "n": n_total}
+
+
+def rm_anova_within(blocks: Sequence[Sequence[float]]) -> dict[str, Any]:
+    """One-way repeated-measures ANOVA across treatments with matched blocks.
+
+    Input: ``blocks`` is a ``blocks x treatments`` layout -- row = block (here a
+    model), column = treatment (here a generation method), in a **consistent
+    column order**.  Unlike :func:`friedman_test` this consumes the *values*, so
+    the size of a difference counts and not merely its within-block rank.  That
+    is the whole reason it exists alongside Friedman: a treatment that wins in
+    every block by a wide margin is indistinguishable, to a rank test, from one
+    that wins every block by a hair.
+
+    Partitions the total sum of squares into treatment, block and residual, then
+    reports ``F = (SS_treat/(k-1)) / (SS_err/((k-1)(n-1)))`` against
+    ``F(k-1, (k-1)(n-1))``.  Effect size is partial eta-squared
+    ``SS_treat / (SS_treat + SS_err)``.
+
+    **Sphericity is assumed and not tested.**  With ``k = 2`` sphericity is
+    automatic (there is a single difference score) and the result is then exactly
+    the paired t-test, ``F = t**2``.  For ``k > 2`` a violation inflates the
+    Type I error, so a caller reporting more than two treatments should treat the
+    omnibus p as approximate and lean on the pairwise contrasts, which do not
+    depend on sphericity.
+
+    Returns ``{"test","F","p","df1","df2","k","n","partial_eta_sq"}``.  Degenerate
+    inputs (``<2`` treatments, ``<2`` blocks, or zero residual variation) return
+    the same keys with ``F``/``p``/``partial_eta_sq`` ``None`` and a ``"note"`` --
+    never a NaN that flows downstream unnoticed.
+    """
+    arr = _as_block_matrix(blocks)
+    n, k = arr.shape
+    base: dict[str, Any] = {"test": "rm_anova", "F": None, "p": None,
+                            "df1": max(k - 1, 0), "df2": max((k - 1) * (n - 1), 0),
+                            "k": k, "n": n, "partial_eta_sq": None}
+    if k < 2 or n < 2:
+        base["note"] = f"need >=2 treatments and >=2 blocks, got {k} treatments / {n} blocks"
+        return base
+
+    grand = float(arr.mean())
+    ss_treat = float(n * ((arr.mean(axis=0) - grand) ** 2).sum())
+    ss_block = float(k * ((arr.mean(axis=1) - grand) ** 2).sum())
+    ss_err = float(((arr - grand) ** 2).sum()) - ss_treat - ss_block
+    df1, df2 = k - 1, (k - 1) * (n - 1)
+    # Floating-point subtraction can drive an exactly-additive residual slightly
+    # negative; treat that as the zero it is rather than propagating a nonsense F.
+    if ss_err <= 1e-12:
+        if ss_treat <= 1e-12:
+            # No treatment signal and no residual: every cell is the same value.
+            base["note"] = "no treatment or residual variation; F is undefined"
+            return base
+        # A perfectly additive grid -- every block separated by a constant, with
+        # nothing left over. The ratio diverges rather than being unknown, so it
+        # is reported as such, matching friedman_test's perfect-concordance case
+        # (inf / 0.0 stated explicitly, never a NaN that flows on unnoticed).
+        base["F"] = math.inf
+        base["p"] = 0.0
+        base["partial_eta_sq"] = 1.0
+        base["note"] = "zero residual variation; F diverges (perfectly additive blocks)"
+        return base
+
+    f_stat = (ss_treat / df1) / (ss_err / df2)
+    base["F"] = f_stat
+    base["p"] = float(stats.f.sf(f_stat, df1, df2))
+    base["partial_eta_sq"] = ss_treat / (ss_treat + ss_err) if (ss_treat + ss_err) > 0 else None
+    return base
+
+
+def paired_t_pairwise(
+    blocks: Sequence[Sequence[float]],
+    *,
+    labels: Sequence[str],
+) -> dict[str, Any]:
+    """All pairwise paired t-tests across treatments, Holm-corrected.
+
+    Input matches :func:`rm_anova_within` (row = block, column = treatment);
+    *labels* names the columns and must match the column count.
+
+    For every unordered pair this reports the **mean paired difference** (second
+    minus first, so a positive value means the later-listed treatment scored
+    higher), Cohen's ``dz`` on the differences, the raw two-sided ``scipy``
+    ``ttest_rel`` p, the Holm-adjusted p, the number of blocks in which the
+    second treatment won, and an assumption-free two-sided **sign-test** p on
+    that count.
+
+    The sign test is carried deliberately, not as decoration: the t-test assumes
+    the differences are normally distributed, which ``n`` in the low tens cannot
+    establish.  A conclusion that both agree on does not rest on that assumption.
+
+    **Holm is applied across every pair**, not across whichever subset a figure
+    later chooses to draw.  Correcting over the drawn subset would make the
+    reported p depend on a rendering decision, and would invite the objection
+    that the family was narrowed after seeing the results.
+
+    Returns ``{"test","n","k","pairs"}`` where ``pairs`` maps ``"a|b"`` to
+    ``{"mean_diff","dz","p_raw","p_holm","wins","n_blocks","p_sign"}``.
+    Degenerate input (``<2`` treatments/blocks) returns an empty ``pairs`` map
+    plus a ``"note"``.  A pair whose differences are all identical yields
+    ``dz``/``p_raw`` ``None`` with its own per-pair ``note`` rather than a NaN.
+    """
+    arr = _as_block_matrix(blocks)
+    n, k = arr.shape
+    if len(labels) != k:
+        raise ValueError(f"labels has {len(labels)} entries but the matrix has {k} columns")
+    out: dict[str, Any] = {"test": "paired_t", "n": n, "k": k, "pairs": {}}
+    if k < 2 or n < 2:
+        out["note"] = f"need >=2 treatments and >=2 blocks, got {k} treatments / {n} blocks"
+        return out
+
+    keys: list[str] = []
+    raw_ps: list[float] = []
+    records: dict[str, dict[str, Any]] = {}
+    for i in range(k):
+        for j in range(i + 1, k):
+            diff = arr[:, j] - arr[:, i]
+            key = f"{labels[i]}|{labels[j]}"
+            wins = int((diff > 0).sum())
+            rec: dict[str, Any] = {
+                "mean_diff": float(diff.mean()),
+                "wins": wins,
+                "n_blocks": n,
+                "p_sign": _two_sided_sign_p(wins, n),
+                "dz": None,
+                "p_raw": None,
+                "p_holm": None,
+            }
+            sd = float(diff.std(ddof=1)) if n > 1 else 0.0
+            if sd <= 0:
+                rec["note"] = "all paired differences identical; t is undefined"
+            else:
+                rec["dz"] = float(diff.mean() / sd)
+                rec["p_raw"] = float(stats.ttest_rel(arr[:, j], arr[:, i]).pvalue)
+                keys.append(key)
+                raw_ps.append(rec["p_raw"])
+            records[key] = rec
+
+    for key, p_adj in zip(keys, _holm_adjust(raw_ps)):
+        records[key]["p_holm"] = p_adj
+    out["pairs"] = records
+    return out
+
+
+def _two_sided_sign_p(wins: int, n: int) -> float:
+    """Exact two-sided sign-test p for *wins* successes out of *n* trials."""
+    if n <= 0:
+        return 1.0
+    extreme = max(wins, n - wins)
+    tail = sum(math.comb(n, i) for i in range(extreme, n + 1))
+    return min(1.0, 2.0 * tail / (2 ** n))
+
+
+def _holm_adjust(p_values: Sequence[float]) -> list[float]:
+    """Holm step-down adjusted p-values, order-preserving and monotone.
+
+    Returns a list aligned to *p_values*.  Monotonicity is enforced by carrying
+    the running maximum down the sorted sequence, so an adjusted p can never fall
+    below one that was already smaller before adjustment.
+    """
+    m = len(p_values)
+    if m == 0:
+        return []
+    order = sorted(range(m), key=lambda idx: p_values[idx])
+    adjusted = [0.0] * m
+    running = 0.0
+    for rank, idx in enumerate(order):
+        running = max(running, min(1.0, (m - rank) * p_values[idx]))
+        adjusted[idx] = running
+    return adjusted

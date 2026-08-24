@@ -402,6 +402,14 @@ def plot_factor_dominance(result: dict[str, Any], out_path: str | Path) -> Path 
 
 
 # ------------------------------------------------------------------
+#: Display names for the omnibus tests the builder can run. Keyed by the panel's
+#: ``omnibus["test"]`` so the figure reports the test that actually produced the
+#: p-value; an unknown id falls through to the raw id rather than a wrong name.
+_OMNIBUS_LABELS = {
+    "rm_anova": "Repeated-measures ANOVA",
+    "friedman": "Friedman",
+}
+
 # Method-comparison figure (bars + points + significance brackets/stars)
 # ------------------------------------------------------------------
 
@@ -599,12 +607,17 @@ def _draw_method_panel(
     omnibus = panel.get("omnibus", {})
     p_omni = omnibus.get("p")
     p_bh = omnibus.get("p_bh")
+    # The test NAME comes from the panel, never from a literal here: the builder
+    # decides which omnibus it ran, and a hardcoded label silently mislabels the
+    # number the moment that changes. It did -- this said "Friedman" while showing
+    # a repeated-measures ANOVA p, which is a wrong name on a right number.
+    omni_label = _OMNIBUS_LABELS.get(omnibus.get("test"), omnibus.get("test") or "omnibus")
     if p_omni is None:
-        omni_note = "Friedman: n/a"
+        omni_note = f"{omni_label}: n/a"
     elif p_bh is not None:
-        omni_note = f"Friedman p={p_omni:.3g} (BH {p_bh:.3g})"
+        omni_note = f"{omni_label} p={p_omni:.3g} (BH {p_bh:.3g})"
     else:
-        omni_note = f"Friedman p={p_omni:.3g}"
+        omni_note = f"{omni_label} p={p_omni:.3g}"
     # Header: model n and (for a category panel) the attribute's declared level
     # count from the block; the Overall panel spans all categories, so it has no
     # single level count and shows only the model n. Pure consumer -- the count is
@@ -629,7 +642,8 @@ def plot_method_comparison(
     block): each panel is a demographic category (or ``overall``) drawn by
     :func:`_draw_method_panel` -- bars = per-method mean TV-similarity, individual
     model points + faint paired lines overlaid, pairwise significance brackets/stars
-    over the configured pairs, the omnibus Friedman p + ``n`` in the panel title, and
+    over the configured pairs, the omnibus p (labelled by the test the builder
+    actually ran, via ``_OMNIBUS_LABELS``) + ``n`` in the panel title, and
     an in-figure star key. The renderer never recomputes a statistic nor discovers
     files.
 

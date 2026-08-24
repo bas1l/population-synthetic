@@ -279,17 +279,25 @@ def main() -> None:
         print(f"Cost-efficiency CSV written to {csv_path} -- {len(rows)} row(s)")
 
         if not args.no_charts:
-            name = f"{country}_cost_vs_fidelity"
-            try:
-                saved = save_figure(
-                    plot_cost_vs_accuracy(document, hosting=model_hosting),
-                    cost_dir / f"{name}.png",
-                    dpi=args.dpi,
-                )
-            except ValueError as exc:
-                print(f"WARNING: {name} not rendered: {exc}", file=sys.stderr)
-            else:
-                print(f"{name} written to {saved} (+ .svg)")
+            # Two scales of the same data. Log is the default because costs span four
+            # orders of magnitude and the cheap end is where the interesting comparison
+            # lives; linear is emitted beside it because a reader comparing absolute
+            # spend reads ratios off a linear axis and cannot off a log one. Neither is
+            # a different measurement -- same rows, same numbers, two readings.
+            for name, scale in (
+                (f"{country}_cost_vs_fidelity", "symlog"),
+                (f"{country}_cost_vs_fidelity_linear", "linear"),
+            ):
+                try:
+                    saved = save_figure(
+                        plot_cost_vs_accuracy(document, hosting=model_hosting, xscale=scale),
+                        cost_dir / f"{name}.png",
+                        dpi=args.dpi,
+                    )
+                except ValueError as exc:
+                    print(f"WARNING: {name} not rendered: {exc}", file=sys.stderr)
+                else:
+                    print(f"{name} written to {saved} (+ .svg)")
 
         print()
         _print_country_summary(document)

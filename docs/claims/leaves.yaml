@@ -1,0 +1,183 @@
+# leaves.yaml -- the shared leaf layer of the claim DAG.
+#
+# Every node here is terminal: a FINDING read off an artifact, an ASSUMPTION the
+# argument needs and does not supply, or a CONTEXT restricting the scope of a claim.
+# Result files under results/ reference these by id; a leaf cited by four results is
+# ONE node with four consumers, which is the whole point -- it makes visible that a
+# compromised leaf invalidates several published claims at once.
+#
+# Node contract
+#   type      finding | assumption | context
+#   grid      which dataset the node belongs to; a result may only cite leaves from
+#             its own grid, and the renderer raises otherwise. Two sweeps produced
+#             these numbers and silently sharing a leaf between them would make the
+#             impact table assert a dependency that does not exist. Contexts are
+#             exempt -- a scope restriction is not a measurement.
+#   text      the proposition, stated so it is determinately true or false
+#   artifact  (finding) where it is recomputable from -- relative to the analysis root
+#   status    (assumption) unargued | unsupported | conceded-false | addressed
+#   where     (assumption) where the manuscript discusses it, if it does
+
+meta:
+  title: "LLM demographic-fidelity benchmark -- shared leaf layer"
+  grids:
+    swedish_8x5: "8 models x 5 strategies, 39/40 cells -- the manuscript sweep"
+    swedish_02: "10 models x 5 v2 strategies, 50/50 cells -- the current pipeline grid"
+
+nodes:
+
+  # =========================================================================
+  # Grid: swedish_8x5 -- the manuscript sweep
+  # =========================================================================
+
+  F6:
+    type: finding
+    grid: swedish_8x5
+    text: "Kruskal-Wallis, strategy-pooled: H = 135.6, p = 2.4e-28, 5 groups, N = 585"
+    artifact: "model_ranking/{country}_performance.csv"
+  F7:
+    type: finding
+    grid: swedish_8x5
+    text: "Dunn/Holm, strategy: sampling exceeds every other level, all adj. p < 1e-9"
+    artifact: "model_ranking/{country}_performance.csv"
+  F8:
+    type: finding
+    grid: swedish_8x5
+    text: "Strategy medians: 0.787 sampling / 0.635 gen-eval-pick / 0.596 gen-pick / 0.544 pick / 0.514 pick-dag"
+    artifact: "model_ranking/{country}_performance.csv"
+  F11:
+    type: finding
+    grid: swedish_8x5
+    text: "Friedman blocked by attribute: chi2 = 78.2, p = 3.3e-14, Kendall W = 0.19"
+    artifact: "method_significance/{country}_significance.json"
+  F12:
+    type: finding
+    grid: swedish_8x5
+    text: "Nemenyi CD = 1.36; model mean ranks span 3.0 to 5.9"
+    artifact: "method_significance/{country}_significance.json"
+  F13:
+    type: finding
+    grid: swedish_8x5
+    text: "Mixed-effects eta-squared: attribute 0.41, method 0.17, model 0.04, residual 0.38"
+    artifact: "method_significance/{country}_significance.json"
+  F17:
+    type: finding
+    grid: swedish_8x5
+    text: "Per-attribute means span 0.318 (industry sector) to 0.779 (parental structure)"
+    artifact: "fidelity/{country}_fidelity_report.json"
+  F25:
+    type: finding
+    grid: swedish_8x5
+    text: "40 model x strategy cells designed, 39 completed; one GLM-5.2 run failed to map"
+    artifact: "population_cap/_index.json"
+
+  A1:
+    type: assumption
+    grid: swedish_8x5
+    text: "Mean marginal TV-similarity over the 15-attribute schema operationalises demographic fidelity"
+    status: unargued
+    where: "asserted by construction in Methods; never defended"
+  A2:
+    type: assumption
+    grid: swedish_8x5
+    text: "The 15 per-attribute scores within a run are exchangeable samples for pooling"
+    status: conceded-false
+    where: "Limitations L1 -- pseudo-replication; p-values reported as indicative"
+  A3:
+    type: assumption
+    grid: swedish_8x5
+    text: "One unseeded run per cell estimates that cell's expected fidelity with negligible error"
+    status: unsupported
+    where: "Limitations L1"
+  A4:
+    type: assumption
+    grid: swedish_8x5
+    text: "The 8 models and 5 strategies span the relevant factor spaces"
+    status: addressed
+    where: "Limitations L6 -- excluded models named"
+
+  # =========================================================================
+  # Grid: swedish_02 -- the model x method heatmap
+  # =========================================================================
+
+  F30:
+    type: finding
+    grid: swedish_02
+    text: "Performance table: 50 rows carrying (model, strategy, overall_tv_similarity, n)"
+    artifact: "model_ranking/swedish_02_performance.csv"
+  F31:
+    type: finding
+    grid: swedish_02
+    text: "requested_n = 100 for all 50 slugs -- the gate's own record, per slug"
+    artifact: "population_cap/_index.json"
+  F32:
+    type: finding
+    grid: swedish_02
+    text: "Seven cells sit below the cap: n = 7, 9, 11, 19, 22, 34, 49"
+    artifact: "population_cap/_index.json"
+  F33:
+    type: finding
+    grid: swedish_02
+    text: "ollama_llama31_8b has zero full-n cells -- all five are thin (11, 19, 22, 34, 49)"
+    artifact: "population_cap/_index.json"
+  F34:
+    type: finding
+    grid: swedish_02
+    text: "Three of the seven thin cells lie in the all_generate_evaluate_random_pick_v2 column (n = 7, 9, 11)"
+    artifact: "population_cap/_index.json"
+  F35:
+    type: finding
+    grid: swedish_02
+    text: "The grid is complete: 50 of 50 model x method cells present, no NaN"
+    artifact: "model_ranking/swedish_02_performance.csv"
+  F36:
+    type: finding
+    grid: swedish_02
+    text: "Column order is strategy_complexity_order over the five v2 strategies"
+    artifact: "config/synthetic/axes/strategies/_families.yaml"
+
+  A20:
+    type: assumption
+    grid: swedish_02
+    text: "Every cell entering a marginal is a comparable estimate of the same quantity"
+    status: conceded-false
+    where: "violated in the prototype: rowmean and colmean average all cells, thin ones included"
+  A21:
+    type: assumption
+    grid: swedish_02
+    text: "The 15 attributes are equally important, so an unweighted mean is the right overall score"
+    status: unargued
+    where: "implied by taking a plain mean; since attribute explains eta2 = 0.41, the ranking is a function of which attributes are in the schema"
+  A22:
+    type: assumption
+    grid: swedish_02
+    text: "The 10 models and 5 v2 methods span the relevant factor spaces"
+    status: unargued
+  A23:
+    type: assumption
+    grid: swedish_02
+    text: "A range over 5 method means is comparable to a range over 10 model means"
+    status: addressed
+    where: "both biases run against the claim -- see R21_1"
+  # NOTE: "gate attrition is missing-at-random w.r.t. fidelity" is deliberately NOT a
+  # leaf here. It is carried as the undermining defeater UM20_2 on F30, because an
+  # assumption and the defeater denying it are the same proposition twice -- and
+  # holding both would double-count it in the impact table. The eliminative framing
+  # prefers the defeater: support is what survives doubt, not what is asserted.
+
+  # =========================================================================
+  # Contexts -- scope restrictions, not measurements, so not grid-bound
+  # =========================================================================
+
+  K2:
+    type: context
+    text: "The 15-attribute canonical schema; marginal distributions only"
+  K4:
+    type: context
+    text: "The 8-model roster and the 5-rung strategy ladder as defined in Methods"
+  K5:
+    type: context
+    text: "One generation run per cell, unseeded"
+  K20:
+    type: context
+    text: "swedish_02 only; v2 strategies are Sweden-only by the coverage invariant"

@@ -88,6 +88,16 @@ _UNMETERED_NOTE = (
 )
 
 
+def _per_100(per_persona: float | None) -> float | None:
+    """``per_persona * 100``, preserving ``None``.
+
+    A trivial scaling, but it lives here rather than in the renderer because the
+    renderer is a pure sink: a figure that multiplied by 100 itself could disagree
+    with the CSV beside it, and nothing would catch it.
+    """
+    return None if per_persona is None else per_persona * 100.0
+
+
 def cost_per_usable_persona(total_cost_usd: float | None, clean: int) -> float | None:
     """``total_cost_usd / clean``; ``None`` when either side is undefined.
 
@@ -130,6 +140,9 @@ def build_rows(result: JoinResult) -> list[CostRow]:
             cost_per_usable_persona=cost_per_usable_persona(
                 record.cost.total_cost_usd, record.attrition.clean
             ),
+            cost_per_100_usable_personas=_per_100(
+                cost_per_usable_persona(record.cost.total_cost_usd, record.attrition.clean)
+            ),
             cost_basis=record.cost.cost_basis,
             unmetered=record.cost.unmetered,
             has_token_data=record.cost.has_token_data,
@@ -168,6 +181,7 @@ def _combination_entry(row: CostRow) -> dict[str, Any]:
         "cost": {
             "total_cost_usd": row.total_cost_usd,
             "cost_per_usable_persona": row.cost_per_usable_persona,
+            "cost_per_100_usable_personas": row.cost_per_100_usable_personas,
             "cost_basis": row.cost_basis,
             "unmetered": row.unmetered,
             "price_in": row.price_in,

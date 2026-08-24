@@ -343,7 +343,9 @@ def test_real_pricing_config_loads():
     assert table.observed_date
     assert "claude_haiku" in table
     # ollama models are priced at a genuine zero (not absent).
-    assert table.get("ollama_llama31_8b") == (0.0, 0.0)
+    # Rented-equivalent rate, not a billed one -- see the pricing config header.
+    assert table.get("ollama_llama31_8b") == (0.05, 0.08)
+    assert table.get("ollama_qwen3_14b") == (0.0, 0.0)
 
 
 # --------------------------------------------------------------------------- #

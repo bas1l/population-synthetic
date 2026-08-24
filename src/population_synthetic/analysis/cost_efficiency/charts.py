@@ -128,6 +128,31 @@ def _linthresh(costs: Sequence[float]) -> float:
     return min(positive) * _LINTHRESH_FRACTION
 
 
+def _rented_equivalent_note(entries: Sequence[Mapping[str, Any]]) -> list[str] | None:
+    """Caption line naming the models priced by rented equivalent, or ``None``.
+
+    A rented-equivalent rate estimates a counterfactual -- what the same model
+    would cost to rent per token -- rather than measuring a transaction, and it
+    prices an fp8/bf16 build while a local run is 4-bit quantised. Both facts are
+    already columns on the row (the pricing flags); this lifts them onto the
+    figure, because the figure travels without the table.
+    """
+    flagged = sorted({
+        str(entry["model"])
+        for entry in entries
+        for flag in (entry["cost"].get("pricing_flags") or ())
+        if str(flag).startswith("rented-equivalent")
+    })
+    if not flagged:
+        return None
+    return [
+        f"{len(flagged)} model(s) are priced by RENTED EQUIVALENT, not by what was billed: "
+        f"{', '.join(flagged)}. They run locally and are billed nothing; the rate is what "
+        f"the same model costs to rent per token, for an fp8/bf16 build while the run was "
+        f"4-bit quantised -- so the proxy prices a better model than was used.",
+    ]
+
+
 def _caption(
     document: Mapping[str, Any],
     *,
@@ -144,15 +169,18 @@ def _caption(
         f"Cost basis: {document['cost_basis']} -- every LLM call of the full generated "
         f"pool, not the capped mirror "
         f"({'/'.join(str(n) for n in scored_n)} personas) the accuracy is scored on.",
-        f"x = cost_per_usable_persona = total_cost_usd / clean personas (passed both "
+        f"x = cost_per_100_usable_personas = 100 * total_cost_usd / clean personas (passed both "
         f"validity gates). y = overall_tv_similarity over n_scored personas. "
         f"{n_drawn} combination(s) drawn; pooled {totals['generated']} generated -> "
         f"{totals['clean']} clean. The x-axis is logarithmic outside the shaded band and "
-        f"linear inside it; every point inside the band cost a measured 0.00 USD and is "
-        f"spread horizontally for legibility only.",
+        f"linear inside it"
+        + ("; every point inside the band cost a measured 0.00 USD and is spread "
+           "horizontally for legibility only." if n_unmetered else
+           ". No combination is unmetered on this grid, so the band is empty."),
         f"Metered subtotal: {metered['n_combinations']} combination(s), "
         f"{metered['total_cost_usd']:.2f} USD over {metered['clean']} clean personas. "
         f"{n_unmetered} combination(s) are unmetered. {document['unmetered_note']}",
+        *(_rented_equivalent_note(document['combinations']) or []),
     ]
     if n_no_cost:
         lines.append(
@@ -177,6 +205,7 @@ def plot_cost_vs_accuracy(
     document: Mapping[str, Any],
     *,
     hosting: Mapping[str, str] | None = None,
+    xscale: str = "symlog",
 ):
     """Render fidelity against cost per usable persona; return an unsaved ``Figure``.
 
@@ -202,7 +231,7 @@ def plot_cost_vs_accuracy(
     drawn: list[tuple[float, float, str, str, str]] = []  # x, y, model, strategy, host
     no_cost: list[str] = []
     for entry in entries:
-        cost = entry["cost"]["cost_per_usable_persona"]
+        cost = entry["cost"]["cost_per_100_usable_personas"]
         model = str(entry["model"])
         if cost is None:
             no_cost.append(str(entry["slug"]))
@@ -250,10 +279,15 @@ def plot_cost_vs_accuracy(
     # the figure edge.
     fig.subplots_adjust(right=_GUTTER_LEFT - 0.015)
 
+    n_unmetered = sum(1 for entry in entries if entry["cost"]["unmetered"])
     # The unmetered band, drawn first so every marker sits above it. It spans the symlog
     # linear region, which is exactly the region where a distance is NOT a log distance.
-    ax.axvspan(-linthresh, linthresh, facecolor=_BAND_COLOR, edgecolor="none", zorder=0)
-    ax.axvline(linthresh, color=_BAND_EDGE, linewidth=1.0, linestyle=(0, (4, 3)), zorder=1)
+    # Drawn ONLY when something is unmetered: an empty band is grey canvas reserving
+    # room for points that do not exist, and it pushes every real point rightwards.
+    draw_band = bool(n_unmetered) and xscale == "symlog"
+    if draw_band:
+        ax.axvspan(-linthresh, linthresh, facecolor=_BAND_COLOR, edgecolor="none", zorder=0)
+        ax.axvline(linthresh, color=_BAND_EDGE, linewidth=1.0, linestyle=(0, (4, 3)), zorder=1)
 
     # Labels alternate above and below their marker in ascending fidelity order, so two
     # points close in y push their text in opposite directions instead of onto each
@@ -289,17 +323,36 @@ def plot_cost_vs_accuracy(
     # linscale sets how many decades of canvas the linear band is given. Kept below 1 so
     # the band -- which holds one distinct x value, zero -- does not occupy the width of
     # a whole decade of real cost variation.
-    ax.set_xscale("symlog", linthresh=linthresh, linscale=0.5)
-    # The left limit stops exactly at the band edge: a symlog axis has a negative
-    # logarithmic branch beyond it, and a cost axis showing -10^-4 is nonsense.
-    ax.set_xlim(-linthresh, max_cost * 3.2 if max_cost > 0 else linthresh * 10)
-    # No tick inside the band. It holds exactly one distinct value -- zero -- so a
-    # decade tick there labels a position that means nothing, and the band's own text
-    # already states what every point in it cost.
-    ax.set_xticks([t for t in ax.get_xticks() if abs(t) >= linthresh])
-    ax.set_xlabel(
-        "Cost per usable persona (USD, log scale outside the shaded band)", fontsize=10
-    )
+    positive = [x for x, *_ in drawn if x > 0]
+    if xscale == "linear":
+        # Linear reads costs as ratios of the largest, not of each other: the cheap
+        # models collapse toward the axis. Offered because a reader comparing absolute
+        # spend wants that, but it is the wrong scale for comparing the cheap end.
+        ax.set_xscale("linear")
+        ax.set_xlim(0.0, max_cost * 1.08 if max_cost > 0 else 1.0)
+        ax.set_xlabel("Cost per 100 usable personas (USD, linear scale)", fontsize=10)
+    elif draw_band:
+        # linscale sets how many decades of canvas the linear band is given. Kept below 1 so
+        # the band -- which holds one distinct x value, zero -- does not occupy the width of
+        # a whole decade of real cost variation.
+        ax.set_xscale("symlog", linthresh=linthresh, linscale=0.5)
+        # The left limit stops exactly at the band edge: a symlog axis has a negative
+        # logarithmic branch beyond it, and a cost axis showing -10^-4 is nonsense.
+        ax.set_xlim(-linthresh, max_cost * 3.2 if max_cost > 0 else linthresh * 10)
+        # No tick inside the band. It holds exactly one distinct value -- zero -- so a
+        # decade tick there labels a position that means nothing, and the band's own text
+        # already states what every point in it cost.
+        ax.set_xticks([t for t in ax.get_xticks() if abs(t) >= linthresh])
+        ax.set_xlabel(
+            "Cost per 100 usable personas (USD, log scale outside the shaded band)", fontsize=10
+        )
+    else:
+        # Nothing is unmetered, so every cost is strictly positive and a plain log axis
+        # applies throughout -- no linear band, and no dead grey margin before the data.
+        ax.set_xscale("log")
+        lo = min(positive) if positive else 1e-6
+        ax.set_xlim(lo / 2.2, max_cost * 3.2 if max_cost > 0 else lo * 10)
+        ax.set_xlabel("Cost per 100 usable personas (USD, log scale)", fontsize=10)
     ax.set_ylabel("Fidelity -- overall TV-similarity (higher is better)", fontsize=10)
     ax.set_title(
         f"Fidelity against generation cost -- {document['country']} "
@@ -309,14 +362,18 @@ def plot_cost_vs_accuracy(
     ax.grid(True, which="major", axis="both", color="#DDDDDD", linewidth=0.6, zorder=0)
     ax.set_axisbelow(True)
 
-    n_unmetered = sum(1 for entry in entries if entry["cost"]["unmetered"])
-    ax.annotate(
-        f"unmetered (priced 0/0), n={n_unmetered}\nevery point here is a measured 0.00 USD\n"
-        "horizontal position inside the band is\nspread for legibility, not measured",
-        xy=(0.0, 1.0), xycoords=("data", "axes fraction"),
-        xytext=(0, -8), textcoords="offset points",
-        ha="center", va="top", fontsize=7.0, color="#555555", zorder=2,
-    )
+    # Only label the band when something is in it. Every local model in the live
+    # grid now carries a rented-equivalent rate, so the band is routinely empty --
+    # and a label reading "every point here is a measured 0.00 USD" over an empty
+    # band asserts something about points that are not there.
+    if n_unmetered:
+        ax.annotate(
+            f"unmetered (priced 0/0), n={n_unmetered}\nevery point here is a measured 0.00 USD\n"
+            "horizontal position inside the band is\nspread for legibility, not measured",
+            xy=(0.0, 1.0), xycoords=("data", "axes fraction"),
+            xytext=(0, -8), textcoords="offset points",
+            ha="center", va="top", fontsize=7.0, color="#555555", zorder=2,
+        )
 
     method_handles = [
         Line2D([], [], linestyle="none", marker="o", markersize=7,

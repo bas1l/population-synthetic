@@ -35,3 +35,6 @@ docs/reference/scb-pxweb-catalog/scb-am-uf-catalog.html
 
 # Generated per-persona DAG SVGs (render_persona_dags.py) — potentially huge, never tracked
 persona_dags/
+
+# Generated claim-DAG renders (rebuild with scripts/dev/render_claim_dag.py)
+docs/claims/diagrams/

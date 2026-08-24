@@ -47,6 +47,7 @@ def _row(**overrides) -> CostRow:
         total_tokens=3_000,
         total_cost_usd=1.5,
         cost_per_usable_persona=0.0125,
+        cost_per_100_usable_personas=1.25,
         cost_basis="generated_pool_01_raw",
         unmetered=False,
         has_token_data=True,
@@ -79,6 +80,7 @@ def test_empty_optional_cell_reads_back_as_none_never_zero(tmp_path) -> None:
     row = _row(
         total_cost_usd=None,
         cost_per_usable_persona=None,
+        cost_per_100_usable_personas=None,
         generation_multiplier=None,
         input_tokens=None,
         output_tokens=None,
@@ -89,12 +91,14 @@ def test_empty_optional_cell_reads_back_as_none_never_zero(tmp_path) -> None:
 
     with open(path, newline="", encoding="utf-8") as fh:
         raw = next(csv.DictReader(fh))
-    for column in ("total_cost_usd", "cost_per_usable_persona", "generation_multiplier",
+    for column in ("total_cost_usd", "cost_per_usable_persona", "cost_per_100_usable_personas",
+                   "generation_multiplier",
                    "input_tokens", "output_tokens", "total_tokens"):
         assert raw[column] == "", column
 
     back = read_cost_csv(path)[0]
-    for column in ("total_cost_usd", "cost_per_usable_persona", "generation_multiplier",
+    for column in ("total_cost_usd", "cost_per_usable_persona", "cost_per_100_usable_personas",
+                   "generation_multiplier",
                    "input_tokens", "output_tokens", "total_tokens"):
         value = getattr(back, column)
         assert value is None, column
@@ -104,11 +108,13 @@ def test_empty_optional_cell_reads_back_as_none_never_zero(tmp_path) -> None:
 def test_measured_zero_survives_as_zero_not_none(tmp_path) -> None:
     # The unmetered case: a MEASURED 0.0 must stay 0.0, or every local model becomes
     # indistinguishable from an unpriced one.
-    row = _row(total_cost_usd=0.0, cost_per_usable_persona=0.0, unmetered=True,
+    row = _row(total_cost_usd=0.0, cost_per_usable_persona=0.0,
+               cost_per_100_usable_personas=0.0, unmetered=True,
                price_in=0.0, price_out=0.0)
     back = read_cost_csv(write_cost_csv([row], tmp_path / "c.csv"))[0]
     assert back.total_cost_usd == 0.0
     assert back.cost_per_usable_persona == 0.0
+    assert back.cost_per_100_usable_personas == 0.0
     assert back.unmetered is True
 
 

@@ -1,0 +1,13 @@
+id: "openrouter_kimi_k3"
+label: "OpenRouter Kimi K3"
+model_config:
+  provider: "openrouter"
+  model: "moonshotai/kimi-k3"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+parameters:
+  parallel:
+    workers: 4

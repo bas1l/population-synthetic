@@ -1,0 +1,77 @@
+# Visual grammar for the claim DAG. Kept beside the graph rather than in the
+# renderer so the encoding is inspectable and changeable without touching code.
+#
+# The house heatmap ramp (analysis/utils/palette.py) is deliberately NOT used here:
+# it is sequential, which orders cells by magnitude, and node class is categorical.
+# Borrowing it would imply an ordering between "finding" and "assumption" that does
+# not exist.
+#
+# Two encodings must survive greyscale, because each carries something the prose
+# cannot: an assumption the paper itself concedes false must be distinguishable from
+# one merely unargued, and an uneliminated defeater from an eliminated one. Both are
+# therefore carried by outline weight and hatch, never by fill alone.
+
+node_class:
+  finding:    {fill: "#2e6f95", text: "#ffffff", label: "finding -- read off an artifact"}
+  law:        {fill: "#f4f1ee", text: "#1b1b1b", label: "law -- the inference rule"}
+  derived:    {fill: "#3aa6a0", text: "#ffffff", label: "derived claim"}
+  claim:      {fill: "#1f3a5f", text: "#ffffff", label: "root claim"}
+  assumption: {fill: "#c06c3e", text: "#ffffff", label: "assumption -- needed, not supplied"}
+  context:    {fill: "#b8c4cc", text: "#1b1b1b", label: "context -- scope restriction"}
+  defeater:   {fill: "#8c3b4a", text: "#ffffff", label: "defeater -- a doubt"}
+
+# Overlay on assumption nodes. `unargued` is the default state and draws plain.
+assumption_status:
+  unargued:       {edge: "#c06c3e", lw: 1.1, hatch: null,  marker: ""}
+  addressed:      {edge: "#5a8f3c", lw: 1.6, hatch: null,  marker: " [addressed]"}
+  unsupported:    {edge: "#1b1b1b", lw: 2.2, hatch: "//",  marker: " [unsupported]"}
+  conceded-false: {edge: "#1b1b1b", lw: 2.8, hatch: "xx",  marker: " [CONCEDED FALSE]"}
+
+# Overlay on defeater nodes. An eliminated defeater is faded rather than removed --
+# it stays on the figure because "we considered this and ruled it out" is a claim the
+# reader should be able to check, not housekeeping to be tidied away.
+defeater_status:
+  eliminated:   {edge: "#5a8f3c", lw: 1.4, hatch: null, alpha: 0.62, marker: " [eliminated]"}
+  uneliminated: {edge: "#1b1b1b", lw: 2.4, hatch: "\\\\", alpha: 1.0, marker: " [OPEN]"}
+
+# Edge kinds. `premise` and `law_out` carry the derivation; `context` and `attack`
+# are deliberately different channels so neither reads as support.
+edge:
+  premise:  {color: "#2b2b2b", lw: 1.6, style: "-",           arrow: "-|>"}
+  law_out:  {color: "#2b2b2b", lw: 1.9, style: "-",           arrow: "-|>"}
+  context:  {color: "#8a9aa5", lw: 1.1, style: [0, [4, 3]],   arrow: "-"}
+  attack:   {color: "#8c3b4a", lw: 1.6, style: [0, [1, 2]],   arrow: "-["}
+  # Ancillary evidence -- evidence ABOUT evidence. It grounds a defeater and must not
+  # join the main chain: Schum's rule is that it points at an arc, never into it.
+  evidence: {color: "#8c3b4a", lw: 1.2, style: [0, [5, 2, 1, 2]], arrow: "-|>"}
+
+# Weakest-link ordinal scale, strongest first. The renderer checks the Ladder
+# Invariant against this order: no node may carry a qualifier stronger than the
+# minimum over its own premises.
+qualifier_order: [established, strong, moderate, weak, conjectural]
+
+# Where a node's `figure:` is looked up, in order. Declared here rather than in the
+# result files so the one absolute path -- the manuscript folder lives outside git by
+# design -- exists in a single place instead of being repeated per claim. A declared
+# figure that resolves in none of these raises with the roots listed.
+figure_roots:
+  - "docs/claims/diagrams"
+  - "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/04_Dissemination/Manuscripts/40_llm-population-fidelity-benchmark/2026-07-02_TMLR/figures"
+  - "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/04_Dissemination/Manuscripts/40_llm-population-fidelity-benchmark/figures"
+
+layout:
+  # Left-to-right, leaves on the left and the root on the right. Bottom-up matches
+  # the "climbing" metaphor better, but a ladder with a dozen leaves in its widest
+  # rank comes out around 3:1 wide and unusable on a page or a slide. Laid on its
+  # side the same rank count becomes height, which is far cheaper. This is why
+  # `dot rankdir=LR` is the default for dependency graphs generally.
+  node_w: 3.30
+  law_w: 3.70
+  min_h: 0.72
+  line_h: 0.148
+  pad_h: 0.40
+  x_gap: 1.05
+  y_gap: 0.30
+  wrap_chars: 38
+  law_wrap_chars: 44
+  dpi: 300

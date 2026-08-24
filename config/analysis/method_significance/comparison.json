@@ -1,12 +1,30 @@
 {
-  "description": "Method-comparison significance-figure config for analysis/method_significance. Declares which method pairs get a significance bracket ('pairs_mode') and the p-value -> star-symbol cutoffs ('star_thresholds'), in the standard GraphPad/Prism convention. Consumed by method_significance/builder.py::load_comparison_config (fail-fast) and the comparison-figure renderer; it knows nothing about models, countries, or matplotlib. 'pairs_mode' must be one of 'allowed_pairs_modes'; an unknown mode fails loudly. 'star_thresholds' are matched smallest-'max_p'-first (first match wins); a p above every threshold maps to 'ns_symbol'.",
-  "pairs_mode": "significant-only",
-  "allowed_pairs_modes": ["adjacent", "all", "vs-baseline", "significant-only"],
+  "description": "Method-comparison significance-figure config for analysis/method_significance. Declares which method pairs get a significance bracket ('pairs_mode') and the p-value -> star-symbol cutoffs ('star_thresholds'), in the standard GraphPad/Prism convention. Consumed by method_significance/builder.py::load_comparison_config (fail-fast) and the comparison-figure renderer; it knows nothing about models, countries, or matplotlib. 'pairs_mode' must be one of 'allowed_pairs_modes'; an unknown mode fails loudly. 'star_thresholds' are matched smallest-'max_p'-first (first match wins); a p above every threshold maps to 'ns_symbol'. Pairwise p-values are paired t-tests on the TV values, Holm-corrected across ALL pairs regardless of which subset is drawn, so a reported p never depends on a rendering choice. 'vs-most-complex' draws the reference-vs-rest family: the most complex method against each simpler one.",
+  "pairs_mode": "vs-most-complex",
+  "allowed_pairs_modes": [
+    "adjacent",
+    "all",
+    "vs-baseline",
+    "vs-most-complex",
+    "significant-only"
+  ],
   "star_thresholds": [
-    {"max_p": 0.0001, "symbol": "****"},
-    {"max_p": 0.001, "symbol": "***"},
-    {"max_p": 0.01, "symbol": "**"},
-    {"max_p": 0.05, "symbol": "*"}
+    {
+      "max_p": 0.0001,
+      "symbol": "****"
+    },
+    {
+      "max_p": 0.001,
+      "symbol": "***"
+    },
+    {
+      "max_p": 0.01,
+      "symbol": "**"
+    },
+    {
+      "max_p": 0.05,
+      "symbol": "*"
+    }
   ],
   "ns_symbol": "ns"
 }

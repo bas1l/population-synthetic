@@ -1,0 +1,13 @@
+id: "openrouter_gpt56_sol"
+label: "OpenRouter GPT-5.6 Sol"
+model_config:
+  provider: "openrouter"
+  model: "openai/gpt-5.6-sol"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+parameters:
+  parallel:
+    workers: 4

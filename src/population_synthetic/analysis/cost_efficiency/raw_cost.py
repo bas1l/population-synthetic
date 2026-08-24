@@ -85,6 +85,13 @@ __all__ = [
 #: structural constant of the pipeline layout, not a tunable value. Declared locally,
 #: as ``generation_metadata/__init__.py`` and ``scripts/analyze/cap_populations.py``
 #: both do -- there is no shared accessor for it.
+#: Config declaring the token-telemetry plausibility floor. A literal here would
+#: be a tuning constant hiding in code; the JSON carries the measurement that
+#: justifies the number and the reason it exists.
+TELEMETRY_CONFIG_PATH = (
+    PROJECT_ROOT / "config" / "analysis" / "cost_efficiency" / "telemetry.json"
+)
+
 RAW_STAGE_DIR = "01_Raw"
 
 #: Combo subdirectories holding one persona each.
@@ -100,6 +107,13 @@ INTERACTION_FILENAMES = ("llm_interactions.jsonl", "llm_interactions.json")
 #: cost number read without its basis is uninterpretable, and the alternative basis
 #: (the capped mirror) differs from this one by up to 5.5x.
 COST_BASIS = "generated_pool_01_raw"
+
+#: Config declaring per-persona costs measured on a comparable API for models whose
+#: own run telemetry cannot be priced. See the JSON's own description for why the
+#: claude_* runs qualify.
+CALIBRATION_CONFIG_PATH = (
+    PROJECT_ROOT / "config" / "analysis" / "cost_efficiency" / "cost_calibration.json"
+)
 
 #: The pricing config. Same file ``generation_metadata`` reads; see the module
 #: docstring for why it is parsed here rather than imported.
@@ -234,6 +248,10 @@ class RawCostTotals:
     #: True when any persona reported prompt or completion tokens -- the same
     #: predicate ``generation_metadata`` publishes per combo. Gates the cost.
     has_token_data: bool
+    #: Why the telemetry was rejected as implausible, or ``None`` when it was not.
+    #: Present-but-too-small counts become absent; the reason travels as data so a
+    #: reader of the artifact sees why a combination has no cost.
+    implausible_telemetry: str | None
     #: True when the model is priced ``{in: 0, out: 0}``. Unmetered is not free.
     unmetered: bool
     price_in: float
@@ -479,11 +497,86 @@ def _persona_dirs(slug_dir: Path) -> list[Path]:
     return sorted((p for p in slug_dir.glob(PERSONA_GLOB) if p.is_dir()), key=lambda p: p.name)
 
 
+def load_telemetry_floor(path: str | Path = TELEMETRY_CONFIG_PATH) -> int:
+    """The minimum believable mean input tokens per call, from config (fail-fast).
+
+    Raises :class:`FileNotFoundError` when the config is missing and
+    :class:`ValueError` when ``min_input_tokens_per_call`` is absent or is not a
+    positive integer. There is no default: a silent fallback would decide, without
+    saying so, which provider's telemetry is trusted.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Telemetry config not found: {path}. Expected "
+            "config/analysis/cost_efficiency/telemetry.json."
+        )
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = json.load(fh)
+    floor = raw.get("min_input_tokens_per_call") if isinstance(raw, dict) else None
+    if not isinstance(floor, int) or isinstance(floor, bool) or floor <= 0:
+        raise ValueError(
+            f"Telemetry config {path} must carry a positive integer "
+            f"'min_input_tokens_per_call', got {floor!r}."
+        )
+    return floor
+
+
+def load_cost_calibration(path: str | Path = CALIBRATION_CONFIG_PATH) -> dict[str, Any]:
+    """Per-persona calibrated costs, from config (fail-fast).
+
+    Returns the parsed document. Raises :class:`FileNotFoundError` when absent and
+    :class:`ValueError` when it lacks ``cost_basis`` or ``models`` -- a calibrated
+    figure that cannot name its own basis must never reach a row, because the whole
+    point of the basis is that this number is not a measurement of the run.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Cost-calibration config not found: {path}. Expected "
+            "config/analysis/cost_efficiency/cost_calibration.json."
+        )
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = json.load(fh)
+    if not isinstance(raw, dict) or not raw.get("cost_basis") or not isinstance(raw.get("models"), dict):
+        raise ValueError(
+            f"Cost-calibration config {path} must be an object carrying a non-empty "
+            "'cost_basis' and a 'models' mapping."
+        )
+    return raw
+
+
+def calibrated_persona_cost(model_id: str, strategy_id: str,
+                            calibration: dict[str, Any]) -> tuple[float, str] | None:
+    """``(usd_per_persona, cost_basis)`` for this cell, or ``None`` when uncalibrated.
+
+    Absence is the normal case -- almost every model prices from its own telemetry --
+    so this returns ``None`` rather than raising. A model that IS listed but lacks
+    this method raises: a partial calibration silently pricing four methods and
+    dropping the fifth is the kind of gap that reads downstream as "this cell had no
+    cost" when in fact nobody measured it.
+    """
+    entry = calibration["models"].get(model_id)
+    if entry is None:
+        return None
+    methods = entry.get("methods") or {}
+    row = methods.get(strategy_id)
+    if row is None:
+        raise ValueError(
+            f"Model {model_id!r} is calibrated but has no entry for method {strategy_id!r} "
+            f"(has: {sorted(methods)}). Add it or remove the model from the calibration."
+        )
+    return float(row["usd_per_persona"]), str(calibration["cost_basis"])
+
+
 def raw_cost_for_slug(
     output_base: Path | str,
     slug: str,
     model_id: str,
     pricing: RawPricing,
+    *,
+    strategy_id: str | None = None,
+    calibration: dict[str, Any] | None = None,
 ) -> RawCostTotals:
     """Total one combination's LLM cost over its full ``01_Raw`` pool.
 
@@ -595,9 +688,39 @@ def raw_cost_for_slug(
     cache_creation_tokens = total(_CACHE_CREATION_FIELD)
     has_token_data = input_tokens is not None or output_tokens is not None
 
-    if not has_token_data:
+    # A present-but-implausible input count is worse than an absent one: priced,
+    # it yields a confidently wrong dollar figure that nothing downstream can
+    # detect. Below the configured floor the telemetry is recorded as absent,
+    # with the reason carried on the record.
+    implausible_reason: str | None = None
+    if has_token_data and n_calls > 0 and input_tokens is not None:
+        per_call = input_tokens / n_calls
+        floor = load_telemetry_floor()
+        if per_call < floor:
+            implausible_reason = (
+                f"mean input tokens per call {per_call:.1f} is below the plausibility "
+                f"floor of {floor}; the provider does not report usage, so the counts "
+                f"are treated as absent rather than priced"
+            )
+            has_token_data = False
+
+    # Exception path: a model whose own telemetry cannot be priced, but for which a
+    # per-persona cost was measured on a comparable API. Scaled by the pool this
+    # combination actually generated, and stamped with the calibration's own basis so
+    # it can never be summed with measured spend as though it were the same quantity.
+    calibrated: tuple[float, str] | None = None
+    if not has_token_data and calibration is not None and strategy_id is not None:
+        calibrated = calibrated_persona_cost(model_id, strategy_id, calibration)
+
+    if calibrated is not None:
+        per_persona, basis = calibrated
+        total_cost_usd = per_persona * len(persona_dirs)
+        cost_basis = basis
+    elif not has_token_data:
         total_cost_usd = None
+        cost_basis = COST_BASIS
     else:
+        cost_basis = COST_BASIS
         cost = (input_tokens or 0) * price_in / _PER_MILLION
         cost += (output_tokens or 0) * price_out / _PER_MILLION
         if cache_read_tokens or cache_creation_tokens:
@@ -609,7 +732,7 @@ def raw_cost_for_slug(
     return RawCostTotals(
         slug=slug,
         model=model_id,
-        cost_basis=COST_BASIS,
+        cost_basis=cost_basis,
         n_personas=len(persona_dirs),
         n_personas_with_interactions=n_with_interactions,
         n_personas_with_tokens=n_with_tokens,
@@ -621,6 +744,7 @@ def raw_cost_for_slug(
         cache_read_tokens=cache_read_tokens,
         cache_creation_tokens=cache_creation_tokens,
         has_token_data=has_token_data,
+        implausible_telemetry=implausible_reason,
         unmetered=unmetered,
         price_in=price_in,
         price_out=price_out,

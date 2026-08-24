@@ -107,7 +107,8 @@ def test_metered_points_carry_their_measured_cost_and_accuracy(tmp_path) -> None
     offsets = fig.axes[0].collections[0].get_offsets().tolist()
     assert len(offsets) == 1
     x, y = offsets[0]
-    assert x == pytest.approx(entry["cost"]["cost_per_usable_persona"])
+    # The axis is per 100 usable personas -- derived in the builder, read here.
+    assert x == pytest.approx(entry["cost"]["cost_per_100_usable_personas"])
     assert y == pytest.approx(entry["accuracy"]["overall_tv_similarity"])
     matplotlib.pyplot.close(fig)
 
