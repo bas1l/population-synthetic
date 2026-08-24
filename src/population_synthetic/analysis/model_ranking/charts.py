@@ -48,6 +48,20 @@ from population_synthetic.analysis.utils.palette import (
     text_color_for_rgb,
     text_color_on,
 )
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    AXIS_TITLE,
+    FIGURE_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    PANEL_TITLE,
+    TICK_LABEL,
+    figure_size,
+    grow_height,
+    grow_width,
+    house_style,
+)
 from population_synthetic.analysis.utils.table_style import (
     ANNOT_FONTSIZE,
     BOX_EDGE,
@@ -74,6 +88,7 @@ def _ordered_strategies(strategies: list[str]) -> list[str]:
 # Heatmap (combos × attributes + overall)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Rank-ordered combo × attribute heatmap of TV-similarity, plus an overall column."""
     attributes: list[str] = result["metadata"]["attributes"]
@@ -81,8 +96,6 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
     if not attributes or not ranking:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path = Path(out_path)
@@ -101,32 +114,35 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
         return None
 
     fig, ax = plt.subplots(
-        figsize=(max(8.0, (len(attributes) + 1) * 0.8 + 3.0), max(4.0, len(ranking) * 0.45 + 2.5))
+        figsize=(
+            grow_width(len(attributes) + 1, per_item=0.8, padding=3.0, minimum=FULL),
+            grow_height(len(ranking), per_item=0.45, padding=2.5, minimum=4.0),
+        ),
     )
     masked = np.ma.masked_invalid(values)
     im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap())
 
     ax.set_xticks(range(len(attributes) + 1))
-    ax.set_xticklabels(attributes + ["overall"], rotation=40, ha="right", fontsize=8)
+    ax.set_xticklabels(attributes + ["overall"], rotation=40, ha="right", fontsize=TICK_LABEL)
     ax.set_yticks(range(len(ranking)))
-    ax.set_yticklabels(labels, fontsize=8)
+    ax.set_yticklabels(labels, fontsize=TICK_LABEL)
     ax.axvline(len(attributes) - 0.5, color="white", linewidth=2.5)
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
-    cbar.set_label("TV-similarity (1 - TV distance)", fontsize=8)
+    cbar.set_label("TV-similarity (1 - TV distance)", fontsize=AXIS_TITLE)
 
     for i in range(values.shape[0]):
         for j in range(values.shape[1]):
             v = values[i, j]
             if np.isnan(v):
                 continue
-            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=6.5,
+            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=ANNOTATION,
                     color=text_color_on(im, v))
 
     country = result["metadata"]["country"]
     ax.set_title(
         f"{country}: TV-similarity per attribute (combos in rank order)",
-        fontsize=12, fontweight="bold",
+        fontsize=FIGURE_TITLE, fontweight="bold",
     )
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -138,14 +154,13 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
 # Leaderboard (overall ranking)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Horizontal bars of overall TV-similarity (best on top), coherence annotated."""
     ranking: list[str] = result["ranking"]
     if not ranking:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path = Path(out_path)
@@ -163,7 +178,7 @@ def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -
     # Best combo at the top of the chart.
     positions = list(range(len(ranking)))[::-1]
 
-    fig, ax = plt.subplots(figsize=(9.0, max(3.5, len(ranking) * 0.45 + 1.8)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(len(ranking), per_item=0.45, padding=1.8, minimum=3.5)))
     ax.barh(
         positions, means,
         color=CATEGORICAL_SERIES[0], edgecolor=BAR_EDGE, linewidth=0.5, alpha=0.85, height=0.65,
@@ -172,19 +187,19 @@ def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -
         if mean == mean:
             ax.text(
                 mean, pos, f"  {mean:.3f}  (coh {coherence:.3f})",
-                va="center", ha="left", fontsize=7.5, color=ANNOTATION_GREY,
+                va="center", ha="left", fontsize=ANNOTATION, color=ANNOTATION_GREY,
             )
 
     ax.set_yticks(positions)
-    ax.set_yticklabels(labels, fontsize=8)
-    ax.set_xlabel("mean TV-similarity across attributes", fontsize=9)
+    ax.set_yticklabels(labels, fontsize=TICK_LABEL)
+    ax.set_xlabel("mean TV-similarity across attributes", fontsize=AXIS_TITLE)
     finite = [m for m in means if m == m]
     if finite:
         ax.set_xlim(0.0, min(1.0, max(finite) * 1.18))
     ax.grid(axis="x", linestyle=":", alpha=0.4)
 
     country = result["metadata"]["country"]
-    ax.set_title(f"{country}: model x strategy leaderboard", fontsize=12, fontweight="bold")
+    ax.set_title(f"{country}: model x strategy leaderboard", fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -195,6 +210,7 @@ def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -
 # C2ST AUC vs mean TV-similarity scatter (multivariate summary)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Scatter of C2ST ROC-AUC vs mean TV-similarity across combos, coloured by strategy.
 
@@ -223,14 +239,12 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
     if not by_strategy:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(8.5, 6.0))
+    fig, ax = plt.subplots(figsize=figure_size(FULL, 6.0))
     all_aucs: list[float] = []
     for strategy in strategies:
         pts = by_strategy.get(strategy)
@@ -248,21 +262,21 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
     ax.text(
         0.01, 0.5, "0.5 = indistinguishable joint",
         transform=ax.get_yaxis_transform(), va="bottom", ha="left",
-        fontsize=7.5, color=SECONDARY_GREY,
+        fontsize=ANNOTATION, color=SECONDARY_GREY,
     )
 
-    ax.set_xlabel("mean TV-similarity across attributes (marginal fidelity)", fontsize=9)
-    ax.set_ylabel("C2ST ROC-AUC (joint discriminability; 0.5 best)", fontsize=9)
+    ax.set_xlabel("mean TV-similarity across attributes (marginal fidelity)", fontsize=AXIS_TITLE)
+    ax.set_ylabel("C2ST ROC-AUC (joint discriminability; 0.5 best)", fontsize=AXIS_TITLE)
     lo = min([0.5] + all_aucs) - 0.03
     hi = max([0.5] + all_aucs) + 0.03
     ax.set_ylim(lo, min(1.02, hi))
     ax.grid(True, linestyle=":", alpha=0.4)
-    ax.legend(title="strategy", fontsize=7.5, title_fontsize=8)
+    ax.legend(title="strategy", fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE)
 
     country = result["metadata"]["country"]
     ax.set_title(
         f"{country}: joint discriminability (C2ST) vs marginal fidelity",
-        fontsize=12, fontweight="bold",
+        fontsize=FIGURE_TITLE, fontweight="bold",
     )
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -274,6 +288,7 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
 # Per-attribute grouped bars (optional)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Path]:
     """One grouped bar chart per attribute: strategies on x, one series per model."""
     attributes: list[str] = result["metadata"]["attributes"]
@@ -282,8 +297,6 @@ def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Pat
     if not attributes or not models or not strategies:
         return []
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_dir = Path(out_dir)
@@ -300,7 +313,9 @@ def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Pat
     x = np.arange(len(strategies))
 
     for attr in attributes:
-        fig, ax = plt.subplots(figsize=(max(7.0, len(strategies) * 1.4 + 2.0), 5.0))
+        fig, ax = plt.subplots(
+            figsize=figure_size(grow_width(len(strategies), per_item=1.4, padding=2.0, minimum=7.0), 5.0),
+        )
         for m_idx, model in enumerate(models):
             heights = []
             for strategy in strategies:
@@ -317,15 +332,15 @@ def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Pat
             )
 
         ax.set_xticks(x)
-        ax.set_xticklabels(strategies, rotation=25, ha="right", fontsize=8)
-        ax.set_ylabel("TV-similarity", fontsize=9)
+        ax.set_xticklabels(strategies, rotation=25, ha="right", fontsize=TICK_LABEL)
+        ax.set_ylabel("TV-similarity", fontsize=AXIS_TITLE)
         ax.set_ylim(0.0, 1.0)
         ax.grid(axis="y", linestyle=":", alpha=0.4)
-        ax.legend(fontsize=7.5)
+        ax.legend(fontsize=LEGEND_LABEL)
 
         country = result["metadata"]["country"]
         ax.set_title(f"{country}: {attr} -- TV-similarity by model x strategy",
-                     fontsize=11, fontweight="bold")
+                     fontsize=PANEL_TITLE, fontweight="bold")
         out_path = out_dir / f"{attr}_bars.png"
         fig.tight_layout()
         fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -562,6 +577,7 @@ def _row_marginal_text(row: _ModelRow) -> str:
     return f"{row.best_value * 100:.1f}  {row.best_method}  ({row.key_cells} {scope})"
 
 
+@house_style
 def plot_model_method_heatmap(
     result: dict[str, Any],
     requested_n: CapIndex,
@@ -613,8 +629,6 @@ def plot_model_method_heatmap(
     if np.all(np.isnan(values)):
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch, Rectangle
@@ -640,9 +654,9 @@ def plot_model_method_heatmap(
 
     fig, ax = plt.subplots(
         figsize=(
-            max(9.0, (n_methods + marginal_columns) * _COLUMN_INCHES + _FIXED_INCHES),
-            max(4.5, (len(ordered) + gap) * 0.62 + 3.2),
-        )
+            grow_width(n_methods + marginal_columns, per_item=_COLUMN_INCHES, padding=_FIXED_INCHES, minimum=FULL),
+            grow_height(len(ordered) + gap, per_item=0.62, padding=3.2, minimum=4.5),
+        ),
     )
 
     def _draw_block(block: list[_ModelRow], y_top: float):
@@ -663,7 +677,7 @@ def plot_model_method_heatmap(
 
     categories_on_top(ax, strategies)
     ax.set_yticks(row_y)
-    ax.set_yticklabels([row.model for row in ordered], fontsize=8)
+    ax.set_yticklabels([row.model for row in ordered], fontsize=TICK_LABEL)
     hosting: dict[str, str] = metadata.get("model_hosting", {})
     for label, row in zip(ax.get_yticklabels(), ordered):
         # Provenance side-marker (same rule and colours as the models table); Tier 2
@@ -712,7 +726,7 @@ def plot_model_method_heatmap(
         )
         ax.text(
             -0.5, len(tier1) - 0.5 + gap / 2.0 - 0.08, _UNRANKED_NOTE,
-            ha="left", va="bottom", fontsize=7.5, color=BOX_EDGE, clip_on=False,
+            ha="left", va="bottom", fontsize=ANNOTATION, color=BOX_EDGE, clip_on=False,
         )
 
     # --- marginals, fenced off from the grid by the shared divider.
@@ -722,17 +736,17 @@ def plot_model_method_heatmap(
     for i, row in enumerate(ordered):
         ax.text(
             n_methods - 0.5 + _ROW_MARGINAL_OFFSET, row_y[i], row_marginals[i],
-            ha="left", va="center", fontsize=7.5,
+            ha="left", va="center", fontsize=ANNOTATION,
             fontstyle="italic" if row.tier == 2 else "normal", clip_on=False,
         )
 
     means, counts = _column_marginals(ordered, n_methods)
     for j, (mean, count) in enumerate(zip(means, counts)):
         text = f"{mean * 100:.1f}\n({count} full-n)" if count else f"n/a\n({count} full-n)"
-        ax.text(j, marginal_y, text, ha="center", va="center", fontsize=7.5, linespacing=1.35)
+        ax.text(j, marginal_y, text, ha="center", va="center", fontsize=ANNOTATION, linespacing=1.35)
     ax.text(
         -0.5 - _ROW_MARGINAL_OFFSET, marginal_y, "method mean",
-        ha="right", va="center", fontsize=7.5, clip_on=False,
+        ha="right", va="center", fontsize=ANNOTATION, clip_on=False,
     )
 
     add_percentage_colorbar(fig, im, ax, "TV-similarity (%)")
@@ -750,7 +764,7 @@ def plot_model_method_heatmap(
     )
     ax.legend(
         handles=handles, loc="upper left", bbox_to_anchor=(0.0, -0.02),
-        ncol=3, fontsize=7.5, title="provenance / sampling", title_fontsize=8, frameon=False,
+        ncol=3, fontsize=LEGEND_LABEL, title="provenance / sampling", title_fontsize=LEGEND_TITLE, frameon=False,
     )
 
     country = metadata["country"]
@@ -758,7 +772,7 @@ def plot_model_method_heatmap(
         f"{country}: overall fidelity by model x method (TV-similarity %)\n"
         "one cell per combination, averaged over every axis -- not the per-axis "
         "combo table or the single-method models table",
-        fontsize=11, fontweight="bold", pad=30,
+        fontsize=PANEL_TITLE, fontweight="bold", pad=30,
     )
 
     # The row-marginal scope clause names the tiers only when the grid actually has two,
@@ -780,7 +794,7 @@ def plot_model_method_heatmap(
         caption = f"{lead}{_UNRANKED_CAVEAT} {caption}"
     ax.text(
         0.0, -0.13, textwrap.fill(caption, _CAPTION_WRAP), transform=ax.transAxes,
-        ha="left", va="top", fontsize=7, clip_on=False,
+        ha="left", va="top", fontsize=ANNOTATION, clip_on=False,
     )
 
     fig.tight_layout()

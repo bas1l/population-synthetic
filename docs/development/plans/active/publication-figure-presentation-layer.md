@@ -267,11 +267,29 @@ on labelling, so they are recorded here as the project's chosen convention.
 ### Phase 2: The style module
 **Goal:** One place that decides how every figure looks, meeting the standards doc.
 
-- [ ] 2.1 — Create `analysis/utils/style.py`: backend selection, an `apply_house_style()` context manager, rcParams for Arial with a documented fallback stack, the 8–12 pt size scale (headers 11–12 bold, axis titles 10, ticks 8–9, legend 8), `lines.linewidth` and `axes.linewidth` above 0.25 pt, RGB output.
-- [ ] 2.2 — Define the figure-size vocabulary in inches: `SINGLE` (8.9 cm), `DOUBLE` (17.4 cm), `FULL` (19.05 cm maximum), each capped at 22.23 cm tall, plus the growth helpers replacing the 12 ad-hoc formulae.
-- [ ] 2.3 — Delete all 52 in-function `matplotlib.use("Agg")` calls.
-- [ ] 2.4 — Replace every `fontsize=` numeric literal with a named size from the scale, raising the sub-8 pt ones.
-- [ ] 2.5 — Unit-test that no rcParam permits a sub-8 pt or sub-0.25 pt value.
+**Started:** 2026-08-24
+**Completed:** 2026-08-24
+
+- [x] 2.1 — Create `analysis/utils/style.py`: backend selection, an `apply_house_style()` context manager, rcParams for Arial with a documented fallback stack, the 8–12 pt size scale (headers 11–12 bold, axis titles 10, ticks 8–9, legend 8), `lines.linewidth` and `axes.linewidth` above 0.25 pt, RGB output.
+- [x] 2.2 — Define the figure-size vocabulary in inches: `SINGLE` (8.9 cm), `DOUBLE` (17.4 cm), `FULL` (19.05 cm maximum), each capped at 22.23 cm tall, plus the growth helpers replacing the 12 ad-hoc formulae.
+- [x] 2.3 — Delete all 52 in-function `matplotlib.use("Agg")` calls.
+- [x] 2.4 — Replace every `fontsize=` numeric literal with a named size from the scale, raising the sub-8 pt ones.
+- [x] 2.5 — Unit-test that no rcParam permits a sub-8 pt or sub-0.25 pt value.
+
+**Notes.** The style is applied by a `house_style` decorator over `apply_house_style()`, so
+the 53 draw functions each carry one line rather than an indented `with` block; `rcParams` is
+installed through `plt.rc_context`, so nothing leaks between draws. `font.family` names the
+**resolved** family rather than the generic `sans-serif` alias — matplotlib resolves a generic
+alias at render time, so a figure returned unsaved (as `cost_efficiency` does) and written by
+its driver outside the context would otherwise have rendered in DejaVu Sans. All 58 `figsize=`
+call sites now go through the vocabulary, not the 12 originally counted: 40 carried a growth
+formula and the remaining 18 were fixed pairs, most of them wider than the printable canvas.
+
+Three grids genuinely cannot breathe at the 19.05 cm cap with 8 pt text and need Phase 4's
+annotation policy and a Phase 6 review: `fidelity/charts.py::plot_radar_grid` (a 3.2 in cell
+times up to five strategy columns, previously ~17.5 in wide), `real_population_stats::plot_overview_panel`
+(a 4x4 panel grid, previously 18 x 16.8 in, now taller than it is wide), and
+`method_significance::_plot_facets` (4.6 in per facet column).
 
 **Files Modified:** `analysis/utils/style.py` (new), every `analysis/**/charts.py`, `tests/test_style.py` (new)
 

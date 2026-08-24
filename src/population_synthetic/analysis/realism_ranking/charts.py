@@ -66,6 +66,19 @@ from population_synthetic.analysis.utils.palette import (
     heatmap_cmap,
     text_color_on,
 )
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    AXIS_TITLE,
+    CALLOUT,
+    FIGURE_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    TICK_LABEL,
+    figure_size,
+    grow_height,
+    grow_width,
+    house_style,
+)
 
 __all__ = [
     "plot_headline_map",
@@ -114,6 +127,7 @@ def _point_style(is_real: bool) -> dict[str, Any]:
             "edgecolor": "white", "linewidth": 0.5, "zorder": 2}
 
 
+@house_style
 def plot_headline_map(ranking: dict[str, Any], *, measure: str = _DEFAULT_MEASURE):
     """Render the coherence x coverage map from a built ranking document.
 
@@ -128,8 +142,6 @@ def plot_headline_map(ranking: dict[str, Any], *, measure: str = _DEFAULT_MEASUR
     like one that was never judged. Returns the ``Figure`` unsaved and open; raises when
     there is nothing plottable.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     distances = {
@@ -142,7 +154,7 @@ def plot_headline_map(ranking: dict[str, Any], *, measure: str = _DEFAULT_MEASUR
     if not plotted:
         raise ValueError("plot_headline_map requires at least one competitor with a defined rate")
 
-    fig, ax = plt.subplots(figsize=(9, 7))
+    fig, ax = plt.subplots(figsize=figure_size(FULL, 7))
     seen_labels: set[str] = set()
     for entry in plotted:
         slug = entry["slug"]
@@ -163,37 +175,38 @@ def plot_headline_map(ranking: dict[str, Any], *, measure: str = _DEFAULT_MEASUR
         annotation = f"{slug}*" if undefined else slug
         ax.annotate(
             annotation, (entry["rate"], y),
-            textcoords="offset points", xytext=(6, 4), fontsize=7,
+            textcoords="offset points", xytext=(6, 4), fontsize=ANNOTATION,
         )
 
     ax.set_xlabel(
         "Axis A -- impossibility rate (share of internally-contradictory personas); lower is better",
-        fontsize=9,
+        fontsize=AXIS_TITLE,
     )
     ax.set_ylabel(
         f"Axis B -- typicality-dispersion distance to the real population ({measure}); "
         "near zero is better",
-        fontsize=9,
+        fontsize=AXIS_TITLE,
     )
     ax.set_title(
         "Persona realism -- coherence vs typicality coverage\n"
         "(the real population is ranked as an ordinary competitor on Axis A)",
-        fontsize=12, fontweight="bold",
+        fontsize=FIGURE_TITLE, fontweight="bold",
     )
     ax.axhline(0, color="gray", linestyle="--", linewidth=0.7, alpha=0.7, zorder=0)
-    ax.tick_params(axis="both", labelsize=8)
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
     handles, labels = ax.get_legend_handles_labels()
     if handles:
-        ax.legend(handles, labels, fontsize=8, loc="best")
+        ax.legend(handles, labels, fontsize=LEGEND_LABEL, loc="best")
     if any(distances.get(e["slug"]) is None and e["slug"] != real_slug for e in plotted):
         ax.text(
             0.99, 0.01, "* Axis-B distance undefined; plotted on the x-axis only",
-            transform=ax.transAxes, ha="right", va="bottom", fontsize=7, color="gray",
+            transform=ax.transAxes, ha="right", va="bottom", fontsize=ANNOTATION, color="gray",
         )
     fig.tight_layout()
     return fig
 
 
+@house_style
 def plot_impossibility_forest(ranking: dict[str, Any]):
     """Render every competitor's impossibility rate with its bootstrap CI, in rank order.
 
@@ -207,8 +220,6 @@ def plot_impossibility_forest(ranking: dict[str, Any]):
     figure; they are still present in the ranking with an explicit ``None``. Returns the
     ``Figure`` unsaved and open; raises when there is nothing plottable.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     entries = [e for e in ranking["axis_a"]["ranking"] if e["rate"] is not None]
@@ -219,7 +230,7 @@ def plot_impossibility_forest(ranking: dict[str, Any]):
     labels = [f"{e['slug']}  (n={e['denominator']})" for e in entries]
     positions = list(range(len(entries)))
 
-    fig, ax = plt.subplots(figsize=(10, max(3.0, len(entries) * 0.32 + 1.8)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(len(entries), per_item=0.32, padding=1.8, minimum=3.0)))
     for pos, entry in zip(positions, entries):
         is_real = entry["slug"] == real_slug
         lo, hi = entry["ci_lo"], entry["ci_hi"]
@@ -231,22 +242,23 @@ def plot_impossibility_forest(ranking: dict[str, Any]):
                    edgecolor="white", linewidth=0.4)
 
     ax.set_yticks(positions)
-    ax.set_yticklabels(labels, fontsize=7)
+    ax.set_yticklabels(labels, fontsize=TICK_LABEL)
     ax.invert_yaxis()  # best (lowest rate) at the top
     ax.set_xlabel(
         f"Impossibility rate with {int(round(entries[0]['ci_level'] * 100))}% bootstrap CI; "
         "lower is better",
-        fontsize=9,
+        fontsize=AXIS_TITLE,
     )
     ax.set_title(
         "Axis A -- impossibility rate by competitor (the real population included)",
-        fontsize=12, fontweight="bold",
+        fontsize=FIGURE_TITLE, fontweight="bold",
     )
-    ax.tick_params(axis="x", labelsize=8)
+    ax.tick_params(axis="x", labelsize=TICK_LABEL)
     ax.grid(axis="x", linestyle=":", linewidth=0.5, alpha=0.6)
     fig.tight_layout()
     return fig
 
+@house_style
 def _render_grid_heatmap(
     grid: dict[str, Any],
     *,
@@ -281,8 +293,6 @@ def _render_grid_heatmap(
     Returns the ``Figure`` unsaved and open. Raises ``ValueError`` when nothing has a
     defined value, matching the sibling charts.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -316,7 +326,10 @@ def _render_grid_heatmap(
         vmax = 1.0   # every value is 0: keep a valid range instead of a degenerate one
 
     fig, ax = plt.subplots(
-        figsize=(max(7.0, len(methods) * 1.5 + 3.5), max(3.2, n_rows * 0.55 + 2.4))
+        figsize=(
+            grow_width(len(methods), per_item=1.5, padding=3.5, minimum=7.0),
+            grow_height(n_rows, per_item=0.55, padding=2.4, minimum=3.2),
+        ),
     )
     im = ax.imshow(
         np.ma.masked_invalid(plotted), aspect="auto",
@@ -327,22 +340,22 @@ def _render_grid_heatmap(
     if real_rate is not None:
         row_labels.append(f"{real['slug']}  (real population)")
     ax.set_xticks(range(max(len(methods), 1)))
-    ax.set_xticklabels(methods or [""], rotation=30, ha="right", fontsize=8)
+    ax.set_xticklabels(methods or [""], rotation=30, ha="right", fontsize=TICK_LABEL)
     ax.set_yticks(range(n_rows))
-    ax.set_yticklabels(row_labels, fontsize=8)
+    ax.set_yticklabels(row_labels, fontsize=TICK_LABEL)
 
     # Annotate each cell with its value and denominator; grey cells say so explicitly.
     for i, model in enumerate(models):
         for j, method in enumerate(methods):
             cell = grid["cells"].get(model, {}).get(method)
             if cell is None or cell.get("rate") is None:
-                ax.text(j, i, "n/a", ha="center", va="center", fontsize=7.5,
+                ax.text(j, i, "n/a", ha="center", va="center", fontsize=ANNOTATION,
                         color=SECONDARY_GREY, style="italic")
                 continue
             value = float(cell["rate"])
             ax.text(
                 j, i, f"{value:.3f}\nn={cell['denominator']}",
-                ha="center", va="center", fontsize=7,
+                ha="center", va="center", fontsize=ANNOTATION,
                 color=text_color_on(im, value),
             )
 
@@ -353,17 +366,17 @@ def _render_grid_heatmap(
         centre = (len(methods) - 1) / 2.0 if methods else 0.0
         ax.text(
             centre, row, f"{float(real_rate):.3f}   n={real['denominator']}",
-            ha="center", va="center", fontsize=7.5,
+            ha="center", va="center", fontsize=ANNOTATION,
             color=text_color_on(im, float(real_rate)),
         )
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
-    cbar.set_label(cbar_label, fontsize=8)
-    cbar.ax.tick_params(labelsize=7)
+    cbar.set_label(cbar_label, fontsize=AXIS_TITLE)
+    cbar.ax.tick_params(labelsize=TICK_LABEL)
 
-    ax.set_xlabel("Method (strategy)", fontsize=9)
-    ax.set_ylabel("Model", fontsize=9)
-    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.set_xlabel("Method (strategy)", fontsize=AXIS_TITLE)
+    ax.set_ylabel("Model", fontsize=AXIS_TITLE)
+    ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
 
     footnotes = [caption] if caption else []
     if real_rate is not None:
@@ -377,7 +390,7 @@ def _render_grid_heatmap(
         # below the axes without reserved space collides with the rotated tick labels.
         reserved = 0.07 + 0.035 * text.count("\n")
         fig.tight_layout(rect=(0.0, reserved, 1.0, 1.0))
-        fig.text(0.5, 0.015, text, ha="center", va="bottom", fontsize=7, color=FOOTNOTE_GREY)
+        fig.text(0.5, 0.015, text, ha="center", va="bottom", fontsize=ANNOTATION, color=FOOTNOTE_GREY)
     else:
         fig.tight_layout()
     return fig
@@ -486,7 +499,7 @@ def _place_footnote(fig, ax, sentences: list[str]) -> None:
     box = ax.get_tightbbox(fig.canvas.get_renderer()).transformed(fig.transFigure.inverted())
     fig.text(
         0.5, box.y0 - _FOOTNOTE_GAP_IN / fig.get_figheight(), text,
-        ha="center", va="top", fontsize=7, color=FOOTNOTE_GREY,
+        ha="center", va="top", fontsize=ANNOTATION, color=FOOTNOTE_GREY,
     )
 
 
@@ -557,11 +570,12 @@ def _column(ax, row: float, offset_pt: int, text: str, color: str, *, bold: bool
     ax.annotate(
         text, xy=(1.0, row), xycoords=("axes fraction", "data"),
         xytext=(offset_pt, 0), textcoords="offset points",
-        ha="left", va="center", fontsize=7, color=color,
+        ha="left", va="center", fontsize=ANNOTATION, color=color,
         fontweight="bold" if bold else "normal", annotation_clip=False,
     )
 
 
+@house_style
 def _empty_pair_summary(summary: dict[str, Any], title: str):
     """The figure a level with nothing to rank gets -- an explanation, not empty axes.
 
@@ -572,24 +586,23 @@ def _empty_pair_summary(summary: dict[str, Any], title: str):
     crashed render, and emitting a blank axis would make it look like a rendering bug; the
     figure says which it is, and the denominators still travel with it.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(11, 4.2))
+    fig, ax = plt.subplots(figsize=figure_size(FULL, 4.2))
     ax.axis("off")
-    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
     ax.text(
         0.5, 0.55,
         f"No {summary['severity']} clash was raised by any consumed competitor.\n"
         "There is nothing to rank at this level -- this is a measured absence, "
         "not a missing figure.",
-        transform=ax.transAxes, ha="center", va="center", fontsize=10, color=ANNOTATION_GREY,
+        transform=ax.transAxes, ha="center", va="center", fontsize=CALLOUT, color=ANNOTATION_GREY,
     )
     _place_footnote(fig, ax, _pair_summary_footnotes(summary))
     return fig
 
 
+@house_style
 def plot_severity_pair_summary(summary: dict[str, Any]):
     """Render one severity level's clashing attribute pairs, ranked country-wide.
 
@@ -624,8 +637,6 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
     Returns the ``Figure`` unsaved and open. A level with no clash at all returns the
     explaining figure rather than raising, so the artifact set is never silently short.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
@@ -644,7 +655,7 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
     values = [0.0 if pair["prevalence"] is None else float(pair["prevalence"]) for pair in pairs]
     positions = list(range(len(pairs)))
 
-    fig, ax = plt.subplots(figsize=(12, max(3.6, len(pairs) * 0.42 + 2.6)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(len(pairs), per_item=0.42, padding=2.6, minimum=3.6)))
     ax.barh(
         positions, values, height=0.62, color=_COMPETITOR_COLOR,
         edgecolor="white", linewidth=0.4, zorder=2,
@@ -683,7 +694,7 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
         _column(ax, _HEADER_ROW, _COLUMN_REAL_PT, "real", _REAL_COLOR, bold=True)
 
     ax.set_yticks(positions)
-    ax.set_yticklabels(labels, fontsize=8)
+    ax.set_yticklabels(labels, fontsize=TICK_LABEL)
     # Top-down (most-affected first) with room above row 0 for the column headers. Set
     # directly rather than via invert_yaxis(), which would flip the reserved strip to the
     # bottom of the figure where the headers would sit under the columns they name.
@@ -691,10 +702,10 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
     ax.set_xlabel(
         f"Share of personas exhibiting the pair at {severity} "
         "(each series over its own denominator)",
-        fontsize=9,
+        fontsize=AXIS_TITLE,
     )
-    ax.set_title(title, fontsize=12, fontweight="bold")
-    ax.tick_params(axis="x", labelsize=8)
+    ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
+    ax.tick_params(axis="x", labelsize=TICK_LABEL)
     ax.grid(axis="x", linestyle=":", linewidth=0.5, alpha=0.6, zorder=0)
     ax.set_axisbelow(True)
     handles, legend_labels = ax.get_legend_handles_labels()
@@ -716,7 +727,7 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
         order = sorted(range(len(handles)), key=lambda i: legend_labels[i].startswith("synthetic"),
                        reverse=True)
         ax.legend([handles[i] for i in order], [legend_labels[i] for i in order],
-                  fontsize=8, loc="best", framealpha=0.92)
+                  fontsize=LEGEND_LABEL, loc="best", framealpha=0.92)
     _place_footnote(fig, ax, _pair_summary_footnotes(summary))
     return fig
 
@@ -894,6 +905,7 @@ def _typicality_footnotes(
     return lines
 
 
+@house_style
 def plot_typicality_heatmap(ranking: dict[str, Any]):
     """Render the self-contained typicality statistic as a model x method grid.
 
@@ -924,8 +936,6 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
     Returns the ``Figure`` unsaved and open. Raises ``ValueError`` when no competitor has
     a defined statistic, matching the sibling charts.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
     from matplotlib.patches import Rectangle
@@ -967,7 +977,10 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
         plotted[-1, :] = float(real_value)
 
     fig, ax = plt.subplots(
-        figsize=(max(7.0, len(methods) * 1.5 + 3.5), max(3.2, n_rows * 0.55 + 2.4))
+        figsize=(
+            grow_width(len(methods), per_item=1.5, padding=3.5, minimum=7.0),
+            grow_height(n_rows, per_item=0.55, padding=2.4, minimum=3.2),
+        ),
     )
     im = ax.imshow(
         np.ma.masked_invalid(plotted), aspect="auto",
@@ -979,15 +992,15 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
         suffix = " -- deltas are measured against it" if has_reference else ""
         row_labels.append(f"{real['slug']}  (real population{suffix})")
     ax.set_xticks(range(max(len(methods), 1)))
-    ax.set_xticklabels(methods or [""], rotation=30, ha="right", fontsize=8)
+    ax.set_xticklabels(methods or [""], rotation=30, ha="right", fontsize=TICK_LABEL)
     ax.set_yticks(range(n_rows))
-    ax.set_yticklabels(row_labels, fontsize=8)
+    ax.set_yticklabels(row_labels, fontsize=TICK_LABEL)
 
     for i, model in enumerate(models):
         for j, method in enumerate(methods):
             cell = grid["cells"][model][method]
             if cell is None:
-                ax.text(j, i, "not judged", ha="center", va="center", fontsize=7.5,
+                ax.text(j, i, "not judged", ha="center", va="center", fontsize=ANNOTATION,
                         color=SECONDARY_GREY, style="italic")
                 continue
             if cell["value"] is None:
@@ -999,7 +1012,7 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
                     linewidth=0.0, zorder=2,
                 ))
                 ax.text(j, i, f"no typicality\nof {cell['n_personas']} personas",
-                        ha="center", va="center", fontsize=7, color=FOOTNOTE_GREY,
+                        ha="center", va="center", fontsize=ANNOTATION, color=FOOTNOTE_GREY,
                         style="italic", zorder=4)
                 continue
             value = float(cell["value"])
@@ -1013,7 +1026,7 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
             # allowed to strike through it.
             ax.text(
                 j, i, f"{value:.3f}{_delta(value)}\nn={cell['denominator']}",
-                ha="center", va="center", fontsize=7, zorder=4,
+                ha="center", va="center", fontsize=ANNOTATION, zorder=4,
                 color=text_color_on(im, value),
             )
 
@@ -1032,7 +1045,7 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
             ))
         ax.text(
             centre, row, f"{float(real_value):.3f}   n={real['denominator']}",
-            ha="center", va="center", fontsize=7.5, zorder=4,
+            ha="center", va="center", fontsize=ANNOTATION, zorder=4,
             color=text_color_on(im, float(real_value)),
         )
 
@@ -1042,9 +1055,9 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
     # end is which, and this family's own implementations disagree about that.
     cbar.set_label(
         textwrap.fill(f"{block['statistic_label']} -- no better/worse direction", _LABEL_WRAP),
-        fontsize=8,
+        fontsize=AXIS_TITLE,
     )
-    cbar.ax.tick_params(labelsize=7)
+    cbar.ax.tick_params(labelsize=TICK_LABEL)
     if has_reference:
         # The one place on this figure where the reference is visible rather than
         # arithmetic. Its colour is taken from the ramp position it marks, so the rule
@@ -1054,8 +1067,8 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
             linewidth=_REFERENCE_RULE_WIDTH,
         )
 
-    ax.set_xlabel("Method (strategy)", fontsize=9)
-    ax.set_ylabel("Model", fontsize=9)
+    ax.set_xlabel("Method (strategy)", fontsize=AXIS_TITLE)
+    ax.set_ylabel("Model", fontsize=AXIS_TITLE)
     subtitle = (
         "sequential ramp; the rule on the colourbar is the real population"
         if has_reference else "sequential ramp -- no real population to measure against"
@@ -1063,7 +1076,7 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
     ax.set_title(
         f"Typicality -- {block['statistic']} by model x method\n"
         f"({subtitle}; grey = not judged, which is not a value of zero)",
-        fontsize=12, fontweight="bold",
+        fontsize=FIGURE_TITLE, fontweight="bold",
     )
     _place_footnote(fig, ax, _typicality_footnotes(
         block, reference_role="Colourbar rule", under_powered_mark="hatched", flat=flat,
@@ -1105,6 +1118,7 @@ def _method_dodge(n_models: int) -> list[float]:
     return [-_METHOD_DODGE_SPAN / 2 + step * i for i in range(n_models)]
 
 
+@house_style
 def plot_typicality_by_method(ranking: dict[str, Any]):
     """Render the typicality statistic with the methods on x and the real value as a line.
 
@@ -1126,8 +1140,6 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
     statistic invites being read as exact. Returns the ``Figure`` unsaved and open; raises
     ``ValueError`` when no competitor has a defined statistic.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
@@ -1141,7 +1153,7 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
             "typicality statistic"
         )
 
-    fig, ax = plt.subplots(figsize=(max(7.5, len(methods) * 1.6 + 3.0), 6.0))
+    fig, ax = plt.subplots(figsize=figure_size(grow_width(len(methods), per_item=1.6, padding=3.0, minimum=FULL), 6.0))
     colours = _model_colors(len(models), plt.get_cmap(_MODEL_CMAP))
     offsets = _method_dodge(len(models))
     handles: list[Line2D] = []
@@ -1195,7 +1207,7 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
             f"{block['reference_slug']} = {float(reference):.3f}  (real population, "
             "not a target)",
             xy=(-0.55, float(reference)), xytext=(0, 3), textcoords="offset points",
-            va="bottom", ha="left", fontsize=7.5, color=_REAL_COLOR,
+            va="bottom", ha="left", fontsize=ANNOTATION, color=_REAL_COLOR,
         )
     if any_under_powered:
         handles.append(Line2D([], [], color=FOOTNOTE_GREY, marker="o", markersize=6,
@@ -1203,20 +1215,20 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
                               label=f"hollow = under-powered (n < {block['min_n']})"))
 
     ax.set_xticks(range(len(methods)))
-    ax.set_xticklabels(methods, rotation=25, ha="right", fontsize=8)
+    ax.set_xticklabels(methods, rotation=25, ha="right", fontsize=TICK_LABEL)
     ax.set_xlim(-0.6, len(methods) - 0.4)
-    ax.set_xlabel("Method (strategy) -- simplest first", fontsize=9)
-    ax.set_ylabel(textwrap.fill(block["statistic_label"], _LABEL_WRAP), fontsize=8)
+    ax.set_xlabel("Method (strategy) -- simplest first", fontsize=AXIS_TITLE)
+    ax.set_ylabel(textwrap.fill(block["statistic_label"], _LABEL_WRAP), fontsize=AXIS_TITLE)
     ax.set_title(
         f"Typicality -- {block['statistic']} by method, one mark per model\n"
         "(no better/worse direction: the optimum is interior)",
-        fontsize=12, fontweight="bold",
+        fontsize=FIGURE_TITLE, fontweight="bold",
     )
-    ax.tick_params(axis="y", labelsize=8)
+    ax.tick_params(axis="y", labelsize=TICK_LABEL)
     ax.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.6, zorder=0)
     ax.set_axisbelow(True)
     if handles:
-        ax.legend(handles=handles, fontsize=7.5, loc="center left",
+        ax.legend(handles=handles, fontsize=LEGEND_LABEL, loc="center left",
                   bbox_to_anchor=(1.01, 0.5), framealpha=0.92)
 
     excluded = block["excluded"]

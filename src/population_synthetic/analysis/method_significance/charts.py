@@ -56,6 +56,23 @@ from population_synthetic.analysis.utils.palette import (
     heatmap_cmap,
     text_color_on,
 )
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    ANNOTATION_LARGE,
+    AXIS_TITLE,
+    CALLOUT,
+    FIGURE_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    PANEL_TITLE,
+    TICK_LABEL,
+    TICK_LABEL_LARGE,
+    figure_size,
+    grow_height,
+    grow_width,
+    house_style,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +90,7 @@ def _tv_distance(record: ComboPerformance, attr: str) -> float | None:
 # Per-attribute TV(method) trend lines, one line per model
 # ------------------------------------------------------------------
 
+@house_style
 def plot_method_trends(
     result: dict[str, Any],
     records: list[ComboPerformance],
@@ -99,8 +117,6 @@ def plot_method_trends(
     by_cell = {(r.model, r.strategy): r for r in records}
     x = np.arange(len(method_order))
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_dir = Path(out_dir)
@@ -117,7 +133,9 @@ def plot_method_trends(
         if not any_point:
             continue
 
-        fig, ax = plt.subplots(figsize=(max(7.0, len(method_order) * 1.4 + 2.0), 5.0))
+        fig, ax = plt.subplots(
+            figsize=figure_size(grow_width(len(method_order), per_item=1.4, padding=2.0, minimum=7.0), 5.0),
+        )
         for m_idx, model in enumerate(models):
             ys = []
             for strategy in method_order:
@@ -130,11 +148,11 @@ def plot_method_trends(
             )
 
         ax.set_xticks(x)
-        ax.set_xticklabels(method_order, rotation=25, ha="right", fontsize=8)
-        ax.set_xlabel("generation method (simplest -> most complex)", fontsize=9)
-        ax.set_ylabel("TV distance (lower = better fidelity)", fontsize=9)
+        ax.set_xticklabels(method_order, rotation=25, ha="right", fontsize=TICK_LABEL)
+        ax.set_xlabel("generation method (simplest -> most complex)", fontsize=AXIS_TITLE)
+        ax.set_ylabel("TV distance (lower = better fidelity)", fontsize=AXIS_TITLE)
         ax.grid(axis="y", linestyle=":", alpha=0.4)
-        ax.legend(fontsize=7.5, title="model", title_fontsize=8)
+        ax.legend(fontsize=LEGEND_LABEL, title="model", title_fontsize=LEGEND_TITLE)
 
         method = result["per_attribute"][attr]["method_trend"]
         p_bh = method.get("p_bh")
@@ -145,7 +163,7 @@ def plot_method_trends(
             trend_note = f"Page L trend (BH-adj p = {p_bh:.3g}, {flag})"
         ax.set_title(
             f"{country}: {attr} -- TV by method, per model\n{trend_note}",
-            fontsize=11, fontweight="bold",
+            fontsize=PANEL_TITLE, fontweight="bold",
         )
         out_path = out_dir / f"{attr}_method_trend.png"
         fig.tight_layout()
@@ -160,6 +178,7 @@ def plot_method_trends(
 # Slope heatmap (attribute x model) -- descriptive interaction view
 # ------------------------------------------------------------------
 
+@house_style
 def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Attribute x model heatmap of the descriptive TV(method) trend slope.
 
@@ -190,8 +209,6 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
     if np.all(np.isnan(values)):
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path = Path(out_path)
@@ -203,7 +220,10 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
     bound = bound if bound > 0 else 1.0
 
     fig, ax = plt.subplots(
-        figsize=(max(6.0, len(models) * 0.9 + 3.0), max(4.0, len(attributes) * 0.45 + 2.5))
+        figsize=(
+            grow_width(len(models), per_item=0.9, padding=3.0, minimum=6.0),
+            grow_height(len(attributes), per_item=0.45, padding=2.5, minimum=4.0),
+        ),
     )
     # The house sequential ramp, on limits kept symmetric about zero so a slope of zero
     # always lands at the same point of the ramp across figures. The ramp orders by
@@ -212,12 +232,12 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
     im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap(), vmin=-bound, vmax=bound)
 
     ax.set_xticks(range(len(models)))
-    ax.set_xticklabels(models, rotation=40, ha="right", fontsize=8)
+    ax.set_xticklabels(models, rotation=40, ha="right", fontsize=TICK_LABEL)
     ax.set_yticks(range(len(attributes)))
-    ax.set_yticklabels(attributes, fontsize=8)
+    ax.set_yticklabels(attributes, fontsize=TICK_LABEL)
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
-    cbar.set_label("TV(method) slope (+ = worsens, - = improves)", fontsize=8)
+    cbar.set_label("TV(method) slope (+ = worsens, - = improves)", fontsize=AXIS_TITLE)
     cbar.ax.axhline(0.0, color=text_color_on(im, 0.0), linewidth=2.0)
 
     for i in range(values.shape[0]):
@@ -225,13 +245,13 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
             v = values[i, j]
             if np.isnan(v):
                 continue
-            ax.text(j, i, f"{v:+.3f}", ha="center", va="center", fontsize=6.5,
+            ax.text(j, i, f"{v:+.3f}", ha="center", va="center", fontsize=ANNOTATION,
                     color=text_color_on(im, v))
 
     country = result["metadata"]["country"]
     ax.set_title(
         f"{country}: per-category TV(method) trend slope (descriptive; n=1 per cell)",
-        fontsize=11, fontweight="bold",
+        fontsize=PANEL_TITLE, fontweight="bold",
     )
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -243,6 +263,7 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
 # Critical-difference (CD) diagram for models (Demšar 2006)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Critical-difference diagram of models from the Demšar model comparison.
 
@@ -267,8 +288,6 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
     if k < 2:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path = Path(out_path)
@@ -280,7 +299,7 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
     axis_lo = np.floor(lo - pad)
     axis_hi = np.ceil(hi + pad)
 
-    fig, ax = plt.subplots(figsize=(9.0, max(3.5, k * 0.4 + 2.5)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(k, per_item=0.4, padding=2.5, minimum=3.5)))
     ax.set_xlim(axis_lo, axis_hi)
     ax.set_ylim(0.0, 1.0)
     ax.axis("off")
@@ -290,9 +309,9 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
     ticks = np.arange(int(axis_lo), int(axis_hi) + 1)
     for t in ticks:
         ax.plot([t, t], [axis_y, axis_y + 0.02], color="black", linewidth=1.0)
-        ax.text(t, axis_y + 0.05, str(t), ha="center", va="bottom", fontsize=8)
+        ax.text(t, axis_y + 0.05, str(t), ha="center", va="bottom", fontsize=ANNOTATION)
     ax.text((axis_lo + axis_hi) / 2.0, axis_y + 0.12, "average rank (lower = better)",
-            ha="center", va="bottom", fontsize=9)
+            ha="center", va="bottom", fontsize=ANNOTATION_LARGE)
 
     # Model markers: labels alternate left/right, dropping down from the axis.
     label_levels = np.linspace(0.62, 0.10, num=k)
@@ -307,7 +326,7 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
                 linewidth=1.3)
         label = f"{name} ({rank:.2f})"
         ax.text(edge, y, f"{label} " if ha == "right" else f" {label}",
-                ha=ha, va="center", fontsize=8)
+                ha=ha, va="center", fontsize=ANNOTATION)
 
     # CD bars: connect maximal runs of adjacent models within CD of each other.
     bar_y = axis_y - 0.06
@@ -329,14 +348,14 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
     ax.plot([axis_lo, axis_lo + cd], [axis_y + 0.18, axis_y + 0.18],
             color=ANNOTATION_GREY, linewidth=2.0)
     ax.text(axis_lo + cd / 2.0, axis_y + 0.20, f"CD = {cd:.2f}",
-            ha="center", va="bottom", fontsize=8)
+            ha="center", va="bottom", fontsize=ANNOTATION)
 
     country = result["metadata"]["country"]
     n_blocks = comparison.get("n_blocks")
     ax.set_title(
         f"{country}: model critical-difference diagram "
         f"(Nemenyi, {n_blocks} category x method blocks)",
-        fontsize=11, fontweight="bold",
+        fontsize=PANEL_TITLE, fontweight="bold",
     )
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -348,6 +367,7 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
 # Factor-dominance bar (eta^2 variance shares)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_factor_dominance(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Horizontal bars of the mixed model's eta^2 variance shares by factor.
 
@@ -366,8 +386,6 @@ def plot_factor_dominance(result: dict[str, Any], out_path: str | Path) -> Path 
     if not order or not any(s == s for s in shares):
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path = Path(out_path)
@@ -377,16 +395,16 @@ def plot_factor_dominance(result: dict[str, Any], out_path: str | Path) -> Path 
     colors = {"model": CATEGORICAL_SERIES[0], "method": CATEGORICAL_SERIES[1],
               "category": CATEGORICAL_SERIES[2], "residual": RESIDUAL_GREY}
 
-    fig, ax = plt.subplots(figsize=(8.0, max(2.6, len(order) * 0.55 + 1.4)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(len(order), per_item=0.55, padding=1.4, minimum=2.6)))
     ax.barh(positions, shares, color=[colors.get(k, MUTED_GREY) for k in order],
             edgecolor=BAR_EDGE, linewidth=0.5, alpha=0.9, height=0.6)
     for pos, share in zip(positions, shares):
         ax.text(share, pos, f"  {share * 100:.1f}%", va="center", ha="left",
-                fontsize=8, color=ANNOTATION_GREY)
+                fontsize=ANNOTATION, color=ANNOTATION_GREY)
 
     ax.set_yticks(positions)
-    ax.set_yticklabels(order, fontsize=9)
-    ax.set_xlabel("share of fitted variance (eta^2, approximate)", fontsize=9)
+    ax.set_yticklabels(order, fontsize=TICK_LABEL_LARGE)
+    ax.set_xlabel("share of fitted variance (eta^2, approximate)", fontsize=AXIS_TITLE)
     ax.set_xlim(0.0, min(1.0, max(shares) * 1.2) if shares else 1.0)
     ax.grid(axis="x", linestyle=":", alpha=0.4)
 
@@ -395,7 +413,7 @@ def plot_factor_dominance(result: dict[str, Any], out_path: str | Path) -> Path 
     suffix = "" if converged else "  (mixed fit did NOT converge -- descriptive only)"
     ax.set_title(
         f"{country}: factor dominance (variance share){suffix}",
-        fontsize=11, fontweight="bold",
+        fontsize=PANEL_TITLE, fontweight="bold",
     )
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -546,9 +564,9 @@ def _draw_method_panel(
     """
     x = np.arange(len(methods))
     ax.set_xticks(x)
-    ax.set_xticklabels(methods, rotation=25, ha="right", fontsize=7.5)
+    ax.set_xticklabels(methods, rotation=25, ha="right", fontsize=TICK_LABEL)
     ax.set_xlim(-0.6, len(methods) - 0.4)
-    ax.set_ylabel("TV-similarity (higher = more faithful)", fontsize=8)
+    ax.set_ylabel("TV-similarity (higher = more faithful)", fontsize=AXIS_TITLE)
     ax.grid(axis="y", linestyle=":", alpha=0.35)
 
     n_models = panel.get("n_models", 0)
@@ -557,10 +575,10 @@ def _draw_method_panel(
         ax.text(
             (len(methods) - 1) / 2.0, 0.5,
             f"insufficient n (n<3)\nn={n_models} complete model(s)",
-            ha="center", va="center", fontsize=10, color=WARNING_TEXT, fontweight="bold",
+            ha="center", va="center", fontsize=CALLOUT, color=WARNING_TEXT, fontweight="bold",
             bbox={"boxstyle": "round", "facecolor": WARNING_FILL, "edgecolor": WARNING_TEXT},
         )
-        ax.set_title(title, fontsize=9.5, fontweight="bold")
+        ax.set_title(title, fontsize=PANEL_TITLE, fontweight="bold")
         return
 
     means = panel.get("means", {})
@@ -629,9 +647,10 @@ def _draw_method_panel(
         count_note = f"n={n_models} models · {n_levels} levels"
     else:
         count_note = f"n={n_models} models"
-    ax.set_title(f"{title}  ({count_note})\n{omni_note}", fontsize=9.5, fontweight="bold")
+    ax.set_title(f"{title}  ({count_note})\n{omni_note}", fontsize=PANEL_TITLE, fontweight="bold")
 
 
+@house_style
 def plot_method_comparison(
     result: dict[str, Any],
     out_path: str | Path,
@@ -692,8 +711,6 @@ def plot_method_comparison(
                 "models); rendering placeholder.", key, panels[key].get("n_models"),
             )
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     n_panels = len(panel_keys)
@@ -704,8 +721,12 @@ def plot_method_comparison(
         nrows = int(np.ceil(n_panels / ncols))
 
     fig, axes = plt.subplots(
-        nrows, ncols,
-        figsize=(max(6.0, ncols * 4.6), max(4.6, nrows * 4.0)),
+        nrows,
+        ncols,
+        figsize=(
+            grow_width(ncols, per_item=4.6, padding=0.0, minimum=6.0),
+            grow_height(nrows, per_item=4.0, padding=0.0, minimum=4.6),
+        ),
         squeeze=False,
     )
     flat = axes.flatten()
@@ -719,10 +740,10 @@ def plot_method_comparison(
     headline = f"{country}: method comparison on TV-similarity (models as blocks)"
     if overall_only:
         headline += " -- Overall"
-    fig.suptitle(headline, fontsize=12, fontweight="bold")
+    fig.suptitle(headline, fontsize=FIGURE_TITLE, fontweight="bold")
 
     key_text = _star_key_text(thresholds, ns_symbol, pairs_mode)
-    fig.text(0.5, 0.005, "key -- " + key_text, ha="center", va="bottom", fontsize=8,
+    fig.text(0.5, 0.005, "key -- " + key_text, ha="center", va="bottom", fontsize=ANNOTATION,
              color=ANNOTATION_GREY)
 
     fig.tight_layout(rect=(0.0, 0.03, 1.0, 0.97))

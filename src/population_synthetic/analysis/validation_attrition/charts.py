@@ -58,6 +58,18 @@ from population_synthetic.analysis.utils.palette import (
     text_color_for_rgb,
     text_color_on,
 )
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    AXIS_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    PANEL_TITLE,
+    TICK_LABEL,
+    grow_height,
+    grow_width,
+    house_style,
+)
 from population_synthetic.analysis.utils.table_style import (
     ANNOT_FONTSIZE,
     BOX_EDGE,
@@ -196,6 +208,7 @@ def _pooled(entries: Sequence[Mapping[str, Any]]) -> tuple[float | None, int, in
     return (clean / generated, clean, generated)
 
 
+@house_style
 def plot_attrition_funnel(document: Mapping[str, Any]):
     """Per-combination attrition funnel, normalised, one horizontal bar per combination.
 
@@ -223,13 +236,11 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     """
     entries = sorted(_combinations(document), key=_sort_key)
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
 
     n_rows = len(entries)
-    fig, ax = plt.subplots(figsize=(15.0, max(4.0, n_rows * 0.26 + 3.4)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(n_rows, per_item=0.26, padding=3.4, minimum=4.0)))
 
     labels: list[str] = []
     for index, entry in enumerate(entries):
@@ -248,7 +259,7 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
                 fontsize=ANNOT_FONTSIZE,
                 color=text_color_for_rgb(_to_rgb(_EMPTY_POOL_COLOR)),
             )
-            ax.text(1.02, y, "N=0", ha="left", va="center", fontsize=7.0)
+            ax.text(1.02, y, "N=0", ha="left", va="center", fontsize=ANNOTATION)
             continue
 
         slices = _segment_counts(entry)
@@ -262,12 +273,12 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
         rate = entry["retention_rate"]
         ax.text(
             1.02, y, f"N={generated}   retained {rate * 100:.1f}%",
-            ha="left", va="center", fontsize=7.0,
+            ha="left", va="center", fontsize=ANNOTATION,
             fontweight="bold" if entry["excluded"] else "normal",
         )
 
     ax.set_yticks(range(n_rows))
-    ax.set_yticklabels(list(reversed(labels)), fontsize=6.5)
+    ax.set_yticklabels(list(reversed(labels)), fontsize=TICK_LABEL)
     for label, entry in zip(reversed(ax.get_yticklabels()), entries):
         if entry["excluded"]:
             label.set_color(_SEGMENTS[3][1])
@@ -276,8 +287,8 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(-0.8, n_rows - 0.2)
     ax.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
-    ax.set_xticklabels(["0", "25", "50", "75", "100"], fontsize=8)
-    ax.set_xlabel("share of the combination's generated pool (%)", fontsize=9)
+    ax.set_xticklabels(["0", "25", "50", "75", "100"], fontsize=TICK_LABEL)
+    ax.set_xlabel("share of the combination's generated pool (%)", fontsize=AXIS_TITLE)
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
 
@@ -287,7 +298,7 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
         f"({document['n_combinations']} combinations, {document['n_excluded']} withdrawn)\n"
         "each bar is one combination's generated pool, normalised -- absolute pools are "
         "not comparable",
-        fontsize=11, fontweight="bold", pad=14,
+        fontsize=PANEL_TITLE, fontweight="bold", pad=14,
     )
 
     handles = [
@@ -296,7 +307,7 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     ]
     ax.legend(
         handles=handles, loc="upper left", bbox_to_anchor=(0.0, -0.04),
-        ncol=4, fontsize=7.5, frameon=False,
+        ncol=4, fontsize=LEGEND_LABEL, frameon=False,
     )
 
     pooled_rate = totals["retention_rate"]
@@ -319,7 +330,7 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     )
     ax.text(
         0.0, -0.075, textwrap.fill(caption, _CAPTION_WRAP), transform=ax.transAxes,
-        ha="left", va="top", fontsize=7, clip_on=False,
+        ha="left", va="top", fontsize=ANNOTATION, clip_on=False,
     )
 
     fig.tight_layout()
@@ -350,6 +361,7 @@ def _cell_state(entry: Mapping[str, Any] | None) -> str:
     return "measured"
 
 
+@house_style
 def plot_mapped_validity_grid(
     document: Mapping[str, Any],
     *,
@@ -416,8 +428,6 @@ def plot_mapped_validity_grid(
                 values[i, j] = float(entry["retention_rate"])
         states.append(row_states)
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch, Rectangle
@@ -431,9 +441,9 @@ def plot_mapped_validity_grid(
     marginal_columns = 1.5
     fig, ax = plt.subplots(
         figsize=(
-            max(9.0, (n_methods + marginal_columns) * 1.5 + 3.0),
-            max(4.5, len(models) * 0.62 + 3.6),
-        )
+            grow_width(n_methods + marginal_columns, per_item=1.5, padding=3.0, minimum=FULL),
+            grow_height(len(models), per_item=0.62, padding=3.6, minimum=4.5),
+        ),
     )
     im = ax.imshow(
         np.ma.masked_invalid(values), cmap=cmap, norm=norm,
@@ -446,7 +456,7 @@ def plot_mapped_validity_grid(
 
     categories_on_top(ax, methods)
     ax.set_yticks(range(len(models)))
-    ax.set_yticklabels(models, fontsize=8)
+    ax.set_yticklabels(models, fontsize=TICK_LABEL)
     hosting = dict(hosting or {})
     for label, model in zip(ax.get_yticklabels(), models):
         label.set_color(HOST_COLORS[hosting.get(model, HOST_DEFAULT_CLASS)])
@@ -516,17 +526,17 @@ def plot_mapped_validity_grid(
         text = "n/a" if rate is None else f"{rate * 100:.1f}%"
         ax.text(
             n_methods - 0.5 + 0.12, i, f"{text}  ({clean}/{generated})",
-            ha="left", va="center", fontsize=7.5, clip_on=False,
+            ha="left", va="center", fontsize=ANNOTATION, clip_on=False,
         )
     for j, method in enumerate(methods):
         rate, clean, generated = _pooled([e for e in entries if e["strategy"] == method])
         text = "n/a" if rate is None else f"{rate * 100:.1f}%"
         ax.text(
             j, marginal_y, f"{text}\n({clean}/{generated})",
-            ha="center", va="center", fontsize=7.5, linespacing=1.3,
+            ha="center", va="center", fontsize=ANNOTATION, linespacing=1.3,
         )
     ax.text(
-        -0.6, marginal_y, "method pooled", ha="right", va="center", fontsize=7.5,
+        -0.6, marginal_y, "method pooled", ha="right", va="center", fontsize=ANNOTATION,
         clip_on=False,
     )
 
@@ -551,7 +561,7 @@ def plot_mapped_validity_grid(
     ]
     ax.legend(
         handles=handles, loc="upper left", bbox_to_anchor=(0.0, -0.02),
-        ncol=2, fontsize=7.5, title="provenance / cell state", title_fontsize=8,
+        ncol=2, fontsize=LEGEND_LABEL, title="provenance / cell state", title_fontsize=LEGEND_TITLE,
         frameon=False,
     )
 
@@ -559,7 +569,7 @@ def plot_mapped_validity_grid(
         f"{document['country']}: validation survival by model x method\n"
         "share of each combination's generated pool that passed both validity gates -- "
         f"{document['n_excluded']} of {document['n_combinations']} combinations withdrawn",
-        fontsize=11, fontweight="bold", pad=30,
+        fontsize=PANEL_TITLE, fontweight="bold", pad=30,
     )
 
     caption = (
@@ -577,7 +587,7 @@ def plot_mapped_validity_grid(
     )
     ax.text(
         0.0, -0.155, textwrap.fill(caption, _CAPTION_WRAP), transform=ax.transAxes,
-        ha="left", va="top", fontsize=7, clip_on=False,
+        ha="left", va="top", fontsize=ANNOTATION, clip_on=False,
     )
 
     fig.tight_layout()

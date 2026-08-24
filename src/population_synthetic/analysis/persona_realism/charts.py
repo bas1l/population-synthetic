@@ -34,6 +34,17 @@ from population_synthetic.analysis.utils.palette import (
     SEVERITY_SERIES,
 )
 from population_synthetic.analysis.utils.realism_csv import SEVERITY_LEVELS, SEVERITY_RANK
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    AXIS_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    PANEL_TITLE,
+    TICK_LABEL,
+    figure_size,
+    grow_height,
+    house_style,
+)
 
 # Severity -> bar colour / legend caption for the clash taxonomy (S3 hard
 # contradiction reddest). These are protocol-fixed severity labels (see judge.py),
@@ -53,6 +64,7 @@ _TYPICALITY_MIN = 0
 _TYPICALITY_MAX = 10
 
 
+@house_style
 def plot_typicality_distribution(
     typicality_means: Sequence[float],
     combo_label: str,
@@ -69,8 +81,6 @@ def plot_typicality_distribution(
     the tail colour to mark the unusual-but-possible reach. Returns the ``Figure``
     unsaved and open.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     buckets = list(range(_TYPICALITY_MIN, _TYPICALITY_MAX + 1))
@@ -83,14 +93,18 @@ def plot_typicality_distribution(
         for b in buckets
     ]
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=figure_size(FULL, 5))
     bars = ax.bar(buckets, [counts[b] for b in buckets], color=colors, edgecolor="white", linewidth=0.4)
-    ax.bar_label(bars, fmt="%d", fontsize=7, padding=2)
+    ax.bar_label(bars, fmt="%d", fontsize=ANNOTATION, padding=2)
     ax.set_xticks(buckets)
-    ax.set_xlabel("Mean typicality (0 = unusual-but-possible, 10 = modal)", fontsize=9)
-    ax.set_ylabel("Personas", fontsize=9)
-    ax.set_title(f"{combo_label} -- typicality distribution (can_exist personas)", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=8)
+    ax.set_xlabel("Mean typicality (0 = unusual-but-possible, 10 = modal)", fontsize=AXIS_TITLE)
+    ax.set_ylabel("Personas", fontsize=AXIS_TITLE)
+    ax.set_title(
+        f"{combo_label} -- typicality distribution (can_exist personas)",
+        fontsize=PANEL_TITLE,
+        fontweight="bold",
+    )
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
     if tail_threshold is not None:
         ax.axvline(tail_threshold + 0.5, color="gray", linestyle="--", linewidth=0.7, alpha=0.7)
     fig.tight_layout()
@@ -103,6 +117,7 @@ def _clash_label(key: ClashKey) -> str:
     return f"{a} x {b} ({key.severity})"
 
 
+@house_style
 def plot_clash_taxonomy(clash_taxonomy: dict[ClashKey, int], combo_label: str):
     """Render one combination's attribute-pair clash taxonomy as ranked bars.
 
@@ -112,8 +127,6 @@ def plot_clash_taxonomy(clash_taxonomy: dict[ClashKey, int], combo_label: str):
     persona count (descending), then severity, and coloured by severity. Returns
     the ``Figure`` unsaved and open.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     # Rank by persona-count desc, then S3>S2>S1, then label for a stable order.
@@ -127,18 +140,18 @@ def plot_clash_taxonomy(clash_taxonomy: dict[ClashKey, int], combo_label: str):
     counts = [v for _, v in items]
     colors = [_SEVERITY_COLORS.get(k.severity, NEUTRAL_GREY) for k, _ in items]
 
-    fig, ax = plt.subplots(figsize=(9, max(3.0, len(items) * 0.4 + 1.5)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(len(items), per_item=0.4, padding=1.5, minimum=3.0)))
     y_pos = range(len(items))
     bars = ax.barh(list(y_pos), counts, color=colors, edgecolor="white", linewidth=0.4)
-    ax.bar_label(bars, fmt="%d", fontsize=7, padding=3)
+    ax.bar_label(bars, fmt="%d", fontsize=ANNOTATION, padding=3)
     ax.set_yticks(list(y_pos))
-    ax.set_yticklabels(labels, fontsize=8)
+    ax.set_yticklabels(labels, fontsize=TICK_LABEL)
     ax.invert_yaxis()  # highest count at the top
-    ax.set_xlabel("Personas exhibiting the clash (>=1 round)", fontsize=9)
-    ax.set_title(f"{combo_label} -- attribute-clash taxonomy", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="x", labelsize=8)
+    ax.set_xlabel("Personas exhibiting the clash (>=1 round)", fontsize=AXIS_TITLE)
+    ax.set_title(f"{combo_label} -- attribute-clash taxonomy", fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="x", labelsize=TICK_LABEL)
 
     handles = [plt.Rectangle((0, 0), 1, 1, color=_SEVERITY_COLORS[s]) for s in SEVERITY_LEVELS]
-    ax.legend(handles, [_SEVERITY_CAPTIONS[s] for s in SEVERITY_LEVELS], fontsize=8, loc="lower right")
+    ax.legend(handles, [_SEVERITY_CAPTIONS[s] for s in SEVERITY_LEVELS], fontsize=LEGEND_LABEL, loc="lower right")
     fig.tight_layout()
     return fig

@@ -40,6 +40,20 @@ from population_synthetic.analysis.utils.palette import (
     heatmap_cmap,
     text_color_on,
 )
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    ANNOTATION_LARGE,
+    AXIS_TITLE,
+    FIGURE_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    PANEL_TITLE,
+    TICK_LABEL,
+    figure_size,
+    grow_height,
+    grow_width,
+    house_style,
+)
 
 __all__ = ["render_metric_heatmaps", "plot_run_charts", "plot_run_comparison"]
 
@@ -86,6 +100,7 @@ def _fmt_mean(value: float) -> str:
     return f"{value:.2f}"
 
 
+@house_style
 def render_metric_heatmaps(
     country: str,
     summaries: list[ComboSummary],
@@ -113,8 +128,6 @@ def render_metric_heatmaps(
     if not summaries:
         return []
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -142,35 +155,38 @@ def render_metric_heatmaps(
             continue
 
         fig, ax = plt.subplots(
-            figsize=(max(6.0, len(methods) * 1.5 + 2.5), max(3.5, len(models) * 0.55 + 2.0))
+            figsize=(
+                grow_width(len(methods), per_item=1.5, padding=2.5, minimum=6.0),
+                grow_height(len(models), per_item=0.55, padding=2.0, minimum=3.5),
+            ),
         )
         masked = np.ma.masked_invalid(means)
         im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap())
 
         ax.set_xticks(range(len(methods)))
-        ax.set_xticklabels(methods, rotation=30, ha="right", fontsize=8)
+        ax.set_xticklabels(methods, rotation=30, ha="right", fontsize=TICK_LABEL)
         ax.set_yticks(range(len(models)))
-        ax.set_yticklabels(models, fontsize=8)
+        ax.set_yticklabels(models, fontsize=TICK_LABEL)
 
         cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
-        cbar.set_label(_METRIC_LABELS.get(metric, metric), fontsize=8)
+        cbar.set_label(_METRIC_LABELS.get(metric, metric), fontsize=AXIS_TITLE)
 
         for i in range(len(models)):
             for j in range(len(methods)):
                 if np.isnan(means[i, j]):
                     # Distinguish "combo absent" from "combo present, metric ungated".
                     if (models[i], methods[j]) in by_cell:
-                        ax.text(j, i, "n/a", ha="center", va="center", fontsize=6.5, color=SECONDARY_GREY)
+                        ax.text(j, i, "n/a", ha="center", va="center", fontsize=ANNOTATION, color=SECONDARY_GREY)
                     continue
                 color = text_color_on(im, means[i, j])
                 ax.text(
                     j, i, f"{_fmt_mean(means[i, j])}\nn={counts[i, j]}",
-                    ha="center", va="center", fontsize=6.5, color=color,
+                    ha="center", va="center", fontsize=ANNOTATION, color=color,
                 )
 
         ax.set_title(
             f"{country}: {_METRIC_LABELS.get(metric, metric)} (mean per model x method)",
-            fontsize=11, fontweight="bold",
+            fontsize=PANEL_TITLE, fontweight="bold",
         )
         fig.tight_layout()
         written.append(save_figure(fig, out_dir / f"{country}_{metric}.png", dpi=_DPI))
@@ -185,6 +201,7 @@ def render_metric_heatmaps(
 # :func:`diagnostics.compute_metrics`.  Entry point: :func:`plot_run_charts`.
 # ==================================================================
 
+@house_style
 def _plot_category_call_count(metrics: dict, output_dir: Path) -> Path | None:
     """Horizontal bar chart: call count per category, sorted descending."""
     if not metrics.get("per_category"):
@@ -194,8 +211,6 @@ def _plot_category_call_count(metrics: dict, output_dir: Path) -> Path | None:
     if not data:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -204,18 +219,19 @@ def _plot_category_call_count(metrics: dict, output_dir: Path) -> Path | None:
     vals = [data[c] for c in cats_sorted]
     n_cats = len(cats_sorted)
 
-    fig, ax = plt.subplots(figsize=(10, max(4, n_cats * 0.45 + 2)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(n_cats, per_item=0.45, padding=2, minimum=4.0)))
     ax.barh(range(n_cats), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
     ax.set_yticks(range(n_cats))
-    ax.set_yticklabels(cats_sorted, fontsize=8)
-    ax.set_xlabel("Call count", fontsize=9)
-    ax.set_title("LLM calls per category", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=8)
+    ax.set_yticklabels(cats_sorted, fontsize=TICK_LABEL)
+    ax.set_xlabel("Call count", fontsize=AXIS_TITLE)
+    ax.set_title("LLM calls per category", fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     fig.tight_layout()
     return save_figure(fig, output_dir / "category_call_count.png", dpi=_DPI)
 
 
+@house_style
 def _plot_category_retry_rate(metrics: dict, output_dir: Path) -> Path | None:
     """Horizontal bar chart: retry rate per category, sorted descending (same order as call count)."""
     if not metrics.get("per_category"):
@@ -226,8 +242,6 @@ def _plot_category_retry_rate(metrics: dict, output_dir: Path) -> Path | None:
     cats_sorted = sorted(per_cat, key=lambda c: per_cat[c]["call_count"])  # ascending → bottom-to-top
     rates = {cat: per_cat[cat]["retry_rate"] for cat in cats_sorted}
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -238,22 +252,23 @@ def _plot_category_retry_rate(metrics: dict, output_dir: Path) -> Path | None:
     max_rate = max(vals) if vals else 0.0
     x_max = max(0.05, max_rate * 1.15) if max_rate > 0 else 0.10
 
-    fig, ax = plt.subplots(figsize=(10, max(4, n_cats * 0.45 + 2)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(n_cats, per_item=0.45, padding=2, minimum=4.0)))
     ax.barh(range(n_cats), vals, color=_SERIES_ADVERSE, edgecolor="white", linewidth=0.4)
     ax.set_yticks(range(n_cats))
-    ax.set_yticklabels(cats_sorted, fontsize=8)
-    ax.set_xlabel("Retry rate", fontsize=9)
+    ax.set_yticklabels(cats_sorted, fontsize=TICK_LABEL)
+    ax.set_xlabel("Retry rate", fontsize=AXIS_TITLE)
     ax.set_xlim(0, x_max)
-    ax.set_title("Retry rate per category", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=8)
+    ax.set_title("Retry rate per category", fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     ax.axvline(0.10, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
-    ax.text(0.10, n_cats - 0.5, "10%", va="top", ha="left", fontsize=7, color="gray", alpha=0.8)
+    ax.text(0.10, n_cats - 0.5, "10%", va="top", ha="left", fontsize=ANNOTATION, color="gray", alpha=0.8)
 
     fig.tight_layout()
     return save_figure(fig, output_dir / "category_retry_rate.png", dpi=_DPI)
 
 
+@house_style
 def _plot_value_diversity_entropy(metrics: dict, output_dir: Path) -> Path | None:
     """Horizontal bar chart: Shannon entropy per category, annotated with unique value count."""
     if not metrics.get("value_diversity"):
@@ -264,8 +279,6 @@ def _plot_value_diversity_entropy(metrics: dict, output_dir: Path) -> Path | Non
     if not cats_sorted:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -273,25 +286,26 @@ def _plot_value_diversity_entropy(metrics: dict, output_dir: Path) -> Path | Non
     n_cats = len(cats_sorted)
     vals = [vd[c]["entropy_bits"] for c in cats_sorted]
 
-    fig, ax = plt.subplots(figsize=(10, max(4, n_cats * 0.45 + 2)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(n_cats, per_item=0.45, padding=2, minimum=4.0)))
     ax.barh(range(n_cats), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
     ax.set_yticks(range(n_cats))
-    ax.set_yticklabels(cats_sorted, fontsize=8)
-    ax.set_xlabel("Entropy (bits)", fontsize=9)
-    ax.set_title("Value diversity (Shannon entropy) per category", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=8)
+    ax.set_yticklabels(cats_sorted, fontsize=TICK_LABEL)
+    ax.set_xlabel("Entropy (bits)", fontsize=AXIS_TITLE)
+    ax.set_title("Value diversity (Shannon entropy) per category", fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     x_max = max(vals) if vals else 1.0
     x_offset = x_max * 0.01
 
     for idx, (cat, val) in enumerate(zip(cats_sorted, vals)):
         unique = vd[cat]["unique_values"]
-        ax.text(val + x_offset, idx, f"({unique} unique)", va="center", fontsize=8)
+        ax.text(val + x_offset, idx, f"({unique} unique)", va="center", fontsize=ANNOTATION)
 
     fig.tight_layout()
     return save_figure(fig, output_dir / "value_diversity_entropy.png", dpi=_DPI)
 
 
+@house_style
 def _plot_method_distribution(metrics: dict, output_dir: Path) -> Path | None:
     """Bar chart: method call counts. Horizontal when many methods or long names."""
     if not metrics.get("method_distribution"):
@@ -301,8 +315,6 @@ def _plot_method_distribution(metrics: dict, output_dir: Path) -> Path | None:
     if not dist:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -316,25 +328,26 @@ def _plot_method_distribution(metrics: dict, output_dir: Path) -> Path | None:
     if use_horizontal:
         methods_plot = list(reversed(methods))  # largest at top
         vals_plot = list(reversed(vals))
-        fig, ax = plt.subplots(figsize=(10, max(4, n_methods * 0.45 + 2)))
+        fig, ax = plt.subplots(figsize=(FULL, grow_height(n_methods, per_item=0.45, padding=2, minimum=4.0)))
         ax.barh(range(n_methods), vals_plot, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
         ax.set_yticks(range(n_methods))
-        ax.set_yticklabels(methods_plot, fontsize=8)
-        ax.set_xlabel("Call count", fontsize=9)
+        ax.set_yticklabels(methods_plot, fontsize=TICK_LABEL)
+        ax.set_xlabel("Call count", fontsize=AXIS_TITLE)
     else:
-        fig, ax = plt.subplots(figsize=(max(6, n_methods * 1.0 + 2), 5))
+        fig, ax = plt.subplots(figsize=figure_size(grow_width(n_methods, per_item=1.0, padding=2, minimum=6.0), 5))
         ax.bar(range(n_methods), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
         ax.set_xticks(range(n_methods))
-        ax.set_xticklabels(methods, rotation=30, ha="right", fontsize=8)
-        ax.set_ylabel("Call count", fontsize=9)
+        ax.set_xticklabels(methods, rotation=30, ha="right", fontsize=TICK_LABEL)
+        ax.set_ylabel("Call count", fontsize=AXIS_TITLE)
 
-    ax.set_title("Method distribution", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=8)
+    ax.set_title("Method distribution", fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     fig.tight_layout()
     return save_figure(fig, output_dir / "method_distribution.png", dpi=_DPI)
 
 
+@house_style
 def _plot_prompt_size_growth(metrics: dict, output_dir: Path) -> Path | None:
     """Line chart: median prompt length by chain position, with optional p25/p75 band."""
     if not metrics.get("prompt_size_growth"):
@@ -362,13 +375,11 @@ def _plot_prompt_size_growth(metrics: dict, output_dir: Path) -> Path | None:
     total_personas = metrics.get("summary", {}).get("total_personas", 1)
     compute_band = total_personas > 1
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=figure_size(FULL, 5))
     ax.plot(positions, medians, color=_SERIES_PRIMARY, linewidth=2, label="Median")
 
     if compute_band:
@@ -376,17 +387,18 @@ def _plot_prompt_size_growth(metrics: dict, output_dir: Path) -> Path | None:
         p75_vals = [_percentile(pos_lens[p], 75) for p in positions]
         ax.fill_between(positions, p25_vals, p75_vals, alpha=0.15, color=_SERIES_PRIMARY)
 
-    ax.set_xlabel("Chain position", fontsize=9)
-    ax.set_ylabel("Prompt length (chars)", fontsize=9)
-    ax.set_title("Prompt size growth by chain position", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=8)
+    ax.set_xlabel("Chain position", fontsize=AXIS_TITLE)
+    ax.set_ylabel("Prompt length (chars)", fontsize=AXIS_TITLE)
+    ax.set_title("Prompt size growth by chain position", fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
     if compute_band:
-        ax.legend(["Median (p25–p75 band)"], fontsize=8)
+        ax.legend(["Median (p25–p75 band)"], fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
     return save_figure(fig, output_dir / "prompt_size_growth.png", dpi=_DPI)
 
 
+@house_style
 def _plot_wall_clock_per_persona(metrics: dict, output_dir: Path) -> Path | None:
     """Horizontal bar chart: wall-clock time per persona (filtered, ≥2 personas required)."""
     if not metrics.get("wall_clock_per_persona"):
@@ -400,8 +412,6 @@ def _plot_wall_clock_per_persona(metrics: dict, output_dir: Path) -> Path | None
     if len(valid) <= 1:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -410,18 +420,19 @@ def _plot_wall_clock_per_persona(metrics: dict, output_dir: Path) -> Path | None
     vals = [valid[p] for p in pids_sorted]
     n_pids = len(pids_sorted)
 
-    fig, ax = plt.subplots(figsize=(10, max(4, n_pids * 0.45 + 2)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(n_pids, per_item=0.45, padding=2, minimum=4.0)))
     ax.barh(range(n_pids), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
     ax.set_yticks(range(n_pids))
-    ax.set_yticklabels(pids_sorted, fontsize=8)
-    ax.set_xlabel("Wall-clock time (s)", fontsize=9)
-    ax.set_title("Wall-clock time per persona", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=8)
+    ax.set_yticklabels(pids_sorted, fontsize=TICK_LABEL)
+    ax.set_xlabel("Wall-clock time (s)", fontsize=AXIS_TITLE)
+    ax.set_title("Wall-clock time per persona", fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     fig.tight_layout()
     return save_figure(fig, output_dir / "wall_clock_per_persona.png", dpi=_DPI)
 
 
+@house_style
 def _plot_token_consumption_by_category(metrics: dict, output_dir: Path) -> Path | None:
     """Stacked horizontal bar: prompt + completion tokens per category."""
     if metrics.get("token_consumption_per_category") is None:
@@ -431,8 +442,6 @@ def _plot_token_consumption_by_category(metrics: dict, output_dir: Path) -> Path
     if not tok:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -442,23 +451,24 @@ def _plot_token_consumption_by_category(metrics: dict, output_dir: Path) -> Path
     completion_vals = [tok[c]["completion_tokens"] for c in cats_sorted]
     n_cats = len(cats_sorted)
 
-    fig, ax = plt.subplots(figsize=(10, max(4, n_cats * 0.45 + 2)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(n_cats, per_item=0.45, padding=2, minimum=4.0)))
     y_pos = range(n_cats)
     ax.barh(y_pos, prompt_vals, color=_SERIES_PRIMARY, label="Prompt",
             edgecolor="white", linewidth=0.4)
     ax.barh(y_pos, completion_vals, left=prompt_vals, color=_SERIES_SECONDARY,
             label="Completion", edgecolor="white", linewidth=0.4)
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(cats_sorted, fontsize=8)
-    ax.set_xlabel("Token count", fontsize=9)
-    ax.set_title("Token consumption by category", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=8)
-    ax.legend(fontsize=8)
+    ax.set_yticklabels(cats_sorted, fontsize=TICK_LABEL)
+    ax.set_xlabel("Token count", fontsize=AXIS_TITLE)
+    ax.set_title("Token consumption by category", fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
+    ax.legend(fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
     return save_figure(fig, output_dir / "token_consumption_by_category.png", dpi=_DPI)
 
 
+@house_style
 def _plot_token_budget_by_step_type(metrics: dict, output_dir: Path) -> Path | None:
     """Grouped vertical bar: prompt and completion tokens per step type."""
     if metrics.get("token_budget_by_step_type") is None:
@@ -468,8 +478,6 @@ def _plot_token_budget_by_step_type(metrics: dict, output_dir: Path) -> Path | N
     if not budget:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -483,23 +491,24 @@ def _plot_token_budget_by_step_type(metrics: dict, output_dir: Path) -> Path | N
     x = np.arange(n_types)
     bar_width = 0.35
 
-    fig, ax = plt.subplots(figsize=(max(6, n_types * 1.0 + 2), 5))
+    fig, ax = plt.subplots(figsize=figure_size(grow_width(n_types, per_item=1.0, padding=2, minimum=6.0), 5))
     ax.bar(x - bar_width / 2, prompt_vals, width=bar_width, color=_SERIES_PRIMARY,
            label="Prompt", edgecolor="white", linewidth=0.4)
     ax.bar(x + bar_width / 2, completion_vals, width=bar_width, color=_SERIES_SECONDARY,
            label="Completion", edgecolor="white", linewidth=0.4)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(step_types, rotation=30, ha="right", fontsize=8)
-    ax.set_ylabel("Token count", fontsize=9)
-    ax.set_title("Token budget by step type", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=8)
-    ax.legend(fontsize=8)
+    ax.set_xticklabels(step_types, rotation=30, ha="right", fontsize=TICK_LABEL)
+    ax.set_ylabel("Token count", fontsize=AXIS_TITLE)
+    ax.set_title("Token budget by step type", fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
+    ax.legend(fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
     return save_figure(fig, output_dir / "token_budget_by_step_type.png", dpi=_DPI)
 
 
+@house_style
 def _plot_latency_by_category(metrics: dict, output_dir: Path) -> Path | None:
     """Grouped horizontal bar: median / p95 / max latency per category."""
     if metrics.get("latency_by_category") is None:
@@ -520,8 +529,6 @@ def _plot_latency_by_category(metrics: dict, output_dir: Path) -> Path | None:
     if not filtered:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -543,7 +550,7 @@ def _plot_latency_by_category(metrics: dict, output_dir: Path) -> Path | None:
     bar_height = 0.25
     y_base = range(n_cats)
 
-    fig, ax = plt.subplots(figsize=(10, max(4, n_cats * 0.9 + 2)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(n_cats, per_item=0.9, padding=2, minimum=4.0)))
     ax.barh([y + bar_height for y in y_base], median_vals, height=bar_height,
             color=_SERIES_ALTERNATE,  label="Median",  edgecolor="white", linewidth=0.3)
     ax.barh([y              for y in y_base], p95_vals,    height=bar_height,
@@ -552,11 +559,11 @@ def _plot_latency_by_category(metrics: dict, output_dir: Path) -> Path | None:
             color=_SERIES_ADVERSE,    label="Max",     edgecolor="white", linewidth=0.3)
 
     ax.set_yticks(list(y_base))
-    ax.set_yticklabels(cats_plot, fontsize=8)
-    ax.set_xlabel("Latency (ms)", fontsize=9)
-    ax.set_title("Latency by category (median / p95 / max)", fontsize=11, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=8)
-    ax.legend(fontsize=8)
+    ax.set_yticklabels(cats_plot, fontsize=TICK_LABEL)
+    ax.set_xlabel("Latency (ms)", fontsize=AXIS_TITLE)
+    ax.set_title("Latency by category (median / p95 / max)", fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
+    ax.legend(fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
     return save_figure(fig, output_dir / "latency_by_category.png", dpi=_DPI)
@@ -618,9 +625,10 @@ def _kruskal_subtitle(kruskal: dict[str, Any]) -> str:
 
 
 def _figwidth(n_groups: int) -> float:
-    return max(7.0, min(22.0, n_groups * 1.1 + 3.0))
+    return grow_width(n_groups, per_item=1.1, padding=3.0, minimum=7.0)
 
 
+@house_style
 def _plot_box_grouped(
     block: dict[str, Any],
     factor_label: str,
@@ -634,8 +642,6 @@ def _plot_box_grouped(
     if not order:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -645,7 +651,7 @@ def _plot_box_grouped(
     positions = list(range(1, len(order) + 1))
     pos_of = {g: i + 1 for i, g in enumerate(order)}
 
-    fig, ax = plt.subplots(figsize=(_figwidth(len(order)), 6))
+    fig, ax = plt.subplots(figsize=figure_size(_figwidth(len(order)), 6))
 
     bp = ax.boxplot(
         data,
@@ -671,13 +677,13 @@ def _plot_box_grouped(
         )
 
     ax.set_xticks(positions)
-    ax.set_xticklabels(order, rotation=35, ha="right", fontsize=8)
+    ax.set_xticklabels(order, rotation=35, ha="right", fontsize=TICK_LABEL)
     ylabel = f"{metric_label} ({unit})" if unit else metric_label
-    ax.set_ylabel(ylabel, fontsize=9)
-    ax.set_title(f"{metric_label} by {factor_label}", fontsize=12, fontweight="bold")
+    ax.set_ylabel(ylabel, fontsize=AXIS_TITLE)
+    ax.set_title(f"{metric_label} by {factor_label}", fontsize=FIGURE_TITLE, fontweight="bold")
     ax.text(
         0.5, 1.015, _kruskal_subtitle(block["kruskal"]),
-        transform=ax.transAxes, ha="center", va="bottom", fontsize=8, color=CAPTION_GREY,
+        transform=ax.transAxes, ha="center", va="bottom", fontsize=ANNOTATION, color=CAPTION_GREY,
     )
     ax.grid(axis="y", linestyle=":", alpha=0.4)
 
@@ -704,13 +710,13 @@ def _plot_box_grouped(
                 [y - step * 0.25, y, y, y - step * 0.25],
                 color="black", linewidth=1.0,
             )
-            ax.text((x1 + x2) / 2.0, y, _stars(d["p_holm"]), ha="center", va="bottom", fontsize=9)
+            ax.text((x1 + x2) / 2.0, y, _stars(d["p_holm"]), ha="center", va="bottom", fontsize=ANNOTATION_LARGE)
         ax.set_ylim(top=ymax + step * (len(sig) + 1.5))
 
     if omitted:
         ax.text(
             0.99, 0.01, f"+{omitted} more significant pair(s) omitted",
-            transform=ax.transAxes, ha="right", va="bottom", fontsize=7, color=MUTED_GREY,
+            transform=ax.transAxes, ha="right", va="bottom", fontsize=ANNOTATION, color=MUTED_GREY,
         )
         print(f"  note: {out_path.name}: {omitted} significant pair(s) omitted from brackets")
 
@@ -718,6 +724,7 @@ def _plot_box_grouped(
     return save_figure(fig, out_path, dpi=_DPI)
 
 
+@house_style
 def _plot_grouped_bar_errorbars(
     block: dict[str, Any],
     factor_label: str,
@@ -731,8 +738,6 @@ def _plot_grouped_bar_errorbars(
     if not order:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -742,20 +747,20 @@ def _plot_grouped_bar_errorbars(
     stds = [float(np.std(groups[g], ddof=1)) if len(groups[g]) > 1 else 0.0 for g in order]
     positions = list(range(len(order)))
 
-    fig, ax = plt.subplots(figsize=(_figwidth(len(order)), 6))
+    fig, ax = plt.subplots(figsize=figure_size(_figwidth(len(order)), 6))
     ax.bar(
         positions, means, yerr=stds, capsize=4,
         color=_SERIES_ALTERNATE, edgecolor=BAR_EDGE, linewidth=0.5, alpha=0.85,
         error_kw={"elinewidth": 1.0, "ecolor": ERROR_BAR_GREY},
     )
     ax.set_xticks(positions)
-    ax.set_xticklabels(order, rotation=35, ha="right", fontsize=8)
+    ax.set_xticklabels(order, rotation=35, ha="right", fontsize=TICK_LABEL)
     ylabel = f"{metric_label} ({unit})" if unit else metric_label
-    ax.set_ylabel(f"mean {ylabel}", fontsize=9)
-    ax.set_title(f"{metric_label} by {factor_label} (mean +/- SD)", fontsize=12, fontweight="bold")
+    ax.set_ylabel(f"mean {ylabel}", fontsize=AXIS_TITLE)
+    ax.set_title(f"{metric_label} by {factor_label} (mean +/- SD)", fontsize=FIGURE_TITLE, fontweight="bold")
     ax.text(
         0.5, 1.015, _kruskal_subtitle(block["kruskal"]),
-        transform=ax.transAxes, ha="center", va="bottom", fontsize=8, color=CAPTION_GREY,
+        transform=ax.transAxes, ha="center", va="bottom", fontsize=ANNOTATION, color=CAPTION_GREY,
     )
     ax.grid(axis="y", linestyle=":", alpha=0.4)
 
@@ -763,6 +768,7 @@ def _plot_grouped_bar_errorbars(
     return save_figure(fig, out_path, dpi=_DPI)
 
 
+@house_style
 def _plot_heatmap(
     matrix: dict[str, Any],
     metric_label: str,
@@ -784,37 +790,38 @@ def _plot_heatmap(
     if np.all(np.isnan(values)):
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(
-        figsize=(max(6.0, len(methods) * 1.3 + 3.0), max(5.0, len(models) * 0.5 + 2.5))
+        figsize=(
+            grow_width(len(methods), per_item=1.3, padding=3.0, minimum=6.0),
+            grow_height(len(models), per_item=0.5, padding=2.5, minimum=5.0),
+        ),
     )
     masked = np.ma.masked_invalid(values)
     im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap())
 
     ax.set_xticks(range(len(methods)))
-    ax.set_xticklabels(methods, rotation=35, ha="right", fontsize=8)
+    ax.set_xticklabels(methods, rotation=35, ha="right", fontsize=TICK_LABEL)
     ax.set_yticks(range(len(models)))
-    ax.set_yticklabels(models, fontsize=8)
+    ax.set_yticklabels(models, fontsize=TICK_LABEL)
 
     agg = matrix.get("cell_agg", "value")
     label = f"{agg} {metric_label}" + (f" ({unit})" if unit else "")
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label(label, fontsize=8)
+    cbar.set_label(label, fontsize=AXIS_TITLE)
 
     for i in range(len(models)):
         for j in range(len(methods)):
             v = values[i, j]
             if np.isnan(v):
                 continue
-            ax.text(j, i, f"{v:.3g}", ha="center", va="center", fontsize=7,
+            ax.text(j, i, f"{v:.3g}", ha="center", va="center", fontsize=ANNOTATION,
                     color=text_color_on(im, v))
 
-    ax.set_title(f"{metric_label}: model x method", fontsize=12, fontweight="bold")
+    ax.set_title(f"{metric_label}: model x method", fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
     return save_figure(fig, out_path, dpi=_DPI)
 

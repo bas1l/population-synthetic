@@ -41,6 +41,18 @@ from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.figures import save_figure
 from population_synthetic.analysis.utils.marginals import compute_proportions
 from population_synthetic.analysis.utils.palette import BASELINE_DARK, CATEGORICAL_SERIES
+from population_synthetic.analysis.utils.style import (
+    AXIS_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    PANEL_TITLE,
+    TICK_LABEL,
+    figure_size,
+    grow_height,
+    grow_width,
+    house_style,
+)
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 logger = logging.getLogger(__name__)
@@ -230,6 +242,7 @@ def _series_color(index: int) -> str:
     return CATEGORICAL_SERIES[(index - 1) % len(CATEGORICAL_SERIES)]
 
 
+@house_style
 def plot_marginal_progression(
     prepared: PreparedSeries,
     country: str,
@@ -262,8 +275,6 @@ def plot_marginal_progression(
         The list of written PNG paths (SVG siblings are written alongside but not
         listed), in ``(model, attribute)`` iteration order.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -293,8 +304,10 @@ def plot_marginal_progression(
             offsets = [(i - (n_series - 1) / 2.0) * bar_size for i in range(n_series)]
 
             if horizontal:
-                fig_height = max(4.0, min(n_cats * (0.35 * n_series + 0.4) + 2.0, 22.0))
-                fig, ax = plt.subplots(figsize=(11.0, fig_height))
+                fig_height = grow_height(
+                    n_cats, per_item=0.35 * n_series + 0.4, padding=2.0, minimum=4.0
+                )
+                fig, ax = plt.subplots(figsize=figure_size(FULL, fig_height))
                 y_pos = np.arange(n_cats)
                 for i, (label, props) in enumerate(series):
                     vals = [props.get(cat, 0.0) for cat in cats]
@@ -304,13 +317,15 @@ def plot_marginal_progression(
                         edgecolor="white", linewidth=0.3,
                     )
                 ax.set_yticks(y_pos)
-                ax.set_yticklabels(cats, fontsize=7)
-                ax.set_xlabel("Proportion", fontsize=8)
+                ax.set_yticklabels(cats, fontsize=TICK_LABEL)
+                ax.set_xlabel("Proportion", fontsize=AXIS_TITLE)
                 ax.set_xlim(0.0, 1.0)
                 ax.invert_yaxis()
             else:
-                fig_width = max(8.0, n_cats * max(0.9, n_series * 0.22) + 2.0)
-                fig, ax = plt.subplots(figsize=(fig_width, 5.0))
+                fig_width = grow_width(
+                    n_cats, per_item=max(0.9, n_series * 0.22), padding=2.0, minimum=FULL
+                )
+                fig, ax = plt.subplots(figsize=figure_size(fig_width, 5.0))
                 x_pos = np.arange(n_cats)
                 for i, (label, props) in enumerate(series):
                     vals = [props.get(cat, 0.0) for cat in cats]
@@ -320,16 +335,16 @@ def plot_marginal_progression(
                         edgecolor="white", linewidth=0.3,
                     )
                 ax.set_xticks(x_pos)
-                ax.set_xticklabels(cats, rotation=30, ha="right", fontsize=7)
-                ax.set_ylabel("Proportion", fontsize=8)
+                ax.set_xticklabels(cats, rotation=30, ha="right", fontsize=TICK_LABEL)
+                ax.set_ylabel("Proportion", fontsize=AXIS_TITLE)
                 ax.set_ylim(0.0, 1.0)
 
             ax.set_title(
                 f"{country} / {model}: {attr}\nreal baseline vs method progression",
-                fontsize=10, fontweight="bold",
+                fontsize=PANEL_TITLE, fontweight="bold",
             )
-            ax.legend(fontsize=7, title="series (simplest -> most complex)", title_fontsize=7)
-            ax.tick_params(axis="both", labelsize=7)
+            ax.legend(fontsize=LEGEND_LABEL, title="series (simplest -> most complex)", title_fontsize=LEGEND_TITLE)
+            ax.tick_params(axis="both", labelsize=TICK_LABEL)
             fig.tight_layout()
 
             out_path = root / model / f"{attr}.png"

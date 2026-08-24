@@ -38,14 +38,18 @@ from __future__ import annotations
 import numpy as np
 
 from population_synthetic.analysis.utils.palette import BEST_CELL_EDGE, heatmap_cmap
+from population_synthetic.analysis.utils.style import ANNOTATION, AXIS_TITLE, TICK_LABEL
 
 #: This family's name for the palette's distinguished-cell rule, drawn around the
 #: best-per-column cell. Bound rather than restated so the value has exactly one
 #: definition; the name stays because the call sites read as grid furniture.
 BOX_EDGE = BEST_CELL_EDGE
 
-#: Point size of the in-cell annotations. Sized for a printed table, not a slide.
-ANNOT_FONTSIZE = 7.0
+#: This family's name for the house scale's in-canvas annotation size, used for the
+#: in-cell numbers. Bound rather than restated -- it was written here as ``7.0``, below
+#: the publisher's 8 pt floor -- so the grids move with the scale and the name stays,
+#: because the call sites read as grid furniture.
+ANNOT_FONTSIZE = ANNOTATION
 
 #: Legend text for the provenance side-marker (figures) and the LaTeX ``Host`` column
 #: swatch. The hues those labels stand beside are the palette's ``HOST_COLORS``.
@@ -126,7 +130,7 @@ def categories_on_top(ax, labels: list[str]) -> None:
     ax.xaxis.set_ticks_position("top")
     ax.xaxis.set_label_position("top")
     ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels(labels, rotation=40, ha="left", fontsize=8)
+    ax.set_xticklabels(labels, rotation=40, ha="left", fontsize=TICK_LABEL)
 
 
 def add_percentage_colorbar(fig, im, ax, label: str):
@@ -140,5 +144,5 @@ def add_percentage_colorbar(fig, im, ax, label: str):
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
     cbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _pos: f"{v * 100:.0f}"))
-    cbar.set_label(label, fontsize=8)
+    cbar.set_label(label, fontsize=AXIS_TITLE)
     return cbar

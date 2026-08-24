@@ -17,6 +17,17 @@ import math
 
 from population_synthetic.analysis.real_population_stats.stats import CategoryStat
 from population_synthetic.analysis.utils.palette import CATEGORICAL_SERIES
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    AXIS_TITLE,
+    FIGURE_TITLE,
+    PANEL_TITLE,
+    TICK_LABEL,
+    figure_size,
+    grow_height,
+    grow_width,
+    house_style,
+)
 
 _BAR_COLOR = CATEGORICAL_SERIES[0]
 _REFERENCE_LINES = (25, 50, 75, 100)
@@ -32,16 +43,17 @@ def _draw_bars(ax, rows: list[CategoryStat], attr: str, *, title: str | None = N
         ax.axhline(y, color="gray", linestyle="--", linewidth=0.6, alpha=0.6, zorder=0)
 
     bars = ax.bar(x_pos, percents, color=_BAR_COLOR, edgecolor="white", linewidth=0.4, zorder=2)
-    ax.bar_label(bars, fmt="%.1f%%", fontsize=6, padding=2)
+    ax.bar_label(bars, fmt="%.1f%%", fontsize=ANNOTATION, padding=2)
 
     ax.set_xticks(list(x_pos))
-    ax.set_xticklabels(categories, rotation=30, ha="right", fontsize=7)
+    ax.set_xticklabels(categories, rotation=30, ha="right", fontsize=TICK_LABEL)
     ax.set_ylim(0, 100)
-    ax.set_ylabel("Percent", fontsize=8)
-    ax.set_title(title or attr, fontsize=10, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=7)
+    ax.set_ylabel("Percent", fontsize=AXIS_TITLE)
+    ax.set_title(title or attr, fontsize=PANEL_TITLE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
 
+@house_style
 def plot_category_bars(rows: list[CategoryStat], attr: str, title: str | None = None):
     """Render one attribute's category-proportion bars.
 
@@ -51,17 +63,16 @@ def plot_category_bars(rows: list[CategoryStat], attr: str, title: str | None = 
     special-cased here). Returns the ``Figure`` unsaved and open; the caller saves
     (``save_figure``) and it closes there.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     n_cats = len(rows)
-    fig, ax = plt.subplots(figsize=(max(6.0, n_cats * 0.8 + 2), 5))
+    fig, ax = plt.subplots(figsize=figure_size(grow_width(n_cats, per_item=0.8, padding=2, minimum=6.0), 5))
     _draw_bars(ax, rows, attr, title=title)
     fig.tight_layout()
     return fig
 
 
+@house_style
 def plot_overview_panel(stats_by_attr: dict[str, list[CategoryStat]]):
     """Tile every attribute's bars into one multi-panel overview figure.
 
@@ -73,8 +84,6 @@ def plot_overview_panel(stats_by_attr: dict[str, list[CategoryStat]]):
     Raises:
         ValueError: if *stats_by_attr* is empty (nothing to tile).
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     attrs = list(stats_by_attr)
@@ -85,7 +94,11 @@ def plot_overview_panel(stats_by_attr: dict[str, list[CategoryStat]]):
     n_cols = math.ceil(math.sqrt(n))
     n_rows = math.ceil(n / n_cols)
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 4.5, n_rows * 4.2))
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(grow_width(n_cols, per_item=4.5, padding=0.0), grow_height(n_rows, per_item=4.2, padding=0.0)),
+    )
     axes_flat = axes.flatten().tolist() if n_rows * n_cols > 1 else [axes]
 
     for ax, attr in zip(axes_flat, attrs):
@@ -94,6 +107,6 @@ def plot_overview_panel(stats_by_attr: dict[str, list[CategoryStat]]):
     for ax in axes_flat[n:]:
         ax.axis("off")
 
-    fig.suptitle("Real Population -- Category Proportions Overview", fontsize=13, fontweight="bold")
+    fig.suptitle("Real Population -- Category Proportions Overview", fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     return fig

@@ -58,6 +58,16 @@ from population_synthetic.analysis.utils.palette import (
     ORDERED_QUALITATIVE_SERIES,
     SURFACE,
 )
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    AXIS_TITLE,
+    FIGURE_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    MAX_HEIGHT,
+    house_style,
+)
 from population_synthetic.analysis.utils.table_style import (
     HOST_DEFAULT_CLASS,
     HOST_LABELS,
@@ -209,6 +219,7 @@ def _caption(
     return "\n".join(textwrap.fill(line, _CAPTION_WRAP) for line in lines)
 
 
+@house_style
 def plot_cost_vs_accuracy(
     document: Mapping[str, Any],
     *,
@@ -281,7 +292,7 @@ def plot_cost_vs_accuracy(
         fraction = zero_ranks[(model, strategy)] / (n_zero - 1)
         return linthresh * _BAND_SPREAD * (2.0 * fraction - 1.0)
 
-    fig, ax = plt.subplots(figsize=(15.5, 8.8))
+    fig, ax = plt.subplots(figsize=(FULL, MAX_HEIGHT))
     # Space reserved for the two out-of-axes legends. Reserved rather than left to the
     # save-time tight bounding box, which crops an axes-anchored legend that overhangs
     # the figure edge.
@@ -322,7 +333,7 @@ def plot_cost_vs_accuracy(
             xy=(draw_x, y),
             xytext=(5, 4 if label_side[(model, strategy)] > 0 else -10),
             textcoords="offset points",
-            fontsize=5.6,
+            fontsize=ANNOTATION,
             color=ANNOTATION_GREY,
             zorder=4,
             clip_on=True,
@@ -338,7 +349,7 @@ def plot_cost_vs_accuracy(
         # spend wants that, but it is the wrong scale for comparing the cheap end.
         ax.set_xscale("linear")
         ax.set_xlim(0.0, max_cost * 1.08 if max_cost > 0 else 1.0)
-        ax.set_xlabel("Cost per 100 usable personas (USD, linear scale)", fontsize=10)
+        ax.set_xlabel("Cost per 100 usable personas (USD, linear scale)", fontsize=AXIS_TITLE)
     elif draw_band:
         # linscale sets how many decades of canvas the linear band is given. Kept below 1 so
         # the band -- which holds one distinct x value, zero -- does not occupy the width of
@@ -352,7 +363,7 @@ def plot_cost_vs_accuracy(
         # already states what every point in it cost.
         ax.set_xticks([t for t in ax.get_xticks() if abs(t) >= linthresh])
         ax.set_xlabel(
-            "Cost per 100 usable personas (USD, log scale outside the shaded band)", fontsize=10
+            "Cost per 100 usable personas (USD, log scale outside the shaded band)", fontsize=AXIS_TITLE
         )
     else:
         # Nothing is unmetered, so every cost is strictly positive and a plain log axis
@@ -360,12 +371,12 @@ def plot_cost_vs_accuracy(
         ax.set_xscale("log")
         lo = min(positive) if positive else 1e-6
         ax.set_xlim(lo / 2.2, max_cost * 3.2 if max_cost > 0 else lo * 10)
-        ax.set_xlabel("Cost per 100 usable personas (USD, log scale)", fontsize=10)
-    ax.set_ylabel("Fidelity -- overall TV-similarity (higher is better)", fontsize=10)
+        ax.set_xlabel("Cost per 100 usable personas (USD, log scale)", fontsize=AXIS_TITLE)
+    ax.set_ylabel("Fidelity -- overall TV-similarity (higher is better)", fontsize=AXIS_TITLE)
     ax.set_title(
         f"Fidelity against generation cost -- {document['country']} "
         f"({document['n_combinations']} combinations)",
-        fontsize=13, fontweight="bold", pad=14,
+        fontsize=FIGURE_TITLE, fontweight="bold", pad=14,
     )
     ax.grid(True, which="major", axis="both", color=GRID_RULE, linewidth=0.6, zorder=0)
     ax.set_axisbelow(True)
@@ -380,7 +391,7 @@ def plot_cost_vs_accuracy(
             "horizontal position inside the band is\nspread for legibility, not measured",
             xy=(0.0, 1.0), xycoords=("data", "axes fraction"),
             xytext=(0, -8), textcoords="offset points",
-            ha="center", va="top", fontsize=7.0, color=FOOTNOTE_GREY, zorder=2,
+            ha="center", va="top", fontsize=ANNOTATION, color=FOOTNOTE_GREY, zorder=2,
         )
 
     method_handles = [
@@ -404,20 +415,20 @@ def plot_cost_vs_accuracy(
         handles=method_handles, title="method (simplest first)",
         loc="upper left", bbox_to_anchor=(_GUTTER_LEFT, 0.95),
         bbox_transform=fig.transFigure,
-        fontsize=7.5, title_fontsize=8, framealpha=1.0, borderaxespad=0.0,
+        fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE, framealpha=1.0, borderaxespad=0.0,
     )
     fig.legend(
         handles=host_handles, title="hosting",
         loc="upper left", bbox_to_anchor=(_GUTTER_LEFT, 0.72),
         bbox_transform=fig.transFigure,
-        fontsize=7.5, title_fontsize=8, framealpha=1.0, borderaxespad=0.0,
+        fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE, framealpha=1.0, borderaxespad=0.0,
     )
 
     fig.text(
         0.01, -0.02,
         _caption(document, n_drawn=len(drawn), n_no_cost=len(no_cost),
                  n_unmetered=n_unmetered),
-        ha="left", va="top", fontsize=7.0, color=CAPTION_GREY,
+        ha="left", va="top", fontsize=ANNOTATION, color=CAPTION_GREY,
     )
     # No tight_layout: both legends are anchored outside the axes, and the driver saves
     # with bbox_inches="tight", which already expands the canvas around them.

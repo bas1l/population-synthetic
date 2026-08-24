@@ -18,8 +18,19 @@ from pathlib import Path
 from typing import Any
 
 from population_synthetic.analysis.utils.palette import CATEGORICAL_SERIES
+from population_synthetic.analysis.utils.style import (
+    AXIS_TITLE,
+    FIGURE_TITLE,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    TICK_LABEL,
+    figure_size,
+    grow_width,
+    house_style,
+)
 
 
+@house_style
 def plot_violation_rates(
     rows: list[dict[str, Any]],
     out_path: str | Path,
@@ -49,8 +60,6 @@ def plot_violation_rates(
     if not rule_order or not populations or not plottable:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -61,7 +70,9 @@ def plot_violation_rates(
     x = np.arange(len(rule_order))
     width = min(0.8 / n_pop, 0.35)
 
-    fig, ax = plt.subplots(figsize=(max(7.0, 1.6 * len(rule_order)), 5.5))
+    fig, ax = plt.subplots(
+        figsize=figure_size(grow_width(len(rule_order), per_item=1.6, padding=0.0, minimum=7.0), 5.5),
+    )
     for i, population in enumerate(populations):
         heights = [
             rate_by.get((population, rule), float("nan"))
@@ -75,16 +86,16 @@ def plot_violation_rates(
         )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(rule_order, rotation=20, ha="right", fontsize=8.5)
-    ax.set_ylabel("violation rate", fontsize=9)
+    ax.set_xticklabels(rule_order, rotation=20, ha="right", fontsize=TICK_LABEL)
+    ax.set_ylabel("violation rate", fontsize=AXIS_TITLE)
     ax.set_ylim(bottom=0.0)
     ax.grid(True, axis="y", linestyle=":", alpha=0.4)
-    ax.legend(title="population", fontsize=7.5, title_fontsize=8)
+    ax.legend(title="population", fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE)
 
     title = "consistency-rule violation rates"
     if country:
         title = f"{country}: {title}"
-    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)

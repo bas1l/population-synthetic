@@ -52,6 +52,16 @@ from population_synthetic.analysis.utils.palette import (
     MISSING_COLOR,
     text_color_for_rgb,
 )
+from population_synthetic.analysis.utils.style import (
+    FIGURE_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    TICK_LABEL,
+    grow_height,
+    grow_width,
+    house_style,
+)
 from population_synthetic.analysis.utils.table_style import (
     ANNOT_FONTSIZE,
     BOX_EDGE,
@@ -216,6 +226,7 @@ def _shared_norm(values: np.ndarray):
 # Models table (rows = models at the global-best strategy)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Models x (axes + Overall) TV-similarity table at the single global-best strategy.
 
@@ -237,8 +248,6 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
     attributes: list[str] = result["metadata"]["attributes"]
     hosting: dict[str, str] = result["metadata"].get("model_hosting", {})
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
 
@@ -247,13 +256,16 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
 
     n_cols = len(attributes) + 1
     fig, ax = plt.subplots(
-        figsize=(max(8.0, n_cols * 0.8 + 3.0), max(4.0, len(row_models) * 0.5 + 2.5))
+        figsize=(
+            grow_width(n_cols, per_item=0.8, padding=3.0, minimum=FULL),
+            grow_height(len(row_models), per_item=0.5, padding=2.5, minimum=4.0),
+        ),
     )
     im = ax.imshow(np.ma.masked_invalid(values), cmap=cmap, norm=norm, aspect="auto")
 
     categories_on_top(ax, attributes + ["overall"])
     ax.set_yticks(range(len(row_models)))
-    ax.set_yticklabels(row_models, fontsize=8)
+    ax.set_yticklabels(row_models, fontsize=TICK_LABEL)
     # Provenance side-marker: colour each model's row label by hosting class
     # (models absent from the map take the presentation default).
     for label, model in zip(ax.get_yticklabels(), row_models):
@@ -272,13 +284,13 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
     if handles:
         ax.legend(
             handles=handles, loc="upper left", bbox_to_anchor=(0.0, -0.02),
-            ncol=2, fontsize=7.5, title="provenance", title_fontsize=8, frameon=False,
+            ncol=2, fontsize=LEGEND_LABEL, title="provenance", title_fontsize=LEGEND_TITLE, frameon=False,
         )
 
     country = result["metadata"]["country"]
     ax.set_title(
         f"{country}: model fidelity by axis at strategy '{best_strategy}' (TV-similarity %)",
-        fontsize=12, fontweight="bold", pad=28,
+        fontsize=FIGURE_TITLE, fontweight="bold", pad=28,
     )
     fig.tight_layout()
     return save_figure(fig, Path(out_path), dpi=150)
@@ -288,6 +300,7 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
 # Methods table (rows = strategies)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Strategies x (axes + Overall) mean-over-models TV-similarity table.
 
@@ -303,8 +316,6 @@ def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> 
     ordered, values = grid
     attributes: list[str] = result["metadata"]["attributes"]
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     norm = _shared_norm(values)
@@ -312,13 +323,16 @@ def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> 
 
     n_cols = len(attributes) + 1
     fig, ax = plt.subplots(
-        figsize=(max(8.0, n_cols * 0.8 + 3.0), max(3.0, len(ordered) * 0.5 + 2.5))
+        figsize=(
+            grow_width(n_cols, per_item=0.8, padding=3.0, minimum=FULL),
+            grow_height(len(ordered), per_item=0.5, padding=2.5, minimum=3.0),
+        ),
     )
     im = ax.imshow(np.ma.masked_invalid(values), cmap=cmap, norm=norm, aspect="auto")
 
     categories_on_top(ax, attributes + ["overall"])
     ax.set_yticks(range(len(ordered)))
-    ax.set_yticklabels(ordered, fontsize=8)
+    ax.set_yticklabels(ordered, fontsize=TICK_LABEL)
     vertical_divider(ax, len(attributes))
     _annotate_and_box(ax, values, cmap, norm, best_cells_per_column(values))
 
@@ -327,7 +341,7 @@ def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> 
     country = result["metadata"]["country"]
     ax.set_title(
         f"{country}: methods (strategy) fidelity by axis (TV-similarity %)",
-        fontsize=12, fontweight="bold", pad=28,
+        fontsize=FIGURE_TITLE, fontweight="bold", pad=28,
     )
     fig.tight_layout()
     return save_figure(fig, Path(out_path), dpi=150)
