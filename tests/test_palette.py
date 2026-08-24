@@ -10,6 +10,8 @@ rather than by a threshold tuned to one ramp.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import matplotlib
 import numpy as np
 import pytest
@@ -28,7 +30,9 @@ from population_synthetic.analysis.utils.palette import (  # noqa: E402
     ORDERED_QUALITATIVE_SERIES,
     SEVERITY_SERIES,
     STAGE_SERIES,
+    SURFACE,
     heatmap_cmap,
+    opaque,
     relative_luminance,
     text_color_for_rgb,
     text_color_on,
@@ -246,3 +250,94 @@ def test_text_colour_picks_the_higher_contrast_option_across_a_whole_ramp(cmap_n
 def test_the_off_ramp_missing_fill_takes_dark_annotation_text():
     """The "never measured" grey is light, so its wording must be the dark option."""
     assert text_color_for_rgb(matplotlib.colors.to_rgb(MISSING_COLOR)) == "black"
+
+
+# --------------------------------------------------------------------------- #
+# the opaque compositor                                                         #
+# --------------------------------------------------------------------------- #
+
+#: Tolerance for a colour that has been through the hex round-trip an 8-bit RGB output
+#: format imposes anyway. One channel step, so a comparison is exact to what is written.
+_ONE_CHANNEL_STEP = 1.0 / 255.0
+
+
+def test_opaque_returns_the_colour_matplotlib_would_have_painted():
+    """The "over" operator on sRGB, which is what the raster backends themselves do.
+
+    Asserted against a hand-computed midpoint rather than against the implementation:
+    half of black over white is the mid grey, whatever the code does to get there.
+    """
+    assert matplotlib.colors.to_rgb(opaque("black", 0.5)) == pytest.approx(
+        (0.5, 0.5, 0.5), abs=_ONE_CHANNEL_STEP
+    )
+
+
+@pytest.mark.parametrize("colour", ["#C44E52", "black", (0.1, 0.7, 0.3)])
+def test_full_coverage_is_the_colour_itself_and_none_is_the_ground(colour):
+    """The two endpoints, so a caller passing 1.0 never has its colour quietly shifted."""
+    assert matplotlib.colors.to_rgb(opaque(colour, 1.0)) == pytest.approx(
+        matplotlib.colors.to_rgb(colour), abs=_ONE_CHANNEL_STEP
+    )
+    assert matplotlib.colors.to_rgb(opaque(colour, 0.0)) == pytest.approx(
+        matplotlib.colors.to_rgb(SURFACE), abs=_ONE_CHANNEL_STEP
+    )
+
+
+def test_the_ground_is_the_page_unless_the_caller_names_another():
+    """A caller drawing over another artist passes that artist's colour."""
+    on_page = opaque("black", 0.5)
+    on_grey = opaque("black", 0.5, over="#808080")
+    assert on_page != on_grey
+    assert matplotlib.colors.to_rgb(on_grey) == pytest.approx((0.25098, 0.25098, 0.25098), abs=1e-4)
+
+
+@pytest.mark.parametrize("alpha", [-0.01, 1.01, 2.0])
+def test_a_coverage_outside_the_unit_interval_raises(alpha):
+    """Never a colour matplotlib would have drawn, so it is always a caller bug."""
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        opaque("black", alpha)
+
+
+#: Calls whose ``alpha=`` is a significance level, not a coverage. Named rather than
+#: pattern-matched: the test must keep failing on a *drawing* call that acquires an
+#: alpha, and the only way to keep that sharp is to enumerate the statistical ones.
+_STATISTICAL_ALPHA_CALLS = frozenset({"resolve_pairs"})
+
+
+def _called_name(node) -> str:
+    """The bare name of a call's callee -- ``a.b.plot(...)`` -> ``plot``."""
+    import ast
+
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    if isinstance(func, ast.Name):
+        return func.id
+    return ""
+
+
+def test_the_layer_draws_no_transparent_artist():
+    """The EPS backend flattens alpha, so an alpha= anywhere splits EPS from PNG/SVG.
+
+    Scanned over the whole analysis package rather than asserted on one module: the
+    divergence is invisible in review because it appears only in the one file that leaves
+    the repository. Read from the syntax tree, not from the text, so the module docstrings
+    that *explain* the rule are not mistaken for breaches of it, and so
+    ``framealpha=`` -- a different keyword, opaque by definition at the ``1.0`` the
+    legends pass -- is not swept in by a substring match.
+    """
+    import ast
+
+    root = Path(palette.__file__).resolve().parent.parent
+    offenders: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if _called_name(node) in _STATISTICAL_ALPHA_CALLS:
+                continue
+            for keyword in node.keywords:
+                if keyword.arg == "alpha":
+                    offenders.append(f"{path.relative_to(root)}:{node.lineno}")
+    assert offenders == []

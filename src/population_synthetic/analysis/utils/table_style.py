@@ -37,8 +37,16 @@ from __future__ import annotations
 
 import numpy as np
 
-from population_synthetic.analysis.utils.palette import BEST_CELL_EDGE, heatmap_cmap
-from population_synthetic.analysis.utils.style import ANNOTATION, AXIS_TITLE, TICK_LABEL
+from population_synthetic.analysis.utils.palette import BEST_CELL_EDGE, SURFACE, heatmap_cmap
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    AXIS_TITLE,
+    CAPTION_MARGIN_IN,
+    LINE_SPACING,
+    POINTS_PER_INCH,
+    TICK_LABEL,
+    wrap_to_width,
+)
 
 #: This family's name for the palette's distinguished-cell rule, drawn around the
 #: best-per-column cell. Bound rather than restated so the value has exactly one
@@ -53,7 +61,13 @@ ANNOT_FONTSIZE = ANNOTATION
 
 #: Legend text for the provenance side-marker (figures) and the LaTeX ``Host`` column
 #: swatch. The hues those labels stand beside are the palette's ``HOST_COLORS``.
-HOST_LABELS = {"hosted": "hosted (API)", "local": "local (Ollama)"}
+#:
+#: The class is named, the serving software is not. "local (Ollama)" put the serving
+#: layer on a legend, which is the one place the labelling convention keeps it out of --
+#: and it named the software without naming the machine, while the two local hosts are
+#: different GPUs, so the parenthetical was provenance the reader could not act on. The
+#: whole serving story lives in the generated provenance table instead.
+HOST_LABELS = {"hosted": "hosted (API)", "local": "locally served"}
 
 #: Hosting class assumed for a model absent from ``metadata.model_hosting`` (e.g.
 #: the builder default of ``{}`` when hosting was not wired). This is a
@@ -73,11 +87,11 @@ def inferno_cmap():
     return heatmap_cmap()
 
 
-#: The divider rule's colour and width. White rather than a dark rule: the gap has
-#: to read as a *break in the grid* at any point on the ramp, and a dark rule is
-#: invisible against the ramp's low end. Named so the two orientations cannot
-#: drift apart, and so a renderer that needs a divider never restates the values.
-_DIVIDER_COLOR = "white"
+#: The divider rule's colour and width. The page's own colour rather than a dark
+#: rule: the gap has to read as a *break in the grid* at any point on the ramp, and
+#: a dark rule is invisible against the ramp's low end. Bound from the palette like
+#: every other colour here, and named so the two orientations cannot drift apart.
+_DIVIDER_COLOR = SURFACE
 _DIVIDER_LINEWIDTH = 2.5
 
 
@@ -146,3 +160,161 @@ def add_percentage_colorbar(fig, im, ax, label: str):
     cbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _pos: f"{v * 100:.0f}"))
     cbar.set_label(label, fontsize=AXIS_TITLE)
     return cbar
+
+
+# ------------------------------------------------------------------
+# Fitting a drawn figure to the page
+# ------------------------------------------------------------------
+
+#: How far a drawn artist may reach past the figure rectangle before
+#: :func:`fit_to_page` treats it as an overhang, in points. A hair of tolerance, so
+#: a rounding difference between the layout pass and the measuring pass does not
+#: send the function rearranging a figure that is already correct.
+_OVERHANG_TOLERANCE_PT = 0.5
+
+
+def _figure_renderer(fig):
+    """The renderer for *fig*, after a draw so every artist has a real extent."""
+    fig.canvas.draw()
+    return fig.canvas.get_renderer()
+
+
+def _fit_axes_title(ax, renderer) -> bool:
+    """Re-wrap *ax*'s title to the width the page leaves it; return whether it moved.
+
+    A title set with ``set_title`` is centred on the **axes**, not on the paper. An
+    axes inset from the left by its tick-label column therefore carries its title
+    off-centre, and a title only slightly wider than the axes runs past the right
+    edge of the page -- where ``bbox_inches="tight"`` picks it up and grows the
+    exported canvas to contain it. The width a title may occupy is thus twice its
+    distance to the *nearer* page edge, which is only knowable once the layout is
+    settled; hence this runs after it, and re-wraps rather than re-sizes.
+
+    Room for the lines the re-wrap adds is taken from the axes rather than from the
+    canvas, for the same reason: the canvas is the caller's choice from the size
+    vocabulary and must survive the fit.
+    """
+    text = ax.get_title()
+    if not text:
+        return False
+    fig = ax.figure
+    width_in, height_in = (float(v) for v in fig.get_size_inches())
+    position = ax.get_position()
+    centre = (position.x0 + position.x1) / 2.0
+    allowed_in = 2.0 * min(centre, 1.0 - centre) * width_in - 2.0 * CAPTION_MARGIN_IN
+    if allowed_in <= 0:
+        return False
+    fontsize = ax.title.get_fontsize()
+    weight = ax.title.get_fontweight()
+    wrapped = wrap_to_width(text, allowed_in, fontsize=fontsize, weight=weight)
+    if wrapped == text:
+        return False
+    added_lines = wrapped.count("\n") - text.count("\n")
+    ax.set_title(wrapped)
+    if added_lines > 0:
+        grown_in = added_lines * fontsize * LINE_SPACING / POINTS_PER_INCH
+        ax.set_position([
+            position.x0, position.y0, position.width,
+            max(position.height - grown_in / height_in, 0.0),
+        ])
+    return True
+
+
+def _anchor_legend_to_page(legend, renderer) -> bool:
+    """Move an over-wide legend to start at the page's left margin; report whether it moved.
+
+    A legend anchored in *axes* coordinates starts wherever the axes starts, which
+    is inset from the paper by the tick-label column -- so a legend narrower than
+    the page still runs off its right edge. Re-anchoring in figure coordinates
+    keeps the legend's own vertical place and its content untouched, and simply
+    stops it inheriting the inset. A legend genuinely wider than the page is left
+    alone and reported by the caller's measurement, because moving it would hide a
+    real problem rather than fix one.
+    """
+    figure = legend.figure
+    extent = legend.get_window_extent(renderer)
+    page = figure.bbox
+    if extent.x1 <= page.x1 + _OVERHANG_TOLERANCE_PT and extent.x0 >= page.x0:
+        return False
+    width_in, height_in = (float(v) for v in figure.get_size_inches())
+    if extent.width / figure.dpi > width_in - 2.0 * CAPTION_MARGIN_IN:
+        return False
+    legend.set_bbox_to_anchor(
+        (CAPTION_MARGIN_IN / width_in, extent.y1 / page.height),
+        transform=figure.transFigure,
+    )
+    return True
+
+
+def _fit_figure_text(text_artist, renderer) -> bool:
+    """Re-wrap a figure-level text that reaches past a page edge; report whether it moved.
+
+    A suptitle, a star key or a footnote is anchored in figure coordinates, so what it
+    may occupy follows from its anchor and its alignment: a centred string is bounded by
+    twice its distance to the nearer edge, a left-aligned one by the distance to the
+    right edge, and the mirror for a right-aligned one. Growing such a string downward
+    (or upward) cannot leave the page, so no room has to be taken from anywhere -- which
+    is why this one, unlike the axes title, needs no compensating move.
+    """
+    text = text_artist.get_text()
+    if not text:
+        return False
+    figure = text_artist.figure
+    extent = text_artist.get_window_extent(renderer)
+    page = figure.bbox
+    if extent.x0 >= page.x0 - _OVERHANG_TOLERANCE_PT and extent.x1 <= page.x1 + _OVERHANG_TOLERANCE_PT:
+        return False
+    width_in, _height_in = (float(v) for v in figure.get_size_inches())
+    x, _y = text_artist.get_position()
+    alignment = text_artist.get_horizontalalignment()
+    if alignment == "center":
+        allowed_in = 2.0 * min(x, 1.0 - x) * width_in - 2.0 * CAPTION_MARGIN_IN
+    elif alignment == "right":
+        allowed_in = x * width_in - CAPTION_MARGIN_IN
+    else:
+        allowed_in = (1.0 - x) * width_in - CAPTION_MARGIN_IN
+    if allowed_in <= 0:
+        return False
+    wrapped = wrap_to_width(
+        text, allowed_in,
+        fontsize=text_artist.get_fontsize(), weight=text_artist.get_fontweight(),
+    )
+    if wrapped == text:
+        return False
+    text_artist.set_text(wrapped)
+    return True
+
+
+def fit_to_page(fig) -> None:
+    """Pull a drawn figure's title and legends back inside the figure rectangle.
+
+    ``analysis/utils/figures.py`` writes each figure at its **tight** bounding box,
+    which grows past the figure rectangle for any artist drawn outside it and then
+    fails the printable-canvas budget. The two artists that routinely reach outside
+    are the ones matplotlib positions relative to the *axes* rather than to the
+    paper: an axes title (centred on an inset axes) and a legend anchored below it.
+    A figure-level text -- a suptitle, a key line -- can reach outside too, simply by
+    being longer than the paper. All three are fixed by measurement, never by shrinking
+    the figure: the canvas the caller chose from the size vocabulary is preserved
+    exactly.
+
+    Call it **last**, after every artist is drawn and after the layout pass (which
+    is :func:`~population_synthetic.analysis.utils.style.caption_block` where a
+    figure carries a caption). It is idempotent: a figure already inside the
+    rectangle is left untouched.
+
+    It deliberately does *not* rescue every possible overhang. An annotation or a
+    tick label that reaches outside is a per-figure layout decision the figure's own
+    author has to make, and silently reflowing it here would hide it.
+    """
+    from matplotlib.legend import Legend
+
+    renderer = _figure_renderer(fig)
+    moved = any([_fit_axes_title(ax, renderer) for ax in fig.axes])
+    moved = any([_fit_figure_text(text, renderer) for text in fig.texts]) or moved
+    legends = list(fig.findobj(Legend))
+    moved = any([_anchor_legend_to_page(legend, renderer) for legend in legends]) or moved
+    if moved:
+        # The re-wrap and the re-anchor both change what the renderer measured, so a
+        # second draw is what makes the new positions the ones the exporter sees.
+        fig.canvas.draw()

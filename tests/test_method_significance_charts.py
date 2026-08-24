@@ -30,7 +30,11 @@ from population_synthetic.analysis.method_significance.charts import (  # noqa: 
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from tests._performance_fixtures import make_combo  # noqa: E402
 
-MODELS = ["model_a", "model_b", "model_c", "model_d"]
+# Real axis ids throughout. The charts resolve every id they print through
+# ``analysis/utils/labels.py``, which raises on an id with no display string in config,
+# so a fixture built from invented ids would only ever exercise the raise. The values
+# below are the *shape* of a run, drawn from the real model and attribute axes.
+MODELS = ["claude_haiku", "claude_sonnet", "openrouter_kimi_k3", "ollama_qwen3_14b"]
 # The five v1 families, ordered by the config-derived accessor (the same order
 # every consumer resolves; asserted against the legacy sequence in test_axes.py).
 STRATEGIES = strategy_complexity_order([
@@ -40,8 +44,16 @@ STRATEGIES = strategy_complexity_order([
     "all_pick_dag",
     "all_pick",
 ])
-ATTRS = ["trend_attr", "null_attr"]
-CATEGORY_VALUES = {"trend_attr": ["a", "b", "c", "d"], "null_attr": ["p", "q", "r"]}
+#: One attribute carrying a monotone method trend and one carrying none, so the trend
+#: test has both a positive and a null case. Which canonical attribute plays which role
+#: is arbitrary -- only the numbers below decide it.
+TREND_ATTR = "education_level"
+NULL_ATTR = "housing_tenure"
+ATTRS = [TREND_ATTR, NULL_ATTR]
+CATEGORY_VALUES = {
+    TREND_ATTR: ["Primary", "Upper secondary", "Tertiary", "Unknown"],
+    NULL_ATTR: ["Owned", "Rented", "Other"],
+}
 _NULL_VALUES = [0.10, 0.20, 0.30, 0.40, 0.50]
 
 
@@ -55,8 +67,8 @@ def _grid():
                     strategy=strategy,
                     model=model,
                     tv_by_attr={
-                        "trend_attr": round(0.05 + 0.15 * (rank - 1) + 0.004 * m_idx, 4),
-                        "null_attr": _NULL_VALUES[(m_idx + (rank - 1)) % 5],
+                        TREND_ATTR: round(0.05 + 0.15 * (rank - 1) + 0.004 * m_idx, 4),
+                        NULL_ATTR: _NULL_VALUES[(m_idx + (rank - 1)) % 5],
                     },
                 )
             )

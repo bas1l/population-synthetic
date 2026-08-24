@@ -57,9 +57,9 @@ from population_synthetic.analysis.realism_ranking.loader import load_competitor
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
 from population_synthetic.analysis.utils.figures import save_figure  # noqa: E402
+from population_synthetic.analysis.utils.labels import method_letters  # noqa: E402
 from population_synthetic.analysis.utils.palette import HEATMAP_CMAP  # noqa: E402
 from population_synthetic.analysis.utils.registry import analysis_output_dir  # noqa: E402
-
 from tests.test_persona_realism_smoke import _stub_factory  # noqa: E402
 
 _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
@@ -179,18 +179,8 @@ def test_judge_emits_combination_directories_only(judged_base):
     assert all((country_root / name).is_dir() for name in entries)
 
 
-#: The figure(s) this module renders do not currently fit the printable canvas, so
-#: ``analysis/utils/figures.py`` rejects them on export (Phase 5 of the
-#: publication-figure plan added that check; Phase 6 owns the layout fixes).
-OVER_CAP_REASON = (
-    "Two of the ranking figures overflow the printable width: the impossibility "
-    "forest at 19.16 cm and the typicality heatmap at 23.24 cm, against the "
-    "19.05 cm cap, so analysis/utils/figures.py rejects them on export. Tracked "
-    "as a layout fix in Phase 6 of the publication-figure plan."
-)
 
 
-@pytest.mark.xfail(strict=True, reason=OVER_CAP_REASON)
 def test_ranking_produces_every_declared_output(judged_base, tmp_path):
     records, skipped = load_competitors(judged_base, axis_ids=_AXIS_IDS)
     assert skipped == []
@@ -368,7 +358,6 @@ def _run_ranking_script(base, *extra):
     return analysis_output_dir("realism_ranking", base) / _COUNTRY
 
 
-@pytest.mark.xfail(strict=True, reason=OVER_CAP_REASON)
 def test_the_driver_script_emits_the_pair_summaries_and_honours_no_charts(judged_base):
     """The three figures are wired to the CLI, and ``--no-charts`` really skips them."""
     out_dir = _run_ranking_script(judged_base, "--no-charts")
@@ -436,7 +425,6 @@ _TYPICALITY_CSVS = ("typicality_summary.csv", "typicality_histogram.csv")
 _TYPICALITY_FIGURES = ("typicality_heatmap", "typicality_by_method")
 
 
-@pytest.mark.xfail(strict=True, reason=OVER_CAP_REASON)
 def test_the_driver_script_emits_the_typicality_axis_byte_stably(judged_base):
     """Judge -> rank through the real CLI: both CSVs, both figures, twice to the same bytes.
 
@@ -504,7 +492,6 @@ def test_the_typicality_axis_degrades_without_the_real_competitor(judged_base):
     assert plot_typicality_by_method(_rank(synthetic)).axes[0].lines is not None
 
 
-@pytest.mark.xfail(strict=True, reason=OVER_CAP_REASON)
 def test_typicality_competitor_order_changes_no_emitted_byte(judged_base, tmp_path):
     """A-then-B or B-then-A: the same rows and the same rendered PNG bytes."""
     records, _ = load_competitors(judged_base, axis_ids=_AXIS_IDS)
@@ -523,11 +510,16 @@ def test_typicality_competitor_order_changes_no_emitted_byte(judged_base, tmp_pa
         assert first == second, name
 
     # The method axis is the complexity order of the ids present, taken from the grid
-    # verbatim rather than re-sorted at render time.
+    # verbatim rather than re-sorted at render time. The ticks carry the resolver's
+    # letters, so the expectation is stated through the resolver: asserting the raw ids
+    # would only be asserting that no display layer exists.
     methods = forward["typicality"]["grid"]["methods"]
     assert methods == strategy_complexity_order(methods)
+    letters = method_letters(methods)
     ax = plot_typicality_heatmap(forward).axes[0]
-    assert [label.get_text() for label in ax.get_xticklabels()] == methods
+    assert [label.get_text() for label in ax.get_xticklabels()] == [
+        letters[method] for method in methods
+    ]
 
 
 def test_a_single_slug_judged_alone_produces_its_complete_artifact_set(tmp_path):

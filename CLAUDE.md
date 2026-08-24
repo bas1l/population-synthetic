@@ -62,6 +62,7 @@ These are enforced guardrails, not suggestions. Full rationale in
 - **A discarded model is still a model** -- A model axis YAML retires itself from the sweep with a top-level `discarded: true`; **an absent key means active** (a documented default -- the 15 live model files carry no key, never `discarded: false`), and a non-boolean value raises. Like `version`, it is a selection-side concept only: nothing downstream reads it, and a discarded model stays runnable if checked. The GUI's Global tab derives its `Active`/`Discarded` chip row from it (opening on `Active`), just as it derives the strategy `v{n}` chips from `version` (opening on the highest discovered version) -- both defaults come from config, never a literal. Filtering is view-only and retaining (`visible = matches(chips) OR isChecked()`), so a default can never hide something a flow selects. See [Axis composition](docs/architecture/axis-composition.md).
 - **Strategy × country compatibility** -- A pair is valid iff the strategy's categories cover the country's required raw keys (mapping `_index.json` attributes **minus** `deprecated_attributes`, `age_group`→`age`). Sweden requires 14 keys **without** `birth_location`; Italy requires 14 **with** it, so **v2 is Sweden-only**. Enforced pre-generation by `scripts/generate/generate_identities_parallel.py::_assert_strategy_covers_country` on the axis-composition path (`--model-id`/`--strategy-id`/`--country-id`); `--manifest` and explicit `--config`/`--strategy` carry no country id and are unchecked.
 - **Generation is crash-safe and resumable** -- The process may die at any instruction (the GUI's Abort is `taskkill /F /T`), so every durable write is atomic (tmp + `fsync` + `os.replace`) and a persona checkpoints after **every** resolved category into `identity.partial.json`. Re-running the same command resumes: a *complete* persona (parses, flat, every category in this run's resolved order present and non-empty -- not merely "the file exists") is skipped, an unfinished one continues from its checkpoint, and a checkpoint written under a different strategy/schema/model/category-order fingerprint is discarded rather than spliced. **`--force` is the only thing that discards a checkpoint** -- a retry round deliberately keeps it. There is **no `--resume` flag and none may be added**: resuming is the default. `llm_interactions.jsonl` is truncated **iff** the checkpoint is discarded, which is what keeps `(persona_id, call_index)` unique without any downstream dedupe. No signal handler -- explicitly rejected, it cannot help against `taskkill /F` and would be a second, weaker recovery path. See [Aborted and resumed runs](docs/development/aborted-and-resumed-runs.md).
+- **Presentation computes nothing** -- The seven modules under `analysis/utils/` that every `charts.py` draws through (`palette`, `style`, `labels`, `figures`, `grids`, `grid_annotations`, `table_style`) form a **presentation boundary**: they receive finished numbers and draw them, computing no statistic, rate, threshold or ranking, and importing nothing from any analysis subpackage -- which is also the membership test for the layer. Each publication decision has exactly one home, so `src/` holds one `savefig` call site, one `imshow` call site, one backend selection and one `rcParams` block; the canvas and file-size budgets are enforced **on write** and a rejection leaves nothing partial on disk. Caveat text is read from the data block, never authored in a chart; an annotation policy declares the cell keys it reads and every record is validated against that declaration; and an id with no display label **raises** rather than printing itself -- so `openrouter_kimi_k3` can never reach a canvas. No artist is drawn with `alpha=` anywhere in the layer (`palette.opaque()` composites the colour instead): matplotlib's PostScript backend flattens transparency, so an EPS drawn with it diverges from its PNG and SVG siblings in the one file that leaves the repository. See [Figure conventions](docs/development/figure-conventions.md).
 - **Fail-fast** -- Raise loudly on unexpected or malformed input rather than silently defaulting.
 
 ## Architecture
@@ -168,7 +169,15 @@ and turns the round count into a per-persona **capacity** check — a persona ho
 fails the run rather than being ranked short — with a blank `--rounds` on a set differing on
 `n_rounds` alone doing the same at the shallowest cached depth, loudly; which of the three it was
 travels as `provenance.n_rounds_source` (`report` | `cap` | `auto`),
-and `utils/` cross-process shared infra), plus `gui/`, `clients/`, and a
+and `utils/` cross-process shared infra -- which also holds the **presentation layer**, the
+seven single-responsibility collaborators every `charts.py` draws through: `palette.py`
+(the one colour vocabulary, sequential ramp and categorical hues alike), `style.py` (the only
+module in `src/` naming a backend or touching `rcParams`: the house font, the named type scale,
+the stroke ladder and the `SINGLE`/`DOUBLE`/`FULL` canvas vocabulary), `labels.py` (config ids
+to display strings, raising on an unresolvable one), `figures.py` (the one `savefig`, emitting
+PNG + SVG + EPS and enforcing the print budgets on write), `grids.py` (the one heatmap draw
+loop, the sole `imshow`), `grid_annotations.py` (what a cell prints, and nothing else) and
+`table_style.py` (the manuscript grids' furniture)), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
 **Analysis registry (single source of truth for the analysis layer):**
@@ -210,6 +219,7 @@ that the task's outputs are already on disk — so it is confirmed by an unskipp
 | Axis composition (model × strategy × country) | [Axis composition](docs/architecture/axis-composition.md) |
 | `config/` inventory | [Configuration](docs/architecture/configuration.md) |
 | Command catalog | [Commands](docs/architecture/commands.md) |
+| Publication figure constraints + labelling conventions + the A–E method key | [Figure conventions](docs/development/figure-conventions.md) |
 | Wiki home / index | [Architecture home](docs/architecture/README.md) |
 
 ## Environment & Secrets
@@ -238,5 +248,6 @@ Design and audit notes worth consulting before non-trivial changes:
 | [SCB02 category-mapping rationale](docs/scb02_comparison_category_mapping_2026-05-11.md) | Category-mapping rationale. |
 | [ISTAT population data sources](docs/istat_population_data_sources.md) | Italy field-by-field API source matrix, protocol details, sampling chain, known limitations. |
 | [Code standards](docs/code-standards/README.md) · [Data-pipeline engineering](docs/data-pipeline-engineering/README.md) | Repository-agnostic engineering-standards wiki sets. |
+| [Figure conventions](docs/development/figure-conventions.md) | What every published figure must satisfy and where each constraint is enforced: the three output formats and the one writer, the print budgets, the no-transparency rule, the single sequential ramp, and the labelling conventions (no ids, no provider prefixes, methods as A–E with the key in the graphic). |
 | [Persona realism judge](docs/development/persona-realism-judge.md) | Operator guide for the two-task persona-realism pipeline: the per-combination judge, the `realism_ranking` aggregator, the two axes and their opposite directions, the reporting-only severity and typicality dimensions, and `--rewrite-artifacts` vs `--force`. |
 | [Development notes](docs/development/) | In-progress development notes, plans, and `decisions/` (ADRs). |

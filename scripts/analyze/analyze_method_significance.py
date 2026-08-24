@@ -34,9 +34,9 @@ Outputs, per country, under the analysis-stage method_significance folder:
                                             as blocks): per category + overall omnibus & pairwise p
     {country}_method_comparison.csv         one row per (category|overall, method-pair): omnibus
                                             stat/p/p_bh/W + pairwise p + significance stars
-    {country}_method_comparison.png/.svg    bars + model points + significance brackets/stars,
+    {country}_method_comparison.png/.svg/.eps    bars + model points + significance brackets/stars,
                                             one panel per category + overall (grid)
-    {country}_method_comparison_overall.png/.svg  the single Overall headline panel
+    {country}_method_comparison_overall.png/.svg/.eps  the single Overall headline panel
     {country}_slope_heatmap.png             attribute x model descriptive TV(method) slope
     {country}_cd_diagram.png                model critical-difference diagram (Nemenyi)
     {country}_factor_dominance.png          eta^2 variance shares (model/method/category)

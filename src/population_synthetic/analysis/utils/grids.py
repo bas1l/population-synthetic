@@ -31,6 +31,14 @@ over an unpainted one takes its colour from the colormap's own ``set_bad``. Neit
 literal, so a ramp change moves both, and this module needs no colour vocabulary of its
 own beyond the two contrast rules it borrows.
 
+**Cells are separated, not abutted.** ``imshow`` paints tiles edge to edge, and two
+touching tiles shift each other's apparent value -- simultaneous contrast, named as a
+defect of unseparated raster grids in Crameri, Shephard and Heron (2020) citing Wong
+(2011). Every interior boundary therefore carries a thin stroke in the page's own colour,
+so a cell is read against the ramp rather than against its neighbour. The perimeter is
+left to the caller, which in several of the eleven grids already draws a frame or a
+divider there.
+
 **What this module knows nothing about.** Which quantity is drawn, its units, its
 direction, whether more is better, what the rows and columns are called, which country or
 process produced them, and every caveat that travels with the figure -- all of which are
@@ -52,10 +60,15 @@ from typing import Any, Collection, Mapping, Sequence
 import numpy as np
 
 from population_synthetic.analysis.utils.grid_annotations import CellAnnotationPolicy
-from population_synthetic.analysis.utils.palette import text_color_for_rgb, text_color_on
-from population_synthetic.analysis.utils.style import ANNOTATION
+from population_synthetic.analysis.utils.palette import (
+    CELL_STROKE,
+    text_color_for_rgb,
+    text_color_on,
+)
+from population_synthetic.analysis.utils.style import ANNOTATION, GRID_LINEWIDTH
 
 __all__ = [
+    "CELL_STROKE_WIDTH",
     "CellRecordMismatch",
     "GridShapeMismatch",
     "TEXT_PATCH_PAD",
@@ -79,6 +92,17 @@ class CellRecordMismatch(ValueError):
 #: as needing one. Named once so the two grids that hatch a cell -- and any that later do
 #: -- open the same gap between the number and the marking that qualifies it.
 TEXT_PATCH_PAD = 1.4
+
+#: Width, in points, of the separator drawn along every interior cell boundary. Bound to
+#: the house style's lightest furniture weight rather than restated, so the stroke can
+#: never drift below the publisher's floor while the ladder above it moves.
+CELL_STROKE_WIDTH = GRID_LINEWIDTH
+
+#: How far above the image the separators sit. Just enough to clear the fill they divide,
+#: and far enough below the default patch and text z-orders that every marking a caller
+#: draws over a cell -- a hatch, a best-cell box, the annotation itself -- still lands on
+#: top of them.
+_CELL_STROKE_ZORDER_OFFSET = 0.01
 
 
 def _validate_shape(matrix: np.ndarray, cells: Sequence[Sequence[Any]]) -> tuple[int, int]:
@@ -127,6 +151,40 @@ def _validate_records(
                     "mislabel the number, and reading it leniently would paint a measured "
                     "cell as unmeasured without raising."
                 )
+
+
+def _draw_cell_strokes(ax, im, n_rows: int, n_cols: int) -> None:
+    """Separate abutting cells with a thin stroke along every interior boundary.
+
+    ``imshow`` draws none, so two neighbouring tiles meet edge to edge and each shifts the
+    other's apparent value -- simultaneous contrast, named as a defect of unseparated
+    raster grids in Crameri, Shephard and Heron (2020) citing Wong (2011). The stroke's
+    colour and width are both roles, not literals
+    (:data:`~population_synthetic.analysis.utils.palette.CELL_STROKE`,
+    :data:`CELL_STROKE_WIDTH`).
+
+    Interior boundaries only. The perimeter is the caller's: several grids in the layer
+    already draw a frame, a tier divider or a marginal column against it, and a second
+    outline underneath one of those would read as a doubled rule rather than as a gap.
+
+    The boundaries are read back from the image's own extent rather than assumed at the
+    half-integers, so the blocks that are rendered into a caller-supplied ``extent`` --
+    one call per tier -- get their separators in the right places too.
+    """
+    if n_rows < 2 and n_cols < 2:
+        return
+    left, right, bottom, top = im.get_extent()
+    zorder = im.get_zorder() + _CELL_STROKE_ZORDER_OFFSET
+    if n_cols > 1:
+        ax.vlines(
+            np.linspace(left, right, n_cols + 1)[1:-1], bottom, top,
+            colors=CELL_STROKE, linewidths=CELL_STROKE_WIDTH, zorder=zorder,
+        )
+    if n_rows > 1:
+        ax.hlines(
+            np.linspace(bottom, top, n_rows + 1)[1:-1], left, right,
+            colors=CELL_STROKE, linewidths=CELL_STROKE_WIDTH, zorder=zorder,
+        )
 
 
 def _missing_text_color(cmap) -> str:
@@ -198,7 +256,8 @@ def render_grid(
 
     Returns:
         The ``matplotlib.image.AxesImage``, for the caller's colourbar and for any
-        further colour it needs to derive from what was actually painted.
+        further colour it needs to derive from what was actually painted. Its interior
+        cell boundaries are already separated; the perimeter is the caller's.
 
     Raises:
         GridShapeMismatch: If *cells* does not describe the same grid as *matrix*.
@@ -220,6 +279,7 @@ def render_grid(
         extent=extent,
         interpolation=interpolation,
     )
+    _draw_cell_strokes(ax, im, n_rows, n_cols)
 
     bold = set(bold_cells or ())
     missing_color: str | None = None

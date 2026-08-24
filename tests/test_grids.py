@@ -37,11 +37,17 @@ from population_synthetic.analysis.utils.grid_annotations import (  # noqa: E402
     SignedValuePolicy,
 )
 from population_synthetic.analysis.utils.grids import (  # noqa: E402
+    CELL_STROKE_WIDTH,
     CellRecordMismatch,
     GridShapeMismatch,
     render_grid,
 )
-from population_synthetic.analysis.utils.palette import MISSING_COLOR, heatmap_cmap  # noqa: E402
+from population_synthetic.analysis.utils.palette import (  # noqa: E402
+    CELL_STROKE,
+    MISSING_COLOR,
+    heatmap_cmap,
+)
+from population_synthetic.analysis.utils.style import MIN_STROKE_PT  # noqa: E402
 
 _ALL_POLICIES = (
     RateWithCountsPolicy(),
@@ -268,6 +274,94 @@ def test_two_policies_differ_in_cell_text_and_in_nothing_else() -> None:
     plt.close(clean_fig)
 
 
+def _stroke_segments(ax) -> list:
+    """Every line segment the separators drew, in data coordinates."""
+    import matplotlib.colors as mcolors
+
+    stroke_rgba = mcolors.to_rgba(CELL_STROKE)
+    segments = []
+    for collection in ax.collections:
+        colors = collection.get_colors()
+        if len(colors) and tuple(colors[0]) == stroke_rgba:
+            segments.extend(collection.get_segments())
+    return segments
+
+
+def test_abutting_cells_are_separated_by_a_stroke_on_every_interior_boundary() -> None:
+    """Simultaneous contrast: touching tiles shift each other's apparent value.
+
+    The 2x3 fixture has two interior column boundaries and one interior row boundary,
+    and the separators are read back by their colour rather than by their index in
+    ``ax.collections``, so a caller adding furniture of its own does not move them.
+    """
+    import matplotlib.pyplot as plt
+
+    fig, ax, im = _draw(RateOnlyPolicy())
+    left, right, bottom, top = im.get_extent()
+
+    verticals = sorted(
+        seg[0][0] for seg in _stroke_segments(ax) if seg[0][0] == seg[1][0]
+    )
+    horizontals = sorted(
+        seg[0][1] for seg in _stroke_segments(ax) if seg[0][1] == seg[1][1]
+    )
+    # Interior only: two of the four column boundaries, one of the three row boundaries.
+    assert verticals == pytest.approx([left + 1.0, left + 2.0])
+    assert horizontals == pytest.approx([(bottom + top) / 2.0])
+    plt.close(fig)
+
+
+def test_the_grid_perimeter_is_left_to_the_caller() -> None:
+    """A second outline under a frame or a tier divider reads as a doubled rule."""
+    import matplotlib.pyplot as plt
+
+    fig, ax, im = _draw(RateOnlyPolicy())
+    left, right, bottom, top = im.get_extent()
+    verticals = {seg[0][0] for seg in _stroke_segments(ax) if seg[0][0] == seg[1][0]}
+    horizontals = {seg[0][1] for seg in _stroke_segments(ax) if seg[0][1] == seg[1][1]}
+
+    assert verticals.isdisjoint({left, right})
+    assert horizontals.isdisjoint({bottom, top})
+    plt.close(fig)
+
+
+def test_a_degenerate_grid_has_no_interior_boundary_to_separate() -> None:
+    """One cell, no neighbours: nothing to contrast against, so nothing is drawn."""
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(2.0, 2.0))
+    render_grid(
+        ax, np.array([[0.5]]), [[{"rate": 0.5}]],
+        policy=RateOnlyPolicy(),
+        cmap=heatmap_cmap(),
+        norm=mcolors.Normalize(vmin=0.0, vmax=1.0),
+    )
+    assert _stroke_segments(ax) == []
+    plt.close(fig)
+
+
+def test_the_cell_stroke_clears_the_publisher_floor() -> None:
+    assert CELL_STROKE_WIDTH > MIN_STROKE_PT
+
+
+def test_the_separators_sit_above_the_fill_and_below_the_annotations() -> None:
+    """A stroke over the fill it divides, under every marking a caller puts on a cell."""
+    import matplotlib.pyplot as plt
+
+    fig, ax, im = _draw(RateOnlyPolicy())
+    stroke_zorders = {
+        collection.get_zorder()
+        for collection in ax.collections
+        if _stroke_segments(ax) and collection.get_segments()
+    }
+    assert stroke_zorders
+    for zorder in stroke_zorders:
+        assert im.get_zorder() < zorder
+        assert all(zorder < text.get_zorder() for text in ax.texts)
+    plt.close(fig)
+
+
 def test_no_annotation_policy_draws_the_same_grid_with_no_text() -> None:
     import matplotlib.pyplot as plt
 
@@ -346,7 +440,6 @@ def test_the_two_f05_variants_are_the_same_figure_with_different_cell_text() -> 
         GRID_VARIANT_CLEAN,
         plot_mapped_validity_grid,
     )
-
     from tests.test_validation_attrition_charts import _COMPLEX, _SIMPLE, _document, _entry
 
     document = _document([

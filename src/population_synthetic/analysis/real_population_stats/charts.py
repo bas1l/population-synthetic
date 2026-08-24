@@ -16,7 +16,8 @@ from __future__ import annotations
 import math
 
 from population_synthetic.analysis.real_population_stats.stats import CategoryStat
-from population_synthetic.analysis.utils.palette import CATEGORICAL_SERIES
+from population_synthetic.analysis.utils.labels import attribute_label
+from population_synthetic.analysis.utils.palette import CATEGORICAL_SERIES, MUTED_GREY, SURFACE
 from population_synthetic.analysis.utils.style import (
     ANNOTATION,
     AXIS_TITLE,
@@ -27,29 +28,72 @@ from population_synthetic.analysis.utils.style import (
     grow_height,
     grow_width,
     house_style,
+    wrap_to_width,
 )
+from population_synthetic.analysis.utils.table_style import fit_to_page
 
 _BAR_COLOR = CATEGORICAL_SERIES[0]
 _REFERENCE_LINES = (25, 50, 75, 100)
 
 
-def _draw_bars(ax, rows: list[CategoryStat], attr: str, *, title: str | None = None) -> None:
-    """Render one attribute's bars onto an existing ``Axes`` (shared by both public functions)."""
+#: Cosine of the category labels' rotation. A label rotated by that angle reaches
+#: horizontally by its own length times this, which is what a width budget has to be
+#: stated against -- not against the length of the string.
+_LABEL_ROTATION_DEGREES = 30.0
+_LABEL_HORIZONTAL_REACH = math.cos(math.radians(_LABEL_ROTATION_DEGREES))
+
+#: How much of its own panel's width a rotated category label may reach into the margin
+#: beside it, in the tiled overview. Half: the labels hang to the LEFT of their ticks, so
+#: whatever the leftmost panel's labels claim comes out of the page margin, and the page
+#: has no more to give. The most generous value that keeps the panel inside the printable
+#: width -- measured, not guessed -- so labels wrap as little as they can.
+_LABEL_REACH_FRACTION = 0.5
+
+
+def _draw_bars(
+    ax,
+    rows: list[CategoryStat],
+    attr: str,
+    *,
+    title: str | None = None,
+    label_reach_in: float | None = None,
+) -> None:
+    """Render one attribute's bars onto an existing ``Axes`` (shared by both public functions).
+
+    *label_reach_in* bounds how far, in inches, a rotated category label may reach to the
+    left of its tick; labels longer than that are wrapped to fit. ``None`` leaves them
+    unwrapped, which is right for a single-attribute figure whose canvas grows with the
+    number of categories. A tiled panel cannot grow that way -- its panels divide a fixed
+    page -- so the leftmost panel's labels run off the paper unless they are bounded, and
+    ``tight_layout`` says so ("cannot make Axes width small enough") rather than fixing it.
+    """
     categories = [row.value for row in rows]
+    if label_reach_in is not None:
+        categories = [
+            wrap_to_width(
+                category, label_reach_in / _LABEL_HORIZONTAL_REACH, fontsize=TICK_LABEL,
+            )
+            for category in categories
+        ]
     percents = [row.percent for row in rows]
     x_pos = range(len(categories))
 
     for y in _REFERENCE_LINES:
-        ax.axhline(y, color="gray", linestyle="--", linewidth=0.6, alpha=0.6, zorder=0)
+        ax.axhline(y, color=MUTED_GREY, linestyle="--", linewidth=0.6, zorder=0)
 
-    bars = ax.bar(x_pos, percents, color=_BAR_COLOR, edgecolor="white", linewidth=0.4, zorder=2)
+    bars = ax.bar(x_pos, percents, color=_BAR_COLOR, edgecolor=SURFACE, linewidth=0.4, zorder=2)
     ax.bar_label(bars, fmt="%.1f%%", fontsize=ANNOTATION, padding=2)
 
     ax.set_xticks(list(x_pos))
-    ax.set_xticklabels(categories, rotation=30, ha="right", fontsize=TICK_LABEL)
+    ax.set_xticklabels(
+        categories, rotation=_LABEL_ROTATION_DEGREES, ha="right", fontsize=TICK_LABEL,
+    )
     ax.set_ylim(0, 100)
     ax.set_ylabel("Percent", fontsize=AXIS_TITLE)
-    ax.set_title(title or attr, fontsize=PANEL_TITLE, fontweight="bold")
+    # The panel heading is the attribute's display phrase, never its schema key: an
+    # explicit *title* from the caller still wins, because only the caller knows when a
+    # panel is showing something other than one plain attribute.
+    ax.set_title(title or attribute_label(attr), fontsize=PANEL_TITLE, fontweight="bold")
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
 
@@ -101,12 +145,17 @@ def plot_overview_panel(stats_by_attr: dict[str, list[CategoryStat]]):
     )
     axes_flat = axes.flatten().tolist() if n_rows * n_cols > 1 else [axes]
 
+    # One panel's share of the page is the budget its labels have to live inside.
+    label_reach_in = float(fig.get_size_inches()[0]) / n_cols * _LABEL_REACH_FRACTION
     for ax, attr in zip(axes_flat, attrs):
-        _draw_bars(ax, stats_by_attr[attr], attr)
+        _draw_bars(ax, stats_by_attr[attr], attr, label_reach_in=label_reach_in)
 
     for ax in axes_flat[n:]:
         ax.axis("off")
 
     fig.suptitle("Real Population -- Category Proportions Overview", fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
+    # The outermost panels' rotated category labels reach past the paper, and the tight
+    # bounding box the exporter writes at would grow the page to contain them.
+    fit_to_page(fig)
     return fig

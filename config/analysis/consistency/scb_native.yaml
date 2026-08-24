@@ -34,14 +34,21 @@
 # persona. The loader resolves this config by the real mapper's MAPPINGS_SUBDIR
 # ("scb_native"); this file is named accordingly (renamed from scb.yaml).
 
+# `label` is what a reader sees on a figure axis; `id` is what the CSV and the JSON are
+# keyed on. The two are kept apart deliberately: the id is a stable join key and may not
+# change, while the wording may. Sentence case, no underscores -- the loader raises on a
+# label carrying one, so a rule added by copying its id into the label fails loudly
+# rather than shipping a snake_case tick on a published figure.
 rules:
   - id: young_retiree
+    label: Young retiree
     description: Retired individuals should not be younger than 55.
     severity: hard
     when: { employment_status: Retired }
     require: { age: { min: 55 } }
 
   - id: minor_married
+    label: Married minor
     description: Married individuals should be adults.
     severity: hard
     when: { civil_status: Married }

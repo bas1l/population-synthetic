@@ -498,8 +498,8 @@ def write_combo_artifacts(
     ``<out_dir>/persona_XXXXX.jsonl`` telemetry logs (fail-fast if the judge model's
     pricing row is absent), and writes ``{combo}.csv``, ``{combo}.json``,
     ``{combo}_personas.csv``, ``{combo}_clashes.csv``,
-    ``{combo}_clash_explanations.csv``, ``typicality.png/.svg`` and
-    ``clash_taxonomy.png/.svg``. The idempotent skip keys on those specific output
+    ``{combo}_clash_explanations.csv``, ``typicality.png/.svg/.eps`` and
+    ``clash_taxonomy.png/.svg/.eps``. The idempotent skip keys on those specific output
     filenames, so the sibling ``persona_*.json/.jsonl`` files never confuse it.
 
     Nothing written here depends on any other combination: judging this slug on an

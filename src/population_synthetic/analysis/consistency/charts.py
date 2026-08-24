@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any
 
 from population_synthetic.analysis.utils.figures import save_figure
-from population_synthetic.analysis.utils.palette import CATEGORICAL_SERIES
+from population_synthetic.analysis.utils.labels import country_label, population_label
+from population_synthetic.analysis.utils.palette import CATEGORICAL_SERIES, GRID_RULE, SURFACE
 from population_synthetic.analysis.utils.style import (
     AXIS_TITLE,
     FIGURE_TITLE,
@@ -42,16 +43,24 @@ def plot_violation_rates(
     """Grouped bar chart of violation rate per rule, one bar group per population.
 
     *rows* is :func:`~population_synthetic.analysis.consistency.builder.build_summary_rows`'s
-    output (``population, rule_id, severity, violations, rate``). Rules keep their
-    first-seen order; populations are ordered alphabetically for a stable legend.
-    Rows with a non-finite rate (``NaN``, an empty population) are skipped. Returns
-    ``None`` -- writing nothing -- when no row has a plottable rate.
+    output (``population, rule_id, rule_label, severity, violations, rate``). Rules keep
+    their first-seen order; populations are ordered alphabetically by *id*, so the legend
+    is stable under a relabelling. Rows with a non-finite rate (``NaN``, an empty
+    population) are skipped. Returns ``None`` -- writing nothing -- when no row has a
+    plottable rate.
+
+    Nothing an id names is printed. A rule ticks as the ``rule_label`` its config
+    declares, which travels on the row; a population legends as its axis config's
+    display name, resolved here because a *population* id is axis config rather than
+    this process's own. Both raise on a miss rather than printing the id.
     """
     rule_order: list[str] = []
     for row in rows:
         if row["rule_id"] not in rule_order:
             rule_order.append(row["rule_id"])
+    rule_ticks = {row["rule_id"]: row["rule_label"] for row in rows}
     populations = sorted({row["population"] for row in rows})
+    legend_labels = {population: population_label(population) for population in populations}
 
     rate_by = {(row["population"], row["rule_id"]): row["rate"] for row in rows}
     plottable = any(
@@ -83,20 +92,22 @@ def plot_violation_rates(
         heights = [h if h == h else 0.0 for h in heights]  # NaN -> 0.0 for a drawable bar
         offset = (i - (n_pop - 1) / 2) * width
         ax.bar(
-            x + offset, heights, width, label=population,
-            color=CATEGORICAL_SERIES[i % len(CATEGORICAL_SERIES)], edgecolor="white", linewidth=0.6,
+            x + offset, heights, width, label=legend_labels[population],
+            color=CATEGORICAL_SERIES[i % len(CATEGORICAL_SERIES)], edgecolor=SURFACE, linewidth=0.6,
         )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(rule_order, rotation=20, ha="right", fontsize=TICK_LABEL)
-    ax.set_ylabel("violation rate", fontsize=AXIS_TITLE)
+    ax.set_xticklabels(
+        [rule_ticks[rule] for rule in rule_order], rotation=20, ha="right", fontsize=TICK_LABEL
+    )
+    ax.set_ylabel("Violation rate", fontsize=AXIS_TITLE)
     ax.set_ylim(bottom=0.0)
-    ax.grid(True, axis="y", linestyle=":", alpha=0.4)
-    ax.legend(title="population", fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE)
+    ax.grid(True, axis="y", linestyle=":", color=GRID_RULE)
+    ax.legend(title="Population", fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE)
 
-    title = "consistency-rule violation rates"
+    title = "Consistency-rule violation rates"
     if country:
-        title = f"{country}: {title}"
+        title = f"{country_label(country)}: {title}"
     ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
     return save_figure(fig, out_path)

@@ -50,6 +50,12 @@ import numpy as np
 from population_synthetic.analysis.utils.figures import save_figure
 from population_synthetic.analysis.utils.grid_annotations import RateOnlyPolicy
 from population_synthetic.analysis.utils.grids import render_grid
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    country_label,
+    model_labels,
+    strategy_label,
+)
 from population_synthetic.analysis.utils.palette import (
     HOST_COLORS,
     MISSING_COLOR,
@@ -73,6 +79,7 @@ from population_synthetic.analysis.utils.table_style import (
     add_percentage_colorbar,
     best_cells_per_column,
     categories_on_top,
+    fit_to_page,
     inferno_cmap,
     vertical_divider,
 )
@@ -105,7 +112,7 @@ def _render_table(ax, values: np.ndarray, cmap, norm, best_cells: set[tuple[int,
     im = render_grid(
         ax, values, cells,
         policy=_CELL_POLICY, cmap=cmap, norm=norm, aspect="auto",
-        fontsize=ANNOT_FONTSIZE, bold_cells=best_cells,
+        fontsize=ANNOT_FONTSIZE, bold_cells=best_cells, interpolation="none",
     )
     for i, j in best_cells:
         ax.add_patch(
@@ -268,9 +275,10 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
     )
     im = _render_table(ax, values, cmap, norm, best_cells_per_column(values))
 
-    categories_on_top(ax, attributes + ["overall"])
+    categories_on_top(ax, [attribute_label(a) for a in attributes] + ["Overall"])
+    display_models = model_labels(row_models)
     ax.set_yticks(range(len(row_models)))
-    ax.set_yticklabels(row_models, fontsize=TICK_LABEL)
+    ax.set_yticklabels([display_models[m] for m in row_models], fontsize=TICK_LABEL)
     # Provenance side-marker: colour each model's row label by hosting class
     # (models absent from the map take the presentation default).
     for label, model in zip(ax.get_yticklabels(), row_models):
@@ -293,10 +301,14 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
 
     country = result["metadata"]["country"]
     ax.set_title(
-        f"{country}: model fidelity by axis at strategy '{best_strategy}' (TV-similarity %)",
+        f"{country_label(country)}: model fidelity by axis at method "
+        f"{strategy_label(best_strategy)} (TV-similarity %)",
         fontsize=FIGURE_TITLE, fontweight="bold", pad=28,
     )
     fig.tight_layout()
+    # The title is centred on an axes inset by the model-label column, so it overhangs
+    # the page before it overhangs the axes.
+    fit_to_page(fig)
     return save_figure(fig, Path(out_path))
 
 
@@ -334,19 +346,25 @@ def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> 
     )
     im = _render_table(ax, values, cmap, norm, best_cells_per_column(values))
 
-    categories_on_top(ax, attributes + ["overall"])
+    categories_on_top(ax, [attribute_label(a) for a in attributes] + ["Overall"])
+    # Rows are the methods themselves, one per row with room for a phrase, so they are
+    # spelled out rather than lettered: there is no second axis to keep short here and
+    # no key block for a letter to be read against.
     ax.set_yticks(range(len(ordered)))
-    ax.set_yticklabels(ordered, fontsize=TICK_LABEL)
+    ax.set_yticklabels([strategy_label(s) for s in ordered], fontsize=TICK_LABEL)
     vertical_divider(ax, len(attributes))
 
     add_percentage_colorbar(fig, im, ax, "TV-similarity (%, mean over models)")
 
     country = result["metadata"]["country"]
     ax.set_title(
-        f"{country}: methods (strategy) fidelity by axis (TV-similarity %)",
+        f"{country_label(country)}: method fidelity by axis (TV-similarity %)",
         fontsize=FIGURE_TITLE, fontweight="bold", pad=28,
     )
     fig.tight_layout()
+    # The title is centred on an axes inset by the model-label column, so it overhangs
+    # the page before it overhangs the axes.
+    fit_to_page(fig)
     return save_figure(fig, Path(out_path))
 
 
@@ -451,7 +469,9 @@ def write_model_fidelity_latex(result: dict[str, Any], out_path: str | Path) -> 
 
     caption = (
         f"{country}: model fidelity by axis at strategy '{best_strategy}' (TV-similarity, %). "
-        "Best per column in bold; Host = hosted (API) / local (Ollama)."
+        # Bound to the shared legend text rather than restated, so the LaTeX caption and
+        # the figure legend can never disagree about what a hosting class is called.
+        f"Best per column in bold; Host = {HOST_LABELS['hosted']} / {HOST_LABELS['local']}."
     )
     return _write_latex_table(Path(out_path), caption, ["Model", "Host"], attributes, body_rows)
 

@@ -19,7 +19,10 @@ printable canvas.
 never sees a number that will be plotted, never authors a string that will be
 printed, and names no hue -- colour is :mod:`population_synthetic.analysis.utils.palette`
 and nothing here may restate any part of it. A helper here takes a count or a pair
-of lengths and returns lengths; it takes no arrays, no records and no captions.
+of lengths and returns lengths; it takes no arrays and no records. The two that do
+receive a string -- :func:`wrap_to_width` and :func:`caption_block` -- measure and
+place it and nothing else: neither reads it, branches on it, or could tell a caption
+from a legend entry.
 
 **Global state is confined here.** ``rcParams`` is process-wide, so mutating it from
 a chart module would make one figure's appearance depend on which figure was drawn
@@ -210,6 +213,12 @@ GRID_LINEWIDTH = 0.5
 #: in centimetres. The conversion lives here once so no call site restates 2.54.
 CM_PER_INCH = 2.54
 
+#: The typographic unit. Font sizes, stroke widths and PostScript bounding boxes are all
+#: stated in points while the canvas is stated in inches, so this module -- which owns
+#: both vocabularies -- owns the conversion between them, and :mod:`figures` imports it
+#: rather than keeping a second copy.
+POINTS_PER_INCH = 72.0
+
 
 def cm_to_inches(centimetres: float) -> float:
     """Convert a length in centimetres to matplotlib's inches.
@@ -358,6 +367,197 @@ def grow_height(
 
 
 # ------------------------------------------------------------------
+# Fitting text to the canvas
+# ------------------------------------------------------------------
+
+#: Narrowest wrap this module will consider, in characters. Below it a caption is a
+#: column of single words, which is not a legible fallback but a different defect.
+_MIN_WRAP_CHARS = 12
+
+
+def text_width_inches(text: str, *, fontsize: float, weight: str | None = None) -> float:
+    """Width, in inches, of *text* set on one line in the house font at *fontsize*.
+
+    Measured from the font's own glyph advances rather than estimated from a
+    characters-per-inch rule of thumb, because the rule of thumb is what put every
+    caption in this layer over the printable width: a wrap chosen as "150 characters"
+    is 21 cm of Arial at 8 pt, against a 19.05 cm page.
+
+    Renderer-free by construction -- it reads the metrics out of the font file through
+    ``TextToPath``, so it needs no figure, no canvas and no draw, and a caller can size
+    a string *before* the figure it will sit on exists. Newlines are not handled: pass
+    one line.
+
+    Raises:
+        ValueError: If *text* contains a newline, which would silently measure the whole
+            string as one run and return a width no line actually has.
+    """
+    if "\n" in text:
+        raise ValueError(
+            "text_width_inches measures one line; got a string containing a newline. "
+            "Split it, or use wrap_to_width, which does."
+        )
+    from matplotlib.font_manager import FontProperties
+    from matplotlib.textpath import TextToPath
+
+    prop = FontProperties(family=house_font(), size=fontsize)
+    if weight is not None:
+        prop.set_weight(weight)
+    width_points, _height, _descent = TextToPath().get_text_width_height_descent(
+        text, prop, ismath=False
+    )
+    return width_points / POINTS_PER_INCH
+
+
+def wrap_to_width(
+    text: str, width_inches: float, *, fontsize: float, weight: str | None = None
+) -> str:
+    """Wrap *text* so that no line is wider than *width_inches* at *fontsize*.
+
+    The replacement for the character-count wraps the chart modules used to carry
+    (``_CAPTION_WRAP = 150``). A character count is a guess about a font: the same 150
+    characters are 21 cm of Arial at 8 pt and 14 cm at 5.5 pt, so a wrap tuned by eye on
+    one figure silently overflows the page on the next. This takes the constraint that
+    actually exists -- the printable width -- and finds the widest wrap that satisfies it.
+
+    The search is over ``textwrap.fill``'s character width, because that is the knob
+    ``textwrap`` offers; every candidate is then *measured*, so the result is a fact
+    about the font and not about the search. The widest fitting candidate wins, so the
+    caption fills the line it is given rather than being conservatively narrow.
+
+    A word longer than *width_inches* cannot be wrapped and would overflow on its own.
+    Rather than let it silently bust the page budget, long words are broken -- a broken
+    word is visible to a reader and a page over the cap is not. The search bottoms out at
+    :data:`_MIN_WRAP_CHARS`, so a target narrower than that many characters of the given
+    size returns the narrowest wrap rather than a column of single letters.
+
+    Args:
+        text: The string to wrap. Existing newlines are honoured as hard breaks and each
+            resulting paragraph is wrapped independently.
+        width_inches: The width to fit inside.
+        fontsize: The size the text will be set at, from the house scale.
+        weight: The weight it will be set at, if not the default.
+
+    Returns:
+        The wrapped string, ready to pass to ``ax.text`` / ``fig.text``.
+
+    Raises:
+        ValueError: If *width_inches* is not positive -- a caller bug that would
+            otherwise loop or return the text unwrapped.
+    """
+    import textwrap
+
+    if not width_inches > 0:
+        raise ValueError(f"width_inches must be positive, got {width_inches!r} in")
+
+    def fits(candidate: str) -> bool:
+        return all(
+            text_width_inches(line, fontsize=fontsize, weight=weight) <= width_inches
+            for line in candidate.splitlines() or [""]
+        )
+
+    wrapped_paragraphs: list[str] = []
+    for paragraph in text.split("\n"):
+        if not paragraph.strip():
+            wrapped_paragraphs.append(paragraph)
+            continue
+        if fits(paragraph):
+            wrapped_paragraphs.append(paragraph)
+            continue
+        low, high = _MIN_WRAP_CHARS, max(len(paragraph), _MIN_WRAP_CHARS)
+        best = textwrap.fill(paragraph, low, break_long_words=True)
+        while low <= high:
+            middle = (low + high) // 2
+            candidate = textwrap.fill(paragraph, middle, break_long_words=True)
+            if fits(candidate):
+                best = candidate
+                low = middle + 1
+            else:
+                high = middle - 1
+        wrapped_paragraphs.append(best)
+    return "\n".join(wrapped_paragraphs)
+
+
+#: Margin, in inches, between a caption block and the two page edges it sits against.
+#: One line of the floor size, so the gap scales with the type rather than being a
+#: number chosen against one figure's proportions.
+CAPTION_MARGIN_IN = FONT_FLOOR_PT / POINTS_PER_INCH
+
+#: matplotlib's default ``linespacing``. Named because the caption block has to reserve
+#: room for text it has not drawn yet, and the reservation must agree with what the draw
+#: will actually occupy.
+LINE_SPACING = 1.2
+
+#: The most of the canvas a caption block may claim. Beyond this the figure has become a
+#: paragraph with a picture on top, which is an authoring problem rather than a layout
+#: one -- so it raises here, where it is deterministic and shows up on the first render,
+#: instead of quietly squeezing the data into the remaining strip.
+MAX_CAPTION_FRACTION = 0.45
+
+
+class CaptionDoesNotFit(ValueError):
+    """A caption block would claim more of the canvas than :data:`MAX_CAPTION_FRACTION`."""
+
+
+def caption_block(fig, text: str, *, fontsize: float = ANNOTATION, color=None):
+    """Draw *text* across the foot of *fig* and reserve the room it needs.
+
+    The replacement for the idiom every chart module used to carry -- a
+    ``textwrap.fill(text, 150)`` set with ``ax.text(0.0, -0.15, ..., clip_on=False)``.
+    That idiom overflowed the page twice over. It wrapped to a **character count**, which
+    is a guess about a font rather than a fact about the page; and it anchored at the
+    *axes*' left edge, which is inset from the paper by however wide the tick-label column
+    happens to be, so even a correctly-sized caption ran off the right. Because the text
+    was unclipped and outside the figure rectangle, ``bbox_inches="tight"`` then grew the
+    written canvas to contain it -- silently, past the printable width, at export time.
+
+    This draws in **figure** coordinates, wrapped to the width the paper actually has, and
+    reserves the vertical room by shrinking the axes rather than by growing the canvas.
+    The figure keeps the size the caller chose from the vocabulary above.
+
+    Call it **after** the drawing is done and **instead of** ``fig.tight_layout()``: it
+    performs that call itself, with the caption's own strip held back.
+
+    Args:
+        fig: The figure. Its size is treated as fixed -- nothing here resizes it.
+        text: The already-composed caption. Newlines are honoured as hard breaks. This
+            module neither authors nor inspects it.
+        fontsize: The size to set it at, from the house scale.
+        color: The colour to set it in, or ``None`` for the ambient text colour. Passed
+            through; this module names no colour of its own.
+
+    Returns:
+        The ``matplotlib.text.Text`` that was drawn, for a caller that needs to measure
+        or adjust it.
+
+    Raises:
+        CaptionDoesNotFit: If the wrapped block would claim more than
+            :data:`MAX_CAPTION_FRACTION` of the canvas height.
+    """
+    width_in, height_in = (float(v) for v in fig.get_size_inches())
+    available = width_in - 2 * CAPTION_MARGIN_IN
+    wrapped = wrap_to_width(text, available, fontsize=fontsize)
+    n_lines = wrapped.count("\n") + 1
+    block_in = n_lines * fontsize * LINE_SPACING / POINTS_PER_INCH
+    reserved_in = block_in + 2 * CAPTION_MARGIN_IN
+    if reserved_in > MAX_CAPTION_FRACTION * height_in:
+        raise CaptionDoesNotFit(
+            f"the caption wraps to {n_lines} line(s), needing {reserved_in:.2f} in of a "
+            f"{height_in:.2f} in canvas -- more than the {MAX_CAPTION_FRACTION:.0%} this "
+            "layer allows a caption to claim. Shorten it, or move the detail into the "
+            "figure legend of the document that publishes it."
+        )
+    fig.tight_layout(rect=(0.0, reserved_in / height_in, 1.0, 1.0))
+    return fig.text(
+        CAPTION_MARGIN_IN / width_in,
+        CAPTION_MARGIN_IN / height_in,
+        wrapped,
+        ha="left", va="bottom", fontsize=fontsize, color=color,
+        linespacing=LINE_SPACING,
+    )
+
+
+# ------------------------------------------------------------------
 # The rcParams block
 # ------------------------------------------------------------------
 
@@ -417,6 +617,11 @@ def house_rc_params() -> dict[str, Any]:
         # -- output form -------------------------------------------------
         # 8-bit RGB, not RGBA: see the docstring.
         "savefig.transparent": False,
+        # matplotlib's own default is 0.8, so *every* legend in the layer was drawn
+        # translucent without a single call site asking for it -- and the PostScript
+        # backend flattens it, which is exactly the PNG/SVG-versus-EPS divergence the
+        # no-transparency rule exists to remove. Opaque, here, once.
+        "legend.framealpha": 1.0,
         # Type 42 (TrueType) rather than Type 3, so the chosen family is *embedded*
         # in vector output instead of being requested from the reader's machine.
         "pdf.fonttype": 42,

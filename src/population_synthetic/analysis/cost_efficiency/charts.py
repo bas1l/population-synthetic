@@ -43,10 +43,15 @@ creation timestamp, so no SVG in this repository is byte-stable.
 
 from __future__ import annotations
 
-import textwrap
 from typing import Any, Mapping, Sequence
 
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
+from population_synthetic.analysis.utils.labels import (
+    country_label,
+    method_key_lines,
+    method_letters,
+    model_label,
+)
 from population_synthetic.analysis.utils.palette import (
     ANNOTATION_GREY,
     BAND_EDGE,
@@ -57,20 +62,26 @@ from population_synthetic.analysis.utils.palette import (
     HOST_COLORS,
     ORDERED_QUALITATIVE_SERIES,
     SURFACE,
+    opaque,
 )
 from population_synthetic.analysis.utils.style import (
     ANNOTATION,
     AXIS_TITLE,
+    CAPTION_MARGIN_IN,
     FIGURE_TITLE,
     FULL,
     LEGEND_LABEL,
     LEGEND_TITLE,
+    LINE_SPACING,
     MAX_HEIGHT,
+    POINTS_PER_INCH,
     house_style,
+    wrap_to_width,
 )
 from population_synthetic.analysis.utils.table_style import (
     HOST_DEFAULT_CLASS,
     HOST_LABELS,
+    fit_to_page,
 )
 
 __all__ = [
@@ -113,12 +124,19 @@ _BAND_EDGE = BAND_EDGE
 #: itself the finding, and the caption says so.
 _FALLBACK_LINTHRESH = 1e-4
 
-_CAPTION_WRAP = 168
+#: Gap, in inches, between the legend strip and the caption block beneath it. One
+#: annotation line, so the two blocks read as separate without a rule between them.
+_LEGEND_GAP_IN = ANNOTATION * LINE_SPACING / POINTS_PER_INCH
 
-#: Left edge, in figure coordinates, of the gutter reserved for the two legends. The
-#: axes stop just short of it (see the ``subplots_adjust`` call), so the legends never
-#: overlap a point and never overhang the canvas.
-_GUTTER_LEFT = 0.755
+#: Columns of the method legend in the strip under the axes. Three, so the five-family
+#: key is two rows deep whatever the run's method set, and the hosting legend still has
+#: the right-hand half of the strip to itself.
+_LEGEND_COLUMNS = 3
+
+#: Right edge of the axes in figure coordinates. Not 1.0: the rightmost x tick label is
+#: centred on the axes' right edge, so an axes flush to the paper puts half a label past
+#: it -- which the save-time tight bounding box picks up as an overhang.
+_AXES_RIGHT = 0.97
 
 
 def _combinations(document: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -155,12 +173,17 @@ def _rented_equivalent_note(entries: Sequence[Mapping[str, Any]]) -> list[str] |
     already columns on the row (the pricing flags); this lifts them onto the
     figure, because the figure travels without the table.
     """
-    flagged = sorted({
+    # Named as a reader sees them, not as the pricing config keys them. The flag is
+    # per model *id*, so the id is what the row carries and what this must resolve --
+    # a caption listing `ollama_gemma4_e4b` prints a config key on a published figure,
+    # and does it in the one sentence that is a caveat about that very model.
+    flagged_ids = {
         str(entry["model"])
         for entry in entries
         for flag in (entry["cost"].get("pricing_flags") or ())
         if str(flag).startswith("rented-equivalent")
-    })
+    }
+    flagged = sorted(model_label(model_id) for model_id in flagged_ids)
     if not flagged:
         return None
     return [
@@ -216,7 +239,9 @@ def _caption(
             "the JSON report."
         )
     lines.append(document["non_composite_reason"])
-    return "\n".join(textwrap.fill(line, _CAPTION_WRAP) for line in lines)
+    # Returned unwrapped, with the sentence breaks the author intended. The figure
+    # wraps it to the canvas it actually has -- a character count cannot know that.
+    return "\n".join(lines)
 
 
 @house_style
@@ -246,6 +271,10 @@ def plot_cost_vs_accuracy(
     entries = _combinations(document)
     methods = _method_order(entries)
     color_for = {m: METHOD_COLORS[i % len(METHOD_COLORS)] for i, m in enumerate(methods)}
+    # Each legend entry carries its own key line -- "A -- All Pick" -- so the letters this
+    # figure would otherwise need a separate key block for are explained where they are
+    # read. Both resolvers return complexity order, which is what aligns the zip.
+    method_key = dict(zip(method_letters(methods), method_key_lines(methods)))
 
     drawn: list[tuple[float, float, str, str, str]] = []  # x, y, model, strategy, host
     no_cost: list[str] = []
@@ -293,10 +322,6 @@ def plot_cost_vs_accuracy(
         return linthresh * _BAND_SPREAD * (2.0 * fraction - 1.0)
 
     fig, ax = plt.subplots(figsize=(FULL, MAX_HEIGHT))
-    # Space reserved for the two out-of-axes legends. Reserved rather than left to the
-    # save-time tight bounding box, which crops an axes-anchored legend that overhangs
-    # the figure edge.
-    fig.subplots_adjust(right=_GUTTER_LEFT - 0.015)
 
     n_unmetered = sum(1 for entry in entries if entry["cost"]["unmetered"])
     # The unmetered band, drawn first so every marker sits above it. It spans the symlog
@@ -322,14 +347,13 @@ def plot_cost_vs_accuracy(
             draw_x, y,
             s=78,
             marker=HOST_MARKERS.get(host, HOST_MARKERS[HOST_DEFAULT_CLASS]),
-            facecolor=color_for[strategy],
-            edgecolor="white",
+            facecolor=opaque(color_for[strategy], 0.92),
+            edgecolor=SURFACE,
             linewidth=0.7,
-            alpha=0.92,
             zorder=3,
         )
         ax.annotate(
-            model,
+            model_label(model),
             xy=(draw_x, y),
             xytext=(5, 4 if label_side[(model, strategy)] > 0 else -10),
             textcoords="offset points",
@@ -374,7 +398,7 @@ def plot_cost_vs_accuracy(
         ax.set_xlabel("Cost per 100 usable personas (USD, log scale)", fontsize=AXIS_TITLE)
     ax.set_ylabel("Fidelity -- overall TV-similarity (higher is better)", fontsize=AXIS_TITLE)
     ax.set_title(
-        f"Fidelity against generation cost -- {document['country']} "
+        f"Fidelity against generation cost -- {country_label(document['country'])} "
         f"({document['n_combinations']} combinations)",
         fontsize=FIGURE_TITLE, fontweight="bold", pad=14,
     )
@@ -396,7 +420,7 @@ def plot_cost_vs_accuracy(
 
     method_handles = [
         Line2D([], [], linestyle="none", marker="o", markersize=7,
-               markerfacecolor=color_for[m], markeredgecolor="white", label=m)
+               markerfacecolor=color_for[m], markeredgecolor=SURFACE, label=method_key[m])
         for m in methods
     ]
     host_classes = [h for h in HOST_MARKERS if any(d[4] == h for d in drawn)]
@@ -406,30 +430,47 @@ def plot_cost_vs_accuracy(
                label=HOST_LABELS[h])
         for h in host_classes
     ]
-    # Both legends sit OUTSIDE the axes, in the gutter reserved above: the point cloud's
-    # shape is data-dependent, so any in-axes placement is a bet that this run's empty
-    # corner stays empty. Placed in FIGURE coordinates rather than anchored past the axes
-    # edge, so they are inside the canvas and the save-time tight bounding box cannot
-    # crop a long strategy id off the right-hand side.
+    # Both legends sit OUTSIDE the axes: the point cloud's shape is data-dependent, so
+    # any in-axes placement is a bet that this run's empty corner stays empty. They sit
+    # in a strip UNDER the axes rather than in a right-hand gutter, because the widest
+    # method key line is wider than any gutter narrow enough to leave the scatter room --
+    # a gutter that fits it either truncates the key or runs the legend off the page,
+    # which the save-time canvas budget then rejects. Under the axes both legends have
+    # the whole page width, and the scatter gets it back too.
+    figure_width, figure_height = (float(v) for v in fig.get_size_inches())
+    caption = wrap_to_width(
+        _caption(document, n_drawn=len(drawn), n_no_cost=len(no_cost),
+                 n_unmetered=n_unmetered),
+        figure_width - 2 * CAPTION_MARGIN_IN, fontsize=ANNOTATION,
+    )
+    caption_in = (caption.count(chr(10)) + 1) * ANNOTATION * LINE_SPACING / POINTS_PER_INCH
+    legend_in = (max(len(method_handles), 1) / _LEGEND_COLUMNS + 1) * (
+        LEGEND_LABEL * LINE_SPACING / POINTS_PER_INCH
+    )
+    strip_in = CAPTION_MARGIN_IN + caption_in + _LEGEND_GAP_IN + legend_in
+    fig.subplots_adjust(bottom=strip_in / figure_height, right=_AXES_RIGHT)
+
+    legend_y = (CAPTION_MARGIN_IN + caption_in + _LEGEND_GAP_IN + legend_in) / figure_height
     fig.legend(
         handles=method_handles, title="method (simplest first)",
-        loc="upper left", bbox_to_anchor=(_GUTTER_LEFT, 0.95),
-        bbox_transform=fig.transFigure,
-        fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE, framealpha=1.0, borderaxespad=0.0,
+        loc="upper left", bbox_to_anchor=(CAPTION_MARGIN_IN / figure_width, legend_y),
+        bbox_transform=fig.transFigure, ncol=_LEGEND_COLUMNS,
+        fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE, borderaxespad=0.0,
     )
     fig.legend(
         handles=host_handles, title="hosting",
-        loc="upper left", bbox_to_anchor=(_GUTTER_LEFT, 0.72),
+        loc="upper right",
+        bbox_to_anchor=(1.0 - CAPTION_MARGIN_IN / figure_width, legend_y),
         bbox_transform=fig.transFigure,
-        fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE, framealpha=1.0, borderaxespad=0.0,
+        fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE, borderaxespad=0.0,
     )
 
     fig.text(
-        0.01, -0.02,
-        _caption(document, n_drawn=len(drawn), n_no_cost=len(no_cost),
-                 n_unmetered=n_unmetered),
-        ha="left", va="top", fontsize=ANNOTATION, color=CAPTION_GREY,
+        CAPTION_MARGIN_IN / figure_width, CAPTION_MARGIN_IN / figure_height, caption,
+        ha="left", va="bottom", fontsize=ANNOTATION, color=CAPTION_GREY,
+        linespacing=LINE_SPACING,
     )
-    # No tight_layout: both legends are anchored outside the axes, and the driver saves
-    # with bbox_inches="tight", which already expands the canvas around them.
+    # No tight_layout: the strip above is reserved explicitly, and tight_layout would
+    # recompute the subplot box and take it back.
+    fit_to_page(fig)
     return fig

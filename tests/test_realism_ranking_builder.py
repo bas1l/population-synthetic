@@ -38,6 +38,10 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
 )
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord  # noqa: E402
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
+from population_synthetic.analysis.utils.labels import (  # noqa: E402
+    country_label,
+    method_letters,
+)
 from population_synthetic.analysis.utils.palette import HEATMAP_CMAP  # noqa: E402
 from population_synthetic.analysis.utils.realism_clash_csv import RealismClashRow  # noqa: E402
 from population_synthetic.analysis.utils.realism_csv import (  # noqa: E402
@@ -1689,7 +1693,10 @@ def test_typicality_heatmap_method_axis_is_the_complexity_order():
     assert methods == strategy_complexity_order(methods) != sorted(methods)
 
     ax = plot_typicality_heatmap(ranking).axes[0]
-    assert [label.get_text() for label in ax.get_xticklabels()] == methods
+    # The ticks are the method letters, so the order assertion runs on the letters the
+    # complexity order maps to -- which also pins that no config id reaches the axis.
+    letters = method_letters(methods)
+    assert [label.get_text() for label in ax.get_xticklabels()] == [letters[m] for m in methods]
 
 
 def test_typicality_figures_carry_their_direction_refusal_and_the_min_n_gate():
@@ -1705,7 +1712,10 @@ def test_typicality_figures_carry_their_direction_refusal_and_the_min_n_gate():
         assert " ".join(block["direction_reason"].split()) in text
         assert " ".join(block["under_powered_policy"].split()) in text
         assert "min_n = 5" in text
-        assert block["reference_slug"] in text
+        # The reference is named by its country, the way a reader sees it -- the slug is
+        # a filesystem key and never reaches the canvas.
+        assert country_label(ranking["country"]) in text
+        assert block["reference_slug"] not in text
 
 
 def test_typicality_by_method_draws_the_real_population_as_a_reference_line():
@@ -1725,8 +1735,10 @@ def test_typicality_by_method_draws_the_real_population_as_a_reference_line():
     inline = " ".join(t.get_text() for t in ax.texts)
     assert f"{reference:.3f}" in inline and "not a target" in inline
     # Methods on x, in the grid's own order; nothing is drawn for the unjudged pair.
+    grid_methods = ranking["typicality"]["grid"]["methods"]
+    letters = method_letters(grid_methods)
     assert [label.get_text() for label in ax.get_xticklabels()] == \
-        ranking["typicality"]["grid"]["methods"]
+        [letters[m] for m in grid_methods]
 
 
 def test_typicality_by_method_marks_an_under_powered_competitor_without_dropping_it():

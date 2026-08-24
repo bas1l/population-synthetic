@@ -16,17 +16,19 @@ Three figures:
   attribute pairs that clashed, ranked country-wide, with the real population as its own
   series rather than pooled into the bars.
 * :func:`plot_typicality_heatmap` -- the self-contained typicality statistic on the same
-  grid, on a **diverging** ramp whose midpoint is the real population's own value, read
-  from the block. The optimum is interior, so neither end of the ramp is "better"; the
-  two ends are "more collapsed than the register population" and "more dispersed than
-  it". With no real population in the consumption set there is no midpoint, and the
-  figure degrades to the neutral sequential ramp with the reason printed on it.
+  grid and the same **sequential** house ramp. The optimum is interior, so neither end of
+  the ramp is "better" -- but a sequential ramp orders cells by magnitude alone, so the
+  side of the real population's own value cannot live in the hue. It lives in the
+  annotations instead: a signed delta printed beside every cell's number and a rule
+  across the colourbar at the reference, both read from ``block["reference_value"]``.
+  With no real population in the consumption set there is no reference, and both are
+  dropped with the reason printed on the figure.
 * :func:`plot_typicality_by_method` -- the same statistic with the methods on x in
   complexity order, one mark per model, and the real population as a horizontal
   reference line. It is the one figure in this task where the real population is a
   reference rather than a series, and it is drawn that way only because this axis has no
-  ranking to hold it out of: the line is the ramp midpoint of its sibling heatmap, in a
-  form that shows each method's spread around it.
+  ranking to hold it out of: the line is the same reference its sibling heatmap prints a
+  delta against, in a form that shows each method's spread around it.
 
 **The real population is drawn as an ordinary competitor.** The previous version of the
 map pinned it to ``y = 0`` and marked it with a reference star, which encoded *the real
@@ -53,34 +55,51 @@ from typing import Any
 
 from population_synthetic.analysis.utils.grid_annotations import RateWithCountsPolicy
 from population_synthetic.analysis.utils.grids import render_grid
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    country_label,
+    method_key_lines,
+    method_letters,
+    model_labels,
+    strategy_label,
+)
 from population_synthetic.analysis.utils.palette import (
     ANNOTATION_GREY,
+    BASELINE_DARK,
     CATEGORICAL_SERIES,
     FOOTNOTE_GREY,
+    GRID_RULE,
     HEATMAP_CMAP,
     HIGHLIGHT_ACCENT,
     HOLLOW_EDGE,
     LARGE_CATEGORICAL_CMAP,
     MISSING_COLOR,
+    MUTED_GREY,
     NEUTRAL_GREY,
     SECONDARY_GREY,
     SURFACE,
     heatmap_cmap,
+    opaque,
     text_color_on,
 )
 from population_synthetic.analysis.utils.style import (
     ANNOTATION,
     AXIS_TITLE,
     CALLOUT,
+    CAPTION_MARGIN_IN,
     FIGURE_TITLE,
     FULL,
     LEGEND_LABEL,
+    LINE_SPACING,
+    POINTS_PER_INCH,
     TICK_LABEL,
     figure_size,
     grow_height,
     grow_width,
     house_style,
+    wrap_to_width,
 )
+from population_synthetic.analysis.utils.table_style import fit_to_page
 
 __all__ = [
     "plot_headline_map",
@@ -144,9 +163,9 @@ def _point_style(is_real: bool) -> dict[str, Any]:
     """Marker style for one competitor -- distinct, but not privileged."""
     if is_real:
         return {"marker": "D", "s": 130, "color": _REAL_COLOR,
-                "edgecolor": "black", "linewidth": 0.6, "zorder": 3}
+                "edgecolor": BASELINE_DARK, "linewidth": 0.6, "zorder": 3}
     return {"marker": "o", "s": 90, "color": _COMPETITOR_COLOR,
-            "edgecolor": "white", "linewidth": 0.5, "zorder": 2}
+            "edgecolor": SURFACE, "linewidth": 0.5, "zorder": 2}
 
 
 @house_style
@@ -194,7 +213,8 @@ def plot_headline_map(ranking: dict[str, Any], *, measure: str = _DEFAULT_MEASUR
         else:
             seen_labels.add(legend_label)
         ax.scatter(entry["rate"], y, label=legend_label, **style)
-        annotation = f"{slug}*" if undefined else slug
+        caption = _competitor_caption(entry)
+        annotation = f"{caption}*" if undefined else caption
         ax.annotate(
             annotation, (entry["rate"], y),
             textcoords="offset points", xytext=(6, 4), fontsize=ANNOTATION,
@@ -214,7 +234,7 @@ def plot_headline_map(ranking: dict[str, Any], *, measure: str = _DEFAULT_MEASUR
         "(the real population is ranked as an ordinary competitor on Axis A)",
         fontsize=FIGURE_TITLE, fontweight="bold",
     )
-    ax.axhline(0, color="gray", linestyle="--", linewidth=0.7, alpha=0.7, zorder=0)
+    ax.axhline(0, color=MUTED_GREY, linestyle="--", linewidth=0.7, zorder=0)
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
     handles, labels = ax.get_legend_handles_labels()
     if handles:
@@ -225,6 +245,7 @@ def plot_headline_map(ranking: dict[str, Any], *, measure: str = _DEFAULT_MEASUR
             transform=ax.transAxes, ha="right", va="bottom", fontsize=ANNOTATION, color="gray",
         )
     fig.tight_layout()
+    fit_to_page(fig)
     return fig
 
 
@@ -249,7 +270,7 @@ def plot_impossibility_forest(ranking: dict[str, Any]):
         raise ValueError("plot_impossibility_forest requires at least one competitor with a rate")
 
     real_slug = ranking.get("real_competitor")
-    labels = [f"{e['slug']}  (n={e['denominator']})" for e in entries]
+    labels = [f"{_competitor_caption(e)}  (n={e['denominator']})" for e in entries]
     positions = list(range(len(entries)))
 
     fig, ax = plt.subplots(figsize=(FULL, grow_height(len(entries), per_item=0.32, padding=1.8, minimum=3.0)))
@@ -261,7 +282,7 @@ def plot_impossibility_forest(ranking: dict[str, Any]):
         color = _REAL_COLOR if is_real else _COMPETITOR_COLOR
         marker = "D" if is_real else "o"
         ax.scatter(entry["rate"], pos, color=color, marker=marker, s=44, zorder=2,
-                   edgecolor="white", linewidth=0.4)
+                   edgecolor=SURFACE, linewidth=0.4)
 
     ax.set_yticks(positions)
     ax.set_yticklabels(labels, fontsize=TICK_LABEL)
@@ -276,14 +297,16 @@ def plot_impossibility_forest(ranking: dict[str, Any]):
         fontsize=FIGURE_TITLE, fontweight="bold",
     )
     ax.tick_params(axis="x", labelsize=TICK_LABEL)
-    ax.grid(axis="x", linestyle=":", linewidth=0.5, alpha=0.6)
+    ax.grid(axis="x", linestyle=":", linewidth=0.5, color=GRID_RULE)
     fig.tight_layout()
+    fit_to_page(fig)
     return fig
 
 @house_style
 def _render_grid_heatmap(
     grid: dict[str, Any],
     *,
+    country: str,
     title: str,
     cbar_label: str,
     caption: str,
@@ -376,14 +399,20 @@ def _render_grid_heatmap(
         policy=_RATE_CELL_POLICY,
         cmap=heatmap_cmap(_SEQUENTIAL_CMAP, missing=_MISSING_COLOR),
         norm=mcolors.Normalize(vmin=0.0, vmax=vmax),
-        aspect="auto", fontsize=ANNOTATION,
+        aspect="auto", fontsize=ANNOTATION, interpolation="none",
     )
 
-    row_labels = list(models)
+    # Letters on the method axis and display names on the model axis; the key is drawn
+    # with the footnotes below, beside the caption that already qualifies the grid.
+    letters = method_letters(methods) if methods else {}
+    display_models = model_labels(models)
+    row_labels = [display_models[model] for model in models]
     if real_rate is not None:
-        row_labels.append(f"{real['slug']}  (real population)")
+        row_labels.append(f"{country_label(country)}  (real population)")
     ax.set_xticks(range(max(len(methods), 1)))
-    ax.set_xticklabels(methods or [""], rotation=30, ha="right", fontsize=TICK_LABEL)
+    ax.set_xticklabels(
+        [letters[m] for m in methods] if methods else [""], fontsize=TICK_LABEL,
+    )
     ax.set_yticks(range(n_rows))
     ax.set_yticklabels(row_labels, fontsize=TICK_LABEL)
 
@@ -398,7 +427,7 @@ def _render_grid_heatmap(
     if real_rate is not None:
         row = n_rows - 1
         # A thick white rule + the band's own label: this row is not a model.
-        ax.axhline(row - 0.5, color="white", linewidth=3.0)
+        ax.axhline(row - 0.5, color=SURFACE, linewidth=3.0)
         centre = (len(methods) - 1) / 2.0 if methods else 0.0
         ax.text(
             centre, row, f"{float(real_rate):.3f}   n={real['denominator']}",
@@ -410,25 +439,26 @@ def _render_grid_heatmap(
     cbar.set_label(cbar_label, fontsize=AXIS_TITLE)
     cbar.ax.tick_params(labelsize=TICK_LABEL)
 
-    ax.set_xlabel("Method (strategy)", fontsize=AXIS_TITLE)
+    ax.set_xlabel("Generation method", fontsize=AXIS_TITLE)
     ax.set_ylabel("Model", fontsize=AXIS_TITLE)
     ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
 
-    footnotes = [caption] if caption else []
+    footnotes = ["Methods:  " + "   ".join(method_key_lines(methods))] if methods else []
+    if caption:
+        footnotes.append(caption)
     if real_rate is not None:
         footnotes.append(
             "The real population spans the full width because it has no method: it is not "
             "a model x method cell, and the factor tests hold it out."
         )
-    text = "\n".join(footnotes)
-    if text:
+    if footnotes:
         # Reserve a strip first, then place the caption inside it: an artist dropped
-        # below the axes without reserved space collides with the rotated tick labels.
-        reserved = 0.07 + 0.035 * text.count("\n")
-        fig.tight_layout(rect=(0.0, reserved, 1.0, 1.0))
-        fig.text(0.5, 0.015, text, ha="center", va="bottom", fontsize=ANNOTATION, color=FOOTNOTE_GREY)
+        # below the axes without reserved space collides with the rotated tick labels,
+        # and one dropped below the *canvas* grows the exported page past the cap.
+        _place_footnote(fig, ax, footnotes)
     else:
         fig.tight_layout()
+        fit_to_page(fig)
     return fig
 
 
@@ -442,6 +472,7 @@ def plot_impossibility_heatmap(ranking: dict[str, Any]):
     """
     return _render_grid_heatmap(
         ranking["axis_a"]["grid"],
+        country=ranking["country"],
         title=(
             "Axis A -- impossibility rate by model x method\n"
             "(grey = not judged, which is not a rate of zero)"
@@ -496,6 +527,7 @@ def plot_severity_heatmap(ranking: dict[str, Any], severity: str):
 
     return _render_grid_heatmap(
         level["grid"],
+        country=ranking["country"],
         title=(
             f"Severity {severity} -- share of personas with >=1 {severity} clash\n"
             f"({level['meaning']}; grey = not judged, not a prevalence of zero)"
@@ -506,37 +538,39 @@ def plot_severity_heatmap(ranking: dict[str, Any], severity: str):
     )
 
 
-#: Wrap width for the footnote block, in characters. Chosen for reading comfort rather
-#: than for the figure's physical width: at 7pt the frame would hold well over 200
-#: characters per line, which is past the point where the eye loses the line return.
-_FOOTNOTE_WRAP = 140
-
 #: Gap between the axes' lowest decoration and the first footnote line, in inches.
 _FOOTNOTE_GAP_IN = 0.22
 
 
 def _place_footnote(fig, ax, sentences: list[str]) -> None:
-    """Hang the wrapped footnote directly under *ax*'s lowest decoration.
+    """Reserve a strip at the foot of *fig* for the wrapped footnote, and fill it.
 
-    Anchored to the axes' measured tight bounding box rather than to a reserved fraction
-    of the figure: this figure's height grows with the number of bars, so any fixed
-    fraction is simultaneously too much on one level and too little on another, and the
-    first version of it left a hand's width of white space under the six-bar S3 chart.
+    The caveats are the reason these figures can travel without their docstring, so
+    they are never the thing that gets cropped -- but they must not be the thing that
+    grows the page either. An earlier version hung them below the canvas and relied on
+    ``bbox_inches="tight"`` to expand the output around them; that expansion is exactly
+    what the printable-canvas budget in ``utils/figures.py`` now rejects, and it fails
+    the whole figure rather than the footnote.
 
-    The text may extend below the figure canvas. That is deliberate and safe here --
-    ``utils/figures.save_figure`` writes with ``bbox_inches="tight"``, which unions every
-    artist's bounds (including those outside the canvas) and grows the output to fit. The
-    caveats are the reason this figure can travel without its docstring, so they must
-    never be the thing that gets cropped.
+    So the strip is reserved *inside* the canvas, measured from the wrapped text rather
+    than taken as a fixed fraction: these figures grow with the number of bars, and any
+    fixed fraction is simultaneously too much on one level and too little on another.
+    The wrap is to the page, not to a character count, for the same reason.
     """
-    text = "\n".join(textwrap.fill(sentence, width=_FOOTNOTE_WRAP) for sentence in sentences)
-    fig.tight_layout()
-    fig.canvas.draw()   # the tight bbox below is only defined once a renderer exists
-    box = ax.get_tightbbox(fig.canvas.get_renderer()).transformed(fig.transFigure.inverted())
-    fig.text(
-        0.5, box.y0 - _FOOTNOTE_GAP_IN / fig.get_figheight(), text,
-        ha="center", va="top", fontsize=ANNOTATION, color=FOOTNOTE_GREY,
+    width_in, height_in = (float(value) for value in fig.get_size_inches())
+    text = "\n".join(
+        wrap_to_width(sentence, width_in - 2 * CAPTION_MARGIN_IN, fontsize=ANNOTATION)
+        for sentence in sentences
     )
+    lines = text.count(chr(10)) + 1
+    strip_in = CAPTION_MARGIN_IN + lines * ANNOTATION * LINE_SPACING / POINTS_PER_INCH
+    fig.tight_layout(rect=(0.0, (strip_in + _FOOTNOTE_GAP_IN) / height_in, 1.0, 1.0))
+    fig.text(
+        0.5, CAPTION_MARGIN_IN / height_in, text,
+        ha="center", va="bottom", fontsize=ANNOTATION, color=FOOTNOTE_GREY,
+        linespacing=LINE_SPACING,
+    )
+    fit_to_page(fig)
 
 
 def _pair_summary_footnotes(summary: dict[str, Any]) -> list[str]:
@@ -548,14 +582,17 @@ def _pair_summary_footnotes(summary: dict[str, Any]) -> list[str]:
     ``non_additive`` / ``provenance`` / the level's ``direction``) rather than restated
     here, so the figure and the block it renders cannot disagree about what the bars mean.
     """
+    # ``real_slug`` decides only whether a real series exists; what the reader is shown
+    # is the country's own name, because a slug is a filesystem key, not a caption.
     real_slug, real_denominator = summary["real_slug"], summary["real_denominator"]
+    real_caption = f"The {country_label(summary['country'])} real population"
     lines = [
         f"Denominator: {summary['denominator']} personas pooled over "
         f"{summary['n_synthetic_competitors']} synthetic combination(s) -- the same "
         "population the severity heatmap divides its cells by. "
         + (
-            f"{real_slug} is counted separately over its own {real_denominator} personas "
-            "and is never pooled into the bars."
+            f"{real_caption} is counted separately over its own {real_denominator} "
+            "personas and is never pooled into the bars."
             if real_slug is not None
             else "No real population was consumable, so no second series is drawn."
         ),
@@ -592,6 +629,20 @@ _COLUMN_REAL_PT = 82
 #: Data-space row the column headers sit on -- above the first bar, and reserved by the
 #: y-limit so nothing is drawn into it.
 _HEADER_ROW = -1.0
+
+
+def _competitor_caption(entry: dict[str, Any]) -> str:
+    """Reader-facing name of one ranked competitor.
+
+    A synthetic competitor is its model's display name and its combination's method
+    phrase. The real population is named by its **country**, because it is a register
+    population carrying no model and no method -- the loader hands it through with both
+    fields empty, and that emptiness is the branch taken here rather than a guess.
+    """
+    if entry["is_real_reference"]:
+        return f"{country_label(entry['country'])} (real population)"
+    model = entry["model"]
+    return f"{model_labels([model])[model]} / {strategy_label(entry['strategy'])}"
 
 
 def _column(ax, row: float, offset_pt: int, text: str, color: str, *, bold: bool = False) -> None:
@@ -687,14 +738,17 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
     if not pairs:
         return _empty_pair_summary(summary, title)
 
-    labels = [f"{pair['attr_a']} x {pair['attr_b']}" for pair in pairs]
+    labels = [
+        f"{attribute_label(pair['attr_a'])} x {attribute_label(pair['attr_b'])}"
+        for pair in pairs
+    ]
     values = [0.0 if pair["prevalence"] is None else float(pair["prevalence"]) for pair in pairs]
     positions = list(range(len(pairs)))
 
     fig, ax = plt.subplots(figsize=(FULL, grow_height(len(pairs), per_item=0.42, padding=2.6, minimum=3.6)))
     ax.barh(
         positions, values, height=0.62, color=_COMPETITOR_COLOR,
-        edgecolor="white", linewidth=0.4, zorder=2,
+        edgecolor=SURFACE, linewidth=0.4, zorder=2,
         label=f"synthetic combinations pooled (n={summary['denominator']})",
     )
 
@@ -704,8 +758,10 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
     if real_slug is not None and drawn:
         ax.scatter(
             [v for _, v in drawn], [pos for pos, _ in drawn],
-            marker="D", s=52, color=_REAL_COLOR, edgecolor="black", linewidth=0.6,
-            zorder=4, label=f"{real_slug} (n={summary['real_denominator']})",
+            marker="D", s=52, color=_REAL_COLOR, edgecolor=BASELINE_DARK, linewidth=0.6,
+            zorder=4,
+            label=f"{country_label(summary['country'])} real population "
+                  f"(n={summary['real_denominator']})",
         )
 
     headroom = max([*values, *(v for v in real_values if v is not None), 0.0]) or 1.0
@@ -742,7 +798,7 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
     )
     ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
     ax.tick_params(axis="x", labelsize=TICK_LABEL)
-    ax.grid(axis="x", linestyle=":", linewidth=0.5, alpha=0.6, zorder=0)
+    ax.grid(axis="x", linestyle=":", linewidth=0.5, color=GRID_RULE, zorder=0)
     ax.set_axisbelow(True)
     handles, legend_labels = ax.get_legend_handles_labels()
     if real_slug is not None and not drawn:
@@ -751,10 +807,11 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
         # rather than as a series that was never drawn.
         handles.append(Line2D(
             [], [], linestyle="none", marker="D", markersize=6, color=_REAL_COLOR,
-            markeredgecolor="black", markeredgewidth=0.6,
+            markeredgecolor=BASELINE_DARK, markeredgewidth=0.6,
         ))
         legend_labels.append(
-            f"{real_slug} (n={summary['real_denominator']}) -- none of these pairs"
+            f"{country_label(summary['country'])} real population "
+            f"(n={summary['real_denominator']}) -- none of these pairs"
         )
     if handles:
         # Bars first, the real series second: the bars are what the ranking is over, and
@@ -763,7 +820,7 @@ def plot_severity_pair_summary(summary: dict[str, Any]):
         order = sorted(range(len(handles)), key=lambda i: legend_labels[i].startswith("synthetic"),
                        reverse=True)
         ax.legend([handles[i] for i in order], [legend_labels[i] for i in order],
-                  fontsize=LEGEND_LABEL, loc="best", framealpha=0.92)
+                  fontsize=LEGEND_LABEL, loc="best")
     _place_footnote(fig, ax, _pair_summary_footnotes(summary))
     return fig
 
@@ -797,7 +854,6 @@ _REFERENCE_RULE_WIDTH = 2.0
 #: qualifying, and the number is still the cell's point.
 _UNDER_POWERED_HATCH = "//"
 _UNDER_POWERED_EDGE = ANNOTATION_GREY
-_UNDER_POWERED_ALPHA = 0.35
 
 #: Fill + overlay for a cell whose competitor was judged but carries NO typicality-bearing
 #: persona (every persona was judged impossible). The fourth state on this figure, and
@@ -891,7 +947,7 @@ def _typicality_limits(values: list[float]) -> tuple[float, float, bool]:
 
 
 def _typicality_footnotes(
-    block: dict[str, Any], *, reference_role: str, under_powered_mark: str,
+    block: dict[str, Any], *, country: str, reference_role: str, under_powered_mark: str,
     flat: bool, has_reference: bool, has_band: bool,
 ) -> list[str]:
     """The caveats that must travel *on* a typicality figure, in reading order.
@@ -908,7 +964,7 @@ def _typicality_footnotes(
     reference = block["reference_value"]
     if has_reference:
         role = (
-            f"{reference_role}: {block['reference_slug']} at {float(reference):.3f} -- "
+            f"{reference_role}: {country_label(country)} at {float(reference):.3f} -- "
             f"{block['reference_note']}"
         )
     else:
@@ -1042,15 +1098,21 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
         policy=_TYPICALITY_CELL_POLICY,
         cmap=heatmap_cmap(_SEQUENTIAL_CMAP, missing=_MISSING_COLOR),
         norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
-        aspect="auto", fontsize=ANNOTATION, zorder=4,
+        aspect="auto", fontsize=ANNOTATION, zorder=4, interpolation="none",
     )
 
-    row_labels = list(models)
+    # As every other grid in this task: letters on the method axis, display names on the
+    # model axis, and the key printed with the footnotes below.
+    letters = method_letters(methods) if methods else {}
+    display_models = model_labels(models)
+    row_labels = [display_models[model] for model in models]
     if real_value is not None:
         suffix = " -- deltas are measured against it" if has_reference else ""
-        row_labels.append(f"{real['slug']}  (real population{suffix})")
+        row_labels.append(f"{country_label(ranking['country'])}  (real population{suffix})")
     ax.set_xticks(range(max(len(methods), 1)))
-    ax.set_xticklabels(methods or [""], rotation=30, ha="right", fontsize=TICK_LABEL)
+    ax.set_xticklabels(
+        [letters[m] for m in methods] if methods else [""], fontsize=TICK_LABEL,
+    )
     ax.set_yticks(range(n_rows))
     ax.set_yticklabels(row_labels, fontsize=TICK_LABEL)
 
@@ -1078,22 +1140,22 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
                 # hatch qualifies the number and must not strike through it.
                 ax.add_patch(Rectangle(
                     (j - 0.5, i - 0.5), 1, 1, fill=False, edgecolor=_UNDER_POWERED_EDGE,
-                    hatch=_UNDER_POWERED_HATCH, alpha=_UNDER_POWERED_ALPHA,
-                    linewidth=0.0, zorder=2,
+                    hatch=_UNDER_POWERED_HATCH, linewidth=0.0, zorder=2,
                 ))
 
     if real_value is not None:
         row = n_rows - 1
-        ax.axhline(row - 0.5, color="white", linewidth=3.0)
+        ax.axhline(row - 0.5, color=SURFACE, linewidth=3.0)
         centre = (len(methods) - 1) / 2.0 if methods else 0.0
         if real["under_powered"]:
             # The reference is measured on the same terms as everyone else, and can be
             # too thin to read like anyone else. An unmarked band would present a shaky
-            # midpoint as a firm one -- and this ramp is centred on it.
+            # reference as a firm one -- and every cell's printed delta is measured
+            # against it.
             ax.add_patch(Rectangle(
                 (-0.5, row - 0.5), max(len(methods), 1), 1, fill=False,
                 edgecolor=_UNDER_POWERED_EDGE, hatch=_UNDER_POWERED_HATCH,
-                alpha=_UNDER_POWERED_ALPHA, linewidth=0.0, zorder=2,
+                linewidth=0.0, zorder=2,
             ))
         ax.text(
             centre, row, f"{float(real_value):.3f}   n={real['denominator']}",
@@ -1131,7 +1193,7 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
         fontsize=FIGURE_TITLE, fontweight="bold",
     )
     _place_footnote(fig, ax, _typicality_footnotes(
-        block, reference_role="Colourbar rule", under_powered_mark="hatched", flat=flat,
+        block, country=ranking["country"], reference_role="Colourbar rule", under_powered_mark="hatched", flat=flat,
         has_reference=has_reference, has_band=real_value is not None,
     ))
     return fig
@@ -1183,8 +1245,8 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
     task.** Everywhere else it is an ordinary series, bar or marker, because everywhere
     else it is *ranked* and a reference line would encode "closer to it is better" into a
     figure whose whole point is not to assume that. This axis ranks nothing: the line is
-    the ramp midpoint of the sibling heatmap, drawn so each method's spread around it is
-    visible. It carries the real population's own colour and slug so it cannot be read as
+    the same reference the sibling heatmap prints a delta against, drawn so each method's
+    spread around it is visible. It carries the real population's own colour and slug so it cannot be read as
     a target or a threshold.
 
     Under-powered competitors are drawn hollow rather than dropped, and their intervals
@@ -1206,6 +1268,10 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
         )
 
     fig, ax = plt.subplots(figsize=figure_size(grow_width(len(methods), per_item=1.6, padding=3.0, minimum=FULL), 6.0))
+    # Letters on the method axis with the key among the footnotes; display names in the
+    # legend, which is the one place on this figure with room for a phrase.
+    letters = method_letters(methods)
+    display_models = model_labels(models)
     colours = _model_colors(len(models), plt.get_cmap(_MODEL_CMAP))
     offsets = _method_dodge(len(models))
     handles: list[Line2D] = []
@@ -1229,35 +1295,35 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
             value = float(cell["value"])
             if cell["ci_lo"] is not None and cell["ci_hi"] is not None:
                 ax.plot([x, x], [cell["ci_lo"], cell["ci_hi"]],
-                        color=colour, linewidth=0.9, alpha=0.45, zorder=2)
+                        color=opaque(colour, 0.45), linewidth=0.9, zorder=2)
             if cell["under_powered"]:
                 any_under_powered = True
                 ax.scatter(x, value, s=46, facecolors="none", edgecolors=colour,
                            linewidths=1.2, zorder=3)
             else:
-                ax.scatter(x, value, s=46, color=colour, edgecolor="white",
+                ax.scatter(x, value, s=46, color=colour, edgecolor=SURFACE,
                            linewidth=0.4, zorder=3)
             xs.append(x)
             ys.append(value)
             drawn += 1
         if drawn > 1:
-            ax.plot(xs, ys, color=colour, linewidth=0.9, alpha=0.55, zorder=2)
+            ax.plot(xs, ys, color=opaque(colour, 0.55), linewidth=0.9, zorder=2)
         if drawn:
             handles.append(Line2D([], [], color=colour, marker="o", markersize=5,
-                                  linewidth=0.9, markeredgecolor="white",
-                                  markeredgewidth=0.4, label=model))
+                                  linewidth=0.9, markeredgecolor=SURFACE,
+                                  markeredgewidth=0.4, label=display_models[model]))
 
     reference = block["reference_value"]
     if reference is not None:
         ax.axhline(float(reference), color=_REAL_COLOR, linestyle="--",
-                   linewidth=1.1, alpha=0.9, zorder=1)
+                   linewidth=1.1, zorder=1)
         # Inline, at the left edge and lifted a few points clear of the line, following
         # the c2st reference-line idiom: a legend entry alone would leave the line
         # unlabelled where it is actually read, and a baseline sitting *on* the line lets
         # the dashes strike through the label.
         ax.annotate(
-            f"{block['reference_slug']} = {float(reference):.3f}  (real population, "
-            "not a target)",
+            f"{country_label(ranking['country'])} = {float(reference):.3f}  "
+            "(real population, not a target)",
             xy=(-0.55, float(reference)), xytext=(0, 3), textcoords="offset points",
             va="bottom", ha="left", fontsize=ANNOTATION, color=_REAL_COLOR,
         )
@@ -1267,9 +1333,9 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
                               label=f"hollow = under-powered (n < {block['min_n']})"))
 
     ax.set_xticks(range(len(methods)))
-    ax.set_xticklabels(methods, rotation=25, ha="right", fontsize=TICK_LABEL)
+    ax.set_xticklabels([letters[m] for m in methods], fontsize=TICK_LABEL)
     ax.set_xlim(-0.6, len(methods) - 0.4)
-    ax.set_xlabel("Method (strategy) -- simplest first", fontsize=AXIS_TITLE)
+    ax.set_xlabel("Generation method -- simplest first", fontsize=AXIS_TITLE)
     ax.set_ylabel(textwrap.fill(block["statistic_label"], _LABEL_WRAP), fontsize=AXIS_TITLE)
     ax.set_title(
         f"Typicality -- {block['statistic']} by method, one mark per model\n"
@@ -1277,15 +1343,15 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
         fontsize=FIGURE_TITLE, fontweight="bold",
     )
     ax.tick_params(axis="y", labelsize=TICK_LABEL)
-    ax.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.6, zorder=0)
+    ax.grid(axis="y", linestyle=":", linewidth=0.5, color=GRID_RULE, zorder=0)
     ax.set_axisbelow(True)
     if handles:
         ax.legend(handles=handles, fontsize=LEGEND_LABEL, loc="center left",
-                  bbox_to_anchor=(1.01, 0.5), framealpha=0.92)
+                  bbox_to_anchor=(1.01, 0.5))
 
     excluded = block["excluded"]
     footnotes = _typicality_footnotes(
-        block, reference_role="Reference line", under_powered_mark="hollow", flat=False,
+        block, country=ranking["country"], reference_role="Reference line", under_powered_mark="hollow", flat=False,
         has_reference=reference is not None, has_band=False,
     )
     footnotes.append(

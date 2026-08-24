@@ -7,8 +7,6 @@ down the JSON report, every CSV table, and every figure. Uses a numpy-only
 
 from __future__ import annotations
 
-import pytest
-
 from population_synthetic.analysis.fidelity.artifacts import write_comparison_artifacts
 from population_synthetic.analysis.fidelity.evaluator import StatisticalEvaluator
 from population_synthetic.analysis.fidelity.scheme import (
@@ -56,18 +54,6 @@ def _pop(n, source):
     return {"metadata": {"source": source, "n": n}, "individuals": people}
 
 
-#: The figure(s) this module renders do not currently fit the printable canvas, so
-#: ``analysis/utils/figures.py`` rejects them on export (Phase 5 of the
-#: publication-figure plan added that check; Phase 6 owns the layout fixes).
-OVER_CAP_REASON = (
-    "The per-combination radar renders 19.53 x 19.08 cm -- over the 19.05 cm "
-    "printable width -- because the attribute labels and the legend sit outside "
-    "the polar axes, so analysis/utils/figures.py rejects it on export. Tracked "
-    "as a layout fix in Phase 6 of the publication-figure plan."
-)
-
-
-@pytest.mark.xfail(strict=True, reason=OVER_CAP_REASON)
 def test_write_comparison_artifacts_emits_full_set(tmp_path):
     scheme = _scheme()
     real_pop = _pop(20, "real")

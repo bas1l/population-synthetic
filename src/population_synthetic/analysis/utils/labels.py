@@ -50,6 +50,7 @@ from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.utils.axes import (
     FAMILIES_FILENAME,
     STRATEGIES_DIR,
+    decompose_slug,
     load_family_order,
     strategy_complexity_order,
     strategy_families,
@@ -256,6 +257,86 @@ def attribute_label(attribute: str, *, labels_path: str | Path | None = None) ->
     if attribute not in labels:
         raise UnknownAxisValue("attribute", attribute, [path])
     return _display_string(labels[attribute], field=f"labels.{attribute}", value=attribute, path=path)
+
+
+# ------------------------------------------------------------------
+# The scanned-population ids
+# ------------------------------------------------------------------
+
+#: What a real-population id is prefixed with. The consistency scan and the realism
+#: judge both enumerate the API-sourced population beside the synthetic ones and both
+#: name it this way; the prefix is the whole difference between the two id shapes, so
+#: it is named once here rather than spelled at each comparison.
+REAL_POPULATION_PREFIX = "real_"
+
+#: How a synthetic combination is spelled when a figure has room for the whole thing --
+#: the model's provider-free name, then the phrase its method is called. Used where the
+#: axis is *populations* rather than models crossed with methods, which is the one case
+#: a method letter cannot be read against a row and a column.
+COMBINATION_SEPARATOR = " / "
+
+
+def discover_strategy_ids(strategies_dir: str | Path | None = None) -> list[str]:
+    """List the strategy axis ids, sorted. ``_``-prefixed files are index, not values."""
+    directory = Path(strategies_dir) if strategies_dir is not None else STRATEGIES_DIR
+    if not directory.is_dir():
+        raise FileNotFoundError(f"Strategy axis directory not found: {directory}.")
+    return sorted(p.stem for p in directory.glob("*.yaml") if not p.name.startswith("_"))
+
+
+def discover_country_ids(countries_dir: str | Path | None = None) -> list[str]:
+    """List the country axis ids, sorted. ``_``-prefixed files are index, not values."""
+    directory = Path(countries_dir) if countries_dir is not None else COUNTRIES_DIR
+    if not directory.is_dir():
+        raise FileNotFoundError(f"Country axis directory not found: {directory}.")
+    return sorted(p.stem for p in directory.glob("*.yaml") if not p.name.startswith("_"))
+
+
+def population_label(
+    population_id: str,
+    *,
+    models_dir: str | Path | None = None,
+    strategies_dir: str | Path | None = None,
+    countries_dir: str | Path | None = None,
+) -> str:
+    """Return what a *scanned population* is called on a figure.
+
+    Two id shapes reach a legend here and nowhere else in the layer: the API-sourced
+    reference, spelled ``real_{country}``, and one synthetic run, spelled
+    ``{country}_{strategy}_{model}``. Both are resolved through the ordinary axis
+    resolvers -- the run slug is decomposed against the *declared* axis ids by
+    :func:`~population_synthetic.analysis.utils.axes.decompose_slug`, never by splitting
+    on ``_``, because both strategy and model ids contain underscores of their own and a
+    naive split silently produces a plausible wrong pair.
+
+    Raises:
+        UnknownAxisValue: If *population_id* is neither shape, or names an axis value no
+            config declares. As everywhere in this module there is no fallback to the raw
+            id: a legend reading ``swedish_02_all_pick_v2_claude_haiku`` is exactly the
+            defect this layer exists to make impossible.
+    """
+    countries = Path(countries_dir) if countries_dir is not None else COUNTRIES_DIR
+    strategies = Path(strategies_dir) if strategies_dir is not None else STRATEGIES_DIR
+    models = Path(models_dir) if models_dir is not None else MODELS_DIR
+
+    if population_id.startswith(REAL_POPULATION_PREFIX):
+        country = population_id[len(REAL_POPULATION_PREFIX):]
+        return f"{country_label(country, countries_dir=countries)} real population"
+
+    decomposed = decompose_slug(
+        population_id,
+        discover_country_ids(countries),
+        discover_strategy_ids(strategies),
+        discover_model_ids(models),
+    )
+    if decomposed is None:
+        raise UnknownAxisValue("population", population_id, [countries, strategies, models])
+    _country, strategy, model = decomposed
+    return (
+        f"{model_label(model, models_dir=models)}"
+        f"{COMBINATION_SEPARATOR}"
+        f"{strategy_label(strategy, strategies_dir=strategies)}"
+    )
 
 
 # ------------------------------------------------------------------

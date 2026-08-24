@@ -27,11 +27,14 @@ from __future__ import annotations
 from typing import Sequence
 
 from population_synthetic.analysis.persona_realism.reduce import ClashKey
+from population_synthetic.analysis.utils.labels import UnknownAxisValue, attribute_label
 from population_synthetic.analysis.utils.palette import (
     CATEGORICAL_SERIES,
     HIGHLIGHT_ACCENT,
+    MUTED_GREY,
     NEUTRAL_GREY,
     SEVERITY_SERIES,
+    SURFACE,
 )
 from population_synthetic.analysis.utils.realism_csv import SEVERITY_LEVELS, SEVERITY_RANK
 from population_synthetic.analysis.utils.style import (
@@ -94,27 +97,50 @@ def plot_typicality_distribution(
     ]
 
     fig, ax = plt.subplots(figsize=figure_size(FULL, 5))
-    bars = ax.bar(buckets, [counts[b] for b in buckets], color=colors, edgecolor="white", linewidth=0.4)
+    bars = ax.bar(buckets, [counts[b] for b in buckets], color=colors, edgecolor=SURFACE, linewidth=0.4)
     ax.bar_label(bars, fmt="%d", fontsize=ANNOTATION, padding=2)
     ax.set_xticks(buckets)
     ax.set_xlabel("Mean typicality (0 = unusual-but-possible, 10 = modal)", fontsize=AXIS_TITLE)
     ax.set_ylabel("Personas", fontsize=AXIS_TITLE)
     ax.set_title(
-        f"{combo_label} -- typicality distribution (can_exist personas)",
+        f"{combo_label} -- typicality distribution (personas judged possible)",
         fontsize=PANEL_TITLE,
         fontweight="bold",
     )
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
     if tail_threshold is not None:
-        ax.axvline(tail_threshold + 0.5, color="gray", linestyle="--", linewidth=0.7, alpha=0.7)
+        ax.axvline(tail_threshold + 0.5, color=MUTED_GREY, linestyle="--", linewidth=0.7)
     fig.tight_layout()
     return fig
 
 
+def _clash_attribute(name: str) -> str:
+    """Display phrase for one clashing attribute, marking one the judge invented.
+
+    The pair comes from the judge's own output, so it can name an axis the mapped schema
+    does not have. That is a real and expected case -- the per-clash CSV already records
+    it as ``unresolved`` and the run must survive it -- and such a name is therefore not
+    an axis id at all: it has no display phrase, and resolving it would be resolving a
+    hallucination. It is printed as the judge wrote it and **marked**, so an invented
+    axis is visible on the figure rather than either crashing the run or passing for a
+    real attribute. This is the one place in the layer that catches
+    :class:`UnknownAxisValue`, and it catches it to label the value, never to fall back
+    to it silently.
+    """
+    try:
+        return attribute_label(name)
+    except UnknownAxisValue:
+        return f"{name} (not a schema axis)"
+
+
 def _clash_label(key: ClashKey) -> str:
-    """Human-readable ``attr_a x attr_b (severity)`` label for one clash key."""
+    """Human-readable ``Attribute x Attribute (severity)`` label for one clash key.
+
+    The severity code is a protocol constant of the judge schema, not an axis id, and
+    stays as written.
+    """
     a, b = key.pair
-    return f"{a} x {b} ({key.severity})"
+    return f"{_clash_attribute(a)} x {_clash_attribute(b)} ({key.severity})"
 
 
 @house_style
@@ -142,7 +168,7 @@ def plot_clash_taxonomy(clash_taxonomy: dict[ClashKey, int], combo_label: str):
 
     fig, ax = plt.subplots(figsize=(FULL, grow_height(len(items), per_item=0.4, padding=1.5, minimum=3.0)))
     y_pos = range(len(items))
-    bars = ax.barh(list(y_pos), counts, color=colors, edgecolor="white", linewidth=0.4)
+    bars = ax.barh(list(y_pos), counts, color=colors, edgecolor=SURFACE, linewidth=0.4)
     ax.bar_label(bars, fmt="%d", fontsize=ANNOTATION, padding=3)
     ax.set_yticks(list(y_pos))
     ax.set_yticklabels(labels, fontsize=TICK_LABEL)

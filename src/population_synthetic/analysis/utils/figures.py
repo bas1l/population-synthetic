@@ -90,8 +90,9 @@ EXPORT_RC_KEYS = ("ps.fonttype", "pdf.fonttype", "ps.useafm", "savefig.transpare
 MAX_FILE_BYTES = 10 * 1024 * 1024
 
 #: PostScript's unit. An EPS bounding box is stated in points; the canvas budget is
-#: stated in inches (:mod:`style`), and this is the only conversion between them.
-POINTS_PER_INCH = 72.0
+#: stated in inches. Bound to :mod:`style`'s definition rather than restated: that module
+#: owns both vocabularies, and two copies of a unit conversion is one too many.
+POINTS_PER_INCH = style.POINTS_PER_INCH
 
 #: Whitespace added outside the tight bounding box, in inches. **Zero, deliberately.**
 #: matplotlib's default of 0.1 in is added on each side, so a written file is 0.2 in

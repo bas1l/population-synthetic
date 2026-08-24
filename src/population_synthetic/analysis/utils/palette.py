@@ -183,6 +183,16 @@ RESIDUAL_GREY = "#BBBBBB"
 #: may be retuned without the other.
 GRID_RULE = "#DDDDDD"
 
+#: Separator drawn along the boundary between two abutting heatmap cells. Two tiles that
+#: touch shift each other's apparent value -- simultaneous contrast, named as a defect of
+#: unseparated raster grids in Crameri, Shephard and Heron (2020), *Nature Communications*
+#: 11:5444, citing Wong (2011), *Nature Methods* 8:441 -- and ``imshow`` draws no
+#: separator of its own. White, because the stroke's job is to read as a *gap* between the
+#: tiles, the page showing through, rather than as a rule with a value of its own that
+#: would itself be read against the ramp. Shares its value with :data:`SURFACE`; the two
+#: roles are independent and either may be retuned without the other.
+CELL_STROKE = "#FFFFFF"
+
 #: Dark outline separating abutting filled bars, boxes and patches from each other and
 #: from the ground.
 BAR_EDGE = "#33486F"
@@ -219,6 +229,47 @@ HOLLOW_EDGE = "#CCCCCC"
 #: value in it.
 WARNING_TEXT = "#B00020"
 WARNING_FILL = "#FDECEC"
+
+
+def opaque(color, alpha: float, *, over: str = SURFACE) -> str:
+    """The flat colour a translucent *color* resolves to when composited over *over*.
+
+    **Why this exists.** Matplotlib's PostScript backend has no transparency: it logs
+    "partially transparent artists will be rendered opaque" and writes every ``alpha=``
+    artist at full strength. The submitted EPS therefore diverges from the PNG a draft is
+    read in and the SVG a deck is built from, at every faint grid rule, band and fill --
+    silently, and only in the one file that leaves the repository. Compositing the colour
+    here instead gives all three formats the same picture, and it is the *drawn* colour
+    that becomes a house decision rather than a rendering accident.
+
+    The arithmetic is the "over" operator on the sRGB values matplotlib is handed, which
+    is what the raster backends themselves do -- so a figure converted this way keeps the
+    pixels it had. *over* names the ground the artist actually sits on, defaulting to the
+    page; a caller drawing over another artist passes that artist's colour instead.
+
+    Args:
+        color: Any matplotlib colour specification -- a role from this module, a name,
+            a hex string or an RGB(A) tuple.
+        alpha: The coverage the artist would have been drawn at, in ``[0, 1]``. ``1``
+            returns *color* unchanged and ``0`` returns *over*.
+        over: The opaque ground being covered. Defaults to :data:`SURFACE`, the page.
+
+    Returns:
+        The composited colour as a hex string, ready to pass as ``color=``.
+
+    Raises:
+        ValueError: If *alpha* is outside ``[0, 1]``, which is always a caller bug: a
+            coverage outside that range is not a colour matplotlib would ever have drawn.
+    """
+    import matplotlib.colors as mcolors
+
+    if not 0.0 <= alpha <= 1.0:
+        raise ValueError(f"alpha must lie in [0, 1], got {alpha!r}")
+    source = mcolors.to_rgb(color)
+    ground = mcolors.to_rgb(over)
+    return mcolors.to_hex(
+        tuple(alpha * s + (1.0 - alpha) * g for s, g in zip(source, ground))
+    )
 
 
 def heatmap_cmap(name: str = HEATMAP_CMAP, *, missing: str = MISSING_COLOR):

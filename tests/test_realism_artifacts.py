@@ -17,15 +17,15 @@ import pytest
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.generation_metadata.pricing import PricingTable
 from population_synthetic.analysis.persona_realism import artifacts as A
-from population_synthetic.analysis.persona_realism.csv_writer import FIELDNAMES, RealismRow, write_realism_csv
-from population_synthetic.analysis.persona_realism.judge import Issue, RoundVerdict
-from population_synthetic.analysis.persona_realism.reduce import reduce_combo, reduce_persona
-from population_synthetic.analysis.persona_realism.config import JudgeConfig
-from population_synthetic.analysis.persona_realism.report import write_combo_report
-from population_synthetic.analysis.persona_realism.stats import compute_realism_stats
 from population_synthetic.analysis.persona_realism.clash_explanations_csv import (
     FIELDNAMES as EXPLANATION_FIELDNAMES,
 )
+from population_synthetic.analysis.persona_realism.config import JudgeConfig
+from population_synthetic.analysis.persona_realism.csv_writer import FIELDNAMES, RealismRow, write_realism_csv
+from population_synthetic.analysis.persona_realism.judge import Issue, RoundVerdict
+from population_synthetic.analysis.persona_realism.reduce import reduce_combo, reduce_persona
+from population_synthetic.analysis.persona_realism.report import write_combo_report
+from population_synthetic.analysis.persona_realism.stats import compute_realism_stats
 from population_synthetic.analysis.utils.realism_clash_csv import (
     FIELDNAMES as CLASH_FIELDNAMES,
 )
@@ -364,11 +364,11 @@ def test_personas_csv_carries_per_severity_counts_from_the_verdict_cache(tmp_pat
     attrs = {"age_group": "25-34", "education_level": "Upper-Secondary"}
     both = _impossible(issues=(
         Issue(("age_group", "education_level"), "S3", "hard"),
-        Issue(("income_bracket", "occupation"), "S2", "near"),
+        Issue(("housing_tenure", "income_source"), "S2", "near"),
     ))
     _write_cache(out_dir, "persona_00000", attrs, [both, both])
     _write_cache(out_dir, "persona_00001", attrs,
-                 [_possible(7, issues=(Issue(("a", "b"), "S1", "unusual"),))] * 2)
+                 [_possible(7, issues=(Issue(("civil_status", "region"), "S1", "unusual"),))] * 2)
     _write_cache(out_dir, "persona_00002", attrs, [_possible(8), _possible(8)])
     _write_jsonl(out_dir, ["persona_00000", "persona_00001", "persona_00002"])
 
@@ -404,10 +404,12 @@ def test_personas_csv_row_count_mismatch_raises(tmp_path):
 # --------------------------------------------------------------------------- #
 
 #: Attributes covering every axis the clash fixtures below name, so a value join
-#: succeeds unless a test deliberately makes it fail.
+#: succeeds unless a test deliberately makes it fail. Canonical names, because the
+#: per-combination figures resolve every attribute they print through
+#: ``analysis/utils/labels.py``, which raises on one config does not declare.
 _CLASH_ATTRS = {
     "age_group": "25-34", "education_level": "Upper-Secondary",
-    "income_bracket": "Low", "occupation": "Student",
+    "housing_tenure": "Low", "income_source": "Student",
 }
 
 
@@ -416,11 +418,11 @@ def _seed_clash_combo_dir(tmp_path):
     out_dir = tmp_path / "combo_x"
     both = _impossible(issues=(
         Issue(("age_group", "education_level"), "S3", "hard, with a comma"),
-        Issue(("income_bracket", "occupation"), "S2", "near"),
+        Issue(("housing_tenure", "income_source"), "S2", "near"),
     ))
     _write_cache(out_dir, "persona_00000", _CLASH_ATTRS, [both, both])
     _write_cache(out_dir, "persona_00001", _CLASH_ATTRS,
-                 [_possible(7, issues=(Issue(("occupation", "age_group"), "S1", "unusual"),))] * 2)
+                 [_possible(7, issues=(Issue(("income_source", "age_group"), "S1", "unusual"),))] * 2)
     _write_cache(out_dir, "persona_00002", _CLASH_ATTRS, [_possible(8), _possible(8)])
     _write_jsonl(out_dir, ["persona_00000", "persona_00001", "persona_00002"])
     return out_dir
@@ -464,8 +466,8 @@ def test_clashes_csv_reconciles_with_the_personas_csv(tmp_path):
     joined = {(r.attr_a, r.attr_b): r for r in rows}
     assert joined[("age_group", "education_level")].value_a == "25-34"
     assert joined[("age_group", "education_level")].value_b == "Upper-Secondary"
-    # The judge named (occupation, age_group); the row carries the sorted pair.
-    assert ("age_group", "occupation") in joined
+    # The judge named (income_source, age_group); the row carries the sorted pair.
+    assert ("age_group", "income_source") in joined
     assert not any(r.unresolved for r in rows)
 
 

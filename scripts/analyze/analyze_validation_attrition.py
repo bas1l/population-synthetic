@@ -28,9 +28,9 @@ Two derived rates, denominated deliberately:
 Outputs, per country, under the analysis-stage validation_attrition folder:
     {country}_attrition.csv     one row per combination (schema v1, 15 columns)
     {country}_attrition.json    counts, both rates, totals, the withdrawn list, provenance
-    {country}_attrition_funnel.png/.svg          per-combination normalised funnel
-    {country}_mapped_validity_grid.png/.svg      model x method validation-survival grid
-    {country}_mapped_validity_grid_clean.png/.svg  the same grid, rate-only annotations
+    {country}_attrition_funnel.png/.svg/.eps          per-combination normalised funnel
+    {country}_mapped_validity_grid.png/.svg/.eps      model x method validation-survival grid
+    {country}_mapped_validity_grid_clean.png/.svg/.eps  the same grid, rate-only annotations
 
 The grid is published twice from ONE renderer: the annotated variant prints each rate
 over the two counts it is the quotient of, the clean variant prints the rate alone at a

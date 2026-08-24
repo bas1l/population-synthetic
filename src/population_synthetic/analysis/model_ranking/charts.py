@@ -27,7 +27,6 @@ decision, so it can never drift from them.
 
 from __future__ import annotations
 
-import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -42,15 +41,25 @@ from population_synthetic.analysis.utils.grid_annotations import (
     RateWithCountsPolicy,
 )
 from population_synthetic.analysis.utils.grids import render_grid
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    country_label,
+    method_key_lines,
+    method_letters,
+    model_labels,
+)
 from population_synthetic.analysis.utils.palette import (
     ANNOTATION_GREY,
     BAR_EDGE,
     CATEGORICAL_SERIES,
+    GRID_RULE,
     HOST_COLORS,
     MISSING_COLOR,
     MUTED_GREY,
     SECONDARY_GREY,
+    SURFACE,
     heatmap_cmap,
+    opaque,
     text_color_for_rgb,
 )
 from population_synthetic.analysis.utils.style import (
@@ -62,6 +71,7 @@ from population_synthetic.analysis.utils.style import (
     LEGEND_TITLE,
     PANEL_TITLE,
     TICK_LABEL,
+    caption_block,
     figure_size,
     grow_height,
     grow_width,
@@ -74,6 +84,7 @@ from population_synthetic.analysis.utils.table_style import (
     HOST_LABELS,
     add_percentage_colorbar,
     categories_on_top,
+    fit_to_page,
     horizontal_divider,
     inferno_cmap,
     vertical_divider,
@@ -92,8 +103,30 @@ _GRID_CELL_POLICY = RateWithCountsPolicy(
 )
 
 
-def _combo_label(combo: dict[str, Any]) -> str:
-    return f"{combo['model']} / {combo['strategy']}"
+def _combo_label(
+    combo: dict[str, Any], display_models: dict[str, str], letters: dict[str, str]
+) -> str:
+    """Row caption for one combination: the model's display name and its method letter.
+
+    Both mappings are resolved by the caller over the *whole* figure's id set, because a
+    method letter's version marker is a property of the set, not of any one id.
+    """
+    return f"{display_models[combo['model']]} / {letters[combo['strategy']]}"
+
+
+def _combo_captions(
+    result: dict[str, Any], ranking: list[str]
+) -> tuple[dict[str, str], list[str]]:
+    """``(caption_by_slug, method_key_lines)`` for a figure keyed on combination slugs."""
+    combos = [result["combos"][slug] for slug in ranking]
+    display_models = model_labels([c["model"] for c in combos])
+    strategies = [c["strategy"] for c in combos]
+    letters = method_letters(strategies)
+    captions = {
+        slug: _combo_label(combo, display_models, letters)
+        for slug, combo in zip(ranking, combos)
+    }
+    return captions, method_key_lines(strategies)
 
 
 def _ordered_strategies(strategies: list[str]) -> list[str]:
@@ -119,10 +152,11 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     values = np.full((len(ranking), len(attributes) + 1), np.nan)
+    captions, key_lines = _combo_captions(result, ranking)
     labels: list[str] = []
     for i, slug in enumerate(ranking):
         combo = result["combos"][slug]
-        labels.append(_combo_label(combo))
+        labels.append(captions[slug])
         for j, attr in enumerate(attributes):
             values[i, j] = combo["per_attribute"][attr]["tv_similarity"]
         values[i, -1] = combo["overall"]["tv_similarity_mean"]
@@ -143,24 +177,31 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
     im = render_grid(
         ax, values, cells,
         policy=_COMBO_CELL_POLICY, cmap=heatmap_cmap(), aspect="auto",
-        fontsize=ANNOTATION,
+        fontsize=ANNOTATION, interpolation="none",
     )
 
     ax.set_xticks(range(len(attributes) + 1))
-    ax.set_xticklabels(attributes + ["overall"], rotation=40, ha="right", fontsize=TICK_LABEL)
+    ax.set_xticklabels(
+        [attribute_label(a) for a in attributes] + ["Overall"],
+        rotation=40, ha="right", fontsize=TICK_LABEL,
+    )
     ax.set_yticks(range(len(ranking)))
     ax.set_yticklabels(labels, fontsize=TICK_LABEL)
-    ax.axvline(len(attributes) - 0.5, color="white", linewidth=2.5)
+    # The rule that sets the "Overall" column apart from the per-attribute ones. Drawn
+    # in the page colour rather than in a literal "white", so it stays a role like every
+    # other colour in the layer and follows the ground if that ever moves.
+    ax.axvline(len(attributes) - 0.5, color=SURFACE, linewidth=2.5)
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
     cbar.set_label("TV-similarity (1 - TV distance)", fontsize=AXIS_TITLE)
 
     country = result["metadata"]["country"]
     ax.set_title(
-        f"{country}: TV-similarity per attribute (combos in rank order)",
+        f"{country_label(country)}: TV-similarity per attribute (combos in rank order)",
         fontsize=FIGURE_TITLE, fontweight="bold",
     )
-    fig.tight_layout()
+    caption_block(fig, "Methods:  " + "   ".join(key_lines), fontsize=ANNOTATION)
+    fit_to_page(fig)
     return save_figure(fig, out_path)
 
 
@@ -180,12 +221,13 @@ def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    captions, key_lines = _combo_captions(result, ranking)
     labels: list[str] = []
     means: list[float] = []
     coherences: list[float] = []
     for slug in ranking:
         combo = result["combos"][slug]
-        labels.append(_combo_label(combo))
+        labels.append(captions[slug])
         means.append(combo["overall"]["tv_similarity_mean"])
         coherences.append(combo["overall"]["coherence_score"])
 
@@ -195,7 +237,7 @@ def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -
     fig, ax = plt.subplots(figsize=(FULL, grow_height(len(ranking), per_item=0.45, padding=1.8, minimum=3.5)))
     ax.barh(
         positions, means,
-        color=CATEGORICAL_SERIES[0], edgecolor=BAR_EDGE, linewidth=0.5, alpha=0.85, height=0.65,
+        color=opaque(CATEGORICAL_SERIES[0], 0.85), edgecolor=BAR_EDGE, linewidth=0.5, height=0.65,
     )
     for pos, mean, coherence in zip(positions, means, coherences):
         if mean == mean:
@@ -210,11 +252,15 @@ def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -
     finite = [m for m in means if m == m]
     if finite:
         ax.set_xlim(0.0, min(1.0, max(finite) * 1.18))
-    ax.grid(axis="x", linestyle=":", alpha=0.4)
+    ax.grid(axis="x", linestyle=":", color=GRID_RULE)
 
     country = result["metadata"]["country"]
-    ax.set_title(f"{country}: model x strategy leaderboard", fontsize=FIGURE_TITLE, fontweight="bold")
-    fig.tight_layout()
+    ax.set_title(
+        f"{country_label(country)}: model x method leaderboard",
+        fontsize=FIGURE_TITLE, fontweight="bold",
+    )
+    caption_block(fig, "Methods:  " + "   ".join(key_lines), fontsize=ANNOTATION)
+    fit_to_page(fig)
     return save_figure(fig, out_path)
 
 
@@ -239,6 +285,9 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
     combos: dict[str, Any] = result.get("combos", {})
     strategies = _ordered_strategies(result["metadata"]["strategies"])
     color_for = {s: CATEGORICAL_SERIES[i % len(CATEGORICAL_SERIES)] for i, s in enumerate(strategies)}
+    # The legend entry is the method key line itself, so the letters this figure would
+    # otherwise need a key block for are explained where they are read.
+    method_key = dict(zip(method_letters(strategies), method_key_lines(strategies)))
 
     by_strategy: dict[str, list[tuple[float, float, str]]] = {}
     for combo in combos.values():
@@ -266,8 +315,8 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
         ys = [p[1] for p in pts]
         all_aucs.extend(ys)
         ax.scatter(
-            xs, ys, s=70, color=color_for[strategy], label=strategy,
-            edgecolor="white", linewidth=0.6, alpha=0.9, zorder=3,
+            xs, ys, s=70, color=color_for[strategy], label=method_key[strategy],
+            edgecolor=SURFACE, linewidth=0.6, zorder=3,
         )
 
     ax.axhline(0.5, color=MUTED_GREY, linestyle="--", linewidth=1.0, zorder=1)
@@ -282,12 +331,12 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
     lo = min([0.5] + all_aucs) - 0.03
     hi = max([0.5] + all_aucs) + 0.03
     ax.set_ylim(lo, min(1.02, hi))
-    ax.grid(True, linestyle=":", alpha=0.4)
-    ax.legend(title="strategy", fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE)
+    ax.grid(True, linestyle=":", color=GRID_RULE)
+    ax.legend(title="generation method", fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE)
 
     country = result["metadata"]["country"]
     ax.set_title(
-        f"{country}: joint discriminability (C2ST) vs marginal fidelity",
+        f"{country_label(country)}: joint discriminability (C2ST) vs marginal fidelity",
         fontsize=FIGURE_TITLE, fontweight="bold",
     )
     fig.tight_layout()
@@ -321,6 +370,9 @@ def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Pat
     written: list[Path] = []
     width = 0.8 / len(models)
     x = np.arange(len(strategies))
+    letters = method_letters(strategies)
+    method_key = "Methods:  " + "   ".join(method_key_lines(strategies))
+    display_models = model_labels(models)
 
     for attr in attributes:
         fig, ax = plt.subplots(
@@ -337,23 +389,25 @@ def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Pat
             offsets = x - 0.4 + width * (m_idx + 0.5)
             ax.bar(
                 offsets, heights, width=width,
-                label=model, color=CATEGORICAL_SERIES[m_idx % len(CATEGORICAL_SERIES)],
-                edgecolor=BAR_EDGE, linewidth=0.4, alpha=0.85,
+                label=display_models[model],
+                color=CATEGORICAL_SERIES[m_idx % len(CATEGORICAL_SERIES)],
+                edgecolor=BAR_EDGE, linewidth=0.4,
             )
 
         ax.set_xticks(x)
-        ax.set_xticklabels(strategies, rotation=25, ha="right", fontsize=TICK_LABEL)
+        ax.set_xticklabels([letters[s] for s in strategies], fontsize=TICK_LABEL)
         ax.set_ylabel("TV-similarity", fontsize=AXIS_TITLE)
         ax.set_ylim(0.0, 1.0)
-        ax.grid(axis="y", linestyle=":", alpha=0.4)
+        ax.grid(axis="y", linestyle=":", color=GRID_RULE)
         ax.legend(fontsize=LEGEND_LABEL)
 
         country = result["metadata"]["country"]
-        ax.set_title(f"{country}: {attr} -- TV-similarity by model x strategy",
+        ax.set_title(f"{country_label(country)}: {attribute_label(attr)} -- "
+                     f"TV-similarity by model x method",
                      fontsize=PANEL_TITLE, fontweight="bold")
-        out_path = out_dir / f"{attr}_bars.png"
-        fig.tight_layout()
-        written.append(save_figure(fig, out_path))
+        caption_block(fig, method_key, fontsize=ANNOTATION)
+        fit_to_page(fig)
+        written.append(save_figure(fig, out_dir / f"{attr}_bars.png"))
 
     return written
 
@@ -400,9 +454,6 @@ _HATCH_LINEWIDTH = 0.6
 #: same luminance-derived contrast rule the annotations use, so it stays visible on
 #: both the near-black low end and the bright-yellow high end of the ramp.
 _THIN_HATCH = "///"
-
-#: Wrap width (characters) for the caption block under the figure.
-_CAPTION_WRAP = 130
 
 #: Reason a Tier 2 model carries no rank. Stated on the figure, not merely "unranked":
 #: the natural misreading of a block at the bottom is "these are the bad models", and
@@ -571,7 +622,7 @@ def _column_marginals(
     return means, counts
 
 
-def _row_marginal_text(row: _ModelRow) -> str:
+def _row_marginal_text(row: _ModelRow, letters: dict[str, str]) -> str:
     """The ordering key as printed beside the row: best score, argmax method, cell count.
 
     Deliberately not a mean: the rows are sorted by their maximum, and a marginal
@@ -582,7 +633,7 @@ def _row_marginal_text(row: _ModelRow) -> str:
     if row.best_value is None:
         return "n/a  (no scored cell)"
     scope = "full-n" if row.tier == 1 else "cells, provisional"
-    return f"{row.best_value * 100:.1f}  {row.best_method}  ({row.key_cells} {scope})"
+    return f"{row.best_value * 100:.1f}  {letters[row.best_method]}  ({row.key_cells} {scope})"
 
 
 @house_style
@@ -651,7 +702,9 @@ def plot_model_method_heatmap(
 
     # The row marginal lives inside the axes, so its width is reserved up front (in
     # column units) and the figure is widened to match.
-    row_marginals = [_row_marginal_text(row) for row in ordered]
+    letters = method_letters(strategies)
+    display_models = model_labels([row.model for row in ordered])
+    row_marginals = [_row_marginal_text(row, letters) for row in ordered]
     marginal_columns = _ROW_MARGINAL_OFFSET + (
         max(len(text) for text in row_marginals) / _MARGINAL_CHARS_PER_COLUMN
     )
@@ -691,7 +744,7 @@ def plot_model_method_heatmap(
         return render_grid(
             ax, block_values, cells,
             policy=_GRID_CELL_POLICY, cmap=cmap, norm=norm, aspect="auto",
-            interpolation="nearest",
+            interpolation="none",
             extent=(-0.5, n_methods - 0.5, y_top + len(block) - 0.5, y_top - 0.5),
             row_origin=y_top, fontsize=ANNOT_FONTSIZE, linespacing=1.35,
             text_on_fill=text_on_fill,
@@ -704,9 +757,9 @@ def plot_model_method_heatmap(
     ax.set_xlim(-0.5, n_methods - 0.5 + marginal_columns)
     ax.set_ylim(marginal_y + 0.5, -0.5)
 
-    categories_on_top(ax, strategies)
+    categories_on_top(ax, [letters[s] for s in strategies])
     ax.set_yticks(row_y)
-    ax.set_yticklabels([row.model for row in ordered], fontsize=TICK_LABEL)
+    ax.set_yticklabels([display_models[row.model] for row in ordered], fontsize=TICK_LABEL)
     hosting: dict[str, str] = metadata.get("model_hosting", {})
     for label, row in zip(ax.get_yticklabels(), ordered):
         # Provenance side-marker (same rule and colours as the models table); Tier 2
@@ -786,7 +839,7 @@ def plot_model_method_heatmap(
 
     country = metadata["country"]
     ax.set_title(
-        f"{country}: overall fidelity by model x method (TV-similarity %)\n"
+        f"{country_label(country)}: overall fidelity by model x method (TV-similarity %)\n"
         "one cell per combination, averaged over every axis -- not the per-axis "
         "combo table or the single-method models table",
         fontsize=PANEL_TITLE, fontweight="bold", pad=30,
@@ -798,6 +851,7 @@ def plot_model_method_heatmap(
         "(Tier 1: full-n cells only; Tier 2: all cells, provisional)" if tier2
         else "(full-n cells only)"
     )
+    method_key = "Methods:  " + "   ".join(method_key_lines(strategies)) + "  "
     caption = (
         "Cell: mean TV-similarity across every demographic axis (x100), over the n personas "
         "the validation gate left for that combination. "
@@ -809,12 +863,8 @@ def plot_model_method_heatmap(
     if tier2:
         lead = f"No model has a full-n cell: {_UNRANKED_NOTE}. " if not tier1 else ""
         caption = f"{lead}{_UNRANKED_CAVEAT} {caption}"
-    ax.text(
-        0.0, -0.13, textwrap.fill(caption, _CAPTION_WRAP), transform=ax.transAxes,
-        ha="left", va="top", fontsize=ANNOTATION, clip_on=False,
-    )
-
-    fig.tight_layout()
+    caption_block(fig, method_key + caption, fontsize=ANNOTATION)
+    fit_to_page(fig)
     # Hatch stroke width is an rcParam read at *draw* time, so it is set around the
     # save rather than on the patches, and scoped so no other figure inherits it.
     with plt.rc_context({"hatch.linewidth": _HATCH_LINEWIDTH}):

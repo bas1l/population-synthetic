@@ -22,6 +22,7 @@ never touches the CSV schema; it only reads finished metric structures and draws
 
 from __future__ import annotations
 
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -36,14 +37,25 @@ from population_synthetic.analysis.utils.grid_annotations import (
     RateWithCountsPolicy,
 )
 from population_synthetic.analysis.utils.grids import render_grid
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    country_label,
+    method_key_lines,
+    method_letters,
+    model_labels,
+    strategy_label,
+)
 from population_synthetic.analysis.utils.palette import (
     BAR_EDGE,
     CAPTION_GREY,
     CATEGORICAL_SERIES,
     ERROR_BAR_GREY,
+    GRID_RULE,
     MUTED_GREY,
     SECONDARY_GREY,
+    SURFACE,
     heatmap_cmap,
+    opaque,
 )
 from population_synthetic.analysis.utils.style import (
     ANNOTATION,
@@ -59,6 +71,26 @@ from population_synthetic.analysis.utils.style import (
     grow_width,
     house_style,
 )
+
+#: The diagnostics layer's explicit absent-marker for a call whose category the log did
+#: not record. A sentinel, not an axis id: it has no display string in config, and the
+#: raise it would provoke in `labels.py` is that resolver working as designed. This is
+#: the one legitimate way past it, and the branch below is deliberately the only one.
+#: The literal mirrors `diagnostics.py`, which owns it.
+_UNRECORDED_CATEGORY = "__unknown__"
+
+
+def _category_tick(category: str) -> str:
+    """Display phrase for one generation category, passing the absent-marker through."""
+    if category == _UNRECORDED_CATEGORY:
+        return "unrecorded"
+    return attribute_label(category)
+
+
+#: Characters per line of the in-figure method key. Sized so the key of a full
+#: five-method sweep wraps to two lines on the widest canvas rather than running
+#: past the printable edge, which the save-time budget would then reject.
+_KEY_WRAP = 110
 
 __all__ = ["render_metric_heatmaps", "plot_run_charts", "plot_run_comparison"]
 
@@ -182,13 +214,17 @@ def render_metric_heatmaps(
         im = render_grid(
             ax, means, cells,
             policy=_MEAN_CELL_POLICY, cmap=heatmap_cmap(), aspect="auto",
-            fontsize=ANNOTATION,
+            fontsize=ANNOTATION, interpolation="none",
         )
 
+        # Methods on x as their letters, models on y as their display names. The letters
+        # are meaningless without the key, so it is drawn on the figure below.
+        letters = method_letters(methods)
+        display_models = model_labels(models)
         ax.set_xticks(range(len(methods)))
-        ax.set_xticklabels(methods, rotation=30, ha="right", fontsize=TICK_LABEL)
+        ax.set_xticklabels([letters[m] for m in methods], fontsize=TICK_LABEL)
         ax.set_yticks(range(len(models)))
-        ax.set_yticklabels(models, fontsize=TICK_LABEL)
+        ax.set_yticklabels([display_models[m] for m in models], fontsize=TICK_LABEL)
 
         cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
         cbar.set_label(_METRIC_LABELS.get(metric, metric), fontsize=AXIS_TITLE)
@@ -202,8 +238,13 @@ def render_metric_heatmaps(
                     ax.text(j, i, "n/a", ha="center", va="center", fontsize=ANNOTATION, color=SECONDARY_GREY)
 
         ax.set_title(
-            f"{country}: {_METRIC_LABELS.get(metric, metric)} (mean per model x method)",
+            f"{country_label(country)}: {_METRIC_LABELS.get(metric, metric)} "
+            f"(mean per model x method)",
             fontsize=PANEL_TITLE, fontweight="bold",
+        )
+        ax.text(
+            0.0, -0.12, textwrap.fill("Methods:  " + "   ".join(method_key_lines(methods)), _KEY_WRAP),
+            transform=ax.transAxes, ha="left", va="top", fontsize=ANNOTATION, clip_on=False,
         )
         fig.tight_layout()
         written.append(save_figure(fig, out_dir / f"{country}_{metric}.png"))
@@ -237,9 +278,9 @@ def _plot_category_call_count(metrics: dict, output_dir: Path) -> Path | None:
     n_cats = len(cats_sorted)
 
     fig, ax = plt.subplots(figsize=(FULL, grow_height(n_cats, per_item=0.45, padding=2, minimum=4.0)))
-    ax.barh(range(n_cats), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
+    ax.barh(range(n_cats), vals, color=_SERIES_PRIMARY, edgecolor=SURFACE, linewidth=0.4)
     ax.set_yticks(range(n_cats))
-    ax.set_yticklabels(cats_sorted, fontsize=TICK_LABEL)
+    ax.set_yticklabels([_category_tick(c) for c in cats_sorted], fontsize=TICK_LABEL)
     ax.set_xlabel("Call count", fontsize=AXIS_TITLE)
     ax.set_title("LLM calls per category", fontsize=PANEL_TITLE, fontweight="bold")
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
@@ -270,16 +311,16 @@ def _plot_category_retry_rate(metrics: dict, output_dir: Path) -> Path | None:
     x_max = max(0.05, max_rate * 1.15) if max_rate > 0 else 0.10
 
     fig, ax = plt.subplots(figsize=(FULL, grow_height(n_cats, per_item=0.45, padding=2, minimum=4.0)))
-    ax.barh(range(n_cats), vals, color=_SERIES_ADVERSE, edgecolor="white", linewidth=0.4)
+    ax.barh(range(n_cats), vals, color=_SERIES_ADVERSE, edgecolor=SURFACE, linewidth=0.4)
     ax.set_yticks(range(n_cats))
-    ax.set_yticklabels(cats_sorted, fontsize=TICK_LABEL)
+    ax.set_yticklabels([_category_tick(c) for c in cats_sorted], fontsize=TICK_LABEL)
     ax.set_xlabel("Retry rate", fontsize=AXIS_TITLE)
     ax.set_xlim(0, x_max)
     ax.set_title("Retry rate per category", fontsize=PANEL_TITLE, fontweight="bold")
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
-    ax.axvline(0.10, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
-    ax.text(0.10, n_cats - 0.5, "10%", va="top", ha="left", fontsize=ANNOTATION, color="gray", alpha=0.8)
+    ax.axvline(0.10, color=MUTED_GREY, linestyle="--", linewidth=0.8)
+    ax.text(0.10, n_cats - 0.5, "10%", va="top", ha="left", fontsize=ANNOTATION, color=MUTED_GREY)
 
     fig.tight_layout()
     return save_figure(fig, output_dir / "category_retry_rate.png")
@@ -304,9 +345,9 @@ def _plot_value_diversity_entropy(metrics: dict, output_dir: Path) -> Path | Non
     vals = [vd[c]["entropy_bits"] for c in cats_sorted]
 
     fig, ax = plt.subplots(figsize=(FULL, grow_height(n_cats, per_item=0.45, padding=2, minimum=4.0)))
-    ax.barh(range(n_cats), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
+    ax.barh(range(n_cats), vals, color=_SERIES_PRIMARY, edgecolor=SURFACE, linewidth=0.4)
     ax.set_yticks(range(n_cats))
-    ax.set_yticklabels(cats_sorted, fontsize=TICK_LABEL)
+    ax.set_yticklabels([_category_tick(c) for c in cats_sorted], fontsize=TICK_LABEL)
     ax.set_xlabel("Entropy (bits)", fontsize=AXIS_TITLE)
     ax.set_title("Value diversity (Shannon entropy) per category", fontsize=PANEL_TITLE, fontweight="bold")
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
@@ -346,13 +387,13 @@ def _plot_method_distribution(metrics: dict, output_dir: Path) -> Path | None:
         methods_plot = list(reversed(methods))  # largest at top
         vals_plot = list(reversed(vals))
         fig, ax = plt.subplots(figsize=(FULL, grow_height(n_methods, per_item=0.45, padding=2, minimum=4.0)))
-        ax.barh(range(n_methods), vals_plot, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
+        ax.barh(range(n_methods), vals_plot, color=_SERIES_PRIMARY, edgecolor=SURFACE, linewidth=0.4)
         ax.set_yticks(range(n_methods))
         ax.set_yticklabels(methods_plot, fontsize=TICK_LABEL)
         ax.set_xlabel("Call count", fontsize=AXIS_TITLE)
     else:
         fig, ax = plt.subplots(figsize=figure_size(grow_width(n_methods, per_item=1.0, padding=2, minimum=6.0), 5))
-        ax.bar(range(n_methods), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
+        ax.bar(range(n_methods), vals, color=_SERIES_PRIMARY, edgecolor=SURFACE, linewidth=0.4)
         ax.set_xticks(range(n_methods))
         ax.set_xticklabels(methods, rotation=30, ha="right", fontsize=TICK_LABEL)
         ax.set_ylabel("Call count", fontsize=AXIS_TITLE)
@@ -402,7 +443,7 @@ def _plot_prompt_size_growth(metrics: dict, output_dir: Path) -> Path | None:
     if compute_band:
         p25_vals = [_percentile(pos_lens[p], 25) for p in positions]
         p75_vals = [_percentile(pos_lens[p], 75) for p in positions]
-        ax.fill_between(positions, p25_vals, p75_vals, alpha=0.15, color=_SERIES_PRIMARY)
+        ax.fill_between(positions, p25_vals, p75_vals, color=opaque(_SERIES_PRIMARY, 0.15))
 
     ax.set_xlabel("Chain position", fontsize=AXIS_TITLE)
     ax.set_ylabel("Prompt length (chars)", fontsize=AXIS_TITLE)
@@ -438,7 +479,7 @@ def _plot_wall_clock_per_persona(metrics: dict, output_dir: Path) -> Path | None
     n_pids = len(pids_sorted)
 
     fig, ax = plt.subplots(figsize=(FULL, grow_height(n_pids, per_item=0.45, padding=2, minimum=4.0)))
-    ax.barh(range(n_pids), vals, color=_SERIES_PRIMARY, edgecolor="white", linewidth=0.4)
+    ax.barh(range(n_pids), vals, color=_SERIES_PRIMARY, edgecolor=SURFACE, linewidth=0.4)
     ax.set_yticks(range(n_pids))
     ax.set_yticklabels(pids_sorted, fontsize=TICK_LABEL)
     ax.set_xlabel("Wall-clock time (s)", fontsize=AXIS_TITLE)
@@ -471,11 +512,11 @@ def _plot_token_consumption_by_category(metrics: dict, output_dir: Path) -> Path
     fig, ax = plt.subplots(figsize=(FULL, grow_height(n_cats, per_item=0.45, padding=2, minimum=4.0)))
     y_pos = range(n_cats)
     ax.barh(y_pos, prompt_vals, color=_SERIES_PRIMARY, label="Prompt",
-            edgecolor="white", linewidth=0.4)
+            edgecolor=SURFACE, linewidth=0.4)
     ax.barh(y_pos, completion_vals, left=prompt_vals, color=_SERIES_SECONDARY,
-            label="Completion", edgecolor="white", linewidth=0.4)
+            label="Completion", edgecolor=SURFACE, linewidth=0.4)
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(cats_sorted, fontsize=TICK_LABEL)
+    ax.set_yticklabels([_category_tick(c) for c in cats_sorted], fontsize=TICK_LABEL)
     ax.set_xlabel("Token count", fontsize=AXIS_TITLE)
     ax.set_title("Token consumption by category", fontsize=PANEL_TITLE, fontweight="bold")
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
@@ -510,9 +551,9 @@ def _plot_token_budget_by_step_type(metrics: dict, output_dir: Path) -> Path | N
 
     fig, ax = plt.subplots(figsize=figure_size(grow_width(n_types, per_item=1.0, padding=2, minimum=6.0), 5))
     ax.bar(x - bar_width / 2, prompt_vals, width=bar_width, color=_SERIES_PRIMARY,
-           label="Prompt", edgecolor="white", linewidth=0.4)
+           label="Prompt", edgecolor=SURFACE, linewidth=0.4)
     ax.bar(x + bar_width / 2, completion_vals, width=bar_width, color=_SERIES_SECONDARY,
-           label="Completion", edgecolor="white", linewidth=0.4)
+           label="Completion", edgecolor=SURFACE, linewidth=0.4)
 
     ax.set_xticks(x)
     ax.set_xticklabels(step_types, rotation=30, ha="right", fontsize=TICK_LABEL)
@@ -569,14 +610,14 @@ def _plot_latency_by_category(metrics: dict, output_dir: Path) -> Path | None:
 
     fig, ax = plt.subplots(figsize=(FULL, grow_height(n_cats, per_item=0.9, padding=2, minimum=4.0)))
     ax.barh([y + bar_height for y in y_base], median_vals, height=bar_height,
-            color=_SERIES_ALTERNATE,  label="Median",  edgecolor="white", linewidth=0.3)
+            color=_SERIES_ALTERNATE,  label="Median",  edgecolor=SURFACE, linewidth=0.3)
     ax.barh([y              for y in y_base], p95_vals,    height=bar_height,
-            color=_SERIES_INTERMEDIATE, label="p95",     edgecolor="white", linewidth=0.3)
+            color=_SERIES_INTERMEDIATE, label="p95",     edgecolor=SURFACE, linewidth=0.3)
     ax.barh([y - bar_height for y in y_base], max_vals,    height=bar_height,
-            color=_SERIES_ADVERSE,    label="Max",     edgecolor="white", linewidth=0.3)
+            color=_SERIES_ADVERSE,    label="Max",     edgecolor=SURFACE, linewidth=0.3)
 
     ax.set_yticks(list(y_base))
-    ax.set_yticklabels(cats_plot, fontsize=TICK_LABEL)
+    ax.set_yticklabels([_category_tick(c) for c in cats_plot], fontsize=TICK_LABEL)
     ax.set_xlabel("Latency (ms)", fontsize=AXIS_TITLE)
     ax.set_title("Latency by category (median / p95 / max)", fontsize=PANEL_TITLE, fontweight="bold")
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
@@ -652,8 +693,15 @@ def _plot_box_grouped(
     metric_label: str,
     unit: str,
     out_path: Path,
+    *,
+    display: dict[str, str],
 ) -> Path | None:
-    """Box plot of *metric* across the groups of one factor, with Dunn brackets."""
+    """Box plot of *metric* across the groups of one factor, with Dunn brackets.
+
+    *display* maps each group id to the string its tick carries. It is resolved by the
+    caller, which is the only place that knows whether this factor's groups are models
+    or methods; passing the resolved mapping keeps this function agnostic of both.
+    """
     groups: dict[str, list[float]] = block["groups"]
     order = [g for g in block["order"] if groups.get(g)]
     if not order:
@@ -679,8 +727,9 @@ def _plot_box_grouped(
         medianprops={"color": "black", "linewidth": 1.4},
     )
     for patch in bp["boxes"]:
-        patch.set_facecolor(_SERIES_PRIMARY)
-        patch.set_alpha(0.55)
+        # Composited rather than drawn at alpha: the EPS backend has no transparency,
+        # so an alpha here would make the submitted figure differ from its siblings.
+        patch.set_facecolor(opaque(_SERIES_PRIMARY, 0.55))
         patch.set_edgecolor(BAR_EDGE)
 
     # Overlay individual observations (jittered) -- N per group is small.
@@ -690,11 +739,11 @@ def _plot_box_grouped(
         jitter = rng.uniform(-0.14, 0.14, size=len(vals))
         ax.scatter(
             np.full(len(vals), i + 1) + jitter, vals,
-            s=14, color=_SERIES_SECONDARY, alpha=0.7, edgecolor="white", linewidth=0.3, zorder=3,
+            s=14, color=opaque(_SERIES_SECONDARY, 0.7), edgecolor=SURFACE, linewidth=0.3, zorder=3,
         )
 
     ax.set_xticks(positions)
-    ax.set_xticklabels(order, rotation=35, ha="right", fontsize=TICK_LABEL)
+    ax.set_xticklabels([display[g] for g in order], rotation=35, ha="right", fontsize=TICK_LABEL)
     ylabel = f"{metric_label} ({unit})" if unit else metric_label
     ax.set_ylabel(ylabel, fontsize=AXIS_TITLE)
     ax.set_title(f"{metric_label} by {factor_label}", fontsize=FIGURE_TITLE, fontweight="bold")
@@ -702,7 +751,7 @@ def _plot_box_grouped(
         0.5, 1.015, _kruskal_subtitle(block["kruskal"]),
         transform=ax.transAxes, ha="center", va="bottom", fontsize=ANNOTATION, color=CAPTION_GREY,
     )
-    ax.grid(axis="y", linestyle=":", alpha=0.4)
+    ax.grid(axis="y", linestyle=":", color=GRID_RULE)
 
     # Significance brackets for significant Dunn pairs (within plotted groups).
     sig = [
@@ -748,6 +797,8 @@ def _plot_grouped_bar_errorbars(
     metric_label: str,
     unit: str,
     out_path: Path,
+    *,
+    display: dict[str, str],
 ) -> Path | None:
     """Mean +/- SD bars per group (companion view to the box plot)."""
     groups: dict[str, list[float]] = block["groups"]
@@ -767,11 +818,11 @@ def _plot_grouped_bar_errorbars(
     fig, ax = plt.subplots(figsize=figure_size(_figwidth(len(order)), 6))
     ax.bar(
         positions, means, yerr=stds, capsize=4,
-        color=_SERIES_ALTERNATE, edgecolor=BAR_EDGE, linewidth=0.5, alpha=0.85,
+        color=opaque(_SERIES_ALTERNATE, 0.85), edgecolor=BAR_EDGE, linewidth=0.5,
         error_kw={"elinewidth": 1.0, "ecolor": ERROR_BAR_GREY},
     )
     ax.set_xticks(positions)
-    ax.set_xticklabels(order, rotation=35, ha="right", fontsize=TICK_LABEL)
+    ax.set_xticklabels([display[g] for g in order], rotation=35, ha="right", fontsize=TICK_LABEL)
     ylabel = f"{metric_label} ({unit})" if unit else metric_label
     ax.set_ylabel(f"mean {ylabel}", fontsize=AXIS_TITLE)
     ax.set_title(f"{metric_label} by {factor_label} (mean +/- SD)", fontsize=FIGURE_TITLE, fontweight="bold")
@@ -779,7 +830,7 @@ def _plot_grouped_bar_errorbars(
         0.5, 1.015, _kruskal_subtitle(block["kruskal"]),
         transform=ax.transAxes, ha="center", va="bottom", fontsize=ANNOTATION, color=CAPTION_GREY,
     )
-    ax.grid(axis="y", linestyle=":", alpha=0.4)
+    ax.grid(axis="y", linestyle=":", color=GRID_RULE)
 
     fig.tight_layout()
     return save_figure(fig, out_path)
@@ -824,13 +875,16 @@ def _plot_heatmap(
     im = render_grid(
         ax, values, cells,
         policy=_MATRIX_CELL_POLICY, cmap=heatmap_cmap(), aspect="auto",
-        fontsize=ANNOTATION,
+        fontsize=ANNOTATION, interpolation="none",
     )
 
+    # As the sibling grid above: letters on x, display names on y, key on the figure.
+    letters = method_letters(methods)
+    display_models = model_labels(models)
     ax.set_xticks(range(len(methods)))
-    ax.set_xticklabels(methods, rotation=35, ha="right", fontsize=TICK_LABEL)
+    ax.set_xticklabels([letters[m] for m in methods], fontsize=TICK_LABEL)
     ax.set_yticks(range(len(models)))
-    ax.set_yticklabels(models, fontsize=TICK_LABEL)
+    ax.set_yticklabels([display_models[m] for m in models], fontsize=TICK_LABEL)
 
     agg = matrix.get("cell_agg", "value")
     label = f"{agg} {metric_label}" + (f" ({unit})" if unit else "")
@@ -838,6 +892,10 @@ def _plot_heatmap(
     cbar.set_label(label, fontsize=AXIS_TITLE)
 
     ax.set_title(f"{metric_label}: model x method", fontsize=FIGURE_TITLE, fontweight="bold")
+    ax.text(
+        0.0, -0.14, textwrap.fill("Methods:  " + "   ".join(method_key_lines(methods)), _KEY_WRAP),
+        transform=ax.transAxes, ha="left", va="top", fontsize=ANNOTATION, clip_on=False,
+    )
     fig.tight_layout()
     return save_figure(fig, out_path)
 
@@ -859,15 +917,23 @@ def plot_run_comparison(result: dict[str, Any], output_dir: str | Path) -> list[
             block = entry.get(factor)
             if block is None:
                 continue
+            # One factor axis with room for a phrase, so the methods are spelled out here
+            # rather than lettered: there is no second axis to keep short and no key block
+            # to read a letter against.
+            groups = list(block["order"])
+            display = (
+                model_labels(groups) if factor == "by_model"
+                else {g: strategy_label(g) for g in groups}
+            )
             box = _plot_box_grouped(
                 block, factor_label, metric_label, unit,
-                output_dir / f"{key}_{factor}_box.png",
+                output_dir / f"{key}_{factor}_box.png", display=display,
             )
             if box:
                 written.append(box)
             bar = _plot_grouped_bar_errorbars(
                 block, factor_label, metric_label, unit,
-                output_dir / f"{key}_{factor}_bar.png",
+                output_dir / f"{key}_{factor}_bar.png", display=display,
             )
             if bar:
                 written.append(bar)

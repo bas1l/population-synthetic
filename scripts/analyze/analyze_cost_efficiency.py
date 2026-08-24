@@ -41,7 +41,7 @@ Outputs, per country, under the analysis-stage cost_efficiency folder:
     {country}_cost_efficiency.json    the same quantities plus totals, the withdrawn
                                       combinations, the membership rule and pricing
                                       provenance
-    {country}_cost_vs_fidelity.png/.svg   accuracy against cost, symlog x with the
+    {country}_cost_vs_fidelity.png/.svg/.eps   accuracy against cost, symlog x with the
                                       labelled unmetered band
 
 The JSON carries no timestamp, so re-running over unchanged inputs rewrites the CSV and

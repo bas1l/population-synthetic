@@ -338,3 +338,63 @@ def test_the_shared_grid_annotation_size_respects_the_floor():
     from population_synthetic.analysis.utils import table_style
 
     assert table_style.ANNOT_FONTSIZE >= style.FONT_FLOOR_PT
+
+
+# ------------------------------------------------------------------
+# Fitting text to the canvas
+# ------------------------------------------------------------------
+
+def test_a_measured_width_grows_with_the_size_it_is_set_at():
+    """Metrics read from the font, not a characters-per-inch guess."""
+    small = style.text_width_inches("a caption of some length", fontsize=style.FONT_FLOOR_PT)
+    large = style.text_width_inches("a caption of some length", fontsize=style.FONT_CEILING_PT)
+    assert 0 < small < large
+
+
+def test_measuring_a_multi_line_string_raises_rather_than_measuring_the_run():
+    """Measuring the concatenation would report a width no line actually has."""
+    with pytest.raises(ValueError, match="newline"):
+        style.text_width_inches("two\nlines", fontsize=style.ANNOTATION)
+
+
+@pytest.mark.parametrize("width", [style.SINGLE, style.DOUBLE, style.FULL])
+def test_every_wrapped_line_fits_the_width_it_was_given(width):
+    """The property the caption fix rests on, asserted by measuring the result."""
+    caption = (
+        "Each cell is that combination's retention rate: the share of the generated "
+        "pool that survived both validators, printed with the two counts it is the "
+        "quotient of, and hatched where the full-N rule withdrew the combination."
+    )
+    wrapped = style.wrap_to_width(caption, width, fontsize=style.ANNOTATION)
+    for line in wrapped.splitlines():
+        assert style.text_width_inches(line, fontsize=style.ANNOTATION) <= width
+
+
+def test_wrapping_preserves_the_words_and_their_order():
+    """A wrap is a layout decision; it must not edit the sentence."""
+    caption = "one two three four five six seven eight nine ten eleven twelve thirteen"
+    wrapped = style.wrap_to_width(caption, style.SINGLE, fontsize=style.ANNOTATION)
+    assert wrapped.split() == caption.split()
+
+
+def test_a_string_that_already_fits_is_returned_unwrapped():
+    """No gratuitous break: the caption fills the line it is given."""
+    assert style.wrap_to_width("short", style.FULL, fontsize=style.ANNOTATION) == "short"
+
+
+def test_hard_breaks_survive_the_wrap():
+    """A caption that authored its own paragraph break keeps it."""
+    wrapped = style.wrap_to_width("first line\nsecond line", style.FULL, fontsize=style.ANNOTATION)
+    assert wrapped == "first line\nsecond line"
+
+
+def test_a_non_positive_width_raises():
+    with pytest.raises(ValueError, match="positive"):
+        style.wrap_to_width("anything", 0.0, fontsize=style.ANNOTATION)
+
+
+def test_the_point_conversion_has_one_definition():
+    """`figures` binds it rather than restating it, so the two can never disagree."""
+    from population_synthetic.analysis.utils import figures
+
+    assert figures.POINTS_PER_INCH is style.POINTS_PER_INCH

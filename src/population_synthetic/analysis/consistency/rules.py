@@ -75,6 +75,7 @@ class Rule:
     """One guarded-requirement consistency rule: ``when`` implies ``require``."""
 
     id: str
+    label: str
     description: str
     severity: str
     when: tuple[Predicate, ...]
@@ -166,8 +167,9 @@ def load_rules(country: str, *, config_path: Path | None = None) -> tuple[Rule, 
     """Load the consistency rule list for *country* (fail-fast).
 
     Raises on: a missing config file, a config without a non-empty ``rules`` list, a
-    rule entry missing a required key (``id``/``description``/``severity``/``when``/
-    ``require``), a duplicate ``id``, an invalid ``severity`` (must be ``hard`` or
+    rule entry missing a required key (``id``/``label``/``description``/``severity``/
+    ``when``/``require``), a ``label`` containing an underscore (it is what a reader sees
+    on a figure axis), a duplicate ``id``, an invalid ``severity`` (must be ``hard`` or
     ``soft``), a predicate referencing an attribute unknown to the country's
     :class:`~population_synthetic.analysis.fidelity.scheme.ComparisonScheme`
     (plus the raw ``age`` field), or any predicate whose shape does not match the
@@ -197,7 +199,10 @@ def load_rules(country: str, *, config_path: Path | None = None) -> tuple[Rule, 
         if not isinstance(entry, dict):
             raise ValueError(f"Consistency rule config {path}: each rule entry must be a mapping, got {entry!r}")
 
-        missing = [key for key in ("id", "description", "severity", "when", "require") if key not in entry]
+        missing = [
+            key for key in ("id", "label", "description", "severity", "when", "require")
+            if key not in entry
+        ]
         if missing:
             raise KeyError(f"Consistency rule config {path}: rule entry {entry!r} missing key(s) {missing}")
 
@@ -207,6 +212,18 @@ def load_rules(country: str, *, config_path: Path | None = None) -> tuple[Rule, 
         if rule_id in seen_ids:
             raise ValueError(f"Consistency rule config {path}: duplicate rule id {rule_id!r}")
         seen_ids.add(rule_id)
+
+        # The display label, and the one field validated for *presentation*: a rule id is
+        # a join key and looks like one, so a label that still carries an underscore is a
+        # label nobody wrote, and it would reach a published axis as `young_retiree`.
+        label = entry["label"]
+        if not isinstance(label, str) or not label:
+            raise ValueError(f"Consistency rule {rule_id!r}: 'label' must be a non-empty string")
+        if "_" in label:
+            raise ValueError(
+                f"Consistency rule {rule_id!r}: 'label' is what a reader sees on a figure "
+                f"axis and must not contain an underscore, got {label!r}"
+            )
 
         description = entry["description"]
         if not isinstance(description, str) or not description:
@@ -225,7 +242,10 @@ def load_rules(country: str, *, config_path: Path | None = None) -> tuple[Rule, 
             entry["require"], rule_id=rule_id, field_name="require", valid_attrs=valid_attrs
         )
 
-        parsed.append(Rule(id=rule_id, description=description, severity=severity, when=when, require=require))
+        parsed.append(Rule(
+            id=rule_id, label=label, description=description, severity=severity,
+            when=when, require=require,
+        ))
 
     return tuple(parsed)
 

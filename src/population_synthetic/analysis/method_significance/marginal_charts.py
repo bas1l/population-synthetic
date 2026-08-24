@@ -39,8 +39,19 @@ from population_synthetic.analysis.utils.axes import (
 )
 from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    country_label,
+    method_key_lines,
+    method_letters,
+    model_label,
+)
 from population_synthetic.analysis.utils.marginals import compute_proportions
-from population_synthetic.analysis.utils.palette import BASELINE_DARK, CATEGORICAL_SERIES
+from population_synthetic.analysis.utils.palette import (
+    BASELINE_DARK,
+    CATEGORICAL_SERIES,
+    SURFACE,
+)
 from population_synthetic.analysis.utils.style import (
     AXIS_TITLE,
     FULL,
@@ -60,6 +71,11 @@ logger = logging.getLogger(__name__)
 # Label of the real statistical baseline series (always the first entry, drawn
 # distinct from the method-progression series).
 REAL_SERIES_LABEL = "real"
+
+# What that baseline series is CALLED in the legend. The key above is a data-contract
+# token shared with the loader; this is the reader-facing phrase, and the two are
+# deliberately separate so renaming the caption cannot move the contract.
+_REAL_SERIES_CAPTION = "Real population"
 
 # Colour of the baseline series -- deliberately outside ``CATEGORICAL_SERIES`` so the
 # real distribution reads as distinct from the method-progression ramp.
@@ -294,6 +310,14 @@ def plot_marginal_progression(
             if all(props.get(cat, 0.0) == 0.0 for _, props in series for cat in cats):
                 continue
 
+            # The series labels are the loader's contract tokens: the baseline key and
+            # strategy ids. Each is resolved to a reader-facing caption here, and the
+            # method captions carry their own key line, so the legend needs no
+            # separate key block of its own.
+            method_ids = [label for label, _ in series if label != REAL_SERIES_LABEL]
+            caption = {REAL_SERIES_LABEL: _REAL_SERIES_CAPTION}
+            caption.update(zip(method_letters(method_ids), method_key_lines(method_ids)))
+
             n_series = len(series)
             n_cats = len(cats)
             horizontal = attr in _HIGH_CARDINALITY_FIELDS
@@ -313,8 +337,8 @@ def plot_marginal_progression(
                     vals = [props.get(cat, 0.0) for cat in cats]
                     ax.barh(
                         y_pos - offsets[i], vals, height=bar_size,
-                        color=_series_color(i), label=label,
-                        edgecolor="white", linewidth=0.3,
+                        color=_series_color(i), label=caption[label],
+                        edgecolor=SURFACE, linewidth=0.3,
                     )
                 ax.set_yticks(y_pos)
                 ax.set_yticklabels(cats, fontsize=TICK_LABEL)
@@ -331,8 +355,8 @@ def plot_marginal_progression(
                     vals = [props.get(cat, 0.0) for cat in cats]
                     ax.bar(
                         x_pos + offsets[i], vals, width=bar_size,
-                        color=_series_color(i), label=label,
-                        edgecolor="white", linewidth=0.3,
+                        color=_series_color(i), label=caption[label],
+                        edgecolor=SURFACE, linewidth=0.3,
                     )
                 ax.set_xticks(x_pos)
                 ax.set_xticklabels(cats, rotation=30, ha="right", fontsize=TICK_LABEL)
@@ -340,7 +364,8 @@ def plot_marginal_progression(
                 ax.set_ylim(0.0, 1.0)
 
             ax.set_title(
-                f"{country} / {model}: {attr}\nreal baseline vs method progression",
+                f"{country_label(country)} / {model_label(model)}: {attribute_label(attr)}"
+                f"\nreal baseline vs method progression",
                 fontsize=PANEL_TITLE, fontweight="bold",
             )
             ax.legend(fontsize=LEGEND_LABEL, title="series (simplest -> most complex)", title_fontsize=LEGEND_TITLE)

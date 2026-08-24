@@ -82,7 +82,7 @@ _NON_COMPOSITE_REASON = (
 #: What ``unmetered`` does and does not mean, carried as data for the same reason.
 _UNMETERED_NOTE = (
     "An unmetered model is priced {in: 0, out: 0} in config/analysis/model_pricing.yaml "
-    "-- the local ollama_* models, which this pipeline does not bill for. Its cost is a "
+    "-- the locally served models, which this pipeline does not bill for. Its cost is a "
     "MEASURED zero, not an absent one, and unmetered is not free: local inference has a "
     "real hardware, power and operator cost that the pricing config does not model."
 )

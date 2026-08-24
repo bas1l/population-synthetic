@@ -55,6 +55,7 @@ def test_load_rules_unknown_attribute_raises(tmp_path):
         yaml.safe_dump({
             "rules": [{
                 "id": "bogus",
+                "label": "Bogus",
                 "description": "references an attribute that does not exist",
                 "severity": "hard",
                 "when": {"not_a_real_attribute": "x"},
@@ -84,6 +85,7 @@ def test_load_rules_malformed_predicate_raises(tmp_path, when_block):
         yaml.safe_dump({
             "rules": [{
                 "id": "malformed",
+                "label": "Malformed",
                 "description": "malformed predicate",
                 "severity": "hard",
                 "when": when_block,
@@ -96,12 +98,41 @@ def test_load_rules_malformed_predicate_raises(tmp_path, when_block):
         load_rules("swedish", config_path=path)
 
 
+def test_load_rules_underscored_label_raises(tmp_path):
+    """The label is what a reader sees on an axis; an id copied into it would ship as one."""
+    path = tmp_path / "underscored_label.yaml"
+    path.write_text(
+        yaml.safe_dump({
+            "rules": [{
+                "id": "young_retiree",
+                "label": "young_retiree",
+                "description": "the id, pasted into the label",
+                "severity": "hard",
+                "when": {"age": {"min": 1}},
+                "require": {"age": {"min": 1}},
+            }]
+        }),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="underscore"):
+        load_rules("swedish", config_path=path)
+
+
+def test_every_shipped_rule_declares_a_readable_label():
+    """The live config, not a fixture: a rule added without a label must fail here."""
+    for rule in load_rules("swedish"):
+        assert rule.label
+        assert "_" not in rule.label
+        assert rule.label != rule.id
+
+
 def test_load_rules_invalid_severity_raises(tmp_path):
     path = tmp_path / "bad_severity.yaml"
     path.write_text(
         yaml.safe_dump({
             "rules": [{
                 "id": "bad_severity",
+                "label": "Bad severity",
                 "description": "severity is not hard/soft",
                 "severity": "critical",
                 "when": {"age": {"min": 1}},
@@ -117,6 +148,7 @@ def test_load_rules_invalid_severity_raises(tmp_path):
 def test_load_rules_duplicate_id_raises(tmp_path):
     rule = {
         "id": "dup",
+        "label": "Duplicate",
         "description": "duplicate id",
         "severity": "hard",
         "when": {"age": {"min": 1}},
@@ -198,6 +230,7 @@ def test_is_violation_multi_predicate_when_and_require():
     # Multiple keys inside a single when/require block are ANDed together.
     rule = Rule(
         id="multi",
+        label="Employed married minor",
         description="employed AND married adults should be at least 18",
         severity="soft",
         when=(
@@ -222,6 +255,7 @@ def test_is_violation_multi_predicate_when_and_require():
 def _young_retiree_rule():
     return Rule(
         id="young_retiree",
+        label="Young retiree",
         description="Retired individuals should not be younger than 55.",
         severity="hard",
         when=(Predicate(attr="employment_status", equals="retired"),),
@@ -279,3 +313,85 @@ def test_scan_population_never_mutates_input():
     scan_population(individuals, (_young_retiree_rule(),), population="mini", country="swedish")
 
     assert individuals == snapshot
+
+
+# ---------------------------------------------------------------------------
+# The violation-rate chart -- nothing an id names reaches the canvas
+# ---------------------------------------------------------------------------
+
+
+def _summary_rows(country: str):
+    """One row per (population, rule) over the shipped rules, both population shapes."""
+    from population_synthetic.analysis.consistency.builder import build_summary_rows
+    from population_synthetic.generators.synthetic.manifest_loader import axis_slug
+
+    rules = load_rules(country)
+    individuals = [
+        {"id": 0, "age": 30, "employment_status": "Retired", "civil_status": "Married"},
+        {"id": 1, "age": 70, "employment_status": "Retired", "civil_status": "Married"},
+    ]
+    return build_summary_rows([
+        scan_population(individuals, rules, population=population, country=country)
+        for population in (
+            f"real_{country}",
+            axis_slug("claude_haiku", "all_pick", country),
+        )
+    ])
+
+
+def _drawn_strings(rows, country, tmp_path):
+    """Every tick, legend entry and title the chart puts on the canvas.
+
+    The writer closes the figure it persists, so the labelling has to be read before it
+    reaches disk -- which is what intercepting ``save_figure`` is for.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    import population_synthetic.analysis.consistency.charts as mod
+
+    captured = []
+    original = mod.save_figure
+
+    def spy(fig, path, **kwargs):
+        captured.append(fig)
+        return path
+
+    mod.save_figure = spy
+    try:
+        mod.plot_violation_rates(rows, tmp_path / "spied.png", country=country)
+    finally:
+        mod.save_figure = original
+
+    assert captured, "the chart function produced no figure"
+    ax = captured[-1].axes[0]
+    strings = [t.get_text() for t in ax.get_xticklabels()]
+    strings += [t.get_text() for t in ax.get_legend().get_texts()]
+    strings.append(ax.get_legend().get_title().get_text())
+    strings += [ax.get_title(), ax.get_ylabel()]
+    plt.close(captured[-1])
+    return [s for s in strings if s.strip()]
+
+
+def test_violation_rate_chart_ticks_and_legends_without_an_id(tmp_path):
+    """The rule id ticks as its config label; the population legends as its axis name."""
+    country = "swedish_02"
+    displayed = _drawn_strings(_summary_rows(country), country, tmp_path)
+
+    assert displayed, "the chart drew no labelling text"
+    for text in displayed:
+        assert "_" not in text, text
+        assert "openrouter" not in text.lower() and "ollama" not in text.lower(), text
+
+
+def test_violation_rate_chart_prints_the_rule_label_not_the_rule_id(tmp_path):
+    """A tick shows what the config *calls* the rule, and the two are not the same string."""
+    country = "swedish_02"
+    rules = load_rules(country)
+    displayed = _drawn_strings(_summary_rows(country), country, tmp_path)
+
+    for rule in rules:
+        assert rule.label in displayed
+        assert rule.id not in displayed

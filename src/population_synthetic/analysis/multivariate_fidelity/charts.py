@@ -21,10 +21,17 @@ from typing import Any
 from population_synthetic.analysis.fidelity.charts import plot_association_heatmap
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.labels import (
+    country_label,
+    method_key_lines,
+    method_letters,
+)
 from population_synthetic.analysis.utils.palette import (
     CATEGORICAL_SERIES,
+    GRID_RULE,
     MUTED_GREY,
     SECONDARY_GREY,
+    SURFACE,
 )
 from population_synthetic.analysis.utils.style import (
     ANNOTATION,
@@ -81,6 +88,10 @@ def plot_c2st_vs_grounded_tv(
     """
     strategies = _ordered_strategies(sorted({r["strategy"] for r in rows if r["strategy"]}))
     color_for = {s: CATEGORICAL_SERIES[i % len(CATEGORICAL_SERIES)] for i, s in enumerate(strategies)}
+    # The legend entry is the method key line itself -- "A -- All Pick" -- so this figure
+    # needs no separate key block. `method_letters` and `method_key_lines` are both
+    # returned in complexity order, which is what makes the zip aligned.
+    key_line = dict(zip(method_letters(strategies), method_key_lines(strategies)))
 
     by_strategy: dict[str, list[tuple[float, float, str]]] = {}
     for row in rows:
@@ -108,8 +119,8 @@ def plot_c2st_vs_grounded_tv(
         ys = [p[1] for p in pts]
         all_aucs.extend(xs)
         ax.scatter(
-            xs, ys, s=70, color=color_for[strategy], label=strategy,
-            edgecolor="white", linewidth=0.6, alpha=0.9, zorder=3,
+            xs, ys, s=70, color=color_for[strategy], label=key_line[strategy],
+            edgecolor=SURFACE, linewidth=0.6, zorder=3,
         )
 
     ax.axvline(0.5, color=MUTED_GREY, linestyle="--", linewidth=1.0, zorder=1)
@@ -125,12 +136,12 @@ def plot_c2st_vs_grounded_tv(
     hi = max([0.5] + all_aucs) + 0.03
     ax.set_xlim(lo, min(1.02, hi))
     ax.set_ylim(bottom=0.0)
-    ax.grid(True, linestyle=":", alpha=0.4)
-    ax.legend(title="strategy", fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE)
+    ax.grid(True, linestyle=":", color=GRID_RULE)
+    ax.legend(title="generation method", fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE)
 
     title = "joint discriminability (C2ST) vs grounded joint TV"
     if country:
-        title = f"{country}: {title}"
+        title = f"{country_label(country)}: {title}"
     ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
     return save_figure(fig, out_path)

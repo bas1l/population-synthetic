@@ -46,8 +46,6 @@ from population_synthetic.analysis.utils.palette import MISSING_COLOR  # noqa: E
 from population_synthetic.analysis.utils.registry import analysis_output_dir  # noqa: E402
 from population_synthetic.analysis.validation_attrition.charts import (  # noqa: E402
     CELL_STATES,
-    GRID_VARIANT_ANNOTATED,
-    GRID_VARIANT_CLEAN,
     GRID_VARIANTS,
     _cell_state,
     _segment_counts,
@@ -146,6 +144,19 @@ def _document(entries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 def _annotations(ax) -> list[str]:
     return [t.get_text() for t in ax.texts]
+
+
+def _figure_strings(fig) -> str:
+    """Every string the figure draws, axes text and figure text alike, as one blob.
+
+    The caption and the method key are figure-level artists (they are page-width blocks
+    placed in figure coordinates), while the cell annotations belong to the axes. A test
+    asking "does the figure say this" must look at both, and must not pin which artist
+    happens to carry it.
+    """
+    from matplotlib.text import Text
+
+    return chr(10).join(t.get_text() for t in fig.findobj(Text) if t.get_text())
 
 
 def _annotation_at(ax, x: float, y: float) -> str:
@@ -286,7 +297,7 @@ def test_grid_columns_follow_the_config_complexity_order() -> None:
         letters[method] for method in _METHODS
     ]
     # ... and the key that makes those letters readable travels on the figure itself.
-    drawn = chr(10).join(_annotations(ax))
+    drawn = _figure_strings(fig)
     for line in method_key_lines(_METHODS):
         assert line in drawn
 
@@ -517,19 +528,8 @@ def workspace(tmp_path: Path) -> Path:
     ])
 
 
-#: The figure(s) this module renders do not currently fit the printable canvas, so
-#: ``analysis/utils/figures.py`` rejects them on export (Phase 5 of the
-#: publication-figure plan added that check; Phase 6 owns the layout fixes).
-OVER_CAP_REASON = (
-    "Both attrition figures overflow the printable width: the validity grid at "
-    "23.18 cm and the attrition funnel at 26.63 cm, against the 19.05 cm cap, "
-    "because each carries a caption and a legend wider than the canvas itself, "
-    "so analysis/utils/figures.py rejects them on export. Tracked as a layout fix "
-    "in Phase 6 of the publication-figure plan."
-)
 
 
-@pytest.mark.xfail(strict=True, reason=OVER_CAP_REASON)
 def test_cli_writes_both_tables_and_every_figure(workspace: Path) -> None:
     result = _run_cli(workspace)
     assert result.returncode == 0, result.stderr
@@ -558,7 +558,6 @@ def test_cli_writes_both_tables_and_every_figure(workspace: Path) -> None:
     assert len(list(out_dir.glob("*.png"))) == len(stems)
 
 
-@pytest.mark.xfail(strict=True, reason=OVER_CAP_REASON)
 def test_cli_no_charts_writes_no_png_and_no_svg(workspace: Path) -> None:
     result = _run_cli(workspace, "--no-charts")
     assert result.returncode == 0, result.stderr

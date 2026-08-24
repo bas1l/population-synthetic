@@ -41,8 +41,8 @@ of combination directories ONLY -- no country-level aggregate file is produced h
     {country}/{combo}/persona_XXXXX.jsonl   per-persona token/timing telemetry (1:1 with the cache)
     {country}/{combo}/{combo}.csv / .json   this combination's stats + cost + validation
     {country}/{combo}/{combo}_personas.csv  per-persona tidy rows (the realism_ranking contract)
-    {country}/{combo}/typicality.png/.svg   this combination's typicality distribution
-    {country}/{combo}/clash_taxonomy.png/.svg  this combination's attribute-clash taxonomy
+    {country}/{combo}/typicality.png/.svg/.eps   this combination's typicality distribution
+    {country}/{combo}/clash_taxonomy.png/.svg/.eps  this combination's attribute-clash taxonomy
     {country}/real_{country}/...            the real competitor (identical layout)
 
 Usage:

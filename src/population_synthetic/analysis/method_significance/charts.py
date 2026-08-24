@@ -46,17 +46,27 @@ from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils.figures import save_figure
 from population_synthetic.analysis.utils.grid_annotations import SignedValuePolicy
 from population_synthetic.analysis.utils.grids import render_grid
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    country_label,
+    method_key_lines,
+    method_letters,
+    model_labels,
+)
 from population_synthetic.analysis.utils.palette import (
     ANNOTATION_GREY,
     BAR_EDGE,
     CATEGORICAL_SERIES,
     FAINT_LINK,
+    GRID_RULE,
     MUTED_GREY,
     PALE_FILL,
     RESIDUAL_GREY,
+    SURFACE,
     WARNING_FILL,
     WARNING_TEXT,
     heatmap_cmap,
+    opaque,
     text_color_on,
 )
 from population_synthetic.analysis.utils.style import (
@@ -64,18 +74,25 @@ from population_synthetic.analysis.utils.style import (
     ANNOTATION_LARGE,
     AXIS_TITLE,
     CALLOUT,
+    CAPTION_MARGIN_IN,
     FIGURE_TITLE,
     FULL,
+    HEADING_WEIGHT,
     LEGEND_LABEL,
     LEGEND_TITLE,
+    LINE_SPACING,
     PANEL_TITLE,
+    POINTS_PER_INCH,
     TICK_LABEL,
     TICK_LABEL_LARGE,
+    caption_block,
     figure_size,
     grow_height,
     grow_width,
     house_style,
+    wrap_to_width,
 )
+from population_synthetic.analysis.utils.table_style import fit_to_page
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +136,11 @@ def plot_method_trends(
 
     by_cell = {(r.model, r.strategy): r for r in records}
     x = np.arange(len(method_order))
+    # Letters on the method axis with the key printed beneath each facet; the legend
+    # carries the models' display names. Neither axis prints a config id.
+    letters = method_letters(method_order)
+    method_key = "Methods:  " + "   ".join(method_key_lines(method_order))
+    display_models = model_labels(models)
 
     import matplotlib.pyplot as plt
 
@@ -147,14 +169,15 @@ def plot_method_trends(
             ys = [np.nan if v is None else v for v in ys]
             ax.plot(
                 x, ys, marker="o", markersize=5, linewidth=1.6,
-                color=CATEGORICAL_SERIES[m_idx % len(CATEGORICAL_SERIES)], label=model, alpha=0.9,
+                color=opaque(CATEGORICAL_SERIES[m_idx % len(CATEGORICAL_SERIES)], 0.9),
+                label=display_models[model],
             )
 
         ax.set_xticks(x)
-        ax.set_xticklabels(method_order, rotation=25, ha="right", fontsize=TICK_LABEL)
+        ax.set_xticklabels([letters[s] for s in method_order], fontsize=TICK_LABEL)
         ax.set_xlabel("generation method (simplest -> most complex)", fontsize=AXIS_TITLE)
         ax.set_ylabel("TV distance (lower = better fidelity)", fontsize=AXIS_TITLE)
-        ax.grid(axis="y", linestyle=":", alpha=0.4)
+        ax.grid(axis="y", linestyle=":", color=GRID_RULE)
         ax.legend(fontsize=LEGEND_LABEL, title="model", title_fontsize=LEGEND_TITLE)
 
         method = result["per_attribute"][attr]["method_trend"]
@@ -165,12 +188,12 @@ def plot_method_trends(
             flag = "significant" if p_bh < alpha else "n.s."
             trend_note = f"Page L trend (BH-adj p = {p_bh:.3g}, {flag})"
         ax.set_title(
-            f"{country}: {attr} -- TV by method, per model\n{trend_note}",
+            f"{country_label(country)}: {attribute_label(attr)} -- TV by method, per model\n{trend_note}",
             fontsize=PANEL_TITLE, fontweight="bold",
         )
-        out_path = out_dir / f"{attr}_method_trend.png"
-        fig.tight_layout()
-        written.append(save_figure(fig, out_path))
+        caption_block(fig, method_key, fontsize=ANNOTATION)
+        fit_to_page(fig)
+        written.append(save_figure(fig, out_dir / f"{attr}_method_trend.png"))
 
     return written
 
@@ -247,13 +270,16 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
         ax, values, cells,
         policy=_SLOPE_CELL_POLICY, cmap=heatmap_cmap(),
         norm=mcolors.Normalize(vmin=-bound, vmax=bound),
-        aspect="auto", fontsize=ANNOTATION,
+        aspect="auto", fontsize=ANNOTATION, interpolation="none",
     )
 
     ax.set_xticks(range(len(models)))
-    ax.set_xticklabels(models, rotation=40, ha="right", fontsize=TICK_LABEL)
+    display_models = model_labels(models)
+    ax.set_xticklabels(
+        [display_models[m] for m in models], rotation=40, ha="right", fontsize=TICK_LABEL,
+    )
     ax.set_yticks(range(len(attributes)))
-    ax.set_yticklabels(attributes, fontsize=TICK_LABEL)
+    ax.set_yticklabels([attribute_label(a) for a in attributes], fontsize=TICK_LABEL)
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
     cbar.set_label("TV(method) slope (+ = worsens, - = improves)", fontsize=AXIS_TITLE)
@@ -261,10 +287,12 @@ def plot_slope_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | N
 
     country = result["metadata"]["country"]
     ax.set_title(
-        f"{country}: per-category TV(method) trend slope (descriptive; n=1 per cell)",
+        f"{country_label(country)}: per-category TV(method) trend slope "
+        f"(descriptive; n=1 per cell)",
         fontsize=PANEL_TITLE, fontweight="bold",
     )
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, out_path)
 
 
@@ -296,6 +324,7 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
     k = len(names)
     if k < 2:
         return None
+    display_models = model_labels(names)
 
     import matplotlib.pyplot as plt
 
@@ -333,7 +362,7 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
                 linewidth=1.3)
         ax.plot([rank, edge], [y, y], color=CATEGORICAL_SERIES[idx % len(CATEGORICAL_SERIES)],
                 linewidth=1.3)
-        label = f"{name} ({rank:.2f})"
+        label = f"{display_models[name]} ({rank:.2f})"
         ax.text(edge, y, f"{label} " if ha == "right" else f" {label}",
                 ha=ha, va="center", fontsize=ANNOTATION)
 
@@ -362,11 +391,12 @@ def plot_cd_diagram(result: dict[str, Any], out_path: str | Path) -> Path | None
     country = result["metadata"]["country"]
     n_blocks = comparison.get("n_blocks")
     ax.set_title(
-        f"{country}: model critical-difference diagram "
+        f"{country_label(country)}: model critical-difference diagram "
         f"(Nemenyi, {n_blocks} category x method blocks)",
         fontsize=PANEL_TITLE, fontweight="bold",
     )
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, out_path)
 
 
@@ -403,8 +433,8 @@ def plot_factor_dominance(result: dict[str, Any], out_path: str | Path) -> Path 
               "category": CATEGORICAL_SERIES[2], "residual": RESIDUAL_GREY}
 
     fig, ax = plt.subplots(figsize=(FULL, grow_height(len(order), per_item=0.55, padding=1.4, minimum=2.6)))
-    ax.barh(positions, shares, color=[colors.get(k, MUTED_GREY) for k in order],
-            edgecolor=BAR_EDGE, linewidth=0.5, alpha=0.9, height=0.6)
+    ax.barh(positions, shares, color=[opaque(colors.get(k, MUTED_GREY), 0.9) for k in order],
+            edgecolor=BAR_EDGE, linewidth=0.5, height=0.6)
     for pos, share in zip(positions, shares):
         ax.text(share, pos, f"  {share * 100:.1f}%", va="center", ha="left",
                 fontsize=ANNOTATION, color=ANNOTATION_GREY)
@@ -413,16 +443,17 @@ def plot_factor_dominance(result: dict[str, Any], out_path: str | Path) -> Path 
     ax.set_yticklabels(order, fontsize=TICK_LABEL_LARGE)
     ax.set_xlabel("share of fitted variance (eta^2, approximate)", fontsize=AXIS_TITLE)
     ax.set_xlim(0.0, min(1.0, max(shares) * 1.2) if shares else 1.0)
-    ax.grid(axis="x", linestyle=":", alpha=0.4)
+    ax.grid(axis="x", linestyle=":", color=GRID_RULE)
 
     converged = mixed.get("converged")
     country = result["metadata"]["country"]
     suffix = "" if converged else "  (mixed fit did NOT converge -- descriptive only)"
     ax.set_title(
-        f"{country}: factor dominance (variance share){suffix}",
+        f"{country_label(country)}: factor dominance (variance share){suffix}",
         fontsize=PANEL_TITLE, fontweight="bold",
     )
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, out_path)
 
 
@@ -569,10 +600,13 @@ def _draw_method_panel(
     """
     x = np.arange(len(methods))
     ax.set_xticks(x)
-    ax.set_xticklabels(methods, rotation=25, ha="right", fontsize=TICK_LABEL)
+    # Letters, not ids: three panels sit side by side at the printable cap, so the
+    # method axis has no room for a phrase. The key is printed once for the figure.
+    letters = method_letters(methods)
+    ax.set_xticklabels([letters[s] for s in methods], fontsize=TICK_LABEL)
     ax.set_xlim(-0.6, len(methods) - 0.4)
     ax.set_ylabel("TV-similarity (higher = more faithful)", fontsize=AXIS_TITLE)
-    ax.grid(axis="y", linestyle=":", alpha=0.35)
+    ax.grid(axis="y", linestyle=":", color=GRID_RULE)
 
     n_models = panel.get("n_models", 0)
     if panel.get("insufficient_n"):
@@ -598,9 +632,9 @@ def _draw_method_panel(
         ys = [row.get(s) for s in methods]
         ys = [np.nan if (v is None or v != v) else float(v) for v in ys]
         jitter = (rng.random(len(methods)) - 0.5) * 0.18
-        ax.plot(x + jitter, ys, color=FAINT_LINK, linewidth=0.6, alpha=0.35, zorder=2)
-        ax.scatter(x + jitter, ys, s=14, color=CATEGORICAL_SERIES[0], alpha=0.75,
-                   edgecolors="white", linewidths=0.4, zorder=3)
+        ax.plot(x + jitter, ys, color=FAINT_LINK, linewidth=0.6, zorder=2)
+        ax.scatter(x + jitter, ys, s=14, color=opaque(CATEGORICAL_SERIES[0], 0.75),
+                   edgecolors=SURFACE, linewidths=0.4, zorder=3)
 
     # Significance brackets over the configured pairs.
     pairwise_p: dict[str, float] = panel.get("pairwise_p", {})
@@ -737,19 +771,47 @@ def plot_method_comparison(
     flat = axes.flatten()
 
     for ax, key in zip(flat, panel_keys):
-        label = "Overall" if key == "overall" else key
+        label = "Overall" if key == "overall" else attribute_label(key)
         _draw_method_panel(ax, panels[key], methods, pairs_mode, thresholds, ns_symbol, label)
     for ax in flat[n_panels:]:
         ax.axis("off")
 
-    headline = f"{country}: method comparison on TV-similarity (models as blocks)"
+    headline = (
+        f"{country_label(country)}: method comparison on TV-similarity (models as blocks)"
+    )
     if overall_only:
         headline += " -- Overall"
-    fig.suptitle(headline, fontsize=FIGURE_TITLE, fontweight="bold")
 
+    # Both figure-level strings are wrapped to the paper before they are drawn, and the
+    # strips they need are then reserved from the measured line counts. Wrapping after
+    # the layout would be too late: `tight_layout` does not account for a suptitle, so a
+    # second line would grow down into the panels it was supposed to sit above.
+    figure_width, figure_height = (float(v) for v in fig.get_size_inches())
+    usable = figure_width - 2 * CAPTION_MARGIN_IN
+    headline = wrap_to_width(
+        headline, usable, fontsize=FIGURE_TITLE, weight=HEADING_WEIGHT,
+    )
     key_text = _star_key_text(thresholds, ns_symbol, pairs_mode)
-    fig.text(0.5, 0.005, "key -- " + key_text, ha="center", va="bottom", fontsize=ANNOTATION,
-             color=ANNOTATION_GREY)
+    key_block = wrap_to_width(
+        "Methods:  " + "   ".join(method_key_lines(methods)) + "      key -- " + key_text,
+        usable, fontsize=ANNOTATION,
+    )
 
-    fig.tight_layout(rect=(0.0, 0.03, 1.0, 0.97))
+    def _strip(text: str, fontsize: float) -> float:
+        """Fraction of the canvas height a wrapped block of *text* occupies."""
+        lines = text.count(chr(10)) + 1
+        return (lines * fontsize * LINE_SPACING + POINTS_PER_INCH * CAPTION_MARGIN_IN) / (
+            POINTS_PER_INCH * figure_height
+        )
+
+    fig.suptitle(headline, fontsize=FIGURE_TITLE, fontweight=HEADING_WEIGHT)
+    fig.text(
+        0.5, CAPTION_MARGIN_IN / figure_height, key_block,
+        ha="center", va="bottom", fontsize=ANNOTATION, color=ANNOTATION_GREY,
+    )
+
+    fig.tight_layout(rect=(
+        0.0, _strip(key_block, ANNOTATION), 1.0, 1.0 - _strip(headline, FIGURE_TITLE),
+    ))
+    fit_to_page(fig)
     return save_figure(fig, Path(out_path))

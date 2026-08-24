@@ -41,6 +41,7 @@ from population_synthetic.analysis.utils.labels import (
     method_letters,
     model_label,
     model_provenance_rows,
+    population_label,
     strategy_label,
 )
 
@@ -322,6 +323,52 @@ def test_the_live_method_axis_is_a_to_e() -> None:
 def test_empty_method_axis_is_empty() -> None:
     assert method_letters([]) == {}
     assert method_key_lines([]) == []
+
+
+# ------------------------------------------------------------------
+# The scanned-population ids
+# ------------------------------------------------------------------
+
+
+def test_real_population_id_resolves_to_the_country_phrase() -> None:
+    country = _selectable(COUNTRIES_DIR)[0]
+    assert population_label(f"real_{country}") == f"{country_label(country)} real population"
+
+
+def test_run_slug_resolves_to_its_model_and_method_phrase() -> None:
+    """The slug is decomposed against declared ids, not split on the underscore."""
+    from population_synthetic.generators.synthetic.manifest_loader import axis_slug
+
+    model, strategy, country = "claude_haiku", "all_pick", _selectable(COUNTRIES_DIR)[0]
+    resolved = population_label(axis_slug(model, strategy, country))
+    assert resolved == f"{model_label(model)} / {strategy_label(strategy)}"
+
+
+def test_every_population_label_is_free_of_ids_and_providers() -> None:
+    from population_synthetic.generators.synthetic.manifest_loader import axis_slug
+
+    country = _selectable(COUNTRIES_DIR)[0]
+    ids = [f"real_{country}"] + [
+        axis_slug(model, strategy, country)
+        for model in _selectable(MODELS_DIR)
+        for strategy in _selectable(STRATEGIES_DIR)
+    ]
+    for population_id in ids:
+        resolved = population_label(population_id)
+        assert "_" not in resolved, population_id
+        for token in PROVIDER_TOKENS:
+            assert token not in resolved.lower(), population_id
+
+
+def test_an_undecomposable_population_id_raises() -> None:
+    """A legacy `seed_*` directory name must fail, not legend as itself."""
+    with pytest.raises(UnknownAxisValue, match="seed_017"):
+        population_label("seed_017")
+
+
+def test_an_unknown_real_population_country_raises() -> None:
+    with pytest.raises(UnknownAxisValue, match="atlantis"):
+        population_label("real_atlantis")
 
 
 # ------------------------------------------------------------------

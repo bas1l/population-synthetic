@@ -53,7 +53,6 @@ such claim for its own.
 
 from __future__ import annotations
 
-import textwrap
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -67,6 +66,7 @@ from population_synthetic.analysis.utils.grid_annotations import (
 )
 from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.labels import (
+    country_label,
     method_key_lines,
     method_letters,
     model_labels,
@@ -86,6 +86,7 @@ from population_synthetic.analysis.utils.style import (
     LEGEND_TITLE,
     PANEL_TITLE,
     TICK_LABEL,
+    caption_block,
     grow_height,
     grow_width,
     house_style,
@@ -98,6 +99,7 @@ from population_synthetic.analysis.utils.table_style import (
     add_percentage_colorbar,
     best_cells_per_column,
     categories_on_top,
+    fit_to_page,
     horizontal_divider,
     inferno_cmap,
     vertical_divider,
@@ -145,8 +147,6 @@ _SEGMENTS: tuple[tuple[str, str, str], ...] = (
 #: Fill for a combination whose generated pool is empty: there is no composition to draw,
 #: and a zero-width bar is indistinguishable from a missing row.
 _EMPTY_POOL_COLOR = MISSING_COLOR
-
-_CAPTION_WRAP = 150
 
 
 @dataclass(frozen=True)
@@ -331,12 +331,19 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     n_rows = len(entries)
     fig, ax = plt.subplots(figsize=(FULL, grow_height(n_rows, per_item=0.26, padding=3.4, minimum=4.0)))
 
+    # Row captions are the model's display name and the combination's method letter,
+    # resolved over the whole figure's id set because a letter's version marker is a
+    # property of the set. The key travels with the caption block below.
+    display_models = model_labels([entry["model"] for entry in entries])
+    letters = method_letters([entry["strategy"] for entry in entries])
     labels: list[str] = []
     for index, entry in enumerate(entries):
         y = n_rows - 1 - index  # worst at the top
         generated = _funnel_counts(entry)[0]
         suffix = "  [withdrawn]" if entry["excluded"] else ""
-        labels.append(f"{entry['slug']}{suffix}")
+        labels.append(
+            f"{display_models[entry['model']]} / {letters[entry['strategy']]}{suffix}"
+        )
 
         if generated == 0:
             # No composition exists. Drawn as a full-width grey band rather than as an
@@ -383,7 +390,7 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
 
     totals = document["totals"]
     ax.set_title(
-        f"{document['country']}: validation attrition per combination "
+        f"{country_label(document['country'])}: validation attrition per combination "
         f"({document['n_combinations']} combinations, {document['n_excluded']} withdrawn)\n"
         "each bar is one combination's generated pool, normalised -- absolute pools are "
         "not comparable",
@@ -417,12 +424,15 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
         "gate excluded it: its personas were generated and validated but reach no other "
         "artifact in the analysis layer."
     )
-    ax.text(
-        0.0, -0.075, textwrap.fill(caption, _CAPTION_WRAP), transform=ax.transAxes,
-        ha="left", va="top", fontsize=ANNOTATION, clip_on=False,
-    )
-
-    fig.tight_layout()
+    # The row captions carry method letters, so the key travels on the figure with them.
+    key = "Methods:  " + "   ".join(method_key_lines([e["strategy"] for e in entries]))
+    # Drawn as a figure-width block rather than as unclipped axes text: the axes are
+    # inset from the paper by the label column, so a caption anchored at their left
+    # edge ran off the right of the page and grew the exported canvas with it.
+    caption_block(fig, f"{key}\n{caption}", fontsize=ANNOTATION)
+    # The title is centred on the axes and the legend is anchored to them, so both
+    # inherit the label column's inset and reach past the right edge of the page.
+    fit_to_page(fig)
     return fig
 
 
@@ -569,7 +579,7 @@ def plot_mapped_validity_grid(
     im = render_grid(
         ax, values, cells,
         policy=variant.policy, cmap=cmap, norm=norm,
-        aspect="auto", interpolation="nearest",
+        aspect="auto", interpolation="none",
         extent=(-0.5, n_methods - 0.5, len(models) - 0.5, -0.5),
         fontsize=variant.fontsize, linespacing=variant.linespacing, zorder=5,
         text_on_fill=text_on_fill,
@@ -676,7 +686,7 @@ def plot_mapped_validity_grid(
     )
 
     ax.set_title(
-        f"{document['country']}: validation survival by model x method\n"
+        f"{country_label(document['country'])}: validation survival by model x method\n"
         "share of each combination's generated pool that passed both validity gates -- "
         f"{document['n_excluded']} of {document['n_combinations']} combinations withdrawn",
         fontsize=PANEL_TITLE, fontweight="bold", pad=30,
@@ -698,11 +708,9 @@ def plot_mapped_validity_grid(
     # The method key travels in the graphic rather than being deferred to the caption:
     # the letters on the column axis are meaningless without it, and a figure is read
     # apart from the text that published it.
-    key = textwrap.fill("Methods:  " + "   ".join(method_key_lines(methods)), _CAPTION_WRAP)
-    ax.text(
-        0.0, -0.155, f"{key}\n{textwrap.fill(caption, _CAPTION_WRAP)}",
-        transform=ax.transAxes, ha="left", va="top", fontsize=ANNOTATION, clip_on=False,
-    )
-
-    fig.tight_layout()
+    key = "Methods:  " + "   ".join(method_key_lines(methods))
+    caption_block(fig, f"{key}\n{caption}", fontsize=ANNOTATION)
+    # The title is centred on the axes and the legend is anchored to them, so both
+    # inherit the label column's inset and reach past the right edge of the page.
+    fit_to_page(fig)
     return fig
