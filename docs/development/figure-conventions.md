@@ -210,11 +210,47 @@ recorded near-miss in which a lenient renderer read a cell by literal key, was h
 differently-shaped block, and painted every cell grey and labelled it unavailable *without
 raising*.
 
-The annotated and clean variants of a figure are the **same renderer under different policies**, so
+The clean and counted variants of a figure are the **same renderer under different policies**, so
 they cannot diverge on the next edit. Where the two differ in more than the policy — the annotation
 size, and the caption sentence that *describes* the policy — the three travel together in one
-frozen `GridVariant` record, because a clean figure captioned "printed with the two counts it is
-the quotient of" would be a figure disagreeing with itself.
+frozen `GridVariant` record (`analysis/utils/grid_variants.py`), because a clean figure captioned
+"printed with the two counts it is the quotient of" would be a figure disagreeing with itself.
+
+### The unsuffixed filename is the clean figure
+
+Every grid family that publishes variants writes **two** files from one renderer, and the naming is
+the same for all five:
+
+| File | What a cell prints |
+|------|--------------------|
+| `{stem}.{png,svg,eps}` | the value alone — the **camera-ready** figure, the one the manuscript and the deck reference |
+| `{stem}_with_counts.{png,svg,eps}` | the same value over the count it rests on |
+
+The rule is one function, `grid_variants.variant_suffixes()`, so five drivers cannot drift into five
+naming schemes; a driver enumerates a family's `GRID_VARIANTS` instead of naming its variants, and
+adding a third publishes it without a CLI change. A family whose map carries no `clean` variant
+raises rather than promoting an arbitrary one into the name every downstream reference resolves to.
+
+**The clean figure is the default because a repeated denominator is noise.** On these grids the
+count is constant down a column — every cell of a combination is measured over the same capped
+population — so `n=267` in fifty cells spends a line of every cell on one number. It is not
+discarded: it stays in the CSV the grid was drawn from, in the `_with_counts` sibling, and on the
+row and column marginals of the grids that carry them, which print their counts in **both**
+variants. A rate on a figure still never travels without a stated base; the base is simply stated
+once instead of fifty times.
+
+Two things the clean variant never drops. A **qualifier** that carries information the colour does
+not — the typicality grid's signed distance to the real population, which on a sequential ramp is
+the only reading of the reference's side there is — stays in every cell of both variants. And the
+**real-population band**, where a figure draws one, keeps its own `n`: like a marginal, it states
+the base once for the whole figure.
+
+Because the two variants differ *only* in cell text, they are substitutable by construction —
+identical rows, columns, extent, colour scale and markings — and the tests assert exactly that.
+Dropping a line frees vertical room, which a variant may spend by moving one step up the house
+scale; it may never be spent the other way, and no annotation goes below `FONT_FLOOR_PT`. A cell
+carrying an inline qualifier is bound by the cell's *width* rather than by the line it dropped, so
+it keeps its size.
 
 ---
 

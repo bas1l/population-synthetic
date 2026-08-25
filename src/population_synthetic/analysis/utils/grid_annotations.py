@@ -4,8 +4,9 @@ One decision, isolated: given a cell's already-computed record, produce the stri
 cell shows. A policy decides **text only**. It never decides a colour, an extent, which
 cells are drawn, where the annotation sits, or how large it is -- those belong to
 :mod:`population_synthetic.analysis.utils.grids`, which is the only module that draws.
-Splitting them is what lets one grid be published twice, annotated and clean, from a
-single draw loop rather than from two functions that diverge on the next edit.
+Splitting them is what lets one grid be published twice -- clean at the canonical
+filename, with its counts beside it -- from a single draw loop rather than from two
+functions that diverge on the next edit.
 
 **Every policy declares the keys it reads.** ``required_keys`` is not documentation: the
 renderer validates each cell record against it and raises on a mismatch. The rule exists
@@ -124,7 +125,7 @@ def _head(
 
 @dataclass(frozen=True)
 class RateWithCountsPolicy:
-    """The value, and beneath it the counts it rests on. Today's F05 annotation.
+    """The value, and beneath it the counts it rests on -- the ``_with_counts`` variant.
 
     The second line names the base, in one of two forms decided by what the caller
     declares. With a *numerator* the value is a quotient and both counts are printed
@@ -190,14 +191,22 @@ class RateOnlyPolicy:
 
     Identical to :class:`RateWithCountsPolicy` in everything but the second line, which
     is why the two are substitutable over one draw loop: the same matrix, extent and
-    colour scale, differing only in cell text. The counts the annotated sibling prints
+    colour scale, differing only in cell text. The counts the counted sibling prints
     stay available in that figure and in the CSV the grid is drawn from, so dropping them
     here loses ink rather than evidence.
+
+    ``qualifier_key`` is the one thing this policy does **not** drop: it names an
+    already-formatted suffix -- the typicality grid's parenthesised signed distance to the
+    real population -- which on a sequential ramp is the only place the *side* of the
+    reference is readable at all (ADR ``2026-08-12``). A clean variant that dropped it
+    would not be a tidier figure, it would be a figure missing half its content. Read,
+    never derived, exactly as in :class:`RateWithCountsPolicy`.
 
     Attributes:
         value_key: Record key holding the value.
         scale: Multiplier applied before formatting.
         number_format: Python format spec for the scaled value.
+        qualifier_key: Record key holding a pre-formatted suffix, or ``None``.
         absent_text: Wording printed when the value is ``None``; ``None`` makes a
             value-less record an error.
     """
@@ -205,14 +214,18 @@ class RateOnlyPolicy:
     value_key: str = "rate"
     scale: float = 100.0
     number_format: str = ".1f"
+    qualifier_key: str | None = None
     absent_text: str | None = None
 
     @property
     def required_keys(self) -> frozenset[str]:
-        return frozenset({self.value_key})
+        keys = {self.value_key}
+        if self.qualifier_key is not None:
+            keys.add(self.qualifier_key)
+        return frozenset(keys)
 
     def text(self, cell: Mapping[str, Any]) -> str:
-        return _head(
+        head = _head(
             cell,
             value_key=self.value_key,
             scale=self.scale,
@@ -220,6 +233,9 @@ class RateOnlyPolicy:
             absent_text=self.absent_text,
             policy_name=type(self).__name__,
         )
+        if self.qualifier_key is not None and cell[self.value_key] is not None:
+            head = f"{head}{cell[self.qualifier_key]}"
+        return head
 
 
 @dataclass(frozen=True)

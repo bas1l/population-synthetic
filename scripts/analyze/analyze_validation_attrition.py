@@ -30,13 +30,14 @@ Outputs, per country, under the analysis-stage validation_attrition folder:
     {country}_attrition.json    counts, both rates, totals, the withdrawn list, provenance
     {country}_attrition_funnel.png/.svg/.eps          per-combination normalised funnel
     {country}_mapped_validity_grid.png/.svg/.eps      model x method validation-survival grid
-    {country}_mapped_validity_grid_clean.png/.svg/.eps  the same grid, rate-only annotations
+    {country}_mapped_validity_grid_with_counts.png/.svg/.eps  the same grid, counts under each rate
 
-The grid is published twice from ONE renderer: the annotated variant prints each rate
-over the two counts it is the quotient of, the clean variant prints the rate alone at a
-larger size. They share their rows, columns, extent, colour scale and markings by
-construction -- the only difference is the annotation policy handed to the shared draw
-loop -- so the camera-ready figure can never drift from the diagnostic one.
+The grid is published twice from ONE renderer: the bare filename carries the camera-ready
+variant, which prints the rate alone at a larger size, and the _with_counts sibling prints
+each rate over the two counts it is the quotient of. They share their rows, columns,
+extent, colour scale and markings by construction -- the only difference is the annotation
+policy handed to the shared draw loop -- so the camera-ready figure can never drift from
+the diagnostic one.
 
 The JSON carries no timestamp, so re-running over unchanged gate records rewrites the
 CSV and the JSON byte-for-byte. That claim covers the PNGs too but NOT the SVG siblings:
@@ -67,6 +68,7 @@ from population_synthetic.analysis.model_ranking.hosting import (
 )
 from population_synthetic.analysis.utils.attrition_csv import write_attrition_csv
 from population_synthetic.analysis.utils.figures import RASTER_DPI, save_figure
+from population_synthetic.analysis.utils.grid_variants import variant_suffixes
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -140,32 +142,6 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dpi", type=int, default=RASTER_DPI, help=f"PNG render resolution. Default: {RASTER_DPI}.")
     return parser.parse_args()
-
-
-#: The variant published under the bare grid filename. Every other variant is suffixed
-#: with its own name, so the historical artifact keeps its path and a new variant cannot
-#: silently take it over.
-_DEFAULT_GRID_VARIANT = "annotated"
-
-
-def _grid_variant_suffixes() -> list[tuple[str, object]]:
-    """``(filename_suffix, variant)`` for every publishable grid variant.
-
-    The default variant keeps the unsuffixed filename it has always had; the rest are
-    written beside it as ``_{name}``. Raises when the chart module no longer publishes
-    the default variant, rather than silently renaming the artifact every downstream
-    reference points at.
-    """
-    if _DEFAULT_GRID_VARIANT not in GRID_VARIANTS:
-        raise KeyError(
-            f"the validity grid no longer publishes a {_DEFAULT_GRID_VARIANT!r} variant; "
-            f"known variants are {sorted(GRID_VARIANTS)}. The unsuffixed "
-            "{country}_mapped_validity_grid artifact is named after it."
-        )
-    return [
-        ("" if name == _DEFAULT_GRID_VARIANT else f"_{name}", GRID_VARIANTS[name])
-        for name in GRID_VARIANTS
-    ]
 
 
 def _split_csv(values: list[str] | None) -> list[str] | None:
@@ -297,7 +273,7 @@ def main() -> None:
             ]
             # One entry per grid variant, enumerated from the chart module rather than
             # named here: adding a variant there publishes it without touching the CLI.
-            for suffix, variant in _grid_variant_suffixes():
+            for suffix, variant in variant_suffixes(GRID_VARIANTS):
                 charts.append((
                     f"{country}_mapped_validity_grid{suffix}",
                     # `variant` is bound per iteration; a closure over the loop name

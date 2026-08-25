@@ -105,8 +105,10 @@ Fixing these one at a time leaves ~15 places for the next drift to appear.
       *(The three leaks 6.1 found are fixed at their source; the compliance test now walks
       the whole artist tree of each figure, not just the accessors a chart happens to use.)*
 - [x] Method axes render as A–E with an in-figure key.
-- [x] `{country}_mapped_validity_grid_clean.{png,svg,eps}` exists beside the annotated F05, produced
-      by the same renderer with a different annotation policy.
+- [x] The clean F05 and its counted sibling both exist, produced by the same renderer with a
+      different annotation policy. *(Superseded on 2026-08-25 by the layer-wide naming rule: the
+      clean figure now takes the bare `{country}_mapped_validity_grid.{png,svg,eps}` and the counted
+      one is `..._with_counts`. The `_clean` suffix no longer exists — see the Phase 4 revision.)*
 - [x] `labels.resolve()` raises on an unknown id; a unit test asserts the raise.
 - [x] Every emitted EPS is within 19.05 by 22.23 cm and under 10 MB — asserted by a test.
       *(Enforced on write, not merely asserted: an over-budget figure raises and nothing
@@ -376,6 +378,7 @@ dependents, and this table is derived from the axis config alone.
 - [x] 4.4 — Emit the clean F05 as the same call with `RateOnlyPolicy`, at 8 pt or above — room freed by dropping the count line — to `{country}_mapped_validity_grid_clean.*`.
 - [x] 4.5 — Migrate the other 10 heatmap call sites onto `render_grid`.
 - [x] 4.6 — Substitutability test: both policies over the same input produce identical dimensions, extent and colour scale, differing only in cell text.
+- [x] 4.7 — (2026-08-25) Extend the variant mechanism to the other four `n=`-printing grids, move `GridVariant` and the suffix rule into `analysis/utils/grid_variants.py`, and make the **unsuffixed** filename the clean figure everywhere (counted form → `_with_counts`; F05's two names swap and `_clean` disappears).
 
 **Notes.** `grep -rn "\.imshow(" src/` now matches exactly one line, in `grids.py`. All
 eleven grids share the draw loop, the annotation-colour rule and the missing-cell
@@ -409,6 +412,54 @@ three travel together in one frozen record; the CLI enumerates `GRID_VARIANTS` r
 naming the variants, and the default variant keeps the historical unsuffixed filename so
 no downstream reference moves.
 
+**Revision, 2026-08-25 -- the clean variant becomes the default, layer-wide.** Four grids
+outside F05 printed `n=<denominator>` on a second line of **every** cell
+(`generation_metadata`'s metric heatmaps, `model_ranking`'s model x method TV grid, and
+`realism_ranking`'s impossibility/severity and typicality grids). On a camera-ready figure
+that is noise: the denominator is constant down a column, and it is already in the CSV the
+grid is drawn from. All four now publish the same two variants F05 does, and the naming rule
+is uniform across the five families: **the unsuffixed filename is the clean figure** and the
+counted form is written beside it as `_with_counts`.
+
+*This swaps F05's two filenames.* `{country}_mapped_validity_grid` was the annotated figure
+and `..._clean` was the camera-ready one; it is now the other way round, and the `_clean`
+suffix is gone. The swap is the point of the revision -- one rule rather than two -- but the
+deck references those filenames, so anything pointing at `..._mapped_validity_grid_clean`
+must move to `..._mapped_validity_grid`, and anything wanting the counts must move to
+`..._mapped_validity_grid_with_counts`.
+
+*The mechanism moved rather than multiplied.* `GridVariant` left
+`validation_attrition/charts.py` for `analysis/utils/grid_variants.py`, which now also owns
+the suffix rule (`variant_suffixes()`, canonical -> `""`, everything else -> `_{name}`) and a
+`variant_map()` that raises on a duplicate name or a missing canonical variant. Each family
+declares its own two variants -- the wording differs because a `cell_clause` *describes that
+figure's* cells -- and each driver enumerates the map instead of naming them, so `rank_models`,
+`rank_persona_realism` and `analyze_validation_attrition` all publish through one rule.
+`RateOnlyPolicy` gained `qualifier_key`, because the typicality grid's clean variant must keep
+its parenthesised signed delta: on a sequential ramp that is the only reading of the
+reference's side there is (ADR 2026-08-12), so dropping it would remove content, not ink.
+
+*Two things stay on the clean figures deliberately.* Row and column **marginals** keep their
+counts, and `realism_ranking`'s **real-population band** keeps its own `n` -- each states a
+base once for the whole figure rather than fifty times, which is what makes dropping the
+per-cell repetition a loss of ink rather than of evidence. `generation_metadata`'s metric grid
+has no marginal, so its key line moved from the legacy unclipped `ax.text` idiom onto
+`caption_block`, which reserves its strip *inside* the canvas, and the clause naming where the
+count went travels there.
+
+*Type size rose on four of the five, not all five.* The freed line buys a step up the house
+scale (8 -> 9 pt) on the grids whose cell is a bare number -- the three newly varianted ones
+plus F05, which already had it. The typicality grid keeps 8 pt: its
+cell carries an inline qualifier, so it is bound by the cell's **width** rather than by the
+line it dropped, and that grid is already over the printable width. Nothing was reduced, and
+the tests assert every variant sits at or above `FONT_FLOOR_PT` and that no clean variant is
+smaller than its counted sibling.
+
+*Substitutability is now asserted on all five families*, not on F05 alone
+(`tests/test_grids.py`): same canvas, same extent, same norm, same painted array, same ticks,
+same marking count -- and the clean cell text is its counted twin with the count line removed
+and nothing else, which is what catches a variant that quietly drops a qualifier.
+
 *Tick labels: F05 only, deliberately.* The validity grid now draws model display labels
 and method letters A–E with the key in the graphic — it was being rebuilt anyway. The
 other ten grids still print ids, for two reasons. `test_model_ranking_charts.py` and
@@ -420,9 +471,11 @@ one diff; landing it in fragments across two phases would give that review a mov
 target. Moved to Phase 6, where the compliance test that enforces it also lands.
 
 **Files Modified:** `analysis/utils/grids.py` (new), `analysis/utils/grid_annotations.py` (new),
+`analysis/utils/grid_variants.py` (new, 2026-08-25),
 `analysis/{fidelity,generation_metadata,method_significance,model_ranking,realism_ranking,validation_attrition}/charts.py`,
-`analysis/model_ranking/manuscript_tables.py`, `scripts/analyze/analyze_validation_attrition.py`,
-`tests/test_grids.py` (new), `tests/test_validation_attrition_charts.py`
+`analysis/model_ranking/manuscript_tables.py`,
+`scripts/analyze/{analyze_validation_attrition,rank_models,rank_persona_realism}.py`,
+`tests/test_grids.py` (new), `tests/test_{validation_attrition_charts,model_ranking_charts,realism_ranking_builder}.py`
 
 **Dependencies:** Phases 1–3
 
@@ -712,8 +765,8 @@ ground moves it with everything else.
 
 <!-- auto-generated by /plan-implement — do not edit manually -->
 
-91 paths across Phases 1–6, from `git log --name-only dev..HEAD` plus the
-working tree. Two operator run-configuration files that are dirty in the tree —
+92 paths across Phases 1–6 (including the 2026-08-25 Phase 4 revision), from
+`git log --name-only dev..HEAD` plus the working tree. Two operator run-configuration files that are dirty in the tree —
 `config/gui/flows/analysis_workflow.yaml` and `config/gui/flows/generate_parallel.yaml` —
 are excluded: they carry run parameters (`--n`, the selected model, a `force` flag), not
 presentation-layer changes, and this branch does not touch them.
@@ -784,6 +837,7 @@ presentation-layer changes, and this branch does not touch them.
 - `src/population_synthetic/analysis/utils/axes.py`
 - `src/population_synthetic/analysis/utils/figures.py`
 - `src/population_synthetic/analysis/utils/grid_annotations.py`
+- `src/population_synthetic/analysis/utils/grid_variants.py`
 - `src/population_synthetic/analysis/utils/grids.py`
 - `src/population_synthetic/analysis/utils/labels.py`
 - `src/population_synthetic/analysis/utils/palette.py`

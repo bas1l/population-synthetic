@@ -21,6 +21,8 @@ against is precisely one that produced a figure instead of an exception.
 
 from __future__ import annotations
 
+import re
+
 import matplotlib
 
 matplotlib.use("Agg")  # noqa: E402 -- before any package import that may touch pyplot
@@ -436,8 +438,8 @@ def test_the_two_f05_variants_are_the_same_figure_with_different_cell_text() -> 
     import matplotlib.pyplot as plt
 
     from population_synthetic.analysis.validation_attrition.charts import (
-        GRID_VARIANT_ANNOTATED,
         GRID_VARIANT_CLEAN,
+        GRID_VARIANT_WITH_COUNTS,
         plot_mapped_validity_grid,
     )
     from tests.test_validation_attrition_charts import _COMPLEX, _SIMPLE, _document, _entry
@@ -449,7 +451,7 @@ def test_the_two_f05_variants_are_the_same_figure_with_different_cell_text() -> 
                excluded=True),
     ])
 
-    annotated = plot_mapped_validity_grid(document, variant=GRID_VARIANT_ANNOTATED)
+    annotated = plot_mapped_validity_grid(document, variant=GRID_VARIANT_WITH_COUNTS)
     clean = plot_mapped_validity_grid(document, variant=GRID_VARIANT_CLEAN)
     annotated_ax, clean_ax = annotated.axes[0], clean.axes[0]
     annotated_im, clean_im = annotated_ax.get_images()[0], clean_ax.get_images()[0]
@@ -485,11 +487,363 @@ def test_the_clean_variant_prints_at_or_above_the_publisher_font_floor() -> None
     """The reason the variant exists: 7 pt annotations were below the 8 pt floor."""
     from population_synthetic.analysis.utils.style import FONT_FLOOR_PT
     from population_synthetic.analysis.validation_attrition.charts import (
-        GRID_VARIANT_ANNOTATED,
         GRID_VARIANT_CLEAN,
+        GRID_VARIANT_WITH_COUNTS,
     )
 
     assert GRID_VARIANT_CLEAN.fontsize >= FONT_FLOOR_PT
-    assert GRID_VARIANT_ANNOTATED.fontsize >= FONT_FLOOR_PT
+    assert GRID_VARIANT_WITH_COUNTS.fontsize >= FONT_FLOOR_PT
     # The clean variant spends the room the dropped count line frees.
-    assert GRID_VARIANT_CLEAN.fontsize > GRID_VARIANT_ANNOTATED.fontsize
+    assert GRID_VARIANT_CLEAN.fontsize > GRID_VARIANT_WITH_COUNTS.fontsize
+
+
+# --------------------------------------------------------------------------- #
+# the layer-wide variant rule, over every grid family that publishes variants     #
+# --------------------------------------------------------------------------- #
+
+
+def _assert_substitutable(counted, clean, label: str) -> None:
+    """The two publications of one grid differ in cell text and in nothing else.
+
+    Asserted on the *drawn* figures rather than on the records they were built from,
+    because the property that matters is what a reader receives: two figures that can be
+    swapped in a manuscript without moving a row, a column, a tick or a colour. Anything
+    the caller re-derives per variant -- a norm taken over the annotated values, a canvas
+    grown to fit a longer string -- would break exactly here.
+    """
+    assert counted.get_size_inches().tolist() == clean.get_size_inches().tolist(), label
+    counted_ax, clean_ax = counted.axes[0], clean.axes[0]
+    counted_images, clean_images = counted_ax.get_images(), clean_ax.get_images()
+    assert len(counted_images) == len(clean_images), label
+    for counted_im, clean_im in zip(counted_images, clean_images):
+        assert counted_im.get_extent() == clean_im.get_extent(), label
+        assert (counted_im.norm.vmin, counted_im.norm.vmax) == (
+            clean_im.norm.vmin, clean_im.norm.vmax,
+        ), label
+        assert counted_im.cmap.name == clean_im.cmap.name, label
+        np.testing.assert_allclose(
+            counted_im.get_array().filled(np.nan),
+            clean_im.get_array().filled(np.nan),
+            err_msg=label,
+        )
+    assert counted_ax.get_xlim() == clean_ax.get_xlim(), label
+    assert counted_ax.get_ylim() == clean_ax.get_ylim(), label
+    assert [t.get_text() for t in counted_ax.get_yticklabels()] == [
+        t.get_text() for t in clean_ax.get_yticklabels()
+    ], label
+    assert [t.get_text() for t in counted_ax.get_xticklabels()] == [
+        t.get_text() for t in clean_ax.get_xticklabels()
+    ], label
+    # Markings -- hatches, best-cell boxes, tier rules -- qualify cells, not text, so
+    # both variants carry every one of them.
+    assert len(counted_ax.patches) == len(clean_ax.patches), label
+
+
+#: The second form a count line takes: the two counts a printed quotient rests on.
+_COUNT_QUOTIENT = re.compile(r"\d+/\d+")
+
+
+def _assert_clean_drops_only_the_count_line(counted, clean, label: str) -> None:
+    """Every clean cell is its counted twin with the count line removed, and nothing else.
+
+    The point of the revision: what leaves the camera-ready figure is one line of one
+    cell's text, never a qualifier, a marking or a value.
+    """
+    counted_texts = _annotations(counted.axes[0])
+    clean_texts = _annotations(clean.axes[0])
+    assert set(counted_texts) == set(clean_texts), label
+    dropped = 0
+    for position, text in counted_texts.items():
+        head, _, tail = text.partition("\n")
+        if clean_texts[position] == text:
+            # A cell the caller wrote rather than the policy -- "not generated", the real
+            # population's own band -- reads the same on both, which is the point: only
+            # the policy's own second line goes.
+            continue
+        assert clean_texts[position] == head, f"{label} at {position}"
+        # What went is a count line and nothing else: `n=267`, or the `110/267` form the
+        # validity grid uses because its value IS a quotient of two printed counts.
+        assert tail.startswith("n=") or _COUNT_QUOTIENT.fullmatch(tail), (
+            f"{label} at {position}: dropped {tail!r}, which is not a count line"
+        )
+        dropped += 1
+    assert dropped, f"{label}: no counted cell to drop a line from -- vacuous fixture"
+
+
+def _capture_saved(module, call):
+    """Run *call* with *module*'s writer intercepted, and return the figures it produced.
+
+    Several grid entry points save internally and return only a path. Intercepting the
+    writer is what lets a substitutability assertion reach those figures -- including the
+    ones the writer would reject on a size budget, which are exactly the figures a
+    file-based check would never see.
+    """
+    captured: list = []
+    original = module.save_figure
+
+    def spy(fig, path, **kwargs):
+        captured.append(fig)
+        return path
+
+    module.save_figure = spy
+    try:
+        call()
+    finally:
+        module.save_figure = original
+    assert captured, "the chart function produced no figure"
+    return captured
+
+
+def _gm_summary(model: str, strategy: str, scale: float):
+    """One ``ComboSummary`` carrying a defined mean and count for every metric.
+
+    The metric grids read ``metrics[name]["mean"]`` and ``["n"]`` and skip a metric that
+    is undefined everywhere, so a fixture with empty metrics would yield no figure at all
+    and the assertions below would pass vacuously.
+    """
+    from population_synthetic.analysis.generation_metadata.combo_aggregator import (
+        METRIC_NAMES,
+        ComboSummary,
+    )
+
+    return ComboSummary(
+        country="swedish",
+        model=model,
+        strategy=strategy,
+        n_personas=100,
+        has_token_data=True,
+        metrics={
+            name: {"mean": (index + 1) * scale, "std": 0.5, "median": (index + 1) * scale,
+                   "q1": 0.0, "q3": 1.0, "n": 100}
+            for index, name in enumerate(METRIC_NAMES)
+        },
+        skipped=[],
+    )
+
+
+def _variant_pairs():
+    """``(label, counted_figure, clean_figure)`` for every varianted grid in the layer.
+
+    Built from each family's own fixtures rather than from a synthetic grid, because the
+    substitutability claim is about the *published* figures: a family that re-derives a
+    limit from the annotated values, or grows its canvas around a longer string, fails
+    here and nowhere else.
+    """
+    from population_synthetic.analysis.utils.style import apply_house_style
+
+    with apply_house_style():
+        # F05 -- the validation-survival grid the variant mechanism was introduced for.
+        import population_synthetic.analysis.validation_attrition.charts as attrition_mod
+        from tests.test_validation_attrition_charts import (
+            _COMPLEX,
+            _SIMPLE,
+            _document,
+            _entry,
+        )
+
+        document = _document([
+            _entry("claude_haiku", _SIMPLE, clean=120),
+            _entry("claude_haiku", _COMPLEX, clean=9, selected=0, excluded=True),
+            _entry("gemini_flash", _SIMPLE, generated=0, raw_valid=0, clean=0, selected=0,
+                   excluded=True),
+        ])
+        yield (
+            "validation_attrition::plot_mapped_validity_grid",
+            attrition_mod.plot_mapped_validity_grid(
+                document, variant=attrition_mod.GRID_VARIANT_WITH_COUNTS,
+            ),
+            attrition_mod.plot_mapped_validity_grid(
+                document, variant=attrition_mod.GRID_VARIANT_CLEAN,
+            ),
+        )
+
+        # The manuscript's model x method fidelity grid.
+        import population_synthetic.analysis.model_ranking.charts as ranking_mod
+        from tests.test_model_ranking_charts import REQUESTED_N, _cap, _result
+
+        cells = [
+            ("claude_haiku", "all_pick", 0.90, REQUESTED_N),
+            ("claude_haiku", "all_generate_pick", 0.80, REQUESTED_N),
+            ("openrouter_kimi_k3", "all_pick", 0.85, REQUESTED_N),
+            ("openrouter_kimi_k3", "all_generate_pick", 0.95, REQUESTED_N),
+        ]
+        result, cap = _result(cells), _cap(cells)
+        drawn = {
+            variant.name: _capture_saved(
+                ranking_mod,
+                lambda v=variant: ranking_mod.plot_model_method_heatmap(
+                    result, cap, "unused.png", variant=v,
+                ),
+            )[-1]
+            for variant in ranking_mod.GRID_VARIANTS.values()
+        }
+        yield (
+            "model_ranking::plot_model_method_heatmap",
+            drawn[ranking_mod.GRID_VARIANT_WITH_COUNTS.name],
+            drawn[ranking_mod.GRID_VARIANT_CLEAN.name],
+        )
+
+        # The two realism grids: the impossibility/severity rate family and typicality.
+        import population_synthetic.analysis.realism_ranking.charts as realism_mod
+        from tests.test_realism_ranking_builder import _build, _record
+
+        ranking = _build([
+            _record("s1", n_impossible=2, typicalities=[5.0, 6.0, 7.0, 8.0]),
+            _record("s2", n_impossible=1, typicalities=[4.0, 5.0, 9.0],
+                    model="claude_sonnet"),
+        ])
+        yield (
+            "realism_ranking::plot_impossibility_heatmap",
+            realism_mod.plot_impossibility_heatmap(
+                ranking, variant=realism_mod.RATE_VARIANT_WITH_COUNTS,
+            ),
+            realism_mod.plot_impossibility_heatmap(
+                ranking, variant=realism_mod.RATE_VARIANT_CLEAN,
+            ),
+        )
+        yield (
+            "realism_ranking::plot_typicality_heatmap",
+            realism_mod.plot_typicality_heatmap(
+                ranking, variant=realism_mod.TYPICALITY_VARIANT_WITH_COUNTS,
+            ),
+            realism_mod.plot_typicality_heatmap(
+                ranking, variant=realism_mod.TYPICALITY_VARIANT_CLEAN,
+            ),
+        )
+
+        # The generation-cost metric grids.
+        import population_synthetic.analysis.generation_metadata.charts as gm_mod
+
+        summaries = [
+            _gm_summary("claude_haiku", "all_pick", 1.0),
+            _gm_summary("openrouter_kimi_k3", "all_generate_pick", 2.0),
+        ]
+        gm_figures = _capture_saved(
+            gm_mod, lambda: gm_mod.render_metric_heatmaps("swedish", summaries, "unused"),
+        )
+        # One figure per metric per variant, emitted in the variant map's own order.
+        names = list(gm_mod.GRID_VARIANTS)
+        by_variant = {
+            name: gm_figures[index::len(names)] for index, name in enumerate(names)
+        }
+        for index, (counted, clean) in enumerate(zip(
+            by_variant[gm_mod.GRID_VARIANT_WITH_COUNTS.name],
+            by_variant[gm_mod.GRID_VARIANT_CLEAN.name],
+        )):
+            yield f"generation_metadata::metric_heatmap[{index}]", counted, clean
+
+
+@pytest.fixture(scope="module")
+def variant_pairs():
+    import matplotlib.pyplot as plt
+
+    pairs = list(_variant_pairs())
+    yield pairs
+    for _label, counted, clean in pairs:
+        plt.close(counted)
+        plt.close(clean)
+
+
+def test_every_grid_family_publishes_a_variant_pair(variant_pairs) -> None:
+    """A vacuous sweep passes every rule it checks; this is what stops that."""
+    families = {label.split("::")[0] for label, _counted, _clean in variant_pairs}
+    assert families == {
+        "validation_attrition", "model_ranking", "realism_ranking", "generation_metadata",
+    }
+
+
+def test_the_two_variants_of_every_grid_are_the_same_figure(variant_pairs) -> None:
+    """Substitutability, on every published pair rather than on F05 alone."""
+    for label, counted, clean in variant_pairs:
+        _assert_substitutable(counted, clean, label)
+
+
+def test_the_clean_variant_of_every_grid_drops_only_the_count_line(variant_pairs) -> None:
+    """The canonical figure loses the count line and keeps everything else."""
+    for label, counted, clean in variant_pairs:
+        _assert_clean_drops_only_the_count_line(counted, clean, label)
+
+
+def _variant_maps():
+    """Every family's variant map, as ``(label, map)``."""
+    import population_synthetic.analysis.generation_metadata.charts as gm_mod
+    import population_synthetic.analysis.model_ranking.charts as ranking_mod
+    import population_synthetic.analysis.realism_ranking.charts as realism_mod
+    import population_synthetic.analysis.validation_attrition.charts as attrition_mod
+
+    return [
+        ("validation_attrition", attrition_mod.GRID_VARIANTS),
+        ("model_ranking", ranking_mod.GRID_VARIANTS),
+        ("realism_ranking::rate", realism_mod.RATE_GRID_VARIANTS),
+        ("realism_ranking::typicality", realism_mod.TYPICALITY_GRID_VARIANTS),
+        ("generation_metadata", gm_mod.GRID_VARIANTS),
+    ]
+
+
+def test_every_family_names_the_canonical_variant_the_same_way() -> None:
+    """One naming rule across five families, so no driver invents a sixth."""
+    from population_synthetic.analysis.utils.grid_variants import (
+        CANONICAL_VARIANT,
+        COUNTED_VARIANT,
+        variant_suffixes,
+    )
+
+    for label, variants in _variant_maps():
+        assert set(variants) == {CANONICAL_VARIANT, COUNTED_VARIANT}, label
+        suffixes = {
+            variant.name: suffix for suffix, variant in variant_suffixes(variants)
+        }
+        # The camera-ready figure takes the bare filename; the counted one is suffixed.
+        assert suffixes[CANONICAL_VARIANT] == "", label
+        assert suffixes[COUNTED_VARIANT] == f"_{COUNTED_VARIANT}", label
+
+
+def test_no_variant_prints_below_the_publisher_font_floor() -> None:
+    """Dropping a line may buy type size; it may never cost any."""
+    from population_synthetic.analysis.utils.grid_variants import (
+        CANONICAL_VARIANT,
+        COUNTED_VARIANT,
+    )
+    from population_synthetic.analysis.utils.style import FONT_FLOOR_PT
+
+    for label, variants in _variant_maps():
+        for name, variant in variants.items():
+            assert variant.fontsize >= FONT_FLOOR_PT, f"{label}::{name}"
+        assert (
+            variants[CANONICAL_VARIANT].fontsize >= variants[COUNTED_VARIANT].fontsize
+        ), label
+
+
+def test_a_family_without_a_canonical_variant_raises_rather_than_promoting_one() -> None:
+    """The unsuffixed filename is the manuscript's; nothing may take it by accident."""
+    from population_synthetic.analysis.utils.grid_variants import (
+        COUNTED_VARIANT,
+        GridVariant,
+        variant_map,
+        variant_suffixes,
+    )
+
+    counted = GridVariant(
+        name=COUNTED_VARIANT, policy=RateOnlyPolicy(), cell_clause="", fontsize=8.0,
+        linespacing=None,
+    )
+    with pytest.raises(ValueError, match="clean"):
+        variant_map(counted)
+    with pytest.raises(ValueError, match="clean"):
+        variant_suffixes({counted.name: counted})
+
+
+def test_two_variants_may_not_share_a_name() -> None:
+    """A name is a filename suffix, so a duplicate would silently drop a publication."""
+    from population_synthetic.analysis.utils.grid_variants import (
+        CANONICAL_VARIANT,
+        GridVariant,
+        variant_map,
+    )
+
+    clean = GridVariant(
+        name=CANONICAL_VARIANT, policy=RateOnlyPolicy(), cell_clause="", fontsize=8.0,
+        linespacing=None,
+    )
+    with pytest.raises(ValueError, match="share the name"):
+        variant_map(clean, clean)

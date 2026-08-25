@@ -29,7 +29,10 @@ import pytest
 
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.model_ranking.builder import build_performance_comparison
-from population_synthetic.analysis.model_ranking.charts import plot_model_method_heatmap
+from population_synthetic.analysis.model_ranking.charts import (
+    GRID_VARIANT_WITH_COUNTS,
+    plot_model_method_heatmap,
+)
 from population_synthetic.analysis.model_ranking.loader import scheme_attributes
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.cap_index import INDEX_FILENAME, CapIndex
@@ -98,11 +101,16 @@ def _cap(cells, requested: int = REQUESTED_N) -> CapIndex:
     )
 
 
-def _render(cells, tmp_path, *, hosting=None, requested: int = REQUESTED_N):
+def _render(cells, tmp_path, *, hosting=None, requested: int = REQUESTED_N, variant=None):
     """Draw *cells* and return ``(requested_path, ax)``.
 
     The renderer owns and closes its figure and returns only a path, so the axes has
     to be captured as it is created.
+
+    *variant* selects which publication of the grid is drawn; ``None`` takes the chart
+    module's own default, which is the camera-ready one written at the bare filename. A
+    test asserting on a cell's count line passes the counted variant explicitly, because
+    that is the figure the count line lives on.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -118,9 +126,10 @@ def _render(cells, tmp_path, *, hosting=None, requested: int = REQUESTED_N):
         return fig, ax
 
     out = tmp_path / f"{COUNTRY}_model_method_heatmap.png"
+    kwargs = {} if variant is None else {"variant": variant}
     plt.subplots = spy
     try:
-        plot_model_method_heatmap(result, _cap(cells, requested), out)
+        plot_model_method_heatmap(result, _cap(cells, requested), out, **kwargs)
     finally:
         plt.subplots = orig
     return out, captured.get("ax")
@@ -281,8 +290,9 @@ def test_cell_values_are_the_overall_tv_similarity(tmp_path):
 
 
 def test_cell_annotations_print_the_rescaled_value_and_n(tmp_path):
+    """The count line lives on the counted variant; the bare filename drops it."""
     cells = _mixed_grid()
-    _out, ax = _render(cells, tmp_path)
+    _out, ax = _render(cells, tmp_path, variant=GRID_VARIANT_WITH_COUNTS)
 
     for model, strategy, similarity, n in cells:
         assert _cell_text(ax, model, strategy) == f"{similarity * 100:.1f}\nn={n}"
@@ -316,7 +326,8 @@ def test_tier_assignment_splits_on_having_any_full_n_cell(tmp_path):
 
 def test_tier1_ordering_key_ignores_thin_cells(tmp_path):
     """``claude_sonnet``'s best cell (0.95) is thin, so it ranks on its 0.60 full-n cell."""
-    _out, ax = _render(_mixed_grid(), tmp_path)
+    # Counted variant: the last assertion is about the thin cell's printed n.
+    _out, ax = _render(_mixed_grid(), tmp_path, variant=GRID_VARIANT_WITH_COUNTS)
 
     assert _row_models(ax) == ["claude_haiku", "claude_sonnet", "gemini_flash"]
     assert _row_marginals(ax)["claude_sonnet"].startswith("60.0")
@@ -521,7 +532,10 @@ def test_marginals_are_fenced_off_by_the_shared_dividers(tmp_path):
 def test_caption_states_both_marginal_scopes(tmp_path):
     _out, ax = _render(_mixed_grid(), tmp_path)
 
-    text = _all_text(ax)
+    # Wrapping is a layout decision the caption block owns, so the phrases are checked
+    # against the unwrapped text: a line break falling inside one of them is not a
+    # missing sentence.
+    text = " ".join(_all_text(ax).split())
     assert "Row marginal" in text and "Column marginal" in text
     assert "full-n cells only" in text
 
@@ -616,7 +630,8 @@ def test_all_nan_column_does_not_crash_the_marginals(tmp_path):
         ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, nan, REQUESTED_N),
         ("claude_sonnet", S1, 0.70, REQUESTED_N), ("claude_sonnet", S2, nan, REQUESTED_N),
     ]
-    _out, ax = _render(cells, tmp_path)
+    # Counted variant: the cell assertion below is about the dash printed over its base.
+    _out, ax = _render(cells, tmp_path, variant=GRID_VARIANT_WITH_COUNTS)
 
     assert _column_marginals(ax)[S2] == "n/a\n(0 full-n)"
     assert _cell_text(ax, "claude_haiku", S2) == f"--\nn={REQUESTED_N}"

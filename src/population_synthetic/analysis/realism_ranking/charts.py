@@ -53,7 +53,16 @@ from __future__ import annotations
 import textwrap
 from typing import Any
 
-from population_synthetic.analysis.utils.grid_annotations import RateWithCountsPolicy
+from population_synthetic.analysis.utils.grid_annotations import (
+    RateOnlyPolicy,
+    RateWithCountsPolicy,
+)
+from population_synthetic.analysis.utils.grid_variants import (
+    CANONICAL_VARIANT,
+    COUNTED_VARIANT,
+    GridVariant,
+    variant_map,
+)
 from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.labels import (
     attribute_label,
@@ -84,6 +93,7 @@ from population_synthetic.analysis.utils.palette import (
 )
 from population_synthetic.analysis.utils.style import (
     ANNOTATION,
+    ANNOTATION_LARGE,
     AXIS_TITLE,
     CALLOUT,
     CAPTION_MARGIN_IN,
@@ -102,6 +112,8 @@ from population_synthetic.analysis.utils.style import (
 from population_synthetic.analysis.utils.table_style import fit_to_page
 
 __all__ = [
+    "RATE_GRID_VARIANTS",
+    "TYPICALITY_GRID_VARIANTS",
     "plot_headline_map",
     "plot_impossibility_forest",
     "plot_impossibility_heatmap",
@@ -111,24 +123,85 @@ __all__ = [
     "plot_typicality_heatmap",
 ]
 
-#: The impossibility / severity grids' cell annotation: the rate at its own 0--1 scale
+#: The impossibility / severity grids' counted variant: the rate at its own 0--1 scale
 #: over the personas it was taken across. The rate is not a quotient of two counts the
 #: figure prints, so the base is named ``n=`` rather than as a fraction.
-_RATE_CELL_POLICY = RateWithCountsPolicy(
-    value_key="value", numerator_key=None, denominator_key="denominator",
-    scale=1.0, number_format=".3f",
+RATE_VARIANT_WITH_COUNTS = GridVariant(
+    name=COUNTED_VARIANT,
+    policy=RateWithCountsPolicy(
+        value_key="value", numerator_key=None, denominator_key="denominator",
+        scale=1.0, number_format=".3f",
+    ),
+    cell_clause="Cell: the rate at its own 0-1 scale, over the n personas it was taken across.",
+    fontsize=ANNOTATION,
+    linespacing=None,
 )
 
-#: The typicality grid's cell annotation: the statistic, its parenthesised signed
+#: The camera-ready variant, published at the bare filename: the rate alone, one step up
+#: the house scale on the room the dropped count line frees. The denominator is constant
+#: down a column of this grid -- every cell of a combination is judged over the same
+#: capped population -- so printing it in every cell spends a line on a repetition, and
+#: it stays available in the per-persona CSV, in the counted sibling and on the real
+#: population's own band.
+RATE_VARIANT_CLEAN = GridVariant(
+    name=CANONICAL_VARIANT,
+    policy=RateOnlyPolicy(value_key="value", scale=1.0, number_format=".3f"),
+    cell_clause=(
+        "Cell: the rate at its own 0-1 scale; the n it was taken across is on the "
+        "with-counts sibling figure and in the per-persona realism CSV."
+    ),
+    fontsize=ANNOTATION_LARGE,
+    linespacing=None,
+)
+
+#: The rate grids' publishable variants, clean first because it takes the bare filename.
+RATE_GRID_VARIANTS: dict[str, GridVariant] = variant_map(
+    RATE_VARIANT_CLEAN, RATE_VARIANT_WITH_COUNTS,
+)
+
+#: The typicality grid's counted variant: the statistic, its parenthesised signed
 #: distance to the real population, and the survivor count it rests on. The delta is
 #: read from the record, not derived here: it is a function of a *second* competitor's
 #: value, so the chart -- which owns the reference -- formats it and the policy prints
 #: what it is handed. That keeps the reference out of every cell's arithmetic while
 #: leaving it visible in the rendering, which is the whole of ADR 2026-08-12's
 #: Decision 2.
-_TYPICALITY_CELL_POLICY = RateWithCountsPolicy(
-    value_key="value", numerator_key=None, denominator_key="denominator",
-    scale=1.0, number_format=".3f", qualifier_key="delta",
+TYPICALITY_VARIANT_WITH_COUNTS = GridVariant(
+    name=COUNTED_VARIANT,
+    policy=RateWithCountsPolicy(
+        value_key="value", numerator_key=None, denominator_key="denominator",
+        scale=1.0, number_format=".3f", qualifier_key="delta",
+    ),
+    cell_clause=(
+        "Cell: the statistic, its parenthesised signed distance to the reference, and "
+        "the n typicality-bearing personas it rests on."
+    ),
+    fontsize=ANNOTATION,
+    linespacing=None,
+)
+
+#: The camera-ready variant, at the bare filename: the statistic and its signed distance,
+#: without the count line. The **delta is not dropped** -- on a sequential ramp it is the
+#: only place the side of the reference is readable (ADR 2026-08-12), so a variant without
+#: it would be missing content rather than ink. Its type size is deliberately *not* raised:
+#: unlike its sibling grids this cell carries an inline qualifier, so the annotation is
+#: bound by the cell's width rather than by the line the variant drops.
+TYPICALITY_VARIANT_CLEAN = GridVariant(
+    name=CANONICAL_VARIANT,
+    policy=RateOnlyPolicy(
+        value_key="value", scale=1.0, number_format=".3f", qualifier_key="delta",
+    ),
+    cell_clause=(
+        "Cell: the statistic and, parenthesised, its signed distance to the reference; "
+        "its n is on the with-counts sibling figure."
+    ),
+    fontsize=ANNOTATION,
+    linespacing=None,
+)
+
+#: The typicality grid's publishable variants, clean first.
+TYPICALITY_GRID_VARIANTS: dict[str, GridVariant] = variant_map(
+    TYPICALITY_VARIANT_CLEAN, TYPICALITY_VARIANT_WITH_COUNTS,
 )
 
 _COMPETITOR_COLOR = CATEGORICAL_SERIES[0]
@@ -311,12 +384,20 @@ def _render_grid_heatmap(
     cbar_label: str,
     caption: str,
     error_context: str,
+    variant: GridVariant,
 ):
     """Render one ``{models, methods, cells, real}`` grid as a heatmap.
 
     The single implementation behind every heatmap this task emits, so the layout and
     the guards below cannot diverge between them. Computes nothing: each cell payload
     already carries its ``rate`` and ``denominator``.
+
+    *variant* decides what a cell prints and nothing else -- the clean publication prints
+    the rate alone one step larger, the with-counts one adds the base beneath it -- so the
+    two are the same figure in rows, columns, extent, colour scale and markings by
+    construction. The real-population band keeps its own ``n`` in both, exactly as the
+    marginals of the sibling grids do: it is stated once on the figure rather than in
+    every cell.
 
     Three rendering decisions carry meaning:
 
@@ -396,10 +477,11 @@ def _render_grid_heatmap(
 
     im = render_grid(
         ax, plotted, cells,
-        policy=_RATE_CELL_POLICY,
+        policy=variant.policy,
         cmap=heatmap_cmap(_SEQUENTIAL_CMAP, missing=_MISSING_COLOR),
         norm=mcolors.Normalize(vmin=0.0, vmax=vmax),
-        aspect="auto", fontsize=ANNOTATION, interpolation="none",
+        aspect="auto", fontsize=variant.fontsize, linespacing=variant.linespacing,
+        interpolation="none",
     )
 
     # Letters on the method axis and display names on the model axis; the key is drawn
@@ -444,6 +526,9 @@ def _render_grid_heatmap(
     ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
 
     footnotes = ["Methods:  " + "   ".join(method_key_lines(methods))] if methods else []
+    # What a cell prints is the first thing a reader of this figure needs, and it is the
+    # one sentence the two publications do not share.
+    footnotes.append(variant.cell_clause)
     if caption:
         footnotes.append(caption)
     if real_rate is not None:
@@ -462,13 +547,18 @@ def _render_grid_heatmap(
     return fig
 
 
-def plot_impossibility_heatmap(ranking: dict[str, Any]):
+def plot_impossibility_heatmap(
+    ranking: dict[str, Any], *, variant: GridVariant = RATE_VARIANT_CLEAN,
+):
     """Render Axis A as a model x method grid, with the real population as its own band.
 
     The forest plot answers "who is most coherent"; this one answers "does incoherence
     track the model, the method, or neither" -- the same question the Kruskal-Wallis
     tests answer numerically, in a form that shows the pattern rather than a p-value.
     Every number arrives pre-computed in ``axis_a.grid``.
+
+    *variant* selects the publication: :data:`RATE_VARIANT_CLEAN` (the default, and the
+    one written at the bare filename) or :data:`RATE_VARIANT_WITH_COUNTS`.
     """
     return _render_grid_heatmap(
         ranking["axis_a"]["grid"],
@@ -480,10 +570,13 @@ def plot_impossibility_heatmap(ranking: dict[str, Any]):
         cbar_label="Impossibility rate -- lower is better",
         caption="",
         error_context="plot_impossibility_heatmap",
+        variant=variant,
     )
 
 
-def plot_severity_heatmap(ranking: dict[str, Any], severity: str):
+def plot_severity_heatmap(
+    ranking: dict[str, Any], severity: str, *, variant: GridVariant = RATE_VARIANT_CLEAN,
+):
     """Render one severity level's clash prevalence as a model x method grid.
 
     *severity* is one of ``S3`` / ``S2`` / ``S1``. The value shown is the share of a
@@ -503,6 +596,9 @@ def plot_severity_heatmap(ranking: dict[str, Any], severity: str):
     (``_SEQUENTIAL_CMAP``), which carries no better/worse reading of its own. A reader
     must therefore take the direction from the colourbar label and the caption, both of
     which are always present, and never from the colour.
+
+    *variant* selects the publication: :data:`RATE_VARIANT_CLEAN` (the default, and the
+    one written at the bare filename) or :data:`RATE_VARIANT_WITH_COUNTS`.
 
     Raises ``KeyError`` on an unknown severity level.
     """
@@ -535,6 +631,7 @@ def plot_severity_heatmap(ranking: dict[str, Any], severity: str):
         cbar_label=cbar_label,
         caption=caption,
         error_context=f"plot_severity_heatmap({severity})",
+        variant=variant,
     )
 
 
@@ -998,7 +1095,9 @@ def _typicality_footnotes(
 
 
 @house_style
-def plot_typicality_heatmap(ranking: dict[str, Any]):
+def plot_typicality_heatmap(
+    ranking: dict[str, Any], *, variant: GridVariant = TYPICALITY_VARIANT_CLEAN,
+):
     """Render the self-contained typicality statistic as a model x method grid.
 
     The severity and impossibility dimensions each have this figure; typicality had none,
@@ -1024,6 +1123,12 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
     value (on the ramp, hatched), a judged competitor with no typicality-bearing persona
     (white, cross-hatched, labelled), and an unjudged pair (grey, labelled). Computes
     nothing -- every number, and every caption's wording, arrives from the block.
+
+    *variant* decides what a cell prints and nothing else: the clean publication, written
+    at the bare filename, drops the count line, and the with-counts sibling keeps it. The
+    **delta is in both** -- dropping it would remove the only reading of the reference's
+    side this figure has -- and so is the real band's own ``n``, which is stated once
+    rather than in every cell.
 
     Returns the ``Figure`` unsaved and open. Raises ``ValueError`` when no competitor has
     a defined statistic, matching the sibling charts.
@@ -1095,10 +1200,11 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
     )
     im = render_grid(
         ax, plotted, cells,
-        policy=_TYPICALITY_CELL_POLICY,
+        policy=variant.policy,
         cmap=heatmap_cmap(_SEQUENTIAL_CMAP, missing=_MISSING_COLOR),
         norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
-        aspect="auto", fontsize=ANNOTATION, zorder=4, interpolation="none",
+        aspect="auto", fontsize=variant.fontsize, linespacing=variant.linespacing,
+        zorder=4, interpolation="none",
     )
 
     # As every other grid in this task: letters on the method axis, display names on the
@@ -1192,10 +1298,13 @@ def plot_typicality_heatmap(ranking: dict[str, Any]):
         f"({subtitle}; grey = not judged, which is not a value of zero)",
         fontsize=FIGURE_TITLE, fontweight="bold",
     )
-    _place_footnote(fig, ax, _typicality_footnotes(
+    # The variant's clause leads: what a cell prints is the one sentence the two
+    # publications do not share, and it is what tells the reader whether the denominator
+    # is on this figure or in the CSV beside it.
+    _place_footnote(fig, ax, [variant.cell_clause, *_typicality_footnotes(
         block, country=ranking["country"], reference_role="Colourbar rule", under_powered_mark="hatched", flat=flat,
         has_reference=has_reference, has_band=real_value is not None,
-    ))
+    )])
     return fig
 
 

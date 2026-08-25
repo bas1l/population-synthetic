@@ -46,6 +46,7 @@ from population_synthetic.analysis.utils.palette import MISSING_COLOR  # noqa: E
 from population_synthetic.analysis.utils.registry import analysis_output_dir  # noqa: E402
 from population_synthetic.analysis.validation_attrition.charts import (  # noqa: E402
     CELL_STATES,
+    GRID_VARIANT_WITH_COUNTS,
     GRID_VARIANTS,
     _cell_state,
     _segment_counts,
@@ -232,7 +233,12 @@ def test_populated_cell_is_not_rendered_as_missing() -> None:
     and labels it absent without raising, so the assertion has to be on the drawn array
     and the drawn text, not on the absence of an exception.
     """
-    fig = plot_mapped_validity_grid(_document([_entry("claude_haiku", _SIMPLE, clean=120)]))
+    # Drawn in the counted variant: the regression this guards against showed up as the
+    # cell text, and the counted text is the one that carries both numbers.
+    fig = plot_mapped_validity_grid(
+        _document([_entry("claude_haiku", _SIMPLE, clean=120)]),
+        variant=GRID_VARIANT_WITH_COUNTS,
+    )
     ax = fig.axes[0]
     array = ax.get_images()[0].get_array()
 
@@ -255,7 +261,7 @@ def test_grid_draws_all_four_states_distinguishably() -> None:
                selected=0, excluded=True),                                            # undefined
         # gemini_flash x _COMPLEX is deliberately absent from the document.
     ])
-    fig = plot_mapped_validity_grid(document)
+    fig = plot_mapped_validity_grid(document, variant=GRID_VARIANT_WITH_COUNTS)
     ax = fig.axes[0]
     array = ax.get_images()[0].get_array()
     mask = np.ma.getmaskarray(array)
@@ -329,8 +335,10 @@ def test_grid_rows_cover_every_model_including_a_fully_withdrawn_one() -> None:
 
 
 def test_grid_cell_prints_the_denominator_behind_its_rate() -> None:
+    """The counted variant is where the two counts live; the bare filename drops them."""
     fig = plot_mapped_validity_grid(
-        _document([_entry("claude_haiku", _SIMPLE, generated=549, clean=132)])
+        _document([_entry("claude_haiku", _SIMPLE, generated=549, clean=132)]),
+        variant=GRID_VARIANT_WITH_COUNTS,
     )
     ax = fig.axes[0]
 
@@ -548,13 +556,13 @@ def test_cli_writes_both_tables_and_every_figure(workspace: Path) -> None:
     stems = [
         f"{_COUNTRY}_attrition_funnel",
         f"{_COUNTRY}_mapped_validity_grid",
-        f"{_COUNTRY}_mapped_validity_grid_clean",
+        f"{_COUNTRY}_mapped_validity_grid_with_counts",
     ]
     for stem in stems:
         assert (out_dir / f"{stem}.png").is_file()
         assert (out_dir / f"{stem}.svg").is_file()
-    # The clean grid is an addition beside the annotated one, never a replacement of it:
-    # every downstream reference to the historical filename keeps resolving.
+    # The bare filename is the camera-ready figure and the counted form is its suffixed
+    # sibling -- the layer-wide rule, so this grid is named like every other one.
     assert len(list(out_dir.glob("*.png"))) == len(stems)
 
 

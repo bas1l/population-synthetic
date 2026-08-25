@@ -28,6 +28,7 @@ from population_synthetic.analysis.realism_ranking.builder import (  # noqa: E40
     typicality_summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
+    TYPICALITY_VARIANT_WITH_COUNTS,
     plot_headline_map,
     plot_impossibility_forest,
     plot_impossibility_heatmap,
@@ -1594,7 +1595,9 @@ def test_typicality_heatmap_renders_a_populated_cell_as_a_value_not_as_missing()
     populated cells are asserted to carry their numbers.
     """
     ranking = _four_state_ranking()
-    fig = plot_typicality_heatmap(ranking)
+    # Counted variant: the cell's count line is one of the numbers asserted below, and
+    # it is the variant that prints it.
+    fig = plot_typicality_heatmap(ranking, variant=TYPICALITY_VARIANT_WITH_COUNTS)
     text = _figure_text(fig)
 
     assert "0.100" in text and "n=4" in text   # haiku x all_pick, hand-computed in Phase 2
@@ -1785,7 +1788,7 @@ def test_a_grid_of_nothing_but_under_powered_cells_still_renders():
     cells = [_typ(ranking), _typ(ranking, "claude_sonnet", "all_pick_dag"), grid["real"]]
     assert all(cell["under_powered"] for cell in cells)
 
-    fig = plot_typicality_heatmap(ranking)
+    fig = plot_typicality_heatmap(ranking, variant=TYPICALITY_VARIANT_WITH_COUNTS)
     # The real population's band is marked on the same terms as the cells: every cell's
     # delta is measured against it, so a thin reference drawn as a firm one is the worse
     # error.

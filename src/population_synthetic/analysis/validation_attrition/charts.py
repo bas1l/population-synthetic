@@ -38,13 +38,17 @@ grey is the layer's one "no value here" colour and inventing a second would impl
 value. The distinction that matters -- a measured cell is never grey, and a grey cell is
 never annotated with a number -- is asserted by the tests.
 
-**The grid is published twice from one renderer.** The annotated variant prints each
-rate together with the two counts it is the quotient of; the clean variant prints the
-rate alone, one step up the house scale on the room the dropped line frees. They are the
-same figure in every other respect -- rows, columns, extent, colour scale, markings,
-marginals -- because the only thing that varies between them is the annotation policy
-handed to ``analysis/utils/grids.py::render_grid``. A second ``..._clean()`` function
-would have duplicated the draw loop, and the two would have diverged on the first edit.
+**The grid is published twice from one renderer.** The clean variant -- the camera-ready
+one, published at the bare filename -- prints the rate alone, one step up the house scale
+on the room the dropped line frees; the ``_with_counts`` sibling prints it together with
+the two counts it is the quotient of. They are the same figure in every other respect --
+rows, columns, extent, colour scale, markings, marginals -- because the only thing that
+varies between them is the annotation policy handed to
+``analysis/utils/grids.py::render_grid``. A second ``..._clean()`` function would have
+duplicated the draw loop, and the two would have diverged on the first edit. The record
+that pairs a policy with its wording and its type size, and the rule that gives the clean
+variant the unsuffixed name, are shared with every other varianted grid in the layer
+(``analysis/utils/grid_variants.py``).
 
 Byte-reproducibility is claimed for the PNGs only. Matplotlib stamps every SVG with a
 creation timestamp, so no SVG in this repository is byte-stable and this module makes no
@@ -53,16 +57,20 @@ such claim for its own.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.grid_annotations import (
-    CellAnnotationPolicy,
     RateOnlyPolicy,
     RateWithCountsPolicy,
+)
+from population_synthetic.analysis.utils.grid_variants import (
+    CANONICAL_VARIANT,
+    COUNTED_VARIANT,
+    GridVariant,
+    variant_map,
 )
 from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.labels import (
@@ -108,9 +116,8 @@ from population_synthetic.analysis.utils.table_style import (
 __all__ = [
     "CELL_STATES",
     "GRID_VARIANTS",
-    "GRID_VARIANT_ANNOTATED",
     "GRID_VARIANT_CLEAN",
-    "GridVariant",
+    "GRID_VARIANT_WITH_COUNTS",
     "plot_attrition_funnel",
     "plot_mapped_validity_grid",
 ]
@@ -149,39 +156,10 @@ _SEGMENTS: tuple[tuple[str, str, str], ...] = (
 _EMPTY_POOL_COLOR = MISSING_COLOR
 
 
-@dataclass(frozen=True)
-class GridVariant:
-    """One publication of the validity grid: an annotation policy and its wording.
-
-    The two variants below are the *same figure* -- same rows, same columns, same extent,
-    same colour scale, same markings -- published at two annotation densities. Holding the
-    difference in a record rather than in a second draw function is what keeps that true:
-    a change to the grid is made once and both variants inherit it.
-
-    The caption clause travels with the policy because it *describes* the policy. A clean
-    figure captioned "printed with the two counts it is the quotient of" would be a figure
-    disagreeing with itself, and that clause is the only sentence of the caption the two
-    variants do not share.
-
-    Attributes:
-        name: The variant's filename suffix segment, and the key in :data:`GRID_VARIANTS`.
-        policy: The annotation policy handed to the shared renderer.
-        cell_clause: The caption sentence describing what a cell prints.
-        fontsize: The in-cell annotation size. The clean variant sits a step up the house
-            scale, on the room the dropped count line frees.
-        linespacing: In-cell line spacing; only the annotated variant sets two lines.
-    """
-
-    name: str
-    policy: CellAnnotationPolicy
-    cell_clause: str
-    fontsize: float
-    linespacing: float | None
-
-
-#: Today's F05: the rate over the two counts it is the quotient of.
-GRID_VARIANT_ANNOTATED = GridVariant(
-    name="annotated",
+#: The counted sibling: the rate over the two counts it is the quotient of. Written to
+#: ``..._with_counts``, so nothing this figure ever printed is lost.
+GRID_VARIANT_WITH_COUNTS = GridVariant(
+    name=COUNTED_VARIANT,
     policy=RateWithCountsPolicy(
         value_key="rate", numerator_key="numerator", denominator_key="denominator",
     ),
@@ -193,15 +171,15 @@ GRID_VARIANT_ANNOTATED = GridVariant(
     linespacing=1.35,
 )
 
-#: The camera-ready variant: the rate alone, one step larger. The counts it drops are not
-#: lost -- they are in the CSV, in the annotated sibling and in the row marginals -- so
-#: this variant costs ink rather than evidence.
+#: The camera-ready variant, published at the bare filename: the rate alone, one step
+#: larger. The counts it drops are not lost -- they are in the CSV, in the counted sibling
+#: and in the row marginals -- so this variant costs ink rather than evidence.
 GRID_VARIANT_CLEAN = GridVariant(
-    name="clean",
+    name=CANONICAL_VARIANT,
     policy=RateOnlyPolicy(value_key="rate"),
     cell_clause=(
         "Cell: retention_rate (clean / generated) as published in the attrition CSV. The "
-        "two counts behind each rate are printed on the annotated sibling figure and in "
+        "two counts behind each rate are printed on the with-counts sibling figure and in "
         "the CSV; the pooled marginals here carry theirs."
     ),
     fontsize=ANNOTATION_LARGE,
@@ -209,9 +187,10 @@ GRID_VARIANT_CLEAN = GridVariant(
 )
 
 #: The publishable variants by name, so a driver enumerates them instead of naming them.
-GRID_VARIANTS: dict[str, GridVariant] = {
-    variant.name: variant for variant in (GRID_VARIANT_ANNOTATED, GRID_VARIANT_CLEAN)
-}
+#: The clean one is first because it is the one published at the bare filename.
+GRID_VARIANTS: dict[str, GridVariant] = variant_map(
+    GRID_VARIANT_CLEAN, GRID_VARIANT_WITH_COUNTS,
+)
 
 
 def _combinations(document: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -465,7 +444,7 @@ def plot_mapped_validity_grid(
     document: Mapping[str, Any],
     *,
     hosting: Mapping[str, str] | None = None,
-    variant: GridVariant = GRID_VARIANT_ANNOTATED,
+    variant: GridVariant = GRID_VARIANT_CLEAN,
 ):
     """Model x method grid of validation survival -- the mapping-survival figure.
 
@@ -478,8 +457,8 @@ def plot_mapped_validity_grid(
     last, under their display labels. No axis carries a config id.
 
     What a cell *prints* is the *variant*'s decision and the only difference between the
-    two publications of this figure: the annotated one prints the rate together with the
-    two counts it is the quotient of, the clean one prints the rate alone one step larger.
+    two publications of this figure: the clean one prints the rate alone one step larger,
+    the with-counts one prints it together with the two counts it is the quotient of.
     Everything else -- the rows, the columns, the extent, the colour scale, the markings
     and the marginals -- is shared, because both go through the same draw loop
     (:func:`~population_synthetic.analysis.utils.grids.render_grid`) with different
@@ -499,8 +478,9 @@ def plot_mapped_validity_grid(
             the row labels, matching the sibling fidelity grids. A model absent from it
             is drawn in the shared presentation default; ``None`` colours every row in
             it, which is a label colour and affects no value.
-        variant: Which publication of the figure to draw -- :data:`GRID_VARIANT_ANNOTATED`
-            (the default) or :data:`GRID_VARIANT_CLEAN`.
+        variant: Which publication of the figure to draw -- :data:`GRID_VARIANT_CLEAN`
+            (the default, and the one published at the bare filename) or
+            :data:`GRID_VARIANT_WITH_COUNTS`.
 
     Returns:
         An unsaved ``matplotlib.figure.Figure``. The caller saves and closes it.

@@ -40,6 +40,12 @@ from population_synthetic.analysis.utils.grid_annotations import (
     RateOnlyPolicy,
     RateWithCountsPolicy,
 )
+from population_synthetic.analysis.utils.grid_variants import (
+    CANONICAL_VARIANT,
+    COUNTED_VARIANT,
+    GridVariant,
+    variant_map,
+)
 from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.labels import (
     attribute_label,
@@ -64,6 +70,7 @@ from population_synthetic.analysis.utils.palette import (
 )
 from population_synthetic.analysis.utils.style import (
     ANNOTATION,
+    ANNOTATION_LARGE,
     AXIS_TITLE,
     FIGURE_TITLE,
     FULL,
@@ -93,13 +100,46 @@ from population_synthetic.analysis.utils.table_style import (
 #: The combo table's cell annotation: TV-similarity at its own 0--1 scale, two decimals.
 _COMBO_CELL_POLICY = RateOnlyPolicy(value_key="value", scale=1.0, number_format=".2f")
 
-#: The model x method grid's cell annotation: TV-similarity as a percentage over the
+#: The model x method grid's counted variant: TV-similarity as a percentage over the
 #: persona count the cell rests on. Not a quotient of two printed counts, so the base is
 #: named ``n=``; a combination that was scored on no axis prints the count it does have
 #: beneath an explicit dash rather than a number it never measured.
-_GRID_CELL_POLICY = RateWithCountsPolicy(
-    value_key="value", numerator_key=None, denominator_key="n",
-    scale=100.0, number_format=".1f", absent_text="--",
+GRID_VARIANT_WITH_COUNTS = GridVariant(
+    name=COUNTED_VARIANT,
+    policy=RateWithCountsPolicy(
+        value_key="value", numerator_key=None, denominator_key="n",
+        scale=100.0, number_format=".1f", absent_text="--",
+    ),
+    cell_clause=(
+        "Cell: mean TV-similarity across every demographic axis (x100), printed over the "
+        "n personas the validation gate left for that combination."
+    ),
+    fontsize=ANNOT_FONTSIZE,
+    linespacing=1.35,
+)
+
+#: The camera-ready variant, published at the bare filename: the score alone, one step up
+#: the house scale on the room the dropped count line frees. The persona count is not
+#: lost -- it is in the performance CSV, in the counted sibling, and on both marginals of
+#: this very figure -- and it is constant down most of a column, which is exactly the
+#: repetition a manuscript grid should not spend a line on.
+GRID_VARIANT_CLEAN = GridVariant(
+    name=CANONICAL_VARIANT,
+    policy=RateOnlyPolicy(
+        value_key="value", scale=100.0, number_format=".1f", absent_text="--",
+    ),
+    cell_clause=(
+        "Cell: mean TV-similarity across every demographic axis (x100). The n personas "
+        "each cell rests on are printed on the with-counts sibling figure and in the "
+        "performance CSV; the row and column marginals here carry their own counts."
+    ),
+    fontsize=ANNOTATION_LARGE,
+    linespacing=None,
+)
+
+#: The publishable variants by name, clean first because it takes the bare filename.
+GRID_VARIANTS: dict[str, GridVariant] = variant_map(
+    GRID_VARIANT_CLEAN, GRID_VARIANT_WITH_COUNTS,
 )
 
 
@@ -641,14 +681,24 @@ def plot_model_method_heatmap(
     result: dict[str, Any],
     requested_n: CapIndex,
     out_path: str | Path,
+    *,
+    variant: GridVariant = GRID_VARIANT_CLEAN,
 ) -> Path | None:
     """Model x method heatmap of overall TV-similarity, marked and tiered by persona count.
 
     Rows are models, columns are methods (strategies) in
     :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order`, and each
     cell is that combination's mean TV-similarity across every demographic axis, printed
-    as a percentage together with the persona count ``n`` it rests on. A cell whose ``n``
-    is below its own slug's requested cap is hatched, and never decides a Tier 1 rank.
+    as a percentage. A cell whose ``n`` is below its own slug's requested cap is hatched,
+    and never decides a Tier 1 rank.
+
+    What a cell *prints* is the *variant*'s decision, and the only difference between the
+    two publications of this figure: the clean one prints the score alone one step larger,
+    the with-counts one prints it over the persona count ``n`` it rests on. Rows, columns,
+    tiers, extent, colour scale, markings and both marginals are shared, because both go
+    through the same draw loop with different annotation policies rather than through two
+    functions that would diverge on the next edit. The marginals always print their
+    counts, so the clean variant still states a base on the figure.
 
     Rows are partitioned by evidence before they are ranked: a model with at least one
     full-n cell is **Tier 1** and is ordered by ``(-max, -mean, model_id)`` over its
@@ -663,7 +713,12 @@ def plot_model_method_heatmap(
             (:func:`~population_synthetic.analysis.utils.cap_index.load_cap_index`).
             Raises if a combination in *result* has no entry -- an unknown cap is never
             assumed to be met.
-        out_path: The PNG path; the ``.svg`` sibling is written beside it.
+        out_path: The PNG path; the ``.svg`` sibling is written beside it. The caller
+            owns the filename, including the variant's suffix
+            (:func:`~population_synthetic.analysis.utils.grid_variants.variant_suffixes`).
+        variant: Which publication of the figure to draw -- :data:`GRID_VARIANT_CLEAN`
+            (the default, and the one published at the bare filename) or
+            :data:`GRID_VARIANT_WITH_COUNTS`.
 
     Returns:
         The PNG path (the SVG sibling is written by
@@ -743,10 +798,10 @@ def plot_model_method_heatmap(
         text_on_fill = [[not row.full[j] for j in range(n_methods)] for row in block]
         return render_grid(
             ax, block_values, cells,
-            policy=_GRID_CELL_POLICY, cmap=cmap, norm=norm, aspect="auto",
+            policy=variant.policy, cmap=cmap, norm=norm, aspect="auto",
             interpolation="none",
             extent=(-0.5, n_methods - 0.5, y_top + len(block) - 0.5, y_top - 0.5),
-            row_origin=y_top, fontsize=ANNOT_FONTSIZE, linespacing=1.35,
+            row_origin=y_top, fontsize=variant.fontsize, linespacing=variant.linespacing,
             text_on_fill=text_on_fill,
         )
 
@@ -853,8 +908,7 @@ def plot_model_method_heatmap(
     )
     method_key = "Methods:  " + "   ".join(method_key_lines(strategies)) + "  "
     caption = (
-        "Cell: mean TV-similarity across every demographic axis (x100), over the n personas "
-        "the validation gate left for that combination. "
+        f"{variant.cell_clause} "
         "Row marginal: the model's ordering key -- best qualifying score, the method that "
         f"achieved it, and the number of cells the key rested on {row_scope}. "
         "Column marginal: the method's mean across models over full-n cells only, with the "

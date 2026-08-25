@@ -294,7 +294,7 @@ consumers + `generation_metadata` + `validation_attrition`:
     "unmeasurable" decision belongs to the caller that knows what an absent measurement means
   - **The presentation layer** -- seven of the modules in this package form a
     *presentation boundary*: `palette.py`, `style.py`, `labels.py`, `figures.py`, `grids.py`,
-    `grid_annotations.py` and `table_style.py`. A module belongs to it if and only if it can
+    `grid_annotations.py`, `grid_variants.py` and `table_style.py`. A module belongs to it if and only if it can
     draw or format without importing any analysis subpackage, and together they hold every
     decision about how a figure *looks* -- colour, type, canvas, export format, what a tick
     label says, and what a heatmap cell prints. Every `charts.py` in the layer draws through
@@ -392,6 +392,15 @@ consumers + `generation_metadata` + `validation_attrition`:
     raises rather than silently blanking a measured cell. A policy decides text only: never colour,
     extent, or which cells are drawn. The clean and annotated variants of the validation grid are
     the same renderer under two policies, which is what keeps them from diverging on the next edit
+  - `grid_variants.py` -- the record that pairs an annotation policy with the caption sentence
+    describing it and the type size it is set at, plus the one naming rule the five varianted grid
+    families share: the **canonical, unsuffixed filename is the clean figure** (the value alone,
+    camera-ready) and the counted form is its `_with_counts` sibling. A driver enumerates a family's
+    `GRID_VARIANTS` through `variant_suffixes()` rather than naming its variants, so adding one
+    publishes it without a CLI change and five drivers cannot drift into five schemes; a family
+    whose map carries no `clean` variant raises rather than letting an arbitrary one take the name
+    every downstream reference resolves to. Imports no matplotlib and knows nothing about which
+    quantity is drawn -- the wording inside a variant is authored by the chart that owns the figure
   - `table_style.py` -- the visual grammar of the manuscript-style grids (dividers, best-cell
     boxes, top-placed category headers, the percentage colourbar, the annotation size and the
     hosted/local legend text -- which names the hosting *class* and not the serving software,

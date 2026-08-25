@@ -6,8 +6,9 @@ already-computed numbers and all persisted through
 ``savefig``:
 
 * :func:`render_metric_heatmaps` -- one model x method mean-heatmap per metric in
-  :data:`combo_aggregator.METRIC_NAMES` (annotated with each cell's per-persona
-  ``mean`` and contributing count ``n``).
+  :data:`combo_aggregator.METRIC_NAMES`, published in both grid variants: the
+  camera-ready one at the bare filename, printing each cell's per-persona ``mean``
+  alone, and a ``_with_counts`` sibling adding the contributing count ``n`` beneath it.
 * :func:`plot_run_charts` -- per-combo diagnostic charts (call counts, retry
   rate, value diversity, method distribution, prompt-size growth, wall clock,
   token consumption/budget, latency) from a
@@ -35,6 +36,13 @@ from population_synthetic.analysis.utils.grid_annotations import (
     COMPACT_NUMBER_FORMAT,
     RateOnlyPolicy,
     RateWithCountsPolicy,
+)
+from population_synthetic.analysis.utils.grid_variants import (
+    CANONICAL_VARIANT,
+    COUNTED_VARIANT,
+    GridVariant,
+    variant_map,
+    variant_suffixes,
 )
 from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.labels import (
@@ -66,6 +74,7 @@ from population_synthetic.analysis.utils.style import (
     LEGEND_LABEL,
     PANEL_TITLE,
     TICK_LABEL,
+    caption_block,
     figure_size,
     grow_height,
     grow_width,
@@ -92,7 +101,14 @@ def _category_tick(category: str) -> str:
 #: past the printable edge, which the save-time budget would then reject.
 _KEY_WRAP = 110
 
-__all__ = ["render_metric_heatmaps", "plot_run_charts", "plot_run_comparison"]
+__all__ = [
+    "GRID_VARIANTS",
+    "GRID_VARIANT_CLEAN",
+    "GRID_VARIANT_WITH_COUNTS",
+    "render_metric_heatmaps",
+    "plot_run_charts",
+    "plot_run_comparison",
+]
 
 # ------------------------------------------------------------------
 # Chart styling constants
@@ -126,14 +142,46 @@ def _ordered_methods(strategies: set[str]) -> list[str]:
     return strategy_complexity_order(sorted(strategies))
 
 
-#: The metric grids' cell annotation: the mean over the personas it rests on, with that
+#: The metric grids' counted variant: the mean over the personas it rests on, with that
 #: count beneath it. The mean is not a quotient of two printed counts, so the base is
 #: named ``n=`` rather than as a fraction. The compact format is the module's own
 #: long-standing rule -- two decimals through the readable range, three significant
 #: figures for the token counts in the thousands and the costs in thousandths.
-_MEAN_CELL_POLICY = RateWithCountsPolicy(
-    value_key="value", numerator_key=None, denominator_key="denominator",
-    scale=1.0, number_format=COMPACT_NUMBER_FORMAT,
+GRID_VARIANT_WITH_COUNTS = GridVariant(
+    name=COUNTED_VARIANT,
+    policy=RateWithCountsPolicy(
+        value_key="value", numerator_key=None, denominator_key="denominator",
+        scale=1.0, number_format=COMPACT_NUMBER_FORMAT,
+    ),
+    cell_clause=(
+        "Cell: the per-persona mean for this metric, printed over the n personas it was "
+        "taken across."
+    ),
+    fontsize=ANNOTATION,
+    linespacing=None,
+)
+
+#: The camera-ready variant, published at the bare filename: the mean alone, one step up
+#: the house scale on the room the dropped count line frees. This grid carries no
+#: marginal, so the caption -- not another line of cell text -- is what states where the
+#: count went: the per-combination CSV, and the counted sibling beside this figure.
+GRID_VARIANT_CLEAN = GridVariant(
+    name=CANONICAL_VARIANT,
+    policy=RateOnlyPolicy(
+        value_key="value", scale=1.0, number_format=COMPACT_NUMBER_FORMAT,
+    ),
+    cell_clause=(
+        "Cell: the per-persona mean for this metric. The n personas each mean was taken "
+        "across are printed on the with-counts sibling figure and in the generation "
+        "metadata CSV."
+    ),
+    fontsize=ANNOTATION_LARGE,
+    linespacing=None,
+)
+
+#: The publishable variants by name, clean first because it takes the bare filename.
+GRID_VARIANTS: dict[str, GridVariant] = variant_map(
+    GRID_VARIANT_CLEAN, GRID_VARIANT_WITH_COUNTS,
 )
 
 #: The per-combo diagnostic heatmap's cell annotation: the cell statistic alone, three
@@ -163,8 +211,9 @@ def render_metric_heatmaps(
     Returns
     -------
     list[Path]
-        The PNG paths written (each has a sibling ``.svg``). A metric that is
-        empty (mean undefined for every combo) is skipped and contributes no path.
+        The PNG paths written (each has a sibling ``.svg``) -- one per metric per grid
+        variant, the canonical (unsuffixed) one being the camera-ready figure. A metric
+        that is empty (mean undefined for every combo) is skipped and contributes none.
     """
     out_dir = Path(out_dir)
     if not summaries:
@@ -196,12 +245,6 @@ def render_metric_heatmaps(
         if bool(np.all(np.isnan(means))):
             continue
 
-        fig, ax = plt.subplots(
-            figsize=(
-                grow_width(len(methods), per_item=1.5, padding=2.5, minimum=6.0),
-                grow_height(len(models), per_item=0.55, padding=2.0, minimum=3.5),
-            ),
-        )
         cells = [
             [
                 None if np.isnan(means[i, j]) else {
@@ -211,43 +254,69 @@ def render_metric_heatmaps(
             ]
             for i in range(len(models))
         ]
-        im = render_grid(
-            ax, means, cells,
-            policy=_MEAN_CELL_POLICY, cmap=heatmap_cmap(), aspect="auto",
-            fontsize=ANNOTATION, interpolation="none",
-        )
 
-        # Methods on x as their letters, models on y as their display names. The letters
-        # are meaningless without the key, so it is drawn on the figure below.
-        letters = method_letters(methods)
-        display_models = model_labels(models)
-        ax.set_xticks(range(len(methods)))
-        ax.set_xticklabels([letters[m] for m in methods], fontsize=TICK_LABEL)
-        ax.set_yticks(range(len(models)))
-        ax.set_yticklabels([display_models[m] for m in models], fontsize=TICK_LABEL)
+        def _draw(variant, metric=metric, cells=cells, means=means):
+            """One publication of this metric's grid.
 
-        cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
-        cbar.set_label(_METRIC_LABELS.get(metric, metric), fontsize=AXIS_TITLE)
+            Everything above is variant-independent and computed once; only the cell
+            text, its size and one caption sentence vary, so both publications of a
+            metric are the same figure by construction rather than by inspection. The
+            loop variables are bound as defaults: a bare closure would draw the last
+            metric under every filename.
+            """
+            fig, ax = plt.subplots(
+                figsize=(
+                    grow_width(len(methods), per_item=1.5, padding=2.5, minimum=6.0),
+                    grow_height(len(models), per_item=0.55, padding=2.0, minimum=3.5),
+                ),
+            )
+            im = render_grid(
+                ax, means, cells,
+                policy=variant.policy, cmap=heatmap_cmap(), aspect="auto",
+                fontsize=variant.fontsize, linespacing=variant.linespacing,
+                interpolation="none",
+            )
 
-        # The two reasons a cell has no mean are not the same fact, so they are not drawn
-        # alike: a combination that was never run leaves its cell bare, while one that ran
-        # and produced no gated observation says so.
-        for i in range(len(models)):
-            for j in range(len(methods)):
-                if np.isnan(means[i, j]) and (models[i], methods[j]) in by_cell:
-                    ax.text(j, i, "n/a", ha="center", va="center", fontsize=ANNOTATION, color=SECONDARY_GREY)
+            # Methods on x as their letters, models on y as their display names. The
+            # letters are meaningless without the key, so it is drawn on the figure below.
+            letters = method_letters(methods)
+            display_models = model_labels(models)
+            ax.set_xticks(range(len(methods)))
+            ax.set_xticklabels([letters[m] for m in methods], fontsize=TICK_LABEL)
+            ax.set_yticks(range(len(models)))
+            ax.set_yticklabels([display_models[m] for m in models], fontsize=TICK_LABEL)
 
-        ax.set_title(
-            f"{country_label(country)}: {_METRIC_LABELS.get(metric, metric)} "
-            f"(mean per model x method)",
-            fontsize=PANEL_TITLE, fontweight="bold",
-        )
-        ax.text(
-            0.0, -0.12, textwrap.fill("Methods:  " + "   ".join(method_key_lines(methods)), _KEY_WRAP),
-            transform=ax.transAxes, ha="left", va="top", fontsize=ANNOTATION, clip_on=False,
-        )
-        fig.tight_layout()
-        written.append(save_figure(fig, out_dir / f"{country}_{metric}.png"))
+            cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
+            cbar.set_label(_METRIC_LABELS.get(metric, metric), fontsize=AXIS_TITLE)
+
+            # The two reasons a cell has no mean are not the same fact, so they are not
+            # drawn alike: a combination that was never run leaves its cell bare, while
+            # one that ran and produced no gated observation says so.
+            for i in range(len(models)):
+                for j in range(len(methods)):
+                    if np.isnan(means[i, j]) and (models[i], methods[j]) in by_cell:
+                        ax.text(j, i, "n/a", ha="center", va="center",
+                                fontsize=ANNOTATION, color=SECONDARY_GREY)
+
+            ax.set_title(
+                f"{country_label(country)}: {_METRIC_LABELS.get(metric, metric)} "
+                f"(mean per model x method)",
+                fontsize=PANEL_TITLE, fontweight="bold",
+            )
+            # The method key and the variant's cell clause travel in the graphic, in the
+            # strip `caption_block` reserves inside the canvas. The older idiom -- an
+            # unclipped `ax.text` below the axes -- grew the written page instead of
+            # reserving room in it, which is what the export budget rejects.
+            key = "Methods:  " + "   ".join(method_key_lines(methods))
+            caption_block(fig, f"{key}\n{variant.cell_clause}", fontsize=ANNOTATION)
+            return fig
+
+        # One publication per variant, enumerated rather than named: the canonical
+        # (unsuffixed) file is the camera-ready one.
+        for suffix, variant in variant_suffixes(GRID_VARIANTS):
+            written.append(
+                save_figure(_draw(variant), out_dir / f"{country}_{metric}{suffix}.png")
+            )
 
     return written
 
