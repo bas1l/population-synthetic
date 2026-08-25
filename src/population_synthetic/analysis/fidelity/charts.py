@@ -8,7 +8,6 @@ summarizing per-dimension TV similarity and chi-squared p-values.
 from __future__ import annotations
 
 import sys
-import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -40,17 +39,22 @@ from population_synthetic.analysis.utils.style import (
     ANNOTATION,
     AXIS_TITLE,
     CALLOUT,
+    CAPTION_MARGIN_IN,
     FIGURE_TITLE,
     FULL,
+    HEADING_WEIGHT,
     LEGEND_LABEL,
     LEGEND_TITLE,
+    LINE_SPACING,
     MAX_HEIGHT,
     PANEL_TITLE,
+    POINTS_PER_INCH,
     TICK_LABEL,
     figure_size,
     grow_height,
     grow_width,
     house_style,
+    wrap_to_width,
 )
 from population_synthetic.analysis.utils.table_style import fit_to_page
 
@@ -71,10 +75,6 @@ _HIGH_CARDINALITY_FIELDS = frozenset({
 # sits in which slot.
 _ATTR_COLORS = CATEGORICAL_SERIES[:2]
 
-#: Characters per line of the in-figure method key. Sized so a five-method key wraps to
-#: two lines on the widest canvas rather than running past the printable edge, which the
-#: save-time budget would then reject.
-_KEY_WRAP = 110
 _ATTR_COLORS_3WAY = CATEGORICAL_SERIES[:3]
 
 # The radar overlays two filled polygons on the same axes, so its two series take the
@@ -604,6 +604,20 @@ def plot_3way_radar(
 # Radar grid (models × strategies)
 # ------------------------------------------------------------------
 
+def _text_strip_fraction(text: str, *, fontsize: float, height_in: float) -> float:
+    """Fraction of a *height_in* canvas a drawn block of *text* claims, margin included.
+
+    Counts the lines *text* has already been wrapped to rather than guessing at them, so
+    the strip the layout pass holds back is the one the draw will actually occupy. The
+    figure keeps the size the caller chose from the vocabulary: the room comes out of the
+    axes, never out of the canvas.
+    """
+    lines = text.count("\n") + 1
+    return (lines * fontsize * LINE_SPACING + POINTS_PER_INCH * CAPTION_MARGIN_IN) / (
+        POINTS_PER_INCH * height_in
+    )
+
+
 @house_style
 def plot_radar_grid(
     results: dict[tuple[str, str], dict[str, dict[str, Any]]],
@@ -728,13 +742,36 @@ def plot_radar_grid(
                 ax.set_ylabel(display_models[model], fontsize=AXIS_TITLE, labelpad=30,
                               fontweight="bold")
 
-    fig.suptitle("TV-similarity radar: models × methods",
-                 fontsize=FIGURE_TITLE, fontweight="bold", y=1.01)
-    fig.text(
-        0.0, 0.0, textwrap.fill("Methods:  " + "   ".join(method_key_lines(strategies)), _KEY_WRAP),
-        ha="left", va="bottom", fontsize=ANNOTATION,
+    # Both figure-level strings are wrapped to the paper before they are drawn, and the
+    # strips they need are then reserved from the measured line counts. Neither the
+    # layout pass nor `fit_to_page` can rescue one afterwards: `tight_layout` does not
+    # account for a suptitle, and `fit_to_page` re-wraps only what reaches past a *side*
+    # of the page. A headline hung above the figure rectangle -- which is what the
+    # `y=1.01` this replaces did -- therefore survived into the tight bounding box the
+    # exporter writes at and grew the written canvas past the printable height by its own
+    # overhang, on every grid tall enough to have been clamped to that height already.
+    figure_width, figure_height = (float(v) for v in fig.get_size_inches())
+    usable = figure_width - 2 * CAPTION_MARGIN_IN
+    headline = wrap_to_width(
+        "TV-similarity radar: models × methods", usable,
+        fontsize=FIGURE_TITLE, weight=HEADING_WEIGHT,
     )
-    plt.tight_layout(rect=[0, 0.03, 1, 0.98])
+    key_block = wrap_to_width(
+        "Methods:  " + "   ".join(method_key_lines(strategies)), usable, fontsize=ANNOTATION,
+    )
+
+    fig.suptitle(headline, fontsize=FIGURE_TITLE, fontweight=HEADING_WEIGHT)
+    fig.text(
+        CAPTION_MARGIN_IN / figure_width, CAPTION_MARGIN_IN / figure_height, key_block,
+        ha="left", va="bottom", fontsize=ANNOTATION, linespacing=LINE_SPACING,
+    )
+    fig.tight_layout(rect=(
+        0.0,
+        _text_strip_fraction(key_block, fontsize=ANNOTATION, height_in=figure_height),
+        1.0,
+        1.0 - _text_strip_fraction(headline, fontsize=FIGURE_TITLE, height_in=figure_height),
+    ))
+    fit_to_page(fig)
 
     out_path = Path(output_dir) / (f"{prefix}_radar_grid.png" if prefix else "radar_grid.png")
     return save_figure(fig, out_path)
