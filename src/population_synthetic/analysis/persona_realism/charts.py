@@ -48,6 +48,7 @@ from population_synthetic.analysis.utils.style import (
     grow_height,
     house_style,
 )
+from population_synthetic.analysis.utils.table_style import fit_to_page
 
 # Severity -> bar colour / legend caption for the clash taxonomy (S3 hard
 # contradiction reddest). These are protocol-fixed severity labels (see judge.py),
@@ -111,6 +112,7 @@ def plot_typicality_distribution(
     if tail_threshold is not None:
         ax.axvline(tail_threshold + 0.5, color=MUTED_GREY, linestyle="--", linewidth=0.7)
     fig.tight_layout()
+    fit_to_page(fig)
     return fig
 
 
@@ -180,4 +182,5 @@ def plot_clash_taxonomy(clash_taxonomy: dict[ClashKey, int], combo_label: str):
     handles = [plt.Rectangle((0, 0), 1, 1, color=_SEVERITY_COLORS[s]) for s in SEVERITY_LEVELS]
     ax.legend(handles, [_SEVERITY_CAPTIONS[s] for s in SEVERITY_LEVELS], fontsize=LEGEND_LABEL, loc="lower right")
     fig.tight_layout()
+    fit_to_page(fig)
     return fig

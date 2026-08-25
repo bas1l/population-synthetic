@@ -31,6 +31,7 @@ from population_synthetic.analysis.utils.style import (
     grow_width,
     house_style,
 )
+from population_synthetic.analysis.utils.table_style import fit_to_page
 
 
 @house_style
@@ -110,4 +111,5 @@ def plot_violation_rates(
         title = f"{country_label(country)}: {title}"
     ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, out_path)

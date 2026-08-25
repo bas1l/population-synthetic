@@ -64,6 +64,7 @@ from population_synthetic.analysis.utils.style import (
     grow_width,
     house_style,
 )
+from population_synthetic.analysis.utils.table_style import fit_to_page
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 logger = logging.getLogger(__name__)
@@ -371,6 +372,7 @@ def plot_marginal_progression(
             ax.legend(fontsize=LEGEND_LABEL, title="series (simplest -> most complex)", title_fontsize=LEGEND_TITLE)
             ax.tick_params(axis="both", labelsize=TICK_LABEL)
             fig.tight_layout()
+            fit_to_page(fig)
 
             out_path = root / model / f"{attr}.png"
             written.append(save_figure(fig, out_path))

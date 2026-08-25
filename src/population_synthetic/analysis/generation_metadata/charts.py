@@ -80,6 +80,7 @@ from population_synthetic.analysis.utils.style import (
     grow_width,
     house_style,
 )
+from population_synthetic.analysis.utils.table_style import fit_to_page
 
 #: The diagnostics layer's explicit absent-marker for a call whose category the log did
 #: not record. A sentinel, not an axis id: it has no display string in config, and the
@@ -309,6 +310,7 @@ def render_metric_heatmaps(
             # reserving room in it, which is what the export budget rejects.
             key = "Methods:  " + "   ".join(method_key_lines(methods))
             caption_block(fig, f"{key}\n{variant.cell_clause}", fontsize=ANNOTATION)
+            fit_to_page(fig)
             return fig
 
         # One publication per variant, enumerated rather than named: the canonical
@@ -355,6 +357,7 @@ def _plot_category_call_count(metrics: dict, output_dir: Path) -> Path | None:
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, output_dir / "category_call_count.png")
 
 
@@ -392,6 +395,7 @@ def _plot_category_retry_rate(metrics: dict, output_dir: Path) -> Path | None:
     ax.text(0.10, n_cats - 0.5, "10%", va="top", ha="left", fontsize=ANNOTATION, color=MUTED_GREY)
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, output_dir / "category_retry_rate.png")
 
 
@@ -429,6 +433,7 @@ def _plot_value_diversity_entropy(metrics: dict, output_dir: Path) -> Path | Non
         ax.text(val + x_offset, idx, f"({unique} unique)", va="center", fontsize=ANNOTATION)
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, output_dir / "value_diversity_entropy.png")
 
 
@@ -471,6 +476,7 @@ def _plot_method_distribution(metrics: dict, output_dir: Path) -> Path | None:
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, output_dir / "method_distribution.png")
 
 
@@ -522,6 +528,7 @@ def _plot_prompt_size_growth(metrics: dict, output_dir: Path) -> Path | None:
         ax.legend(["Median (p25–p75 band)"], fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, output_dir / "prompt_size_growth.png")
 
 
@@ -556,6 +563,7 @@ def _plot_wall_clock_per_persona(metrics: dict, output_dir: Path) -> Path | None
     ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, output_dir / "wall_clock_per_persona.png")
 
 
@@ -592,6 +600,7 @@ def _plot_token_consumption_by_category(metrics: dict, output_dir: Path) -> Path
     ax.legend(fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, output_dir / "token_consumption_by_category.png")
 
 
@@ -632,6 +641,7 @@ def _plot_token_budget_by_step_type(metrics: dict, output_dir: Path) -> Path | N
     ax.legend(fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, output_dir / "token_budget_by_step_type.png")
 
 
@@ -693,6 +703,7 @@ def _plot_latency_by_category(metrics: dict, output_dir: Path) -> Path | None:
     ax.legend(fontsize=LEGEND_LABEL)
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, output_dir / "latency_by_category.png")
 
 
@@ -856,6 +867,7 @@ def _plot_box_grouped(
         print(f"  note: {out_path.name}: {omitted} significant pair(s) omitted from brackets")
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, out_path)
 
 
@@ -902,6 +914,7 @@ def _plot_grouped_bar_errorbars(
     ax.grid(axis="y", linestyle=":", color=GRID_RULE)
 
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, out_path)
 
 
@@ -966,6 +979,7 @@ def _plot_heatmap(
         transform=ax.transAxes, ha="left", va="top", fontsize=ANNOTATION, clip_on=False,
     )
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, out_path)
 
 

@@ -43,6 +43,7 @@ from population_synthetic.analysis.utils.style import (
     figure_size,
     house_style,
 )
+from population_synthetic.analysis.utils.table_style import fit_to_page
 
 
 def _ordered_strategies(strategies: list[str]) -> list[str]:
@@ -144,4 +145,5 @@ def plot_c2st_vs_grounded_tv(
         title = f"{country_label(country)}: {title}"
     ax.set_title(title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, out_path)

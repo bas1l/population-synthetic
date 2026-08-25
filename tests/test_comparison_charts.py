@@ -214,3 +214,193 @@ def test_radar_grid_fits_the_printable_page_at_production_scale():
     written_width, written_height = measured["written_in"]
     assert written_width <= MAX_WIDTH and written_height <= MAX_HEIGHT
     assert measured["figure_in"] == pytest.approx((MAX_WIDTH, MAX_HEIGHT))
+
+
+# --- the per-combination family: the printable-page budget at production scale -
+
+#: A slug from the live Swedish sweep, and the label of the mapped real population it is
+#: scored against. Both reach the canvas verbatim -- the bar charts print the pair in the
+#: axes title and in the legend, and every report figure prefixes its title with the slug
+#: -- so the length of a real run slug is part of the geometry under test. The tiny
+#: ``_PREFIX`` above is not: it is short enough that no title on this family ever reaches
+#: a page edge, which is exactly why the smoke tests above never saw the defect.
+_PRODUCTION_SLUG = "swedish_02_all_generate_evaluate_pick_v2_claude_haiku"
+_PRODUCTION_REAL_LABEL = "real_swedish_02"
+
+
+def _production_scheme():
+    """The live Swedish comparison axis: every analysed attribute and its categories.
+
+    Read through the same loader the drivers use, so the axis under test is the config's
+    and not a list restated here -- the fixtures elsewhere in this module carry three
+    attributes, and the widest bar charts in the family are the ones the full axis has.
+    """
+    from population_synthetic.analysis.fidelity.scheme import load_scheme
+    from population_synthetic.analysis.utils.country_config import mappings_for_country
+
+    return load_scheme("swedish", mappings_path=mappings_for_country("swedish"))
+
+
+def _population(scheme, *, n: int = 40) -> dict:
+    """A population occupying every category of every attribute on *scheme*.
+
+    Every category has to be occupied, because an attribute's chart is drawn over the
+    categories the scheme declares and the axis is at its production width only when none
+    of them is empty in both populations.
+    """
+    individuals = []
+    for i in range(n):
+        individual: dict = {"age": 18 + (i % 60)}
+        for attr, categories in scheme.categories.items():
+            if attr == "age_group":
+                continue
+            individual[attr] = categories[i % len(categories)]
+        individuals.append(individual)
+    return {"individuals": individuals, "metadata": {"n": len(individuals)}}
+
+
+def _capture_figures(call) -> list[tuple[str, tuple[float, float], tuple[float, float]]]:
+    """Run *call*, returning ``(name, figure_inches, written_inches)`` per saved figure.
+
+    Measures the **tight** bounding box, which is the quantity the export budget checks
+    and the one ``bbox_inches="tight"`` writes at, for the reason
+    ``test_radar_grid_fits_the_printable_page_at_production_scale`` gives: the geometry is
+    the defect, and reading it off the figure names it without serialising three formats.
+    """
+    import matplotlib.pyplot as plt
+
+    measured: list[tuple[str, tuple[float, float], tuple[float, float]]] = []
+
+    def measure(fig, path, **kwargs):
+        fig.canvas.draw()
+        box = fig.get_tightbbox(fig.canvas.get_renderer())
+        measured.append((
+            Path(path).name,
+            tuple(float(v) for v in fig.get_size_inches()),
+            (float(box.width), float(box.height)),
+        ))
+        plt.close(fig)
+        return path
+
+    original = charts.save_figure
+    charts.save_figure = measure
+    try:
+        call()
+    finally:
+        charts.save_figure = original
+    assert measured, "the chart function did not produce a figure"
+    return measured
+
+
+def _fits(written: tuple[float, float]) -> bool:
+    return written[0] <= MAX_WIDTH and written[1] <= MAX_HEIGHT
+
+
+def test_comparison_charts_fit_the_printable_page_at_production_scale():
+    """Every per-attribute bar chart stays inside the page with real labels on it.
+
+    This family is drawn at the printable width **exactly**, so it has no headroom at
+    all: the axes title is centred on the axes rather than on the paper, and with two run
+    slugs interpolated into it it reached past the page edge, where the exporter's tight
+    box grew to contain it. Both halves are asserted -- the written box fits, and the
+    canvas is still the full page, because the overhang has to be re-flowed and never
+    resolved by shrinking a figure the size vocabulary sized.
+    """
+    scheme = _production_scheme()
+    population = _population(scheme)
+
+    measured = _capture_figures(lambda: charts.plot_comparison_charts(
+        population, population, Path("unused"),
+        pop_a_label=_PRODUCTION_REAL_LABEL, pop_b_label=_PRODUCTION_SLUG,
+        prefix=_PRODUCTION_SLUG, attributes=scheme.attributes, categories=scheme.categories,
+    ))
+
+    assert len(measured) == len(scheme.attributes)
+    over = [name for name, _figure, written in measured if not _fits(written)]
+    assert not over, f"written past the printable page: {over}"
+    for name, figure_in, _written in measured:
+        assert figure_in[0] == pytest.approx(MAX_WIDTH), f"{name}: the canvas was shrunk"
+
+
+def _report_figure_calls(scheme):
+    """The report figures whose title carries the run slug, as ``(name, call)`` builders.
+
+    The association heatmap and the two legacy figures join the three multivariate ones
+    because they share the property under test: a title prefixed with a run slug, on a
+    canvas the size vocabulary has already clamped to the page.
+    """
+    report = make_report(
+        {attr: 0.1 for attr in scheme.attributes[:3]},
+        multivariate=make_multivariate(
+            joint_fidelity_pairs=_JF_PAIRS, combination_checks=_CHECKS,
+        ),
+        joint_chi_sq={"age_group_x_education_level": 0.3, "age_group_x_biological_sex": 0.01},
+    )
+    report["multivariate"]["association"] = {
+        "pairs": [
+            {"attr_x": x, "attr_y": y, "abs_delta_v": 0.1}
+            for i, x in enumerate(scheme.attributes)
+            for y in scheme.attributes[i + 1:]
+        ]
+    }
+    return [
+        ("association_heatmap", lambda: charts.plot_association_heatmap(
+            report, Path("unused"), prefix=_PRODUCTION_SLUG, attributes=scheme.attributes)),
+        ("c2st", lambda: charts.plot_c2st(report, Path("unused"), prefix=_PRODUCTION_SLUG)),
+        ("joint_fidelity", lambda: charts.plot_joint_fidelity(
+            report, Path("unused"), prefix=_PRODUCTION_SLUG, attributes=scheme.attributes)),
+        ("combination_plausibility", lambda: charts.plot_combination_plausibility(
+            report, Path("unused"), prefix=_PRODUCTION_SLUG)),
+        ("joint_chi_sq", lambda: charts.plot_joint_chi_sq(
+            report, Path("unused"), prefix=_PRODUCTION_SLUG)),
+        ("coherence", lambda: charts.plot_coherence(
+            report, Path("unused"), prefix=_PRODUCTION_SLUG)),
+    ]
+
+
+@pytest.mark.parametrize("index", range(6))
+def test_report_figures_fit_the_printable_page_with_a_run_slug_in_the_title(index):
+    """A slug-prefixed title is re-flowed onto the page, not resolved by resizing.
+
+    The canvas half is asserted against the *same figure drawn with the fit disabled*
+    rather than against a literal, because these six size themselves differently -- one
+    grows with the pair count, one with the attribute count, one is a fixed small panel.
+    What has to hold for all of them is that fitting the title changed the layout inside
+    the canvas and left the canvas itself alone.
+    """
+    scheme = _production_scheme()
+    name, call = _report_figure_calls(scheme)[index]
+
+    real_fit_to_page = charts.fit_to_page
+    charts.fit_to_page = lambda fig: None
+    try:
+        unfitted = _capture_figures(call)
+    finally:
+        charts.fit_to_page = real_fit_to_page
+    fitted = _capture_figures(call)
+
+    assert _fits(fitted[0][2]), f"{name}: written {fitted[0][2]} past the printable page"
+    assert fitted[0][1] == pytest.approx(unfitted[0][1]), f"{name}: the canvas was shrunk"
+
+
+def test_3way_radar_fits_the_printable_page_at_production_scale():
+    """The three-way radar keeps its spoke labels and its legend inside the page.
+
+    Drawn at both caps at once, so -- like the two-way radar it mirrors -- its polar box
+    has to stop short of the paper: a polar axes fills its subplot box, the spoke labels
+    are drawn outside the frame, and the legend sits below it.
+    """
+    scheme = _production_scheme()
+    pairwise = {
+        f"{a}_vs_{b}": {attr: {"tv_distance": 0.1} for attr in scheme.attributes}
+        for a, b in (("real", "x"), ("real", "y"), ("x", "y"))
+    }
+
+    measured = _capture_figures(lambda: charts.plot_3way_radar(
+        pairwise, (_PRODUCTION_REAL_LABEL, _PRODUCTION_SLUG, _PRODUCTION_SLUG),
+        Path("unused"), attributes=scheme.attributes, prefix="swedish_02",
+    ))
+
+    name, figure_in, written = measured[0]
+    assert _fits(written), f"{name}: written {written} past the printable page"
+    assert figure_in == pytest.approx((MAX_WIDTH, MAX_HEIGHT)), f"{name}: the canvas was shrunk"

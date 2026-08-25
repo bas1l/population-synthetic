@@ -113,6 +113,7 @@ def plot_category_bars(rows: list[CategoryStat], attr: str, title: str | None = 
     fig, ax = plt.subplots(figsize=figure_size(grow_width(n_cats, per_item=0.8, padding=2, minimum=6.0), 5))
     _draw_bars(ax, rows, attr, title=title)
     fig.tight_layout()
+    fit_to_page(fig)
     return fig
 
 

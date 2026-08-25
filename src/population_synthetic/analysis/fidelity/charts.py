@@ -196,6 +196,11 @@ def plot_comparison_charts(
         ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
         plt.tight_layout()
+        # The title is centred on the *axes*, and this family is drawn at the printable
+        # width exactly, so it has no headroom for the overhang: both labels are run
+        # slugs, and a slug pair reaches past the page by whatever it happens to be
+        # long. Re-wrapped to the room the page leaves, never resized.
+        fit_to_page(fig)
 
         fname = f"{prefix}_{attr}.png" if prefix else f"{attr}.png"
         out_path = output_dir / fname
@@ -426,6 +431,7 @@ def plot_association_heatmap(
         title = f"{prefix}: {title}"
     ax.set_title(title, fontsize=PANEL_TITLE, fontweight="bold")
     fig.tight_layout()
+    fit_to_page(fig)
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -524,6 +530,7 @@ def plot_3way_comparison_charts(
             ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
         plt.tight_layout()
+        fit_to_page(fig)
         fname = f"{prefix}_{attr}.png" if prefix else f"{attr}.png"
         save_figure(fig, output_dir / fname)
 
@@ -559,6 +566,13 @@ def plot_3way_radar(
     closed_angles = _close_polygon(angles)
 
     fig, ax = plt.subplots(figsize=(FULL, MAX_HEIGHT), subplot_kw={"projection": "polar"})
+    # Same inset as the two-way radar, for the same reason: the spoke labels are drawn
+    # outside the polar frame and a polar axes fills its subplot box, so an uninset box
+    # puts them past a page drawn at both caps already.
+    fig.subplots_adjust(
+        left=_RADAR_MARGIN, right=1.0 - _RADAR_MARGIN,
+        bottom=_RADAR_MARGIN, top=1.0 - _RADAR_MARGIN,
+    )
     ax.set_theta_offset(np.pi / 2)
     ax.set_theta_direction(-1)
 
@@ -591,7 +605,13 @@ def plot_3way_radar(
     ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
     ax.yaxis.grid(True, color=GRID_RULE)
     ax.spines["polar"].set_linewidth(1.2)
-    ax.legend(loc="lower left", bbox_to_anchor=(-0.15, -0.08), fontsize=LEGEND_LABEL)
+    # Anchored to the figure, not past the axes: the axes box is already inset, so an
+    # axes-relative anchor at a negative fraction lands outside the paper.
+    ax.legend(
+        loc="lower left", bbox_to_anchor=(0.0, 0.0), bbox_transform=fig.transFigure,
+        fontsize=LEGEND_LABEL,
+    )
+    fit_to_page(fig)
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -833,6 +853,7 @@ def plot_c2st(
     title = "C2ST: real vs synthetic separability"
     ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
+    fit_to_page(fig)
 
     fname = f"{prefix}_c2st.png" if prefix else "c2st.png"
     out_path = output_dir / fname
@@ -902,6 +923,7 @@ def plot_joint_fidelity(
     title = "Grounded joint total-variation distance"
     ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
+    fit_to_page(fig)
 
     fname = f"{prefix}_joint_fidelity.png" if prefix else "joint_fidelity.png"
     out_path = output_dir / fname
@@ -960,6 +982,7 @@ def plot_combination_plausibility(
     title = "K-way combination plausibility"
     ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=FIGURE_TITLE, fontweight="bold", pad=24)
     fig.tight_layout()
+    fit_to_page(fig)
 
     fname = f"{prefix}_combination_plausibility.png" if prefix else "combination_plausibility.png"
     out_path = output_dir / fname
@@ -1021,6 +1044,7 @@ def plot_joint_chi_sq(
     title = "Joint chi-squared p-value per pair"
     ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
+    fit_to_page(fig)
 
     fname = f"{prefix}_joint_chi_sq.png" if prefix else "joint_chi_sq.png"
     out_path = output_dir / fname
@@ -1086,6 +1110,7 @@ def plot_coherence(
     suptitle = "Individual coherence"
     fig.suptitle(f"{prefix}: {suptitle}" if prefix else suptitle, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.96])
+    fit_to_page(fig)
 
     fname = f"{prefix}_coherence.png" if prefix else "coherence.png"
     out_path = output_dir / fname

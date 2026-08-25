@@ -380,6 +380,7 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
         fontsize=FIGURE_TITLE, fontweight="bold",
     )
     fig.tight_layout()
+    fit_to_page(fig)
     return save_figure(fig, out_path)
 
 
