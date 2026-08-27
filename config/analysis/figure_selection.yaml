@@ -1,0 +1,136 @@
+# Figure selection -- the config-declared roster of figures published out of the
+# analysis stage into the figures stage. This file is the ONLY place recording which
+# figures a manuscript or a deck uses; nothing auto-discovers a figure, and a figure
+# enters a set because a human listed it here.
+#
+# Contract (enforced by analysis/figure_selection/config.py, fail-fast on violation):
+#   - `sets`    : mapping of set name -> list of entries. The set name is what
+#                 `--set` selects; an unknown one raises, listing the known sets.
+#   - `n`       : the figure number. Orders the `numbered/` emission and prefixes its
+#                 filenames (`F07_...`). Must be a positive integer, unique per set.
+#   - `name`    : the filename slug used under `numbered/`. Ignored by
+#                 `as_generated/`, which takes the source stem's basename verbatim.
+#   - `source`  : an EXTENSION-LESS stem relative to the analysis stage folder. Its
+#                 first segment is a registry process id and is validated against
+#                 config/analysis/analysis_registry.yaml. Every other segment is a
+#                 literal unless it is one of the two placeholders below.
+#   - `slug`    : optional `{model, strategy}` block. Required by -- and only by -- a
+#                 source using `{slug}`; declaring one without the placeholder (or
+#                 the placeholder without a block) raises.
+#
+# Two placeholders, and no others (an unknown `{token}` raises):
+#   {country}   the country id the run was invoked for. The analysis stage carries it
+#               in a filename for some processes and in a directory for others, which
+#               is why it is a placeholder rather than a fixed position.
+#   {slug}      the canonical axis slug `{country}_{strategy}_{model}`, composed
+#               through generators/synthetic/manifest_loader.axis_slug -- the same
+#               function the producing tasks used to name those folders, so a roster
+#               entry can never disagree with them.
+#
+# A pinned literal is deliberate, not a missing placeholder. Where a path segment
+# names a specific model (see the marginal-progression entries below), the roster is
+# recording a research decision about WHICH panel is published, so it is written out.
+
+sets:
+
+  # The journal-article roster, transcribed from the staged selection folder
+  # (Manuscripts/40_llm-population-fidelity-benchmark/"figures selection"/SOURCES.md).
+  # It lists only the pipeline-backed figures: the hand-drawn ones (the sampling
+  # chain, the dependency graph, the strategy explainer) have no source in the
+  # analysis stage and are not copyable, and the two manual halves of the radar grid
+  # are a by-hand split of the single grid emitted below.
+  #
+  # The numbering is the manuscript's, so it is NOT contiguous -- the gaps are the
+  # hand-made figures and the numbers the draft has not assigned.
+  manuscript:
+
+    - n: 2
+      name: reference_category_proportions
+      # NOTE: `real_population_stats` has not been re-run since the presentation
+      # layer landed, so on the current tree this stem has no `.eps` sibling and the
+      # copier will (correctly) refuse the whole set. Re-run
+      # scripts/analyze/analyze_real_population_stats.py to restore it.
+      source: "real_population_stats/{country}/overview"
+
+    - n: 5
+      name: mapping_survival_heatmap
+      source: "validation_attrition/{country}_mapped_validity_grid"
+
+    - n: 7
+      name: model_x_method_heatmap
+      source: "model_ranking/{country}_model_method_heatmap"
+
+    - n: 8
+      name: method_x_category_heatmap
+      source: "model_ranking/{country}_methods_table"
+
+    - n: 9
+      name: model_x_category_heatmap
+      source: "model_ranking/{country}_models_table"
+
+    - n: 10
+      name: radar_grid_full
+      source: "fidelity/{country}_radar_grid"
+
+    # Named for the omnibus the panel actually reports: a repeated-measures ANOVA.
+    # Friedman is a secondary entry in that figure's statistics and never its headline.
+    - n: 11
+      name: method_comparison_overall
+      source: "method_significance/{country}_method_comparison_overall"
+
+    # The two marginal-progression panels pin `claude_haiku` as a literal segment.
+    # The analysis stage carries the same two attributes for every surviving model;
+    # publishing one model is the point of the pair, and keeping the SAME model
+    # across both is what makes them read as "one model, two attributes".
+    - n: 14
+      name: marginals_parental_structure
+      source: "method_significance/{country}_marginal_progression/claude_haiku/parental_structure"
+
+    - n: 15
+      name: trend_parental_structure
+      source: "method_significance/{country}_method_trends/parental_structure_method_trend"
+
+    - n: 16
+      name: marginals_socioeconomic_class
+      source: "method_significance/{country}_marginal_progression/claude_haiku/socioeconomic_class"
+
+    - n: 17
+      name: trend_socioeconomic_class
+      source: "method_significance/{country}_method_trends/socioeconomic_class_method_trend"
+
+    - n: 19
+      name: axisA_impossibility_heatmap
+      source: "realism_ranking/{country}/impossibility_heatmap"
+
+    - n: 21
+      name: severity_heatmap_s1
+      source: "realism_ranking/{country}/severity_heatmap_s1"
+
+    - n: 22
+      name: severity_pairs_s1
+      source: "realism_ranking/{country}/severity_pair_summary_s1"
+
+    - n: 23
+      name: severity_heatmap_s2
+      source: "realism_ranking/{country}/severity_heatmap_s2"
+
+    - n: 24
+      name: severity_pairs_s2
+      source: "realism_ranking/{country}/severity_pair_summary_s2"
+
+    - n: 25
+      name: severity_pairs_s3
+      source: "realism_ranking/{country}/severity_pair_summary_s3"
+
+    - n: 26
+      name: cost_vs_fidelity
+      source: "cost_efficiency/{country}_cost_vs_fidelity"
+
+    # Staged as `F26b`: the linear-x variant of 26, emitted alongside it by the same
+    # process. `n` is an integer and must be unique within a set, so the "b" suffix
+    # cannot be carried; it takes 27, the next free number, which keeps it adjacent
+    # to 26 in citation order. If the manuscript later needs a real Figure 27, this
+    # entry renumbers rather than the new one.
+    - n: 27
+      name: cost_vs_fidelity_linear
+      source: "cost_efficiency/{country}_cost_vs_fidelity_linear"

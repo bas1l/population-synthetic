@@ -210,15 +210,15 @@ roster has not been curated yet — with `supports_force: true`.
 
 ### Phase 2: The selection config and its loader
 
-- [ ] 2.1 — Write `config/analysis/figure_selection.yaml` with the `manuscript` set populated
+- [x] 2.1 — Write `config/analysis/figure_selection.yaml` with the `manuscript` set populated
       from the figures currently staged in the OneDrive selection folder.
-- [ ] 2.2 — `analysis/figure_selection/config.py`: load, validate and materialise
+- [x] 2.2 — `analysis/figure_selection/config.py`: load, validate and materialise
       `FigureEntry` / `FigureSet` dataclasses. Every failure mode in the table above raises
       here, before any filesystem work.
-- [ ] 2.3 — `analysis/figure_selection/resolve.py`: stem + country (+ optional slug block) →
+- [x] 2.3 — `analysis/figure_selection/resolve.py`: stem + country (+ optional slug block) →
       the three concrete source paths, via `figures.OUTPUT_SUFFIXES` and
       `manifest_loader.axis_slug`.
-- [ ] 2.4 — Unit tests over all six live path shapes, plus each raise path.
+- [x] 2.4 — Unit tests over all six live path shapes, plus each raise path.
 
 ### Phase 3: The copier and the manifest
 
@@ -259,10 +259,10 @@ roster has not been curated yet — with `supports_force: true`.
 
 ### Unit
 - [x] Registry: both stage literals; conditional `folder`; every new raise path.
-- [ ] Config loader: unknown set; non-registry process id; duplicate `n`; colliding basename;
+- [x] Config loader: unknown set; non-registry process id; duplicate `n`; colliding basename;
       `{slug}` without a `slug:` block.
-- [ ] Resolver: all six live path shapes resolve to three existing paths in a fixture tree.
-- [ ] Format list is `figures.OUTPUT_SUFFIXES`, not a local literal.
+- [x] Resolver: all six live path shapes resolve to three existing paths in a fixture tree.
+- [x] Format list is `figures.OUTPUT_SUFFIXES`, not a local literal.
 
 ### Integration
 - [ ] A full set copies into both namings with all three formats and a valid `_index.json`.
@@ -295,6 +295,18 @@ The six live path shapes in `03_Analysis`, which the two placeholders must cover
 | `{proc}/{slug}/{slug}/{slug}_{attr}` | `fidelity/{combo}/{combo}/{combo}_age_group` |
 | `{proc}/charts/{combo}/{name}` | `generation_metadata/charts/{combo}/latency_by_category` |
 | `{proc}/{country}_{sub}/{model}/{attr}` | `method_significance/swedish_02_marginal_progression/claude_haiku/age_group` |
+
+Two of those six shapes carry a segment that is **not** a placeholder, resolved in
+Phase 2 by writing it out as a literal (a stem is a template; a literal segment is its
+default, and both segments are country-independent so nothing is lost):
+
+- `method_significance/{country}_marginal_progression/claude_haiku/{attr}` — the model
+  is a research decision about which panel is published, so the roster records it.
+- `generation_metadata/charts/{strategy}_{model}/{name}` — that folder is keyed
+  `{strategy}_{model}` with **no country in it**, so it is not an axis slug at all and
+  `{slug}` (which is `axis_slug`, `{country}_{strategy}_{model}`) does not describe it.
+  Two countries' generation-metadata charts therefore share one folder upstream; that
+  is the producing task's convention, not this one's, and is left untouched.
 
 Figure counts on the live tree (PNG): fidelity 1219, generation_metadata 578,
 method_significance 187, persona_realism 117, real_population_stats 15, the remaining
