@@ -54,10 +54,11 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
 (`validate_raw/`, `mapping/`, `validate_mapped/`, `population_cap/`, `validation_attrition/`,
 `fidelity/`, `multivariate_fidelity/`, `model_ranking/`, `method_significance/`,
-`real_population_stats/`, `generation_metadata/`, `cost_efficiency/`, plus a shared `utils/`). The
-DAG is a **validation gate**:
+`real_population_stats/`, `generation_metadata/`, `cost_efficiency/`, `figure_selection/`, plus a
+shared `utils/`). The DAG is a **validation gate**:
 `validate_raw` (root) -> `mapping` -> `validate_mapped` -> `population_cap` -> the mapped-file
-consumers + `generation_metadata` + `validation_attrition`:
+consumers + `generation_metadata` + `validation_attrition`, closed at the far end by
+`figure_selection`, the terminal node that publishes chosen figures into the second stage folder:
 
 - **`validate_raw/`** -- The analysis-DAG **root**, a non-destructive validation gate. It
   atomistically checks each combo's `01_Raw/{slug}/persona_*` and writes one CSV per combo
@@ -250,6 +251,29 @@ consumers + `generation_metadata` + `validation_attrition`:
   `withdrawn_combinations` rather than inner-joined away. Schema in `utils/cost_csv.py`; see the
   [ADR](../development/decisions/2026-08-20-cost-denominator-and-reconstructed-join-key.md) for both
   load-bearing decisions.
+- **`figure_selection/`** -- The **terminal** node of the DAG and the only figures-stage process
+  (driven by `select_figures.py`, `per_country` dispatch, `depends_on:` the nine figure-producing
+  tasks the workflow *enables*). It **computes nothing**: it draws no figure, imports no chart
+  module and makes no publication decision -- it sits downstream of the presentation boundary, not
+  inside it, and the analysis stage is read-only to it. `config.py` loads and validates the roster
+  (`config/analysis/figure_selection.yaml`: named sets of extension-less stems relative to the
+  analysis stage, each carrying the manuscript figure number `n` and a filename slug `name`);
+  `resolve.py` expands a stem's `{country}` and optional `{slug}` placeholders -- the latter through
+  `manifest_loader.axis_slug`, so a roster entry can never disagree with the folder name the
+  producing task wrote -- into one concrete path per published format (`figures.OUTPUT_SUFFIXES`,
+  never a local list); `export.py` copies the bytes into `{output_base}/04_Figures/{country}/{set}/`
+  under two namings: `as_generated/` keeps the source filenames, so a staged image is traceable by
+  name alone, and `numbered/` carries `F{n:02d}_{name}`, so a citation resolves to a file. Resolve-all,
+  validate-all, **then** copy: an unknown set, an unregistered process id, a stem with nothing
+  behind it, a partial format set (a `.png` whose `.eps` was never drawn), a duplicate `n` or a
+  colliding destination basename each raise before a byte moves -- and every missing figure is
+  named, not just the first -- so a run that is going to fail leaves the figures stage exactly as it
+  found it. Each copy is atomic (`utils/atomic_io.atomic_copy_file`), and `_index.json` is written
+  **last**, so its presence is the completion marker: it records `output_base`, country, set and run
+  timestamp, plus per format the resolved source path, size, mtime and SHA-256, which is what makes
+  drift against a re-run analysis stage detectable without re-reading the analysis stage. Re-runs
+  overwrite what they publish and report at WARNING any destination file the current roster no
+  longer claims; `--force` clears the set's two naming folders first, bounded to `{country}/{set}/`.
 - **`utils/`** -- cross-process shared infra:
   - `realism_csv.py` -- the per-persona tidy schema shared by the two persona-realism tasks
     (writer used by the producer, reader by the consumer, one definition). Keeps *absent* distinct

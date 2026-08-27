@@ -12,7 +12,9 @@ have different force:
 
 The layer that enforces all of it is described in
 [Sub-packages](../architecture/sub-packages.md) and governed by the *presentation computes nothing*
-rule in [Design principles](../architecture/design-principles.md).
+rule in [Design principles](../architecture/design-principles.md). A last section covers neither
+kind of rule but the step after both: how a drawn figure becomes a *published* one in `04_Figures`,
+and how it gets its number.
 
 ---
 
@@ -251,6 +253,86 @@ Dropping a line frees vertical room, which a variant may spend by moving one ste
 scale; it may never be spent the other way, and no annotation goes below `FONT_FLOOR_PT`. A cell
 carrying an inline qualifier is bound by the cell's *width* rather than by the line it dropped, so
 it keeps its size.
+
+---
+
+## Publishing: how a figure reaches `04_Figures`
+
+Drawing a figure and *publishing* one are separate acts. The presentation layer writes every figure
+it draws into `03_Analysis` — some 2,100 of them across thirteen process folders — and a manuscript
+cites about a dozen. Which dozen is a research decision, and it is recorded as **config**:
+`config/analysis/figure_selection.yaml`, holding named sets (`manuscript`, and any other purpose).
+Not as code, and not as a hand-curated folder outside the repository. Nothing is auto-discovered: a
+figure is in a set because a human listed it.
+
+### How a figure gets a number
+
+A roster entry is three fields, plus an optional block for a figure that belongs to one combination:
+
+```yaml
+- n: 7
+  name: model_x_method_heatmap
+  source: "model_ranking/{country}_model_method_heatmap"
+```
+
+`source` is the **extension-less stem** of the figure as the drawing task wrote it, relative to the
+analysis stage. `{country}` and `{slug}` are its only placeholders — `{slug}` available only to an
+entry declaring a `slug: {model, strategy}` block, and composed through `manifest_loader.axis_slug`,
+so a stem can never disagree with the folder name the producing task chose. A segment that is
+neither, such as which model's panel gets published, is written out as a literal, because it is
+itself a research decision and belongs in the roster.
+
+`n` is the manuscript figure number: it orders `numbered/` and it names the file, as
+`F{n:02d}_{name}`. It is **a unique integer within the set — not a position**, and two entries sharing
+it raise. That is the whole contract, which is why the deck's "Figure 26b" — the linear-x variant of
+the cost-vs-fidelity scatter, drawn beside it by the same task — is `n: 27` in the roster rather
+than a sub-number the schema has no room for. If the manuscript ever needs a real Figure 27, that
+entry renumbers and the new one takes the number.
+
+### How `04_Figures` is produced
+
+`figure_selection`, the **terminal** node of the analysis DAG, copies the bytes:
+
+```
+python scripts/analyze/select_figures.py --country-id swedish_02 --set manuscript
+```
+
+It computes nothing, imports no chart module and makes no publication decision — it is downstream of
+the presentation boundary, not part of it — and `03_Analysis` is read-only to it. It ships
+`enabled: false` in the GUI workflow, because a sweep should not fail at its last step over a roster
+nobody has curated yet.
+
+Per country and set it emits the same figures twice:
+
+```
+04_Figures/{country}/{set}/
+  as_generated/   overview.{png,svg,eps}
+  numbered/       F02_reference_category_proportions.{png,svg,eps}
+  _index.json
+```
+
+`as_generated/` is the traceability naming — a staged image is matched back to the task that drew it
+by name alone. `numbered/` is the citation naming. Both carry **every** published format, taken from
+`figures.OUTPUT_SUFFIXES`, the same constant `save_figure` writes from, so the EPS the venues accept
+cannot be the one left behind — which is precisely what hand-copying left behind.
+
+Resolve-all, validate-all, **then** copy. An unknown set, an unregistered process id, a stem with
+nothing behind it, a figure present in fewer than every format, a duplicate `n` or a colliding
+destination basename each raise before a byte moves, and every missing figure is named rather than
+only the first, so a run that is going to fail leaves the figures stage exactly as it found it. The
+partial format set is the failure worth knowing: it means the task that drew that figure has not
+been re-run since the presentation layer landed, and the fix is to redraw it — never to publish the
+PNG on its own.
+
+`_index.json` is written last, so its presence is the completion marker. It records `output_base`,
+country, set and run timestamp, and per entry per format the resolved source path, size, mtime and
+SHA-256 — enough to detect that a re-run analysis stage has moved out from under a published set
+without re-reading that stage. Re-runs overwrite what they publish; a destination file the current
+roster no longer claims is reported at WARNING and left in place, unless `--force` clears the set's
+two naming folders first.
+
+Staging the result onward — into the manuscript or the deck — stays manual. `04_Figures` is the
+deliverable.
 
 ---
 

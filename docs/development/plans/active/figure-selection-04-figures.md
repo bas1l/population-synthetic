@@ -245,12 +245,12 @@ roster has not been curated yet — with `supports_force: true`.
 
 ### Phase 5: Live run and documentation
 
-- [ ] 5.1 — Run against the live `swedish_02` tree; confirm every entry in `manuscript`
+- [x] 5.1 — Run against the live `swedish_02` tree; confirm every entry in `manuscript`
       resolves and all three formats land.
-- [ ] 5.2 — Update `CLAUDE.md`: the second stage folder, the terminal DAG node, and the
+- [x] 5.2 — Update `CLAUDE.md`: the second stage folder, the terminal DAG node, and the
       conditional-`folder` registry contract.
-- [ ] 5.3 — Update `docs/architecture/sub-packages.md` and `docs/architecture/configuration.md`.
-- [ ] 5.4 — Update `docs/development/figure-conventions.md` with how a figure gets a number
+- [x] 5.3 — Update `docs/architecture/sub-packages.md` and `docs/architecture/configuration.md`.
+- [x] 5.4 — Update `docs/development/figure-conventions.md` with how a figure gets a number
       and how `04_Figures` is produced.
 
 ---
@@ -272,7 +272,8 @@ roster has not been curated yet — with `supports_force: true`.
 - [x] Two countries into one `04_Figures` do not collide.
 
 ### Manual
-- [ ] Live `swedish_02` run; open the EPS files and confirm they are the presentation layer's.
+- [x] Live `swedish_02` run; the 19-entry `manuscript` set published 114 files (19 x 3 formats x 2
+      namings) and the EPS files carry the presentation layer's own bounding boxes.
 - [ ] GUI: node appears last, unlocks only after its nine upstreams, and honours `bypass`.
 
 ### Edge cases
