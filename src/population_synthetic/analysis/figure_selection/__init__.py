@@ -24,6 +24,10 @@ Module boundaries (see each module's docstring for the exact contract):
     ``figures.OUTPUT_SUFFIXES`` and ``manifest_loader.axis_slug``. Owns the two
     country-dependent gates: colliding destination basenames, and the on-disk
     existence sweep that reports **every** missing file rather than the first.
+``export``
+    The only module that writes: it runs both gates, copies every format into both
+    namings (``as_generated/`` and ``numbered/``), and writes the ``_index.json``
+    provenance manifest last, so its presence marks a set that copied completely.
 
 The roster is validated and fully resolved before a single byte is copied, so a run
 that is going to fail leaves the figures stage untouched.

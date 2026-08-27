@@ -222,13 +222,13 @@ roster has not been curated yet — with `supports_force: true`.
 
 ### Phase 3: The copier and the manifest
 
-- [ ] 3.1 — `analysis/figure_selection/export.py`: resolve-all → validate-all → copy, emitting
+- [x] 3.1 — `analysis/figure_selection/export.py`: resolve-all → validate-all → copy, emitting
       both namings.
-- [ ] 3.2 — Write `_index.json`: per entry `n`, `name`, source stem, resolved source paths,
+- [x] 3.2 — Write `_index.json`: per entry `n`, `name`, source stem, resolved source paths,
       byte sizes, mtimes, SHA-256, both destination filenames; plus `output_base`, country,
       set name and run timestamp at the top level.
-- [ ] 3.3 — Unwritten-file warning; `--force` clearing.
-- [ ] 3.4 — Integration test over a fixture `03_Analysis` tree: both namings emitted, three
+- [x] 3.3 — Unwritten-file warning; `--force` clearing.
+- [x] 3.4 — Integration test over a fixture `03_Analysis` tree: both namings emitted, three
       formats each, manifest round-trips, and a failing entry leaves the destination untouched.
 
 ### Phase 4: Script and wiring
@@ -265,21 +265,21 @@ roster has not been curated yet — with `supports_force: true`.
 - [x] Format list is `figures.OUTPUT_SUFFIXES`, not a local literal.
 
 ### Integration
-- [ ] A full set copies into both namings with all three formats and a valid `_index.json`.
-- [ ] One missing `.eps` aborts the whole run and leaves `04_Figures` byte-identical.
-- [ ] `--force` removes a figure dropped from the roster; without it the file survives and is
+- [x] A full set copies into both namings with all three formats and a valid `_index.json`.
+- [x] One missing `.eps` aborts the whole run and leaves `04_Figures` byte-identical.
+- [x] `--force` removes a figure dropped from the roster; without it the file survives and is
       reported.
-- [ ] Two countries into one `04_Figures` do not collide.
+- [x] Two countries into one `04_Figures` do not collide.
 
 ### Manual
 - [ ] Live `swedish_02` run; open the EPS files and confirm they are the presentation layer's.
 - [ ] GUI: node appears last, unlocks only after its nine upstreams, and honours `bypass`.
 
 ### Edge cases
-- [ ] A set of one figure.
-- [ ] An entry citing a disabled process (`consistency`) — must raise naming the figure, not
+- [x] A set of one figure.
+- [x] An entry citing a disabled process (`consistency`) — must raise naming the figure, not
       the process.
-- [ ] A country whose analysis was never run — raises on the first entry, copies nothing.
+- [x] A country whose analysis was never run — raises on the first entry, copies nothing.
 
 ---
 
@@ -330,6 +330,7 @@ registry/workflow entries; the only edit to existing code is the conditional-`fo
 - `src/population_synthetic/analysis/figure_selection/resolve.py` *(new)*
 - `src/population_synthetic/analysis/figure_selection/export.py` *(new)*
 - `src/population_synthetic/analysis/utils/registry.py`
+- `src/population_synthetic/utils/atomic_io.py` *(gains `atomic_copy_file`, the binary sibling of `atomic_write_text`, so a published figure is never a truncated one)*
 - `tests/test_figure_selection.py` *(new)*
 - `tests/test_analysis_registry.py`
 - `CLAUDE.md`

@@ -1,22 +1,35 @@
-"""Unit tests for the figure-selection roster and its resolver (Phase 2).
+"""Unit and integration tests for figure selection: the roster, its resolver, the copier.
 
-Two things are proved here. First, that the schema's two placeholders plus literal
+Three things are proved here. First, that the schema's two placeholders plus literal
 segments express **all six** path shapes the analysis stage actually uses -- the
 acceptance test the plan sets for the schema. Second, that every row of the validation
-contract raises, and raises naming what was wrong, before any byte is copied.
+contract raises, and raises naming what was wrong, before any byte is copied. Third,
+that a set publishes into both namings in every format with a manifest that accounts
+for each file -- and that a set which fails any gate leaves the figures stage exactly
+as it found it.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from population_synthetic.analysis.figure_selection.config import (
     FigureEntry,
+    FigureSet,
     SlugSpec,
     known_set_names,
     load_figure_set,
+)
+from population_synthetic.analysis.figure_selection.export import (
+    INDEX_FILENAME,
+    NAMING_AS_GENERATED,
+    NAMING_NUMBERED,
+    export_figure_set,
 )
 from population_synthetic.analysis.figure_selection.resolve import (
     check_basename_collisions,
@@ -25,7 +38,7 @@ from population_synthetic.analysis.figure_selection.resolve import (
     resolve_set,
 )
 from population_synthetic.analysis.utils.figures import OUTPUT_SUFFIXES
-from population_synthetic.analysis.utils.registry import ANALYSIS_STAGE_DIR
+from population_synthetic.analysis.utils.registry import ANALYSIS_STAGE_DIR, FIGURES_STAGE_DIR
 from population_synthetic.generators.synthetic.manifest_loader import axis_slug
 
 COUNTRY = "swedish_02"
@@ -340,3 +353,242 @@ def test_source_with_backslash_separators_raises(tmp_path: Path) -> None:
     roster = _write_roster(tmp_path, "sets:\n  s:\n    - {n: 1, name: a, source: 'fidelity\\a'}\n")
     with pytest.raises(ValueError, match="stay inside its process folder"):
         load_figure_set("s", roster)
+
+
+# --- the copier and its manifest (Phase 3) -----------------------------------
+
+
+def _figure_bytes(stem: str, suffix: str) -> bytes:
+    """Distinguishable content per file, so a copy can be proved byte-for-byte."""
+    return f"{stem}{suffix}".encode("utf-8")
+
+
+def _write_figure(base: Path, stem: str, suffixes: tuple[str, ...] = OUTPUT_SUFFIXES) -> None:
+    """Create one figure's files with per-file content in a fixture analysis tree."""
+    path = base / ANALYSIS_STAGE_DIR / stem
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for suffix in suffixes:
+        path.with_name(path.name + suffix).write_bytes(_figure_bytes(stem, suffix))
+
+
+def _export_roster(tmp_path: Path, *, entries: tuple[tuple[int, str, str], ...]) -> Path:
+    lines = ["sets:", "  s:"]
+    for number, name, source in entries:
+        lines += [f"    - n: {number}", f"      name: {name}", f'      source: "{source}"']
+    return _write_roster(tmp_path, "\n".join(lines) + "\n")
+
+
+_EXPORT_ENTRIES = (
+    (2, "reference_proportions", "real_population_stats/{country}/overview"),
+    (7, "model_x_method_heatmap", "model_ranking/{country}_model_method_heatmap"),
+    (19, "axisA_impossibility", "realism_ranking/{country}/impossibility_heatmap"),
+)
+
+
+def _stage_a_set(
+    tmp_path: Path,
+    *,
+    country: str = COUNTRY,
+    entries: tuple[tuple[int, str, str], ...] = _EXPORT_ENTRIES,
+) -> FigureSet:
+    """Build a fixture analysis tree for *entries* and return the loaded set."""
+    figure_set = load_figure_set("s", _export_roster(tmp_path, entries=entries))
+    for entry in figure_set.entries:
+        _write_figure(tmp_path, entry.source.format(country=country))
+    return figure_set
+
+
+def _set_dir(tmp_path: Path, country: str = COUNTRY, set_name: str = "s") -> Path:
+    return tmp_path / FIGURES_STAGE_DIR / country / set_name
+
+
+def _tree_snapshot(root: Path) -> dict[str, bytes]:
+    """Every file under *root*, as relative path -> content."""
+    if not root.exists():
+        return {}
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_export_emits_both_namings_in_every_format(tmp_path: Path) -> None:
+    figure_set = _stage_a_set(tmp_path)
+    result = export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+
+    as_generated = _set_dir(tmp_path) / NAMING_AS_GENERATED
+    numbered = _set_dir(tmp_path) / NAMING_NUMBERED
+    assert sorted(path.name for path in as_generated.iterdir()) == sorted(
+        f"{stem}{suffix}"
+        for stem in ("overview", f"{COUNTRY}_model_method_heatmap", "impossibility_heatmap")
+        for suffix in OUTPUT_SUFFIXES
+    )
+    assert sorted(path.name for path in numbered.iterdir()) == sorted(
+        f"{stem}{suffix}"
+        for stem in ("F02_reference_proportions", "F07_model_x_method_heatmap", "F19_axisA_impossibility")
+        for suffix in OUTPUT_SUFFIXES
+    )
+    assert result.n_files == len(_EXPORT_ENTRIES) * len(OUTPUT_SUFFIXES) * 2
+
+
+def test_export_copies_bytes_verbatim(tmp_path: Path) -> None:
+    figure_set = _stage_a_set(tmp_path)
+    result = export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+
+    for copied in result.figures:
+        for published in copied.formats:
+            expected = _figure_bytes(copied.figure.stem, published.suffix)
+            assert published.source.read_bytes() == expected
+            for destination in published.destinations.values():
+                assert destination.read_bytes() == expected
+
+
+def test_manifest_round_trips_the_provenance_of_every_file(tmp_path: Path) -> None:
+    figure_set = _stage_a_set(tmp_path)
+    result = export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+
+    manifest = json.loads(result.index_path.read_text(encoding="utf-8"))
+    assert result.index_path == _set_dir(tmp_path) / INDEX_FILENAME
+    assert manifest["output_base"] == str(tmp_path)
+    assert manifest["country"] == COUNTRY
+    assert manifest["set"] == "s"
+    assert manifest["generated_at"] == result.generated_at
+    assert manifest["n_figures"] == len(_EXPORT_ENTRIES)
+    assert [figure["n"] for figure in manifest["figures"]] == [2, 7, 19]
+
+    for record, copied in zip(manifest["figures"], result.figures):
+        assert record["name"] == copied.figure.entry.name
+        assert record["source_stem"] == copied.figure.stem
+        assert set(record["formats"]) == set(OUTPUT_SUFFIXES)
+        for suffix, published in record["formats"].items():
+            source = Path(published["source_path"])
+            assert source == copied.figure.paths[suffix]
+            assert published["size_bytes"] == source.stat().st_size
+            assert published["sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+            assert datetime.fromisoformat(published["mtime"]).tzinfo is not None
+            for naming in (NAMING_AS_GENERATED, NAMING_NUMBERED):
+                assert (_set_dir(tmp_path) / naming / published[naming]).is_file()
+
+
+def test_a_failing_entry_leaves_the_figures_stage_untouched(tmp_path: Path) -> None:
+    # A first, complete run publishes; a second run whose roster gained an entry with
+    # no `.eps` must abort before writing, leaving the stage byte-identical.
+    figure_set = _stage_a_set(tmp_path)
+    export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+    before = _tree_snapshot(tmp_path / FIGURES_STAGE_DIR)
+
+    partial = (*_EXPORT_ENTRIES, (20, "partial", "realism_ranking/{country}/severity_heatmap_s1"))
+    grown = load_figure_set("s", _export_roster(tmp_path, entries=partial))
+    _write_figure(tmp_path, f"realism_ranking/{COUNTRY}/severity_heatmap_s1", suffixes=(".png", ".svg"))
+
+    with pytest.raises(FileNotFoundError, match="partial format set is never copied"):
+        export_figure_set(grown, country=COUNTRY, output_base=tmp_path)
+    assert _tree_snapshot(tmp_path / FIGURES_STAGE_DIR) == before
+
+
+def test_a_missing_figure_creates_no_figures_stage_at_all(tmp_path: Path) -> None:
+    # A country whose analysis was never run: nothing resolves, nothing is created.
+    figure_set = load_figure_set("s", _export_roster(tmp_path, entries=_EXPORT_ENTRIES))
+    with pytest.raises(FileNotFoundError, match="not found in the analysis stage"):
+        export_figure_set(figure_set, country="italian_01", output_base=tmp_path)
+    assert not (tmp_path / FIGURES_STAGE_DIR).exists()
+
+
+def test_an_entry_citing_an_unrun_process_raises_naming_the_figure(tmp_path: Path) -> None:
+    # `consistency` is a registered process the workflow ships disabled: the roster
+    # loads, and the missing-file gate reports it -- by figure, not by process.
+    entries = ((30, "consistency_panel", "consistency/{country}_panel"),)
+    figure_set = load_figure_set("s", _export_roster(tmp_path, entries=entries))
+    with pytest.raises(FileNotFoundError) as excinfo:
+        export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+    assert "F30 'consistency_panel'" in str(excinfo.value)
+
+
+def test_a_set_of_one_figure_exports(tmp_path: Path) -> None:
+    figure_set = _stage_a_set(tmp_path, entries=((1, "solo", "model_ranking/{country}_models_table"),))
+    result = export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+    assert len(result.figures) == 1
+    assert (_set_dir(tmp_path) / NAMING_NUMBERED / "F01_solo.png").is_file()
+
+
+def test_two_countries_share_one_figures_stage_without_colliding(tmp_path: Path) -> None:
+    entries = ((3, "impossibility", "realism_ranking/{country}/impossibility_heatmap"),)
+    for country in (COUNTRY, "italian_01"):
+        figure_set = _stage_a_set(tmp_path, country=country, entries=entries)
+        export_figure_set(figure_set, country=country, output_base=tmp_path)
+
+    for country in (COUNTRY, "italian_01"):
+        staged = _set_dir(tmp_path, country) / NAMING_AS_GENERATED / "impossibility_heatmap.png"
+        assert staged.read_bytes() == _figure_bytes(
+            f"realism_ranking/{country}/impossibility_heatmap", ".png"
+        )
+
+
+def test_a_dropped_figure_survives_without_force_and_is_reported(tmp_path: Path) -> None:
+    figure_set = _stage_a_set(tmp_path)
+    export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+
+    shrunk = load_figure_set("s", _export_roster(tmp_path, entries=_EXPORT_ENTRIES[:2]))
+    result = export_figure_set(shrunk, country=COUNTRY, output_base=tmp_path)
+
+    stale = _set_dir(tmp_path) / NAMING_AS_GENERATED / "impossibility_heatmap.png"
+    assert stale.is_file()
+    assert stale in result.unclaimed
+    # Both namings swept, all three formats of the dropped entry.
+    assert len(result.unclaimed) == len(OUTPUT_SUFFIXES) * 2
+    assert _set_dir(tmp_path) / NAMING_NUMBERED / "F19_axisA_impossibility.eps" in result.unclaimed
+
+
+def test_force_clears_a_dropped_figure_from_both_namings(tmp_path: Path) -> None:
+    figure_set = _stage_a_set(tmp_path)
+    export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+
+    shrunk = load_figure_set("s", _export_roster(tmp_path, entries=_EXPORT_ENTRIES[:2]))
+    result = export_figure_set(shrunk, country=COUNTRY, output_base=tmp_path, force=True)
+
+    assert result.unclaimed == ()
+    assert not (_set_dir(tmp_path) / NAMING_AS_GENERATED / "impossibility_heatmap.png").exists()
+    assert not (_set_dir(tmp_path) / NAMING_NUMBERED / "F19_axisA_impossibility.eps").exists()
+    assert (_set_dir(tmp_path) / NAMING_AS_GENERATED / f"{COUNTRY}_model_method_heatmap.png").is_file()
+
+
+def test_force_does_not_escape_the_country_and_set_subtree(tmp_path: Path) -> None:
+    entries = ((3, "impossibility", "realism_ranking/{country}/impossibility_heatmap"),)
+    other_country = _stage_a_set(tmp_path, country="italian_01", entries=entries)
+    export_figure_set(other_country, country="italian_01", output_base=tmp_path)
+    figure_set = _stage_a_set(tmp_path, entries=entries)
+    export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+
+    sibling = load_figure_set(
+        "deck_probe",
+        _write_roster(
+            tmp_path,
+            "sets:\n  deck_probe:\n    - {n: 1, name: solo, "
+            'source: "realism_ranking/{country}/impossibility_heatmap"}\n',
+        ),
+    )
+    export_figure_set(sibling, country=COUNTRY, output_base=tmp_path)
+
+    neighbours = _tree_snapshot(tmp_path / FIGURES_STAGE_DIR / "italian_01")
+    sibling_set = _tree_snapshot(_set_dir(tmp_path, COUNTRY, "deck_probe"))
+    export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path, force=True)
+
+    assert _tree_snapshot(tmp_path / FIGURES_STAGE_DIR / "italian_01") == neighbours
+    assert _tree_snapshot(_set_dir(tmp_path, COUNTRY, "deck_probe")) == sibling_set
+
+
+def test_a_re_run_overwrites_a_redrawn_figure(tmp_path: Path) -> None:
+    entries = ((7, "heatmap", "model_ranking/{country}_model_method_heatmap"),)
+    figure_set = _stage_a_set(tmp_path, entries=entries)
+    export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+
+    source = tmp_path / ANALYSIS_STAGE_DIR / "model_ranking" / f"{COUNTRY}_model_method_heatmap.png"
+    source.write_bytes(b"redrawn")
+    result = export_figure_set(figure_set, country=COUNTRY, output_base=tmp_path)
+
+    staged = _set_dir(tmp_path) / NAMING_NUMBERED / "F07_heatmap.png"
+    assert staged.read_bytes() == b"redrawn"
+    assert result.unclaimed == ()
+    manifest = json.loads(result.index_path.read_text(encoding="utf-8"))
+    assert manifest["figures"][0]["formats"][".png"]["sha256"] == hashlib.sha256(b"redrawn").hexdigest()
