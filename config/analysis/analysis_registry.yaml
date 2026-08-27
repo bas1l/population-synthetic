@@ -5,10 +5,19 @@
 # derive from one canonical id.
 #
 # Contract (enforced by analysis/utils/registry.py, fail-fast on violation):
-#   - `stage_dir`  : the parent stage folder under output_base (one place this lives).
+#   - `stage_dir`  : the parent stage folder under output_base for the analysis stage
+#                    (one place this lives).
+#   - `figures_stage_dir`
+#                  : the sibling stage folder for the figures stage -- the published
+#                    figure sets, selected out of the analysis stage (one place this
+#                    lives). Both literals are read ONLY by analysis/utils/registry.py.
 #   - `processes`  : mapping of canonical id -> entry. Each entry MUST provide
-#                    label, description, folder, script, dispatch.
-#   - folder       : the process's subfolder under {output_base}/{stage_dir}/.
+#                    label, description, script, dispatch.
+#   - stage        : which stage folder the process writes into -- `analysis` (the
+#                    default when the key is absent) or `figures`. Any other value raises.
+#   - folder       : the process's subfolder under {output_base}/{stage_dir}/. REQUIRED
+#                    for an `analysis`-stage process; FORBIDDEN for a `figures`-stage
+#                    one, which owns {output_base}/{figures_stage_dir}/ itself.
 #   - dispatch     : how the GUI fans the task out over combos
 #                    (per_combo | slugs | per_country | cli).
 #
@@ -19,6 +28,7 @@
 # analysis/utils/registry.analysis_output_dir(..., for_read=True).
 
 stage_dir: "03_Analysis"
+figures_stage_dir: "04_Figures"
 
 processes:
   validate_raw:
