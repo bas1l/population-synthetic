@@ -47,6 +47,10 @@ _EXPECTED_FOLDERS = {
     "cost_efficiency": "cost_efficiency",
 }
 
+# The figures-stage ids: no analysis-stage folder at all (they own the figures stage
+# root), so they are deliberately absent from the folder map above.
+_EXPECTED_FIGURES_PROCESSES = {"figure_selection"}
+
 
 def test_stage_dir_constant() -> None:
     assert ANALYSIS_STAGE_DIR == "03_Analysis"
@@ -79,7 +83,7 @@ def test_load_registry_missing_figures_stage_dir_raises(
 
 def test_registry_has_all_expected_processes() -> None:
     reg = load_registry()
-    assert set(reg) == set(_EXPECTED_FOLDERS)
+    assert set(reg) == set(_EXPECTED_FOLDERS) | _EXPECTED_FIGURES_PROCESSES
     assert all(isinstance(p, AnalysisProcess) for p in reg.values())
 
 
@@ -212,11 +216,14 @@ def _write_registry(tmp_path: Path, entry_body: str) -> Path:
     return path
 
 
-def test_shipped_processes_are_all_analysis_stage() -> None:
-    # The 17 existing processes declare no `stage` and are unaffected by the new key.
+def test_shipped_stages_split_exactly_along_the_folder_contract() -> None:
+    # The analysis-stage processes declare no `stage` (the documented default) and every
+    # one of them declares a folder; the figures-stage ones declare no folder at all.
     reg = load_registry()
-    assert {p.stage for p in reg.values()} == {STAGE_ANALYSIS}
-    assert all(p.folder for p in reg.values())
+    assert {pid for pid, p in reg.items() if p.stage == STAGE_ANALYSIS} == set(_EXPECTED_FOLDERS)
+    assert {pid for pid, p in reg.items() if p.stage == STAGE_FIGURES} == _EXPECTED_FIGURES_PROCESSES
+    assert all(p.folder for pid, p in reg.items() if pid in _EXPECTED_FOLDERS)
+    assert all(p.folder is None for pid, p in reg.items() if pid in _EXPECTED_FIGURES_PROCESSES)
 
 
 def test_figures_stage_entry_without_folder_loads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -12,12 +12,15 @@ as it found it.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
+from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.figure_selection.config import (
     FigureEntry,
     FigureSet,
@@ -37,9 +40,18 @@ from population_synthetic.analysis.figure_selection.resolve import (
     resolve_entry,
     resolve_set,
 )
+from population_synthetic.analysis.utils.country_config import known_country_ids
 from population_synthetic.analysis.utils.figures import OUTPUT_SUFFIXES
-from population_synthetic.analysis.utils.registry import ANALYSIS_STAGE_DIR, FIGURES_STAGE_DIR
+from population_synthetic.analysis.utils.registry import (
+    ANALYSIS_STAGE_DIR,
+    FIGURES_STAGE_DIR,
+    STAGE_FIGURES,
+    get_process,
+)
 from population_synthetic.generators.synthetic.manifest_loader import axis_slug
+from population_synthetic.gui.commands import build_per_country_cmds
+from population_synthetic.gui.workflow_config_model import WorkflowConfigModel
+from population_synthetic.gui.workflow_state import WorkflowState
 
 COUNTRY = "swedish_02"
 MODEL = "claude_sonnet"
@@ -592,3 +604,220 @@ def test_a_re_run_overwrites_a_redrawn_figure(tmp_path: Path) -> None:
     assert result.unclaimed == ()
     manifest = json.loads(result.index_path.read_text(encoding="utf-8"))
     assert manifest["figures"][0]["formats"][".png"]["sha256"] == hashlib.sha256(b"redrawn").hexdigest()
+
+
+# --- the CLI entry point and the DAG wiring (Phase 4) ------------------------
+
+#: The process's canonical id -- simultaneously the registry key, the GUI workflow task
+#: key and (for an analysis-stage process) the output-folder name.
+PROCESS_ID = "figure_selection"
+
+#: The figure-producing tasks the node orders itself behind: every one of them, and ONLY
+#: the ones the shipped workflow enables. A disabled task never enters ``completed_tasks``,
+#: so depending on one would park this node at ``SKIPPED_DEP`` forever.
+_EXPECTED_DEPENDENCIES = {
+    "fidelity",
+    "model_ranking",
+    "method_significance",
+    "real_population_stats",
+    "generation_metadata",
+    "persona_realism",
+    "realism_ranking",
+    "validation_attrition",
+    "cost_efficiency",
+}
+
+
+def _shipped_workflow_model() -> WorkflowConfigModel:
+    return WorkflowConfigModel(PROJECT_ROOT / "config" / "gui" / "flows" / "analysis_workflow.yaml")
+
+
+def test_registry_declares_a_figures_stage_per_country_process() -> None:
+    process = get_process(PROCESS_ID)
+    assert process.stage == STAGE_FIGURES
+    assert process.dispatch == "per_country"
+    # A figures-stage process owns the stage root, so it declares no subfolder.
+    assert process.folder is None
+    assert (PROJECT_ROOT / process.script).is_file()
+
+
+def test_workflow_node_renders_from_the_registry() -> None:
+    """The GUI draws the node from registry-owned metadata, not from the flow YAML.
+
+    ``get_task_meta`` is what the node widget reads; it raises on an id the registry does
+    not declare, so this is the assertion that the node can be drawn at all.
+    """
+    meta = _shipped_workflow_model().get_task_meta(PROCESS_ID)
+    process = get_process(PROCESS_ID)
+    assert meta["label"] == process.label
+    assert meta["script"] == process.script
+    assert meta["dispatch"] == "per_country"
+    assert meta["supports_force"] is True
+
+
+def test_workflow_node_ships_disabled_with_the_curated_roster_selected() -> None:
+    """Opt-in, because a sweep must not fail at its last step over an uncurated roster."""
+    model = _shipped_workflow_model()
+    assert model.is_task_enabled(PROCESS_ID) is False
+    assert model.get_task_bypass(PROCESS_ID) is False
+    assert model.get_task_force(PROCESS_ID) is False
+    options = model.get_task_options(PROCESS_ID)
+    assert set(options) == {"set", "output-base"}
+    # The declared set must exist in the roster: the GUI can only edit an option the flow
+    # already declares, so a name that drifted from the roster would fail at run time only.
+    assert options["set"] in known_set_names()
+
+
+def test_workflow_dependencies_are_exactly_the_enabled_figure_producers() -> None:
+    """Every declared upstream, and every one of them enabled.
+
+    The second half is the load-bearing one: ``depends_on`` gives ordering only, but a
+    dependency that ships ``enabled: false`` is never marked complete, so it would leave
+    this node permanently dep-blocked.
+    """
+    model = _shipped_workflow_model()
+    dependencies = model.get_task_dependencies(PROCESS_ID)
+    assert set(dependencies) == _EXPECTED_DEPENDENCIES
+    assert len(dependencies) == len(_EXPECTED_DEPENDENCIES)
+    disabled = [name for name in dependencies if not model.is_task_enabled(name)]
+    assert disabled == []
+
+
+def test_the_shipped_dag_orders_the_node_after_every_upstream() -> None:
+    state = WorkflowState(_shipped_workflow_model().to_plain(), PROJECT_ROOT)
+    state.validate()
+    order = [task.name for task in state.ordered_tasks()]
+    assert order[-1] == PROCESS_ID  # terminal node of the analysis DAG
+    for dependency in _EXPECTED_DEPENDENCIES:
+        assert order.index(dependency) < order.index(PROCESS_ID)
+
+
+def test_the_node_unlocks_only_once_every_upstream_completes() -> None:
+    """The dependency gate, read on the node itself.
+
+    ``enabled`` is flipped on in the snapshot (the shipped node is opt-in), so the only
+    thing ``can_run`` is reporting here is ``depends_on`` -- and it stays False until the
+    LAST of the nine is marked complete.
+    """
+    snapshot = _shipped_workflow_model().to_plain()
+    snapshot["tasks"][PROCESS_ID]["enabled"] = True
+    state = WorkflowState(snapshot, PROJECT_ROOT)
+
+    dependencies = sorted(_EXPECTED_DEPENDENCIES)
+    for dependency in dependencies[:-1]:
+        assert not state.can_run(PROCESS_ID)
+        state.mark_completed(dependency)
+    assert not state.can_run(PROCESS_ID)
+    state.mark_completed(dependencies[-1])
+    assert state.can_run(PROCESS_ID)
+
+
+def test_the_shipped_node_stays_dep_blocked_while_it_is_opt_in() -> None:
+    """Even with every upstream complete, the shipped node does not fire unasked."""
+    state = WorkflowState(_shipped_workflow_model().to_plain(), PROJECT_ROOT)
+    for dependency in _EXPECTED_DEPENDENCIES:
+        state.mark_completed(dependency)
+    assert not state.can_run(PROCESS_ID)  # enabled: false in the shipped YAML
+
+
+def test_the_set_option_reaches_the_built_command_vector() -> None:
+    """``--set <name>`` is translated out of the flow YAML by the per_country builder.
+
+    Read from the shipped flow rather than a literal: the GUI TRANSLATES the YAML into a
+    CLI vector and the spawned script never reads the flow file, so this option can only
+    reach a run through this vector.
+    """
+    model = _shipped_workflow_model()
+    options = model.get_task_options(PROCESS_ID)
+    script = Path(get_process(PROCESS_ID).script)
+    combos = [(MODEL, STRATEGY, COUNTRY), ("claude_haiku", STRATEGY, COUNTRY)]
+
+    (cmd,) = build_per_country_cmds(script, combos, force=False, options=options)
+
+    assert cmd == [
+        sys.executable, str(script),
+        "--country-id", COUNTRY,
+        "--set", options["set"],
+    ]
+    # Blank output-base falls through to the script's own default rather than emitting
+    # an empty flag, and Force is the node's own checkbox.
+    assert "--output-base" not in cmd
+    assert "--force" not in cmd
+    assert "--force" in build_per_country_cmds(script, combos, force=True, options=options)[0]
+
+
+def _load_cli() -> object:
+    """Load ``scripts/analyze/select_figures.py`` as a module (the CLI edge under test)."""
+    path = PROJECT_ROOT / "scripts" / "analyze" / "select_figures.py"
+    spec = importlib.util.spec_from_file_location("select_figures", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_cli_parses_the_four_documented_flags(monkeypatch) -> None:
+    """The plan's CLI contract: ``--country-id`` (repeatable), ``--set``, ``--output-base``, ``--force``."""
+    cli = _load_cli()
+    monkeypatch.setattr(
+        sys, "argv",
+        ["select_figures.py", "--country-id", COUNTRY, "--country-id", "italian",
+         "--set", "manuscript", "--output-base", "out", "--force"],
+    )
+    args = cli._parse_args()
+    assert args.country_ids == [COUNTRY, "italian"]
+    assert args.set_name == "manuscript"
+    assert args.output_base == "out"
+    assert args.force is True
+
+
+def test_the_cli_defaults_leave_set_base_and_force_to_their_resolvers(monkeypatch) -> None:
+    cli = _load_cli()
+    monkeypatch.setattr(sys, "argv", ["select_figures.py", "--country-id", COUNTRY])
+    args = cli._parse_args()
+    assert (args.set_name, args.output_base, args.force) == (None, None, False)
+
+
+def test_the_cli_requires_a_country(monkeypatch) -> None:
+    """There is no default country: a bare invocation must not publish a guessed one."""
+    cli = _load_cli()
+    monkeypatch.setattr(sys, "argv", ["select_figures.py", "--set", "manuscript"])
+    with pytest.raises(SystemExit):
+        cli._parse_args()
+
+
+def test_resolve_set_name_defaults_to_the_only_declared_set(monkeypatch) -> None:
+    cli = _load_cli()
+    monkeypatch.setattr(cli, "known_set_names", lambda: ("manuscript",))
+    assert cli._resolve_set_name(None) == "manuscript"
+
+
+def test_resolve_set_name_without_a_choice_raises_once_a_second_set_exists(monkeypatch) -> None:
+    """No baked-in default set name: from the second set on, the choice is the operator's."""
+    cli = _load_cli()
+    monkeypatch.setattr(cli, "known_set_names", lambda: ("deck", "manuscript"))
+    with pytest.raises(ValueError, match=r"--set is required.*deck.*manuscript"):
+        cli._resolve_set_name(None)
+
+
+def test_resolve_set_name_rejects_an_unknown_set_listing_the_known_ones() -> None:
+    cli = _load_cli()
+    with pytest.raises(ValueError, match=r"Unknown figure set 'ghost'.*manuscript"):
+        cli._resolve_set_name("ghost")
+
+
+def test_the_cli_accepts_every_shipped_set_name() -> None:
+    cli = _load_cli()
+    for name in known_set_names():
+        assert cli._resolve_set_name(name) == name
+
+
+def test_unknown_country_raises_listing_the_valid_ids() -> None:
+    cli = _load_cli()
+    with pytest.raises(ValueError, match=r"Unknown country id\(s\) \['atlantis'\]"):
+        cli._validate_countries(["atlantis"])
+
+
+def test_repeated_country_ids_collapse_in_first_seen_order() -> None:
+    cli = _load_cli()
+    ids = known_country_ids()
+    assert cli._validate_countries([ids[0], ids[0]]) == [ids[0]]

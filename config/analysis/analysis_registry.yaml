@@ -339,3 +339,26 @@ processes:
     folder: "cost_efficiency"
     script: "scripts/analyze/analyze_cost_efficiency.py"
     dispatch: "slugs"
+
+  figure_selection:
+    label: "Select Figures (publish to 04_Figures)"
+    description: >
+      Terminal node of the analysis DAG, and the one process that COMPUTES NOTHING: it
+      draws no figure, imports no chart module and makes no publication decision. It
+      reads a config-declared roster (config/analysis/figure_selection.yaml), resolves
+      each entry against the analysis stage, and copies the files the presentation layer
+      already wrote into the figures stage -- in EVERY published format, so the EPS the
+      target venues accept can never be left behind the way hand-copying left it. Each
+      set is emitted under two namings: as_generated/ keeps the source filenames, so a
+      staged image is traceable by name alone, and numbered/ carries the manuscript's own
+      figure numbers, so a citation resolves to a file. Beside them, _index.json records
+      which output_base, country, set and run produced each file, with the source's size,
+      mtime and SHA-256, so drift against a re-run analysis stage is detectable without
+      re-reading it. Resolve-all, validate-all, THEN copy: an unknown set, an unregistered
+      process id, a stem with nothing behind it, a partial format set, a duplicate figure
+      number or a destination-filename collision each raise before a byte moves, so a run
+      that is going to fail leaves the figures stage untouched. A figures-stage process,
+      so it declares no folder: it owns the figures stage root itself.
+    stage: "figures"
+    script: "scripts/analyze/select_figures.py"
+    dispatch: "per_country"

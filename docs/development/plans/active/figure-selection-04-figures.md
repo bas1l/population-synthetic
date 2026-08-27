@@ -233,14 +233,14 @@ roster has not been curated yet — with `supports_force: true`.
 
 ### Phase 4: Script and wiring
 
-- [ ] 4.1 — `scripts/analyze/select_figures.py`: `--country-id` (repeatable), `--set`,
+- [x] 4.1 — `scripts/analyze/select_figures.py`: `--country-id` (repeatable), `--set`,
       `--output-base`, `--force`. Docstring in the house style of the other analyze scripts.
-- [ ] 4.2 — Registry entry `figure_selection` (`stage: figures`, `dispatch: per_country`,
+- [x] 4.2 — Registry entry `figure_selection` (`stage: figures`, `dispatch: per_country`,
       script path, label, description).
-- [ ] 4.3 — Workflow entry: `enabled: false`, `supports_force: true`, `depends_on` as listed
+- [x] 4.3 — Workflow entry: `enabled: false`, `supports_force: true`, `depends_on` as listed
       above, options `{set: manuscript, output-base: }`.
-- [ ] 4.4 — Update `analysis_workflow.layout.json` with the new node's position.
-- [ ] 4.5 — GUI smoke test: the node renders, its dependencies resolve, and `--set` reaches
+- [x] 4.4 — Update `analysis_workflow.layout.json` with the new node's position.
+- [x] 4.5 — GUI smoke test: the node renders, its dependencies resolve, and `--set` reaches
       the command vector.
 
 ### Phase 5: Live run and documentation
@@ -323,7 +323,7 @@ registry/workflow entries; the only edit to existing code is the conditional-`fo
 - `config/analysis/analysis_registry.yaml`
 - `config/analysis/figure_selection.yaml` *(new)*
 - `config/gui/flows/analysis_workflow.yaml`
-- `config/gui/flows/analysis_workflow.layout.json`
+- `config/gui/flows/analysis_workflow.layout.json` *(git-ignored operator state -- `.gitignore` excludes `*.layout.json`, so the new node's position is a working-tree change only)*
 - `scripts/analyze/select_figures.py` *(new)*
 - `src/population_synthetic/analysis/figure_selection/__init__.py` *(new)*
 - `src/population_synthetic/analysis/figure_selection/config.py` *(new)*
@@ -333,6 +333,7 @@ registry/workflow entries; the only edit to existing code is the conditional-`fo
 - `src/population_synthetic/utils/atomic_io.py` *(gains `atomic_copy_file`, the binary sibling of `atomic_write_text`, so a published figure is never a truncated one)*
 - `tests/test_figure_selection.py` *(new)*
 - `tests/test_analysis_registry.py`
+- `tests/test_workflow_state.py` *(the shipped-DAG ordering assertions gain the terminal node)*
 - `CLAUDE.md`
 - `docs/architecture/sub-packages.md`
 - `docs/architecture/configuration.md`
