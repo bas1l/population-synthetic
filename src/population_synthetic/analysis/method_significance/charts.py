@@ -16,7 +16,12 @@ records that fed it) and renders, per country:
   ``overall.model_comparison`` (average-rank axis + a CD bar linking models that
   are *not* significantly different at the Nemenyi critical difference);
 * a **factor-dominance bar** of the mixed model's eta^2 variance shares
-  (model vs method vs category vs residual) from ``overall.mixed_logit.eta_sq``.
+  (model vs method vs category vs residual) from ``overall.mixed_logit.eta_sq``;
+* a **method x method pairwise-significance grid** per attribute panel (plus
+  ``overall``) -- the square view of the same pairwise comparisons the bracket
+  figure draws only a configured subset of. Fill = the significance tier, text =
+  the signed row-minus-column difference, both read from the panel's own
+  ``pair_matrix`` block.
 
 Faithful-visualisation rules (per the statistical-software guide, §7): the raw
 data is shown, not silently dropped; absent cells are drawn as gaps (masked), not
@@ -44,7 +49,17 @@ from population_synthetic.analysis.method_significance.builder import (
 )
 from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils.figures import save_figure
-from population_synthetic.analysis.utils.grid_annotations import SignedValuePolicy
+from population_synthetic.analysis.utils.grid_annotations import (
+    SignedValuePolicy,
+    SignedValueWithStarsPolicy,
+)
+from population_synthetic.analysis.utils.grid_variants import (
+    CANONICAL_VARIANT,
+    COUNTED_VARIANT,
+    GridVariant,
+    variant_map,
+    variant_suffixes,
+)
 from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.labels import (
     attribute_label,
@@ -66,6 +81,7 @@ from population_synthetic.analysis.utils.palette import (
     WARNING_FILL,
     WARNING_TEXT,
     heatmap_cmap,
+    heatmap_levels,
     opaque,
     text_color_on,
 )
@@ -75,6 +91,7 @@ from population_synthetic.analysis.utils.style import (
     AXIS_TITLE,
     CALLOUT,
     CAPTION_MARGIN_IN,
+    DOUBLE,
     FIGURE_TITLE,
     FULL,
     HEADING_WEIGHT,
@@ -92,7 +109,7 @@ from population_synthetic.analysis.utils.style import (
     house_style,
     wrap_to_width,
 )
-from population_synthetic.analysis.utils.table_style import fit_to_page
+from population_synthetic.analysis.utils.table_style import categories_on_top, fit_to_page
 
 logger = logging.getLogger(__name__)
 
@@ -466,6 +483,29 @@ _OMNIBUS_LABELS = {
     "friedman": "Friedman",
 }
 
+
+def _omnibus_note(omnibus: dict[str, Any]) -> str:
+    """The panel's omnibus line: the test the builder ran, its p, and its BH sibling.
+
+    The test NAME comes from the panel, never from a literal at the call site: the
+    builder decides which omnibus it ran, and a hardcoded label silently mislabels the
+    number the moment that changes. It did -- a panel title read "Friedman" while
+    showing a repeated-measures ANOVA p, which is a wrong name on a right number.
+
+    Shared by every figure in this module that prints the line, so two figures drawn
+    from the same panel can never report it differently. Reads the panel; derives no
+    p-value, no correction and no verdict.
+    """
+    label = _OMNIBUS_LABELS.get(omnibus.get("test"), omnibus.get("test") or "omnibus")
+    p = omnibus.get("p")
+    if p is None:
+        return f"{label}: n/a"
+    p_bh = omnibus.get("p_bh")
+    if p_bh is not None:
+        return f"{label} p={p:.3g} (BH {p_bh:.3g})"
+    return f"{label} p={p:.3g}"
+
+
 # Method-comparison figure (bars + points + significance brackets/stars)
 # ------------------------------------------------------------------
 
@@ -564,16 +604,23 @@ def _panel_data_max(panel: dict[str, Any], methods: list[str]) -> float:
     return max(values) if values else 1.0
 
 
-def _star_key_text(thresholds: list[dict[str, Any]], ns_symbol: str, pairs_mode: str) -> str:
+def _star_key_text(
+    thresholds: list[dict[str, Any]],
+    ns_symbol: str,
+    *,
+    include_ns: bool,
+) -> str:
     """Human-readable in-figure key defining the star symbols from config.
 
-    The ``ns`` entry is included only when the *pairs_mode* can actually draw a
-    non-significant bracket. Under ``significant-only`` no ``ns`` bracket is ever
-    drawn, so the key omits ``ns`` and defines only ``* ** *** ****`` -- keeping the
-    key accurate to what the figure shows.
+    *include_ns* is the caller's statement of whether its own figure can show a
+    non-significant result at all. The bracket figure under ``significant-only``
+    never draws one, so its key defines only ``* ** *** ****``; the pair grid paints
+    the ``ns`` tier in every cell that earned it, so its key has to define it. The
+    key stays accurate to what the figure shows, and this function stays ignorant of
+    what a pairs mode is.
     """
     parts: list[str] = []
-    if pairs_mode != "significant-only":
+    if include_ns:
         parts.append(f"{ns_symbol}: p>{max(float(e['max_p']) for e in thresholds):g}")
     for entry in sorted(thresholds, key=lambda e: float(e["max_p"]), reverse=True):
         parts.append(f"{entry['symbol']}: p≤{float(entry['max_p']):g}")
@@ -663,20 +710,7 @@ def _draw_method_panel(
     top_used = top + (max(levels) if levels else 0) * step
     ax.set_ylim(0.0, max(1.0, top_used + step))
 
-    omnibus = panel.get("omnibus", {})
-    p_omni = omnibus.get("p")
-    p_bh = omnibus.get("p_bh")
-    # The test NAME comes from the panel, never from a literal here: the builder
-    # decides which omnibus it ran, and a hardcoded label silently mislabels the
-    # number the moment that changes. It did -- this said "Friedman" while showing
-    # a repeated-measures ANOVA p, which is a wrong name on a right number.
-    omni_label = _OMNIBUS_LABELS.get(omnibus.get("test"), omnibus.get("test") or "omnibus")
-    if p_omni is None:
-        omni_note = f"{omni_label}: n/a"
-    elif p_bh is not None:
-        omni_note = f"{omni_label} p={p_omni:.3g} (BH {p_bh:.3g})"
-    else:
-        omni_note = f"{omni_label} p={p_omni:.3g}"
+    omni_note = _omnibus_note(panel.get("omnibus", {}))
     # Header: model n and (for a category panel) the attribute's declared level
     # count from the block; the Overall panel spans all categories, so it has no
     # single level count and shows only the model n. Pure consumer -- the count is
@@ -791,7 +825,9 @@ def plot_method_comparison(
     headline = wrap_to_width(
         headline, usable, fontsize=FIGURE_TITLE, weight=HEADING_WEIGHT,
     )
-    key_text = _star_key_text(thresholds, ns_symbol, pairs_mode)
+    key_text = _star_key_text(
+        thresholds, ns_symbol, include_ns=pairs_mode != "significant-only",
+    )
     key_block = wrap_to_width(
         "Methods:  " + "   ".join(method_key_lines(methods)) + "      key -- " + key_text,
         usable, fontsize=ANNOTATION,
@@ -815,3 +851,344 @@ def plot_method_comparison(
     ))
     fit_to_page(fig)
     return save_figure(fig, Path(out_path))
+
+
+# ------------------------------------------------------------------
+# Method x method pairwise-significance grids (one per attribute panel)
+# ------------------------------------------------------------------
+
+#: The camera-ready variant, published at the bare filename: the signed difference and
+#: the symbol qualifying it, one step up the house scale. The paired-block count it
+#: drops is not lost -- it is in the comparison JSON, in the pairwise CSV and in the
+#: counted sibling beside it -- so this variant costs ink rather than evidence.
+GRID_VARIANT_CLEAN = GridVariant(
+    name=CANONICAL_VARIANT,
+    policy=SignedValueWithStarsPolicy(value_key="value", stars_key="stars"),
+    cell_clause=(
+        "Cell: the row method's mean TV-similarity minus the column method's, over the "
+        "models that entered this panel's test, with the significance symbol of the "
+        "Holm-corrected pairwise test beneath it."
+    ),
+    fontsize=ANNOTATION_LARGE,
+    linespacing=None,
+)
+
+#: The counted sibling: the same two lines over the number of paired model blocks the
+#: test rested on. Written to ``..._with_counts``, so nothing this figure ever printed
+#: is lost.
+GRID_VARIANT_WITH_COUNTS = GridVariant(
+    name=COUNTED_VARIANT,
+    policy=SignedValueWithStarsPolicy(
+        value_key="value", stars_key="stars", count_key="n",
+    ),
+    cell_clause=(
+        "Cell: the row method's mean TV-similarity minus the column method's, with the "
+        "significance symbol of the Holm-corrected pairwise test beneath it, printed "
+        "over the number of paired model blocks that test used."
+    ),
+    fontsize=ANNOTATION,
+    linespacing=1.35,
+)
+
+#: The publishable variants by name, so a driver enumerates them instead of naming them.
+#: The clean one is first because it is the one published at the bare filename.
+GRID_VARIANTS: dict[str, GridVariant] = variant_map(
+    GRID_VARIANT_CLEAN, GRID_VARIANT_WITH_COUNTS,
+)
+
+
+def _star_ladder(thresholds: list[dict[str, Any]], ns_symbol: str) -> list[str]:
+    """The significance symbols as an ordered ladder, most significant first.
+
+    ``["****", "***", "**", "*", "ns"]`` on the current config -- the config's own
+    thresholds sorted by their cutoff, with the ``ns`` symbol as the final rung. Its
+    *length* is the number of discrete colour levels the grid paints, so a threshold
+    added to config adds a level without any figure being edited.
+
+    A rung's index is the position the grid paints, and it is resolved from the symbol
+    :func:`_p_to_stars` returned -- not from a second binning of the p-value. That is
+    deliberate: the fill and the printed symbol then come from one lookup and cannot
+    disagree at a cutoff, where the config's rule (``p <= max_p``) and a half-open
+    colour bin would otherwise place ``p = 0.05`` on opposite sides.
+    """
+    ordered = [
+        str(entry["symbol"])
+        for entry in sorted(thresholds, key=lambda e: float(e["max_p"]))
+    ]
+    return ordered + [ns_symbol]
+
+
+def _pair_grid(
+    panel_key: str,
+    methods: list[str],
+    pair_matrix: dict[str, Any],
+    thresholds: list[dict[str, Any]],
+    ns_symbol: str,
+    ladder: list[str],
+) -> tuple[np.ndarray, list[list[dict[str, Any] | None]]]:
+    """The painted tier matrix and the cell records for one panel's square.
+
+    Three cell states, and keeping them apart is the whole point of the figure:
+
+    * the **diagonal** -- ``np.nan`` value *and* ``None`` record, so it takes the
+      colormap's unpainted fill and carries no text at all;
+    * an **untested** off-diagonal pair (the panel stored no corrected p for it) --
+      ``np.nan`` value with a record whose value is ``None``, so it takes the same
+      unpainted fill but prints the policy's ``absent_text``. Painting it at the palest
+      tier instead would present "never tested" as "tested, not significant";
+    * a **tested** pair -- painted at its tier's rung and printed with the stored
+      difference, symbol and block count.
+
+    Nothing is computed here. The tier is :func:`_p_to_stars`, which is a config
+    lookup; the difference, the count and the p arrive oriented from the builder's
+    ``pair_matrix`` and are read at ``(i, j)`` verbatim, sign included.
+
+    Raises:
+        ValueError: If a pair carries a corrected p but no difference. That cell would
+            be painted at a tier while printing the mark reserved for a pair that was
+            never tested, which is a figure contradicting itself.
+    """
+    p_holm = pair_matrix["p_holm"]
+    mean_diff = pair_matrix["mean_diff"]
+    n_blocks = pair_matrix["n_blocks"]
+    k = len(methods)
+    values = np.full((k, k), np.nan)
+    cells: list[list[dict[str, Any] | None]] = [[None] * k for _ in range(k)]
+    for i in range(k):
+        for j in range(k):
+            if i == j:
+                continue
+            p = p_holm[i][j]
+            if p is None:
+                cells[i][j] = {"value": None, "stars": None, "n": None}
+                continue
+            difference = mean_diff[i][j]
+            if difference is None:
+                raise ValueError(
+                    f"panel {panel_key!r}: the pair {methods[i]!r} vs {methods[j]!r} "
+                    f"carries a corrected p of {p!r} but no mean difference. A painted "
+                    "cell has to print the value its tier qualifies; there is nothing "
+                    "for this one to print."
+                )
+            symbol = _p_to_stars(float(p), thresholds, ns_symbol)
+            values[i, j] = float(ladder.index(symbol))
+            cells[i][j] = {
+                "value": float(difference),
+                "stars": symbol,
+                "n": n_blocks[i][j],
+            }
+    return values, cells
+
+
+def _draw_pair_placeholder(ax, note: str) -> None:
+    """Fill *ax* with the panel's own explanation of why there is no square to draw.
+
+    *note* is read from the panel block. The wording is the builder's -- how many
+    complete models it found and what it needed -- and is never authored here: a caveat
+    restated in a renderer is a caveat that drifts from the rule that produced it.
+    """
+    ax.axis("off")
+    ax.text(
+        0.5, 0.5, note,
+        transform=ax.transAxes, ha="center", va="center",
+        fontsize=CALLOUT, color=WARNING_TEXT, fontweight="bold",
+        bbox={"boxstyle": "round", "facecolor": WARNING_FILL, "edgecolor": WARNING_TEXT},
+    )
+
+
+@house_style
+def plot_method_pair_significance(
+    result: dict[str, Any],
+    out_dir: str | Path,
+) -> list[Path]:
+    """One method x method significance square per attribute panel, in both variants.
+
+    The bracket figure (:func:`plot_method_comparison`) draws only the pairs its
+    configured ``pairs_mode`` selects -- four of ten on the live five-method axis. Every
+    pair is nonetheless computed and Holm-corrected across the whole family, and this
+    figure is the square that shows all of them at once, one file per demographic
+    category plus the pooled ``overall`` panel.
+
+    **The renderer claims no p-value of its own and performs no arithmetic.** Both
+    channels are read from the panel's ``pair_matrix`` block, whose ``mean_diff`` is
+    already oriented row-minus-column by ``builder._method_panel`` -- the sign
+    convention's only home. Nothing here negates, re-signs or re-derives a cell.
+
+    Two channels, deliberately different: the **fill** is the pair's significance tier,
+    which is symmetric across the diagonal, and the **text** is the signed difference,
+    which is antisymmetric. Direction therefore travels in the annotation, on the house
+    sequential ramp binned to the config's own star ladder
+    (:func:`~population_synthetic.analysis.utils.palette.heatmap_levels`), rather than
+    in a diverging hue -- the mechanism the 2026-08-12 ADR chose. Because p ascends
+    while the ramp brightens, the most significant tier is darkest and ``ns`` palest.
+
+    A panel flagged ``insufficient_n`` renders a labelled placeholder carrying the
+    panel's own note, and is logged (never a silent blank or a missing file).
+
+    Args:
+        result: The built analysis (``builder.build_method_significance``).
+        out_dir: Directory for the figures. One stem per panel, at the panel's key, with
+            the variant suffix appended by
+            :func:`~population_synthetic.analysis.utils.grid_variants.variant_suffixes`.
+
+    Returns:
+        The written PNG paths (each with its SVG and EPS siblings), in panel order and,
+        within a panel, in the variant map's own order. Empty when the block carries no
+        panels or the metadata declares no method axis.
+    """
+    block: dict[str, Any] = result.get("method_comparison") or {}
+    panels: dict[str, Any] = block.get("panels") or {}
+    if not panels:
+        return []
+
+    metadata: dict[str, Any] = result.get("metadata", {})
+    attributes: list[str] = metadata.get("attributes") or []
+    order = [attr for attr in attributes if attr in panels]
+    if "overall" in panels:
+        order.append("overall")
+    if not order:
+        return []
+
+    method_order: list[str] = metadata.get("method_order") or []
+    if not method_order:
+        return []
+    # Letters are absolute over the run's whole method axis, so this square reads
+    # against every other figure in the process rather than being renumbered locally.
+    letters = method_letters(method_order)
+    method_key = "Methods:  " + "   ".join(method_key_lines(method_order))
+
+    thresholds = block.get("star_thresholds")
+    ns_symbol = block.get("ns_symbol")
+    if not thresholds or not ns_symbol:
+        cfg = load_comparison_config()
+        thresholds = cfg["star_thresholds"]
+        ns_symbol = cfg["ns_symbol"]
+    ladder = _star_ladder(thresholds, ns_symbol)
+    star_key = "Significance:  " + _star_key_text(thresholds, ns_symbol, include_ns=True)
+
+    # The two readings the fill alone cannot carry, stated once for every panel: which
+    # way the sign points, and that an unpainted cell is not a pale one.
+    absent_mark = GRID_VARIANT_CLEAN.policy.absent_text
+    sign_note = (
+        "Rows and columns are the same methods in the same order. A positive cell means "
+        "the ROW method scored closer to the real population than the column method; a "
+        "negative one, the reverse."
+    )
+    state_note = (
+        "Fill is the pair's significance tier, so it reads the same either side of the "
+        f"diagonal. An unpainted cell printing {absent_mark} is a pair that was never "
+        "tested, which is not the same finding as a pair tested and reported "
+        f"{ns_symbol} (the palest painted tier). The unpainted diagonal prints nothing: "
+        "it is a method against itself."
+    )
+
+    country = metadata.get("country", "")
+
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # One discrete level per rung of the config's ladder, and a norm whose bins are those
+    # rungs. Neither the level count nor the tier a cell lands in is a literal here: both
+    # follow the config's thresholds.
+    cmap = heatmap_levels(len(ladder))
+    norm = mcolors.BoundaryNorm(np.arange(len(ladder) + 1) - 0.5, len(ladder))
+
+    written: list[Path] = []
+    for panel_key in order:
+        panel: dict[str, Any] = panels[panel_key]
+        pair_matrix: dict[str, Any] = panel["pair_matrix"]
+        methods: list[str] = pair_matrix["methods"]
+        if not methods:
+            continue
+        unknown = [s for s in methods if s not in letters]
+        if unknown:
+            raise ValueError(
+                f"panel {panel_key!r} compares the method(s) {unknown}, which the run's "
+                f"method axis {method_order} does not declare; the square's letters "
+                "would not be the ones every other figure in this process prints."
+            )
+
+        insufficient = bool(panel.get("insufficient_n"))
+        note = panel.get("note")
+        values: np.ndarray | None = None
+        cells: list[list[dict[str, Any] | None]] | None = None
+        if insufficient:
+            if not note:
+                raise ValueError(
+                    f"panel {panel_key!r} is flagged insufficient_n but carries no "
+                    "'note'. The placeholder's wording is the builder's statement of "
+                    "what it found, and this renderer does not author one."
+                )
+            logger.warning(
+                "method pair-significance panel %r has insufficient n (n=%s complete "
+                "model(s)); rendering placeholder: %s",
+                panel_key, panel.get("n_models"), note,
+            )
+        else:
+            values, cells = _pair_grid(
+                panel_key, methods, pair_matrix, thresholds, ns_symbol, ladder,
+            )
+
+        label = "Overall" if panel_key == "overall" else attribute_label(panel_key)
+        title = (
+            f"{country_label(country)}: {label} -- pairwise method significance\n"
+            f"{_omnibus_note(panel.get('omnibus', {}))}  "
+            f"(n={panel.get('n_models', 0)} models)"
+        )
+        k = len(methods)
+
+        def _draw(variant: GridVariant):
+            """One publication of this panel. Only the cell text differs between them."""
+            fig, ax = plt.subplots(
+                figsize=(
+                    grow_width(k, per_item=0.85, padding=3.6, minimum=DOUBLE),
+                    grow_height(k, per_item=0.45, padding=3.9, minimum=4.8),
+                ),
+            )
+            if values is None:
+                _draw_pair_placeholder(ax, note)
+            else:
+                im = render_grid(
+                    ax, values, cells,
+                    policy=variant.policy, cmap=cmap, norm=norm,
+                    aspect="equal", interpolation="none",
+                    fontsize=variant.fontsize, linespacing=variant.linespacing,
+                )
+                categories_on_top(ax, [letters[s] for s in methods])
+                ax.set_yticks(range(k))
+                ax.set_yticklabels([letters[s] for s in methods], fontsize=TICK_LABEL)
+                # Ticked with the symbols, not with the cutoffs: the swatch a reader
+                # matches a cell to is the one whose star string that cell prints.
+                cbar = fig.colorbar(
+                    im, ax=ax, fraction=0.03, pad=0.02, ticks=range(len(ladder)),
+                )
+                cbar.ax.set_yticklabels(ladder, fontsize=TICK_LABEL)
+                cbar.set_label("pairwise significance tier", fontsize=AXIS_TITLE)
+                # The colourbar anchors its parent east, which on an equal-aspect square
+                # leaves every spare inch of the canvas in one margin. Centring spends it
+                # evenly instead, so the grid sits under the title it belongs to.
+                ax.set_anchor("C")
+            ax.set_title(title, fontsize=PANEL_TITLE, fontweight="bold", pad=30)
+            # The key travels inside the graphic, in the strip `caption_block` reserves
+            # within the canvas -- PLOS and Springer both require it there.
+            caption_block(
+                fig,
+                "\n".join([
+                    method_key, star_key, variant.cell_clause, sign_note, state_note,
+                ]),
+                fontsize=ANNOTATION,
+            )
+            fit_to_page(fig)
+            return fig
+
+        # One publication per variant, enumerated rather than named: the canonical
+        # (unsuffixed) file is the camera-ready one.
+        for suffix, variant in variant_suffixes(GRID_VARIANTS):
+            written.append(
+                save_figure(_draw(variant), out_dir / f"{panel_key}{suffix}.png")
+            )
+
+    return written

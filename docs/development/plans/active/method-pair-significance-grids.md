@@ -81,7 +81,7 @@ and it is currently unanswerable from any published figure.
       or a missing file, and logs a warning.
 - [ ] The method key (`labels.method_key_lines`) is drawn inside the graphic, not deferred to
       a caption.
-- [ ] `grep -n "alpha=" src/population_synthetic/analysis/method_significance/charts.py`
+- [x] `grep -n "alpha=" src/population_synthetic/analysis/method_significance/charts.py`
       returns no artist call.
 - [ ] `pytest tests/` passes, including new tests for the policy, the palette helper, and the
       variant substitutability of the new grid family.
@@ -294,19 +294,19 @@ plot_method_pair_significance(result, out_dir) -> list[Path]
 ### Phase 3: The grid renderer
 **Goal:** One figure per attribute per variant, house-compliant, budget-clean.
 
-- [ ] 3.1 — Declare `GRID_VARIANT_CLEAN` / `GRID_VARIANT_WITH_COUNTS` / `GRID_VARIANTS` in
+- [x] 3.1 — Declare `GRID_VARIANT_CLEAN` / `GRID_VARIANT_WITH_COUNTS` / `GRID_VARIANTS` in
       `method_significance/charts.py`.
-- [ ] 3.2 — Implement `plot_method_pair_significance(result, out_dir) -> list[Path]`,
+- [x] 3.2 — Implement `plot_method_pair_significance(result, out_dir) -> list[Path]`,
       `@house_style`, matplotlib imported inside the function.
-- [ ] 3.3 — Blank the diagonal (`np.nan` value **and** `None` cell); render untested
+- [x] 3.3 — Blank the diagonal (`np.nan` value **and** `None` cell); render untested
       off-diagonal pairs with the policy's `absent_text` over the `set_bad` fill.
-- [ ] 3.4 — Render an `insufficient_n` panel as a labelled placeholder with the panel's own
+- [x] 3.4 — Render an `insufficient_n` panel as a labelled placeholder with the panel's own
       `note` string read from the block, and log a warning. Never author the wording in the
       chart.
-- [ ] 3.5 — Build the discrete colourbar, ticked with the star symbols read from config.
-- [ ] 3.6 — Draw the in-figure key: `method_key_lines`, the star definitions
+- [x] 3.5 — Build the discrete colourbar, ticked with the star symbols read from config.
+- [x] 3.6 — Draw the in-figure key: `method_key_lines`, the star definitions
       (`_star_key_text`), and the sign convention.
-- [ ] 3.7 — `fit_to_page(fig)` before `save_figure`; confirm no budget breach at `k = 5` and at
+- [x] 3.7 — `fit_to_page(fig)` before `save_figure`; confirm no budget breach at `k = 5` and at
       `k = 10` (both strategy versions live).
 
 **Files Modified:**
@@ -368,14 +368,14 @@ plot_method_pair_significance(result, out_dir) -> list[Path]
 
 ### Integration Tests
 
-- [ ] `plot_method_pair_significance` on a fixture `result` writes, for each panel and variant,
+- [x] `plot_method_pair_significance` on a fixture `result` writes, for each panel and variant,
       all three of `.png`/`.svg`/`.eps`, and returns exactly those PNG paths.
-- [ ] Variant substitutability, asserted the way `tests/test_grids.py` already does for the
+- [x] Variant substitutability, asserted the way `tests/test_grids.py` already does for the
       existing families: both variants share canvas, extent, norm, painted array, ticks and
       marking count; only cell text differs.
-- [ ] A fixture with one `insufficient_n` panel still emits that panel's files, carrying the
+- [x] A fixture with one `insufficient_n` panel still emits that panel's files, carrying the
       placeholder text from the block's own `note`.
-- [ ] An untested pair renders text distinct from an `ns` pair (guards the "distinguish zero
+- [x] An untested pair renders text distinct from an `ns` pair (guards the "distinguish zero
       from absent" failure).
 
 ### Manual Verification
@@ -387,11 +387,11 @@ plot_method_pair_significance(result, out_dir) -> list[Path]
 
 ### Edge Cases
 
-- [ ] `k = 2` methods — a 2×2 grid with one real cell per triangle.
-- [ ] `k = 10` methods (both strategy versions live) — letters render as `A1/A2/…`, and the
+- [x] `k = 2` methods — a 2×2 grid with one real cell per triangle.
+- [x] `k = 10` methods (both strategy versions live) — letters render as `A1/A2/…`, and the
       canvas stays inside `FULL × MAX_HEIGHT`.
-- [ ] An attribute where every pair is `ns` — the grid is uniformly pale but not blank.
-- [ ] A `p_holm` of exactly a boundary value (`0.05`) — lands in the tier `_p_to_stars` assigns,
+- [x] An attribute where every pair is `ns` — the grid is uniformly pale but not blank.
+- [x] A `p_holm` of exactly a boundary value (`0.05`) — lands in the tier `_p_to_stars` assigns,
       and the `BoundaryNorm` bin agrees with it.
 
 ---

@@ -644,7 +644,9 @@ def _assert_clean_drops_only_the_count_line(counted, clean, label: str) -> None:
     assert set(counted_texts) == set(clean_texts), label
     dropped = 0
     for position, text in counted_texts.items():
-        head, _, tail = text.partition("\n")
+        # The count is the LAST line of a cell, whatever precedes it: one family prints
+        # it under a bare value, another under a value and the symbol qualifying it.
+        head, _, tail = text.rpartition("\n")
         if clean_texts[position] == text:
             # A cell the caller wrote rather than the policy -- "not generated", the real
             # population's own band -- reads the same on both, which is the point: only
@@ -822,6 +824,30 @@ def _variant_pairs():
         )):
             yield f"generation_metadata::metric_heatmap[{index}]", counted, clean
 
+        # The method x method pairwise-significance square. Built from the serialised
+        # block rather than from a fitted grid: the renderer is a pure consumer of it,
+        # and that block is the only place a test can state which pairs were never
+        # tested -- the cell state this family exists to keep distinct.
+        import population_synthetic.analysis.method_significance.charts as pair_mod
+        from tests import _method_significance_fixtures as ms_fixtures
+
+        pair_methods = ms_fixtures.FIVE_METHODS
+        pair_result = ms_fixtures.result(pair_methods, {
+            "overall": ms_fixtures.panel(
+                pair_methods, ms_fixtures.significant_pairs(pair_methods),
+            ),
+        })
+        pair_figures = _capture_saved(
+            pair_mod,
+            lambda: pair_mod.plot_method_pair_significance(pair_result, "unused"),
+        )
+        pair_by_variant = dict(zip(pair_mod.GRID_VARIANTS, pair_figures))
+        yield (
+            "method_significance::plot_method_pair_significance",
+            pair_by_variant[pair_mod.GRID_VARIANT_WITH_COUNTS.name],
+            pair_by_variant[pair_mod.GRID_VARIANT_CLEAN.name],
+        )
+
 
 @pytest.fixture(scope="module")
 def variant_pairs():
@@ -839,6 +865,7 @@ def test_every_grid_family_publishes_a_variant_pair(variant_pairs) -> None:
     families = {label.split("::")[0] for label, _counted, _clean in variant_pairs}
     assert families == {
         "validation_attrition", "model_ranking", "realism_ranking", "generation_metadata",
+        "method_significance",
     }
 
 
@@ -857,6 +884,7 @@ def test_the_clean_variant_of_every_grid_drops_only_the_count_line(variant_pairs
 def _variant_maps():
     """Every family's variant map, as ``(label, map)``."""
     import population_synthetic.analysis.generation_metadata.charts as gm_mod
+    import population_synthetic.analysis.method_significance.charts as pair_mod
     import population_synthetic.analysis.model_ranking.charts as ranking_mod
     import population_synthetic.analysis.realism_ranking.charts as realism_mod
     import population_synthetic.analysis.validation_attrition.charts as attrition_mod
@@ -867,11 +895,12 @@ def _variant_maps():
         ("realism_ranking::rate", realism_mod.RATE_GRID_VARIANTS),
         ("realism_ranking::typicality", realism_mod.TYPICALITY_GRID_VARIANTS),
         ("generation_metadata", gm_mod.GRID_VARIANTS),
+        ("method_significance", pair_mod.GRID_VARIANTS),
     ]
 
 
 def test_every_family_names_the_canonical_variant_the_same_way() -> None:
-    """One naming rule across five families, so no driver invents a sixth."""
+    """One naming rule across every family, so no driver invents one of its own."""
     from population_synthetic.analysis.utils.grid_variants import (
         CANONICAL_VARIANT,
         COUNTED_VARIANT,
