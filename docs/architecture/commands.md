@@ -105,7 +105,11 @@ python scripts/analyze/rank_models.py --country swedish --per-attribute-charts
 # category plus the pooled Overall panel, in the layer's two grid variants ({panel}.png/.svg/.eps
 # and {panel}_with_counts.*): cell fill is the pair's Holm-corrected significance tier, cell text the
 # signed row-minus-column TV difference -- so it shows all k(k-1)/2 pairs, not only the ones the
-# bracket figure's configured pairs_mode draws.
+# bracket figure's configured pairs_mode draws. {country}_reference_method_gap.png/.svg/.eps (+ its
+# _with_counts sibling) is the summary of those squares: one grid for the whole run, rows = the
+# simpler methods, columns = every analysed category + Overall, cell = the most complex method
+# (derived from the method axis, never named in code) against that row's method. Same fill, but the
+# text is REFERENCE minus row -- the opposite orientation, stated in that figure's own key.
 python scripts/analyze/analyze_method_significance.py --country swedish
 
 # Extract demographic profiles from a pipeline output tree into a single population file

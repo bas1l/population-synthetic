@@ -848,6 +848,26 @@ def _variant_pairs():
             pair_by_variant[pair_mod.GRID_VARIANT_CLEAN.name],
         )
 
+        # The reference-method gap grid, from the same block: one figure for the whole
+        # run, and the one family in the layer whose cell text is oriented the other way
+        # round. Substitutability is a property of the pair either way.
+        gap_result = ms_fixtures.result(pair_methods, {
+            attr: ms_fixtures.panel(
+                pair_methods, ms_fixtures.significant_pairs(pair_methods),
+            )
+            for attr in (*ms_fixtures.ATTRIBUTES, "overall")
+        })
+        gap_figures = _capture_saved(
+            pair_mod,
+            lambda: pair_mod.plot_reference_method_gap(gap_result, "unused.png"),
+        )
+        gap_by_variant = dict(zip(pair_mod.REFERENCE_GRID_VARIANTS, gap_figures))
+        yield (
+            "method_significance::plot_reference_method_gap",
+            gap_by_variant[pair_mod.REFERENCE_GRID_VARIANT_WITH_COUNTS.name],
+            gap_by_variant[pair_mod.REFERENCE_GRID_VARIANT_CLEAN.name],
+        )
+
 
 @pytest.fixture(scope="module")
 def variant_pairs():
@@ -896,6 +916,7 @@ def _variant_maps():
         ("realism_ranking::typicality", realism_mod.TYPICALITY_GRID_VARIANTS),
         ("generation_metadata", gm_mod.GRID_VARIANTS),
         ("method_significance", pair_mod.GRID_VARIANTS),
+        ("method_significance::reference_gap", pair_mod.REFERENCE_GRID_VARIANTS),
     ]
 
 

@@ -21,7 +21,14 @@ records that fed it) and renders, per country:
   ``overall``) -- the square view of the same pairwise comparisons the bracket
   figure draws only a configured subset of. Fill = the significance tier, text =
   the signed row-minus-column difference, both read from the panel's own
-  ``pair_matrix`` block.
+  ``pair_matrix`` block;
+* a **reference-method gap grid** -- one figure for the whole run, rows = the
+  simpler methods, columns = every analysed category plus ``overall``, cell = the
+  most complex method (the last of ``metadata["method_order"]``, derived rather
+  than named) against that row's method on that category. Same fill, but the text
+  is **reference minus row**: this figure asks what the hardest method gains, so
+  it reads the opposite index pair of the same oriented ``pair_matrix`` and says
+  so in its key.
 
 Faithful-visualisation rules (per the statistical-software guide, §7): the raw
 data is shown, not silently dropped; absent cells are drawn as gaps (masked), not
@@ -484,26 +491,48 @@ _OMNIBUS_LABELS = {
 }
 
 
+def _omnibus_test_label(omnibus: dict[str, Any]) -> str:
+    """The display name of the omnibus test the builder actually ran on a panel.
+
+    The name comes from the panel, never from a literal at the call site: the builder
+    decides which omnibus it ran, and a hardcoded label silently mislabels the number the
+    moment that changes. It did -- a panel title read "Friedman" while showing a
+    repeated-measures ANOVA p, which is a wrong name on a right number. An unknown id
+    falls through to the raw id rather than to a wrong name.
+
+    Split out of :func:`_omnibus_note` so a figure that names the test once for a whole
+    row of panels resolves it the same way as one that prints it per panel.
+    """
+    return _OMNIBUS_LABELS.get(omnibus.get("test"), omnibus.get("test") or "omnibus")
+
+
+def _omnibus_p_text(omnibus: dict[str, Any]) -> str:
+    """The p half of a panel's omnibus line: its p and, where it has one, its BH sibling.
+
+    Without the test name, for a figure whose columns are all the same test and which
+    therefore names it once rather than fifteen times -- the same ink economy the
+    ``clean`` variant applies to a constant count. Reads the panel; derives no p-value,
+    no correction and no verdict.
+    """
+    p = omnibus.get("p")
+    if p is None:
+        return "n/a"
+    p_bh = omnibus.get("p_bh")
+    if p_bh is not None:
+        return f"p={p:.3g} (BH {p_bh:.3g})"
+    return f"p={p:.3g}"
+
+
 def _omnibus_note(omnibus: dict[str, Any]) -> str:
     """The panel's omnibus line: the test the builder ran, its p, and its BH sibling.
 
-    The test NAME comes from the panel, never from a literal at the call site: the
-    builder decides which omnibus it ran, and a hardcoded label silently mislabels the
-    number the moment that changes. It did -- a panel title read "Friedman" while
-    showing a repeated-measures ANOVA p, which is a wrong name on a right number.
-
-    Shared by every figure in this module that prints the line, so two figures drawn
-    from the same panel can never report it differently. Reads the panel; derives no
-    p-value, no correction and no verdict.
+    Shared by every figure in this module that prints the line whole, so two figures
+    drawn from the same panel can never report it differently.
     """
-    label = _OMNIBUS_LABELS.get(omnibus.get("test"), omnibus.get("test") or "omnibus")
-    p = omnibus.get("p")
-    if p is None:
+    label = _omnibus_test_label(omnibus)
+    if omnibus.get("p") is None:
         return f"{label}: n/a"
-    p_bh = omnibus.get("p_bh")
-    if p_bh is not None:
-        return f"{label} p={p:.3g} (BH {p_bh:.3g})"
-    return f"{label} p={p:.3g}"
+    return f"{label} {_omnibus_p_text(omnibus)}"
 
 
 # Method-comparison figure (bars + points + significance brackets/stars)
@@ -1191,4 +1220,338 @@ def plot_method_pair_significance(
                 save_figure(_draw(variant), out_dir / f"{panel_key}{suffix}.png")
             )
 
+    return written
+
+
+# ------------------------------------------------------------------
+# The reference-method gap grid (methods x categories, one square per run)
+# ------------------------------------------------------------------
+
+#: The camera-ready variant. Its cells print the signed gap and the symbol qualifying it
+#: at the house floor size rather than a step above it: this grid is bound by its column
+#: WIDTH -- fifteen categories across the printable page -- and not by the line the clean
+#: variant drops, so the freed vertical room buys nothing here and a wider string would
+#: collide with its neighbour.
+REFERENCE_GRID_VARIANT_CLEAN = GridVariant(
+    name=CANONICAL_VARIANT,
+    policy=SignedValueWithStarsPolicy(value_key="value", stars_key="stars"),
+    cell_clause=(
+        "Cell: the reference method's mean TV-similarity minus the row method's on that "
+        "category, over the models that entered that category's test, with the "
+        "significance symbol of the Holm-corrected pairwise test beneath it."
+    ),
+    fontsize=ANNOTATION,
+    linespacing=None,
+)
+
+#: The counted sibling, written to ``..._with_counts``: the same two lines over the
+#: number of paired model blocks the test rested on.
+REFERENCE_GRID_VARIANT_WITH_COUNTS = GridVariant(
+    name=COUNTED_VARIANT,
+    policy=SignedValueWithStarsPolicy(
+        value_key="value", stars_key="stars", count_key="n",
+    ),
+    cell_clause=(
+        "Cell: the reference method's mean TV-similarity minus the row method's on that "
+        "category, with the significance symbol of the Holm-corrected pairwise test "
+        "beneath it, printed over the number of paired model blocks that test used."
+    ),
+    fontsize=ANNOTATION,
+    linespacing=1.35,
+)
+
+#: This family's own variant map. It is deliberately not the per-category squares' map
+#: above: the two families differ in the size and the spacing their cells can carry, so
+#: sharing one record would let a tuning made for a five-column square silently reset a
+#: fifteen-column grid.
+REFERENCE_GRID_VARIANTS: dict[str, GridVariant] = variant_map(
+    REFERENCE_GRID_VARIANT_CLEAN, REFERENCE_GRID_VARIANT_WITH_COUNTS,
+)
+
+
+def _reference_gap_grid(
+    reference: str,
+    rows: list[str],
+    columns: list[str],
+    panels: dict[str, Any],
+    thresholds: list[dict[str, Any]],
+    ns_symbol: str,
+    ladder: list[str],
+) -> tuple[np.ndarray, list[list[dict[str, Any]]]]:
+    """The painted tier matrix and the cell records for the reference-method grid.
+
+    Cell ``(i, j)`` is the comparison of *reference* against ``rows[i]`` inside the panel
+    ``columns[j]``, read at ``(reference, row)`` of that panel's ``pair_matrix`` -- the
+    index order that yields **reference minus row** directly. Nothing is negated,
+    re-signed or re-derived here; the orientation is the builder's, and this function
+    only chooses which of the two orders it already stores to read.
+
+    There is no diagonal in this grid -- rows and columns are different axes -- so every
+    cell carries a record. A pair the panel never tested takes ``np.nan`` with an
+    all-``None`` record, which paints the colormap's unpainted fill and prints the
+    policy's ``absent_text``: painting it at the palest tier instead would present "never
+    tested" as "tested, not significant". A panel that tested nothing at all -- one
+    flagged ``insufficient_n`` among them -- therefore contributes an unpainted column
+    rather than a blank space.
+
+    Raises:
+        ValueError: If a pair carries a corrected p but no difference. That cell would be
+            painted at a tier while printing the mark reserved for an untested pair.
+    """
+    values = np.full((len(rows), len(columns)), np.nan)
+    cells: list[list[dict[str, Any]]] = [
+        [{"value": None, "stars": None, "n": None} for _ in columns] for _ in rows
+    ]
+    for j, panel_key in enumerate(columns):
+        pair_matrix: dict[str, Any] = panels[panel_key]["pair_matrix"]
+        index = {
+            method: position for position, method in enumerate(pair_matrix["methods"])
+        }
+        reference_at = index.get(reference)
+        if reference_at is None:
+            continue
+        for i, method in enumerate(rows):
+            row_at = index.get(method)
+            if row_at is None:
+                continue
+            p = pair_matrix["p_holm"][reference_at][row_at]
+            if p is None:
+                continue
+            difference = pair_matrix["mean_diff"][reference_at][row_at]
+            if difference is None:
+                raise ValueError(
+                    f"panel {panel_key!r}: the pair {reference!r} vs {method!r} carries "
+                    f"a corrected p of {p!r} but no mean difference. A painted cell has "
+                    "to print the value its tier qualifies; there is nothing for this "
+                    "one to print."
+                )
+            symbol = _p_to_stars(float(p), thresholds, ns_symbol)
+            values[i, j] = float(ladder.index(symbol))
+            cells[i][j] = {
+                "value": float(difference),
+                "stars": symbol,
+                "n": pair_matrix["n_blocks"][reference_at][row_at],
+            }
+    return values, cells
+
+
+@house_style
+def plot_reference_method_gap(
+    result: dict[str, Any],
+    out_path: str | Path,
+) -> list[Path]:
+    """The reference method against every simpler method, on every category at once.
+
+    The per-category squares beside this figure answer "which method pairs separate, on
+    this category" one category at a time -- fifteen files on the live Swedish axis. This
+    one answers the question the sweep was run to ask: **what does the most complex
+    method buy, and where**. Rows are the simpler methods in complexity order, columns
+    are the analysed categories with the pooled ``overall`` panel last, and each cell is
+    the reference method's comparison against that row's method inside that column's
+    panel.
+
+    **The reference method is derived, never named here.** It is the last entry of
+    ``metadata["method_order"]`` -- the most complex method under the config-resolved
+    complexity ordering -- so a run that retires a family, adds one, or splits the axis
+    across both strategy versions re-points this figure without an edit. It is labelled
+    by its letter and family phrase, which is what keeps the figure correct when the
+    letters become ``A1/A2/...``.
+
+    **Sign convention: reference minus row**, the opposite orientation from the
+    per-category squares' row-minus-column, because the question here is what the
+    reference *gains*. It is read straight out of the panel's own ``pair_matrix`` at
+    ``(reference, row)`` -- the builder stores both orders, so choosing the index pair
+    replaces the arithmetic -- and it is stated explicitly in the in-figure key, since
+    two figures in one process folder carrying opposite orientations is exactly the
+    confusion a key exists to prevent.
+
+    The fill is the tier of the Holm-corrected pairwise p, binned onto the config's own
+    star ladder. The omnibus above those pairwise tests is per column, so it travels
+    under each column heading rather than in the title, and the test that produced it is
+    named once in the key rather than fifteen times -- the same ink economy the clean
+    variant applies to a constant count. A column whose panel tested nothing -- one
+    flagged ``insufficient_n`` among them -- is unpainted and marked, never blanked, and
+    is logged with the panel's own note.
+
+    Args:
+        result: The built analysis (``builder.build_method_significance``).
+        out_path: The canonical PNG path. Each variant's suffix is appended to its stem by
+            :func:`~population_synthetic.analysis.utils.grid_variants.variant_suffixes`,
+            so the unsuffixed name is the camera-ready file.
+
+    Returns:
+        The written PNG paths (each with its SVG and EPS siblings), in the variant map's
+        own order. Empty when the block carries no panels, when the metadata declares no
+        method axis, or when that axis holds a single method (there is then no simpler
+        method for the reference to be compared against).
+    """
+    block: dict[str, Any] = result.get("method_comparison") or {}
+    panels: dict[str, Any] = block.get("panels") or {}
+    if not panels:
+        return []
+
+    metadata: dict[str, Any] = result.get("metadata", {})
+    attributes: list[str] = metadata.get("attributes") or []
+    columns = [attr for attr in attributes if attr in panels]
+    if "overall" in panels:
+        columns.append("overall")
+    if not columns:
+        return []
+
+    method_order: list[str] = metadata.get("method_order") or []
+    if len(method_order) < 2:
+        return []
+    # The most complex method under the resolved complexity ordering, which is the order
+    # the metadata carries. Deriving it is what keeps the figure pointed at whatever the
+    # run's hardest method is, rather than at a letter frozen into this module.
+    reference = method_order[-1]
+    rows = [method for method in method_order if method != reference]
+
+    letters = method_letters(method_order)
+    # Both accessors walk the same complexity-ordered assignment list, so zipping the
+    # letter map's keys onto the key lines pairs each method with its own line without
+    # this module having to know how a key line is punctuated.
+    key_line_of = dict(zip(letters, method_key_lines(method_order)))
+    method_key = "Methods:  " + "   ".join(key_line_of.values())
+
+    thresholds = block.get("star_thresholds")
+    ns_symbol = block.get("ns_symbol")
+    if not thresholds or not ns_symbol:
+        cfg = load_comparison_config()
+        thresholds = cfg["star_thresholds"]
+        ns_symbol = cfg["ns_symbol"]
+    ladder = _star_ladder(thresholds, ns_symbol)
+    star_key = "Significance:  " + _star_key_text(thresholds, ns_symbol, include_ns=True)
+
+    for panel_key in columns:
+        unknown = [
+            method for method in panels[panel_key]["pair_matrix"]["methods"]
+            if method not in letters
+        ]
+        if unknown:
+            raise ValueError(
+                f"panel {panel_key!r} compares the method(s) {unknown}, which the run's "
+                f"method axis {method_order} does not declare; a column of this grid "
+                "would silently omit a comparison the analysis made."
+            )
+
+    # One test name for the whole row of columns, or none: a single key line cannot name
+    # two different omnibus tests, and guessing which one a column ran is the
+    # wrong-name-on-a-right-number failure `_omnibus_test_label` exists to prevent.
+    omnibus_labels = {
+        _omnibus_test_label(panels[panel_key].get("omnibus", {}))
+        for panel_key in columns
+    }
+    if len(omnibus_labels) > 1:
+        raise ValueError(
+            f"the panels ran different omnibus tests ({sorted(omnibus_labels)}), so one "
+            "column-heading key line cannot name the test behind the p values printed "
+            "under them."
+        )
+    omnibus_label = omnibus_labels.pop()
+
+    values, cells = _reference_gap_grid(
+        reference, rows, columns, panels, thresholds, ns_symbol, ladder,
+    )
+    for j, panel_key in enumerate(columns):
+        if bool(np.isnan(values[:, j]).all()):
+            logger.warning(
+                "reference-method gap: category %r contributes no tested comparison "
+                "(insufficient_n=%s, n=%s model(s)); its column is drawn unpainted and "
+                "marked. Panel note: %s",
+                panel_key, bool(panels[panel_key].get("insufficient_n")),
+                panels[panel_key].get("n_models"),
+                panels[panel_key].get("note") or "none recorded",
+            )
+
+    absent_mark = REFERENCE_GRID_VARIANT_CLEAN.policy.absent_text
+    reference_letter = letters[reference]
+    sign_note = (
+        f"Every cell is the REFERENCE method {reference_letter} minus the row method, "
+        "which is the opposite orientation from the per-category squares beside this "
+        f"figure. A positive cell means method {reference_letter} scored closer to the "
+        "real population than that row's method on that category; a negative one, the "
+        "reverse."
+    )
+    column_note = (
+        "Columns are the analysed categories, with the pooled Overall panel last. Under "
+        f"each name is that panel's {omnibus_label} p across all methods -- the omnibus "
+        "above these pairwise tests -- with the BH-corrected value in brackets where the "
+        "panel carries one."
+    )
+    state_note = (
+        f"An unpainted cell printing {absent_mark} is a comparison that was never made: "
+        "the category's panel was degenerate, or the pair carried too few paired blocks. "
+        f"That is not the same finding as a pair tested and reported {ns_symbol}, the "
+        "palest painted tier."
+    )
+    title = (
+        f"{country_label(metadata.get('country', ''))}: reference method "
+        f"{key_line_of[reference]} against every simpler method, by category"
+    )
+    column_labels = [
+        ("Overall" if panel_key == "overall" else attribute_label(panel_key))
+        + "\n"
+        + _omnibus_p_text(panels[panel_key].get("omnibus", {}))
+        for panel_key in columns
+    ]
+
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    # One discrete level per rung of the config's ladder, and a norm whose bins are those
+    # rungs -- the same construction the per-category squares paint on, so one cell reads
+    # the same in both figures.
+    cmap = heatmap_levels(len(ladder))
+    norm = mcolors.BoundaryNorm(np.arange(len(ladder) + 1) - 0.5, len(ladder))
+
+    def _draw(variant: GridVariant):
+        """One publication of this grid. Only the cell text differs between them."""
+        fig, ax = plt.subplots(
+            figsize=(
+                grow_width(len(columns), per_item=0.8, padding=3.0, minimum=FULL),
+                grow_height(len(rows), per_item=0.6, padding=4.2, minimum=5.0),
+            ),
+        )
+        im = render_grid(
+            ax, values, cells,
+            policy=variant.policy, cmap=cmap, norm=norm,
+            aspect="auto", interpolation="none",
+            fontsize=variant.fontsize, linespacing=variant.linespacing,
+        )
+        categories_on_top(ax, column_labels)
+        ax.set_yticks(range(len(rows)))
+        ax.set_yticklabels(
+            [letters[method] for method in rows], fontsize=TICK_LABEL_LARGE,
+        )
+        ax.set_ylabel("compared against method", fontsize=AXIS_TITLE)
+        # Ticked with the symbols, not with the cutoffs: the swatch a reader matches a
+        # cell to is the one whose star string that cell prints.
+        cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02, ticks=range(len(ladder)))
+        cbar.ax.set_yticklabels(ladder, fontsize=TICK_LABEL)
+        cbar.set_label("pairwise significance tier", fontsize=AXIS_TITLE)
+        ax.set_title(title, fontsize=PANEL_TITLE, fontweight="bold", pad=30)
+        # The key travels inside the graphic, in the strip `caption_block` reserves within
+        # the canvas -- PLOS and Springer both require it there.
+        caption_block(
+            fig,
+            "\n".join([
+                method_key, star_key, variant.cell_clause,
+                sign_note, column_note, state_note,
+            ]),
+            fontsize=ANNOTATION,
+        )
+        fit_to_page(fig)
+        return fig
+
+    out_path = Path(out_path)
+    written: list[Path] = []
+    # One publication per variant, enumerated rather than named: the canonical
+    # (unsuffixed) file is the camera-ready one.
+    for suffix, variant in variant_suffixes(REFERENCE_GRID_VARIANTS):
+        written.append(
+            save_figure(
+                _draw(variant), out_path.with_name(f"{out_path.stem}{suffix}.png"),
+            )
+        )
     return written

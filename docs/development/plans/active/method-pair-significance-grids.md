@@ -346,6 +346,86 @@ plot_method_pair_significance(result, out_dir) -> list[Path]
 
 **Dependencies:** Phase 4
 
+### Phase 6: The reference-method gap grid
+**Goal:** One figure summarising the whole run — the most complex method against every
+simpler one, on every analysed category at once — so the question "what does the hardest
+method buy, and where?" is answerable from a single published graphic instead of from
+fifteen squares read side by side.
+
+The squares of Phases 1–5 are per category and show every pair. This is their transpose
+and their summary: rows are the non-reference methods in complexity order, columns are the
+analysed categories with the pooled `overall` panel last, and each cell is the reference
+method's comparison against that row's method inside that column's panel. It is a pure
+consumer of the same `pair_matrix` block, adds no statistic, and reads the **other index
+pair** of it rather than negating anything.
+
+Two decisions are the family's own and are recorded here:
+
+- **The reference is derived, never named.** `metadata["method_order"][-1]` — the most
+  complex method under the config-resolved complexity ordering — labelled by its letter
+  and family phrase, so a retired family, an added one, or a live version split re-points
+  the figure with no edit and the letters become `A1/A2/…` on their own.
+- **The sign is reference minus row**, the opposite orientation from the squares'
+  row-minus-column, because the question is what the reference *gains*. The convention
+  keeps its single home in `builder._method_panel`; the renderer only chooses which of the
+  two stored orders to read. Because two figures in one folder then carry opposite
+  orientations, this one's key names its orientation explicitly.
+- **The omnibus is per column, not per figure**, so it travels under each column heading
+  rather than in the title, and the test that produced it is named once in the key rather
+  than fifteen times — the same ink economy the `clean` variant applies to a constant
+  count. `_omnibus_note` was split into `_omnibus_test_label` + `_omnibus_p_text` so the
+  test name still has exactly one home; `_omnibus_note`'s own output is unchanged.
+
+- [x] 6.1 — Split `_omnibus_note` into `_omnibus_test_label` / `_omnibus_p_text` /
+      `_omnibus_note`, preserving the existing output byte for byte.
+- [x] 6.2 — Declare `REFERENCE_GRID_VARIANT_CLEAN` / `_WITH_COUNTS` /
+      `REFERENCE_GRID_VARIANTS` — a **new** map, not the squares', because this family is
+      bound by column width rather than by the dropped line and both its variants
+      therefore sit at the house floor size.
+- [x] 6.3 — Implement `_reference_gap_grid`: read `pair_matrix` at `(reference, row)`;
+      untested comparisons take `np.nan` with an all-`None` record; no diagonal.
+- [x] 6.4 — Implement `plot_reference_method_gap(result, out_path) -> list[Path]`,
+      `@house_style`, matplotlib imported inside, enumerating `variant_suffixes`.
+- [x] 6.5 — An `insufficient_n` category keeps its column, unpainted and marked, and is
+      logged with the panel's own `note` — never blanked, never re-worded in the chart.
+- [x] 6.6 — In-figure key: method key, star definitions, the cell clause, the
+      reference-minus-row convention named explicitly, the column headings' omnibus, and
+      what an unpainted cell means.
+- [x] 6.7 — Size with `grow_width`/`grow_height` against `FULL`/`MAX_HEIGHT`, then
+      `fit_to_page` before `save_figure`; verified at the live 15 × 4 shape and at the
+      version-split 15 × 9 one.
+- [x] 6.8 — Call it from the `if not args.no_charts:` block of
+      `scripts/analyze/analyze_method_significance.py` and extend the script's output
+      inventory.
+- [x] 6.9 — One roster entry, `n: 28`, `name: reference_method_gap`, for the canonical
+      (unsuffixed) stem. 28 is the next free number, taken for the same reason 27 was:
+      every number below it is either claimed or is a gap the manuscript's own numbering
+      has reserved. Its `as_generated/` basename is `{country}_reference_method_gap`,
+      which collides with nothing (the squares' basenames are bare category names).
+- [x] 6.10 — Tests in `tests/test_method_significance_charts.py`: the three formats per
+      variant and exactly those PNGs returned; the reference resolved from `method_order`
+      at two axis widths; the printed sign asserted against the panel's own `means`;
+      untested distinct from `ns`; the `insufficient_n` column; the budget at 4 and 9
+      rows over the country's own 15-column axis; a single-method axis drawing nothing;
+      and a painted tier with no difference raising. The family is also registered in
+      `tests/test_grids.py`, so it is held to the layer-wide substitutability rules.
+- [x] 6.11 — Docs: the new family and its inverted orientation in
+      `figure-conventions.md`, `commands.md` and `sub-packages.md`.
+- [x] 6.12 — Generate on the live Swedish axis (`--country swedish_02 --force`) and
+      inspect both variants.
+
+**Files Modified:**
+- `src/population_synthetic/analysis/method_significance/charts.py`
+- `scripts/analyze/analyze_method_significance.py`
+- `config/analysis/figure_selection.yaml`
+- `tests/_method_significance_fixtures.py`, `tests/test_method_significance_charts.py`,
+  `tests/test_grids.py`, `tests/test_figure_selection.py`
+- `docs/development/figure-conventions.md`, `docs/architecture/commands.md`,
+  `docs/architecture/sub-packages.md`
+
+**Dependencies:** Phases 1–5 (the `pair_matrix` block, the discrete levels, the policy and
+the star ladder are all reused unchanged)
+
 ---
 
 ## Testing Plan

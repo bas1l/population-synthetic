@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from population_synthetic.analysis.method_significance.builder import load_comparison_config
+from population_synthetic.analysis.model_ranking.loader import scheme_attributes
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 
 #: The five v1 families in the config-derived complexity order -- the live Sweden axis.
@@ -46,6 +47,13 @@ TEN_METHODS: list[str] = strategy_complexity_order([
 
 #: Two attributes, both carrying a canonical display label.
 ATTRIBUTES: list[str] = ["education_level", "housing_tenure"]
+
+#: The live Swedish analysed axis, read from the same config accessor a run resolves it
+#: through rather than transcribed: 14 categories, which with the pooled Overall panel is
+#: the 15-column shape the reference-method grid is actually drawn at. A hardcoded copy
+#: would keep passing after the analysed axis moved, which is the one thing a canvas
+#: budget test must not do.
+LIVE_ATTRIBUTES: list[str] = scheme_attributes("swedish_02")
 
 
 def star_thresholds() -> list[dict[str, Any]]:
@@ -100,17 +108,23 @@ def panel(
     insufficient_n: bool = False,
     note: str | None = None,
     omnibus_p: float | None = 1e-5,
+    means: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """One serialised comparison panel, carrying only what the grid reads.
 
     *note* is the builder's own wording for a panel it recorded but did not chart; the
     renderer prints it verbatim and authors none of its own, so a test that wants the
     placeholder supplies both it and *insufficient_n*.
+
+    *means* is the panel's per-method mean TV-similarity, which the grids do not read but
+    which a test asserting the printed sign checks the cell against: the difference in a
+    cell has to be one subtraction of these two numbers and not the other.
     """
     return {
         "n_models": n_models,
         "insufficient_n": insufficient_n,
         "note": note,
+        "means": dict(means) if means is not None else {},
         "omnibus": {"test": "rm_anova", "p": omnibus_p, "p_bh": None},
         "pair_matrix": pair_matrix(methods, pairs),
     }
@@ -153,6 +167,26 @@ def significant_pairs(
     """
     return {
         (i, j): (p, step * (j - i), n_blocks)
+        for i in range(len(methods))
+        for j in range(i + 1, len(methods))
+    }
+
+
+def pairs_from_means(
+    methods: Sequence[str],
+    means: Mapping[str, float],
+    *,
+    p: float = 1e-5,
+    n_blocks: int = 6,
+) -> dict[tuple[int, int], tuple[float, float, int]]:
+    """Every pair tested, each difference taken from *means* in the builder's own order.
+
+    ``mean_diff[i][j]`` is ``means[methods[i]] - means[methods[j]]`` -- row minus column,
+    the convention ``builder._method_panel`` fixes. Pairing this with the panel's *means*
+    is what lets a test check that a renderer printed the subtraction it claims to.
+    """
+    return {
+        (i, j): (p, float(means[methods[i]]) - float(means[methods[j]]), n_blocks)
         for i in range(len(methods))
         for j in range(i + 1, len(methods))
     }

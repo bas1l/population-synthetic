@@ -12,6 +12,7 @@ scikit-posthocs).
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -29,10 +30,16 @@ from population_synthetic.analysis.method_significance.charts import (  # noqa: 
     plot_factor_dominance,
     plot_method_pair_significance,
     plot_method_trends,
+    plot_reference_method_gap,
     plot_slope_heatmap,
 )
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from population_synthetic.analysis.utils.grid_variants import variant_suffixes  # noqa: E402
+from population_synthetic.analysis.utils.labels import (  # noqa: E402
+    attribute_label,
+    method_key_lines,
+    method_letters,
+)
 from tests import _method_significance_fixtures as ms_fixtures  # noqa: E402
 from tests._performance_fixtures import make_combo  # noqa: E402
 
@@ -334,3 +341,251 @@ def test_a_tested_pair_with_no_difference_to_print_raises(tmp_path):
 
     with pytest.raises(ValueError, match="no mean difference"):
         plot_method_pair_significance(result, tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# the reference-method gap grid (methods x categories, one grid per run)       #
+# --------------------------------------------------------------------------- #
+#
+# Same source as the squares above -- the serialised block -- for the same reason: only
+# a hand-built block can state which comparisons were never made. What is new here is the
+# orientation, which is the opposite of the squares', so the sign is asserted against the
+# panel's own per-method means rather than against a number restated in the test.
+
+_GAP_STEM = "swedish_reference_method_gap.png"
+
+
+def _draw_gap(result, tmp_path, stem: str = _GAP_STEM):
+    """Render the gap grid and return ``(paths, figures)``, with the writer intercepted."""
+    captured: list = []
+    original = charts_module.save_figure
+
+    def spy(fig, path, **kwargs):
+        captured.append(fig)
+        return original(fig, path, **kwargs)
+
+    charts_module.save_figure = spy
+    try:
+        paths = plot_reference_method_gap(result, tmp_path / stem)
+    finally:
+        charts_module.save_figure = original
+    return paths, captured
+
+
+def _gap_result(methods, pairs, *, attributes=None, country="swedish", **panel_kwargs):
+    """A result whose every column carries the same panel, plus the pooled Overall one."""
+    columns = list(attributes if attributes is not None else ms_fixtures.ATTRIBUTES)
+    panels = {
+        attr: ms_fixtures.panel(methods, pairs, **panel_kwargs) for attr in columns
+    }
+    panels["overall"] = ms_fixtures.panel(methods, pairs, **panel_kwargs)
+    return ms_fixtures.result(methods, panels, country=country)
+
+
+def test_the_gap_grid_writes_all_three_formats_for_every_variant(tmp_path):
+    """One grid for the whole run, published twice, in the three formats."""
+    methods = ms_fixtures.FIVE_METHODS
+    result = _gap_result(methods, ms_fixtures.significant_pairs(methods))
+
+    paths = plot_reference_method_gap(result, tmp_path / _GAP_STEM)
+
+    expected = [
+        tmp_path / f"{Path(_GAP_STEM).stem}{suffix}.png"
+        for suffix, _variant in variant_suffixes(charts_module.REFERENCE_GRID_VARIANTS)
+    ]
+    assert paths == expected
+    for path in expected:
+        for suffix in (".png", ".svg", ".eps"):
+            assert path.with_suffix(suffix).is_file()
+    assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
+        f"{path.stem}{suffix}" for path in expected for suffix in (".png", ".svg", ".eps")
+    )
+
+
+@pytest.mark.parametrize("methods", [
+    pytest.param(ms_fixtures.FIVE_METHODS, id="five"),
+    pytest.param(ms_fixtures.FIVE_METHODS[:3], id="three"),
+])
+def test_the_reference_method_is_read_off_the_method_order(tmp_path, methods):
+    """The reference is the axis's last method, never a letter frozen into the module.
+
+    Run at two axis widths whose last methods are different families: a hardcoded
+    reference would survive one of them and fail the other.
+    """
+    result = _gap_result(methods, ms_fixtures.significant_pairs(methods))
+
+    _paths, figures = _draw_gap(result, tmp_path)
+    ax = figures[0].axes[0]
+
+    reference = methods[-1]
+    letters = method_letters(methods)
+    key_lines = dict(zip(letters, method_key_lines(methods)))
+    row_labels = [text.get_text() for text in ax.get_yticklabels()]
+
+    # Every simpler method is a row, in complexity order, and the reference is not.
+    assert row_labels == [letters[method] for method in methods[:-1]]
+    assert letters[reference] not in row_labels
+    # And the title names it by letter and family phrase, so the figure stays correct
+    # when both strategy versions are live and the letters become A1/A2/...
+    assert key_lines[reference] in ax.get_title()
+
+
+def test_the_printed_gap_is_the_reference_minus_the_row_method(tmp_path):
+    """The orientation this figure inverts: reference minus row, not row minus reference.
+
+    Asserted against the panel's own per-method means, so the test states the subtraction
+    rather than a number, and a renderer that read the mirrored index pair would print
+    every cell with the wrong sign and fail here.
+    """
+    methods = ms_fixtures.FIVE_METHODS
+    # One simpler method beats the reference and the rest do not, so both signs appear:
+    # a flipped orientation cannot pass by accident on an all-positive fixture.
+    means = {
+        method: value
+        for method, value in zip(methods, [0.50, 0.53, 0.56, 0.62, 0.59])
+    }
+    pairs = ms_fixtures.pairs_from_means(methods, means)
+    result = _gap_result(methods, pairs, means=means)
+
+    _paths, figures = _draw_gap(result, tmp_path)
+    ax = figures[0].axes[0]
+    texts = _annotations(ax)
+
+    reference = methods[-1]
+    rows = methods[:-1]
+    columns = ms_fixtures.ATTRIBUTES + ["overall"]
+    for i, method in enumerate(rows):
+        gap = means[reference] - means[method]
+        for j in range(len(columns)):
+            printed = texts[(float(j), float(i))].splitlines()[0]
+            assert printed == f"{gap:+.3f}"
+            # The mirrored subtraction is a different string for every row here, which
+            # is what makes the assertion above about orientation and not about format.
+            assert printed != f"{means[method] - means[reference]:+.3f}"
+
+
+def test_an_untested_comparison_reads_differently_from_a_non_significant_one(tmp_path):
+    """Absent must not read as measured -- the same rule the squares are held to."""
+    methods = ms_fixtures.FIVE_METHODS
+    reference_at = len(methods) - 1
+    pairs = ms_fixtures.significant_pairs(methods)
+    # Row 0 against the reference: tested and non-significant. Row 1: never tested.
+    pairs[(0, reference_at)] = (0.4, 0.01, 6)
+    del pairs[(1, reference_at)]
+    result = _gap_result(methods, pairs)
+
+    _paths, figures = _draw_gap(result, tmp_path)
+    ax = figures[0].axes[0]
+    texts = _annotations(ax)
+    painted = ax.get_images()[0].get_array()
+    ladder = charts_module._star_ladder(
+        ms_fixtures.star_thresholds(), ms_fixtures.ns_symbol(),
+    )
+
+    ns_text = texts[(0.0, 0.0)]
+    untested_text = texts[(0.0, 1.0)]
+    assert ns_text.splitlines()[-1] == ms_fixtures.ns_symbol()
+    assert untested_text == charts_module.REFERENCE_GRID_VARIANT_CLEAN.policy.absent_text
+    assert untested_text != ns_text
+    # Two states of the ramp, not two labels on one fill: the non-significant comparison
+    # is painted at the palest tier, the untested one not at all.
+    assert not painted.mask[0, 0]
+    assert painted[0, 0] == ladder.index(ms_fixtures.ns_symbol())
+    assert painted.mask[1, 0]
+
+
+def test_an_insufficient_n_category_is_an_unpainted_marked_column(tmp_path, caplog):
+    """A degenerate panel loses its column's fills, not its column -- and it is logged.
+
+    Blanking the column would drop the category from the figure's own axis and read as
+    "this category was analysed and nothing separated"; the honest rendering is the same
+    unpainted, marked state an untested pair takes anywhere else in the layer.
+    """
+    methods = ms_fixtures.FIVE_METHODS
+    note = "2 complete model(s) < 3; recorded but not charted"
+    pairs = ms_fixtures.significant_pairs(methods)
+    degenerate, healthy = ms_fixtures.ATTRIBUTES
+    result = ms_fixtures.result(methods, {
+        degenerate: ms_fixtures.panel(
+            methods, {}, n_models=2, insufficient_n=True, note=note, omnibus_p=None,
+        ),
+        healthy: ms_fixtures.panel(methods, pairs),
+        "overall": ms_fixtures.panel(methods, pairs),
+    })
+
+    with caplog.at_level(logging.WARNING):
+        paths, figures = _draw_gap(result, tmp_path)
+
+    assert len(paths) == len(charts_module.REFERENCE_GRID_VARIANTS)
+    for path in paths:
+        assert path.is_file()
+
+    ax = figures[0].axes[0]
+    painted = ax.get_images()[0].get_array()
+    texts = _annotations(ax)
+    absent = charts_module.REFERENCE_GRID_VARIANT_CLEAN.policy.absent_text
+    n_rows = len(methods) - 1
+    # The degenerate category is the first column; every row of it is unpainted and marked.
+    assert all(painted.mask[i, 0] for i in range(n_rows))
+    assert all(texts[(0.0, float(i))] == absent for i in range(n_rows))
+    # Its neighbours are untouched -- one bad panel does not blank the figure.
+    assert not any(painted.mask[i, 1] for i in range(n_rows))
+    # The column still carries its heading, and the skip is logged with the panel's own
+    # wording rather than with any authored in the chart.
+    assert any(
+        attribute_label(degenerate) in text.get_text()
+        for text in ax.get_xticklabels()
+    )
+    assert any(note in record.getMessage() for record in caplog.records)
+
+
+@pytest.mark.parametrize("methods", [
+    pytest.param(ms_fixtures.FIVE_METHODS, id="four_rows"),
+    pytest.param(ms_fixtures.TEN_METHODS, id="nine_rows"),
+])
+def test_the_gap_grid_stays_inside_the_print_budget_at_the_live_column_count(
+    tmp_path, methods,
+):
+    """The live 15-column shape, at one strategy version and at both.
+
+    ``save_figure`` raises ``FigureBudgetExceeded`` *before* writing anything, so a canvas
+    or file-size breach surfaces here as an error rather than as a missing file. The
+    columns come from the country's own analysed axis, so the widest shape this test
+    covers is the widest shape the sweep can draw.
+    """
+    result = _gap_result(
+        methods,
+        ms_fixtures.significant_pairs(methods),
+        attributes=ms_fixtures.LIVE_ATTRIBUTES,
+        country="swedish_02",
+    )
+
+    paths = plot_reference_method_gap(
+        result, tmp_path / "swedish_02_reference_method_gap.png",
+    )
+
+    assert len(paths) == len(charts_module.REFERENCE_GRID_VARIANTS)
+    for path in paths:
+        for suffix in (".png", ".svg", ".eps"):
+            assert path.with_suffix(suffix).is_file()
+
+
+def test_a_single_method_axis_draws_no_gap_grid(tmp_path):
+    """With nothing simpler than the reference there is no comparison to draw."""
+    methods = ms_fixtures.FIVE_METHODS[:1]
+    result = _gap_result(methods, {})
+
+    assert plot_reference_method_gap(result, tmp_path / _GAP_STEM) == []
+    assert not list(tmp_path.iterdir())
+
+
+def test_a_tested_comparison_with_no_difference_to_print_raises(tmp_path):
+    """A painted tier with nothing to qualify is a figure contradicting itself."""
+    methods = ms_fixtures.FIVE_METHODS
+    result = _gap_result(methods, ms_fixtures.significant_pairs(methods))
+    reference_at = len(methods) - 1
+    panel = result["method_comparison"]["panels"]["overall"]
+    panel["pair_matrix"]["mean_diff"][reference_at][0] = None
+
+    with pytest.raises(ValueError, match="no mean difference"):
+        plot_reference_method_gap(result, tmp_path / _GAP_STEM)

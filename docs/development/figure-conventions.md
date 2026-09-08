@@ -325,6 +325,38 @@ which is why the two differ in *fill* and the diagonal is separated from both by
 The in-figure key states each of those readings, so the distinction survives the figure leaving the
 repository.
 
+### The reference-method gap grid, and why its sign runs the other way
+
+The squares are per category: fifteen files, each showing every method pair on one demographic
+axis. `{country}_reference_method_gap` is the seventh family and the summary of them — one figure
+for the whole run, rows the simpler methods, columns every analysed category with the pooled
+`overall` panel last, and each cell the **reference method** against that row's method on that
+category. Fill, ladder, levels and the four cell states are the squares'; there is no diagonal,
+because the two axes are different things.
+
+Two properties are the family's own.
+
+The reference method is **derived, never named**: it is the last entry of the run's
+`method_order`, the most complex method under the config-resolved complexity ordering, and it is
+labelled by its letter and family phrase — so retiring a family, adding one, or running both
+strategy versions re-points the figure without an edit, and the letters become `A1/A2/…` on their
+own.
+
+And its cells read **reference minus row**, the opposite orientation from the squares'
+row-minus-column, because the question this figure asks is what the hardest method *gains*. The
+inversion costs nothing in the renderer: `pair_matrix` already stores both orders, so the figure
+reads the other index pair rather than negating anything, and the sign convention still has exactly
+one home in `builder._method_panel`. Because two figures in one process folder then carry opposite
+orientations, the in-figure key names this one's explicitly — it is the one place a reader could
+otherwise carry an assumption from the figure beside it.
+
+The omnibus is per column here rather than per figure, so it travels under each column heading
+instead of in the title, and the test that produced it is named once in the key rather than fifteen
+times — the same ink economy that puts a constant denominator in the `_with_counts` sibling. A
+category whose panel is flagged `insufficient_n` keeps its column, unpainted and marked, and is
+logged with the panel's own note: blanking it would drop the category from the figure's own axis
+and read as "analysed, nothing separated".
+
 ---
 
 ## Publishing: how a figure reaches `04_Figures`

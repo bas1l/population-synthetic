@@ -178,9 +178,15 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
   `{country}_method_pair_significance/`, in the layer's two grid variants, with the pair's
   significance tier as the fill (symmetric) and the signed row-minus-column TV difference as the text
   (antisymmetric, oriented once in `builder.py::_method_panel`'s `pair_matrix` block so the renderer
-  performs no arithmetic). `builder.py` (`build_method_significance`
+  performs no arithmetic). `charts.py::plot_reference_method_gap` is the summary of those squares --
+  one grid for the whole run at `{country}_reference_method_gap`, rows the simpler methods, columns
+  every analysed category plus Overall, each cell the **reference** method (the last of the
+  complexity-ordered `method_order`, derived rather than named) against that row's method. It reads
+  the *other* index pair of the same oriented block, so its text is reference-minus-row and its key
+  says so. `builder.py` (`build_method_significance`
   + JSON/CSV writers), `charts.py` (per-attribute trend facets, slope heatmap, CD diagram,
-  factor-dominance bar, method-comparison figure, pair-significance squares). Needs the optional `[analysis]` extra
+  factor-dominance bar, method-comparison figure, pair-significance squares, reference-method gap
+  grid). Needs the optional `[analysis]` extra
   (statsmodels + scikit-posthocs).
 - **`real_population_stats/`** -- Standalone real-only reference statistics (sits after the cap
   stage; driven by `analyze_real_population_stats.py`, depends on `population_cap`, reading the capped

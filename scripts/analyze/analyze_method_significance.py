@@ -45,6 +45,15 @@ Outputs, per country, under the analysis-stage method_significance folder:
                                             tier, text = the signed row-minus-column TV
                                             difference, so every pair is shown, not only
                                             the ones the bracket figure's pairs_mode draws
+    {country}_reference_method_gap.png/.svg/.eps  one grid for the whole run: rows = the
+                                            simpler methods, columns = every analysed
+                                            category + Overall, cell = the most complex
+                                            method (derived from the method axis) against
+                                            that row's method. Text = REFERENCE minus row,
+                                            the opposite orientation from the squares
+                                            above, stated in the figure's own key.
+                                            {country}_reference_method_gap_with_counts.*
+                                            is the diagnostic sibling
     {country}_slope_heatmap.png             attribute x model descriptive TV(method) slope
     {country}_cd_diagram.png                model critical-difference diagram (Nemenyi)
     {country}_factor_dominance.png          eta^2 variance shares (model/method/category)
@@ -90,6 +99,7 @@ from population_synthetic.analysis.method_significance.charts import (
     plot_method_comparison,
     plot_method_pair_significance,
     plot_method_trends,
+    plot_reference_method_gap,
     plot_slope_heatmap,
 )
 from population_synthetic.analysis.method_significance.marginal_charts import (
@@ -464,6 +474,19 @@ def main() -> None:
                 f"Method pair-significance grids written to {pair_dir} "
                 f"({len(pair_grids)} file(s))"
             )
+            reference_gap = plot_reference_method_gap(
+                result, significance_dir / f"{country}_reference_method_gap.png"
+            )
+            if reference_gap:
+                print(
+                    f"Reference-method gap grid written to {significance_dir} "
+                    f"({len(reference_gap)} file(s))"
+                )
+            else:
+                print(
+                    "Reference-method gap grid skipped (no method-comparison panels / "
+                    "fewer than two methods on the axis)."
+                )
 
             # Descriptive per-method marginal-progression charts (additive side-output).
             # This is the one path that reads the mapped populations (not the fidelity
