@@ -585,6 +585,73 @@ def _complete_case_matrix(
     return matrix, complete, dropped
 
 
+def _negated(value: float | None) -> float | None:
+    """Sign-flip *value*, mapping the resulting ``-0.0`` back to ``0.0``.
+
+    A mirrored cell of an antisymmetric matrix is the negation of its partner; a
+    zero difference must still serialise as ``0.0``, since ``-0.0`` reaches a
+    consumer as a signed magnitude it would print with a leading minus.
+    """
+    if value is None:
+        return None
+    flipped = -float(value)
+    return 0.0 if flipped == 0.0 else flipped
+
+
+def _pair_matrices(methods: list[str], pairs: dict[str, Any]) -> dict[str, Any]:
+    """Oriented ``k x k`` views of the unordered method-pair map *pairs*.
+
+    :func:`_pair_key` stores each unordered pair once, under a single ordering,
+    with its difference signed against *that* ordering. Filling a square from it
+    means negating the stored value for every mirrored cell -- arithmetic on a
+    signed quantity, performed in whichever layer happens to draw it. It is
+    performed here instead, once, under the row-minus-column convention stated in
+    :func:`_method_panel`.
+
+    *pairs* is the record map of
+    :func:`~population_synthetic.analysis.utils.stats_tests.paired_t_pairwise`,
+    whose ``mean_diff`` and ``dz`` are signed *second minus first* for the key
+    ``"a|b"``; cell ``(i, j)`` therefore carries the negation of the record stored
+    under ``methods[i] | methods[j]``. ``p_holm`` and ``n_blocks`` are properties
+    of the unordered pair and are mirrored unchanged. The diagonal stays ``None``,
+    as does any field the record itself left ``None`` -- an untested pair is
+    absent, never ``0.0``. An empty *pairs* map (a degenerate panel) yields
+    all-``None`` matrices, so the block is emitted unconditionally. Nothing is
+    computed here: every value is already in *pairs*.
+    """
+    k = len(methods)
+    p_holm: list[list[float | None]] = [[None] * k for _ in range(k)]
+    mean_diff: list[list[float | None]] = [[None] * k for _ in range(k)]
+    n_blocks: list[list[int | None]] = [[None] * k for _ in range(k)]
+    dz: list[list[float | None]] = [[None] * k for _ in range(k)]
+    if pairs:
+        for i, j in combinations(range(k), 2):
+            key = _pair_key(methods[i], methods[j])
+            if key not in pairs:
+                raise KeyError(
+                    f"pair_matrix: no record for method pair {key!r}; "
+                    f"the pairwise map holds {sorted(pairs)}"
+                )
+            rec = pairs[key]
+            stored_p = rec.get("p_holm")
+            p_holm[i][j] = p_holm[j][i] = None if stored_p is None else float(stored_p)
+            stored_n = rec.get("n_blocks")
+            n_blocks[i][j] = n_blocks[j][i] = None if stored_n is None else int(stored_n)
+            stored_diff = rec.get("mean_diff")
+            mean_diff[i][j] = _negated(stored_diff)
+            mean_diff[j][i] = None if stored_diff is None else float(stored_diff)
+            stored_dz = rec.get("dz")
+            dz[i][j] = _negated(stored_dz)
+            dz[j][i] = None if stored_dz is None else float(stored_dz)
+    return {
+        "methods": list(methods),
+        "p_holm": p_holm,
+        "mean_diff": mean_diff,
+        "n_blocks": n_blocks,
+        "dz": dz,
+    }
+
+
 def _method_panel(
     matrix: np.ndarray,
     methods: list[str],
@@ -600,6 +667,23 @@ def _method_panel(
     ``_MIN_COMPLETE_MODELS`` complete models are flagged ``insufficient_n`` (the
     chart skips them); the omnibus still runs when Friedman is computable
     (``n >= 2``) so the number is available, but is ``None`` below that.
+
+    Alongside the unordered pair map the panel also carries ``pair_matrix``:
+    oriented ``k x k`` views of that same map, indexed by
+    ``pair_matrix["methods"]``, so a square-matrix consumer reads cell ``(i, j)``
+    verbatim. **Sign convention -- row minus column.** ``mean_diff[i][j]`` is the
+    mean TV similarity of ``methods[i]`` minus that of ``methods[j]``, over the
+    complete-case models entering this panel's test, so a positive cell means the
+    *row* method scored closer to the real population; ``dz`` carries the same
+    orientation. ``p_holm`` and ``n_blocks`` belong to the unordered pair and are
+    symmetric. The diagonal is ``None``, and so is a pair the panel did not test
+    -- distinguishable from a tested pair whose difference is ``0.0``.
+
+    **This docstring is the convention's only home.** No consumer re-signs,
+    negates or re-derives the matrix; the orientation is fixed once, here, by
+    :func:`_pair_matrices`. Degenerate panels emit the block too, with ``methods``
+    populated and every entry ``None``, so the key is unconditional and no
+    consumer branches on its absence.
     """
     n = int(matrix.shape[0])
     k = len(methods)
@@ -670,6 +754,9 @@ def _method_panel(
         "omnibus": omnibus,
         "pairwise_p": pairwise_p,
         "pairwise_detail": pairwise_detail,
+        # Oriented views of the pair map above; a degenerate panel hands in an
+        # empty map and gets the all-``None`` square, so the key is unconditional.
+        "pair_matrix": _pair_matrices(methods, pairwise_detail),
         "omnibus_friedman": omnibus_friedman,
         "pairwise_p_nemenyi": pairwise_p_nemenyi,
         "correction": {"method": "holm", "scope": "all-pairs"},

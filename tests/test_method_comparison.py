@@ -349,6 +349,104 @@ def test_insufficient_n_flagged_and_recorded():
 
 
 # --------------------------------------------------------------------------- #
+# Oriented pair matrix                                                        #
+# --------------------------------------------------------------------------- #
+
+
+def _assert_mirrors(cell: float | None, mirror: float | None) -> None:
+    """A cell and its mirror are negations -- or both absent, never one of each."""
+    if cell is None or mirror is None:
+        assert cell is None and mirror is None
+    else:
+        assert cell == pytest.approx(-mirror)
+
+
+def test_pair_matrix_is_oriented_row_minus_column():
+    by_ms, models, methods = _by_ms(_full_grid())
+    block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
+    panel = block["panels"]["trend_attr"]
+    square = panel["pair_matrix"]
+    k = len(methods)
+
+    assert square["methods"] == methods
+    for name in ("p_holm", "mean_diff", "n_blocks", "dz"):
+        assert len(square[name]) == k
+        assert all(len(row) == k for row in square[name])
+        # The diagonal is never a comparison.
+        assert all(square[name][i][i] is None for i in range(k))
+
+    for i, j in [(a, b) for a in range(k) for b in range(k) if a != b]:
+        # Significance and block count belong to the unordered pair.
+        assert square["p_holm"][i][j] == square["p_holm"][j][i]
+        assert square["n_blocks"][i][j] == square["n_blocks"][j][i]
+        assert square["n_blocks"][i][j] == panel["n_models"]
+        # Difference and effect size are antisymmetric.
+        _assert_mirrors(square["mean_diff"][i][j], square["mean_diff"][j][i])
+        _assert_mirrors(square["dz"][i][j], square["dz"][j][i])
+        # Row minus column, against the panel's own per-method means.
+        assert square["mean_diff"][i][j] == pytest.approx(
+            panel["means"][methods[i]] - panel["means"][methods[j]]
+        )
+
+
+def test_pair_matrix_matches_the_stored_pair_map():
+    by_ms, models, methods = _by_ms(_full_grid())
+    block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
+    panel = block["panels"]["overall"]
+    square = panel["pair_matrix"]
+    # Every value is a re-orientation of the pair map, not a new quantity: the
+    # record under "a|b" is signed second-minus-first, i.e. cell (j, i).
+    for i, a in enumerate(methods):
+        for j, b in list(enumerate(methods))[i + 1:]:
+            rec = panel["pairwise_detail"][f"{a}|{b}"]
+            assert square["mean_diff"][j][i] == pytest.approx(rec["mean_diff"])
+            _assert_mirrors(square["dz"][i][j], rec["dz"])
+            assert square["p_holm"][i][j] == rec["p_holm"]
+            assert square["n_blocks"][i][j] == rec["n_blocks"]
+
+
+def test_untested_pair_is_none_not_zero():
+    # trend_attr's TV lines are exactly parallel across models, so every paired
+    # difference is identical, t is undefined and the pair carries no p_holm --
+    # the "not tested" state, which must stay distinguishable from a real 0.0.
+    by_ms, models, methods = _by_ms(_full_grid())
+    block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
+    panel = block["panels"]["trend_attr"]
+    square = panel["pair_matrix"]
+
+    untested = [
+        (i, j)
+        for i in range(len(methods)) for j in range(len(methods))
+        if i != j and panel["pairwise_detail"][
+            f"{methods[min(i, j)]}|{methods[max(i, j)]}"
+        ]["p_holm"] is None
+    ]
+    assert untested, "fixture no longer produces an untested pair"
+    for i, j in untested:
+        assert square["p_holm"][i][j] is None
+        assert square["dz"][i][j] is None
+        # The difference itself is still known, and is not zero.
+        assert square["mean_diff"][i][j] != 0.0
+
+
+def test_degenerate_panel_still_emits_an_all_none_pair_matrix():
+    # One model -> no paired blocks; the key must still be present and shaped.
+    combos = [
+        make_combo(slug=f"swedish_{strategy}_solo", strategy=strategy, model="solo",
+                   tv_by_attr={"trend_attr": _trend_tv(0, rank),
+                               "shift_attr": _shift_tv(0, rank)})
+        for rank, strategy in enumerate(STRATEGIES, start=1)
+    ]
+    by_ms, models, methods = _by_ms(combos)
+    block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
+    square = block["panels"]["trend_attr"]["pair_matrix"]
+
+    assert square["methods"] == methods
+    for name in ("p_holm", "mean_diff", "n_blocks", "dz"):
+        assert square[name] == [[None] * len(methods) for _ in methods]
+
+
+# --------------------------------------------------------------------------- #
 # Integration through build_method_significance                               #
 # --------------------------------------------------------------------------- #
 
