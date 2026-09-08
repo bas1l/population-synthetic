@@ -37,6 +37,14 @@ Outputs, per country, under the analysis-stage method_significance folder:
     {country}_method_comparison.png/.svg/.eps    bars + model points + significance brackets/stars,
                                             one panel per category + overall (grid)
     {country}_method_comparison_overall.png/.svg/.eps  the single Overall headline panel
+    {country}_method_pair_significance/     one method x method significance square per
+                                            category + overall, in two variants: the
+                                            canonical {panel}.png/.svg/.eps and the
+                                            {panel}_with_counts.* diagnostic sibling.
+                                            Fill = the pair's Holm-corrected significance
+                                            tier, text = the signed row-minus-column TV
+                                            difference, so every pair is shown, not only
+                                            the ones the bracket figure's pairs_mode draws
     {country}_slope_heatmap.png             attribute x model descriptive TV(method) slope
     {country}_cd_diagram.png                model critical-difference diagram (Nemenyi)
     {country}_factor_dominance.png          eta^2 variance shares (model/method/category)
@@ -80,6 +88,7 @@ from population_synthetic.analysis.method_significance.charts import (
     plot_cd_diagram,
     plot_factor_dominance,
     plot_method_comparison,
+    plot_method_pair_significance,
     plot_method_trends,
     plot_slope_heatmap,
 )
@@ -449,6 +458,12 @@ def main() -> None:
                 print(f"Method-comparison Overall panel written to {comparison_overall} (+ .svg)")
             else:
                 print("Method-comparison Overall panel skipped (no Overall panel / nothing plottable).")
+            pair_dir = significance_dir / f"{country}_method_pair_significance"
+            pair_grids = plot_method_pair_significance(result, pair_dir)
+            print(
+                f"Method pair-significance grids written to {pair_dir} "
+                f"({len(pair_grids)} file(s))"
+            )
 
             # Descriptive per-method marginal-progression charts (additive side-output).
             # This is the one path that reads the mapped populations (not the fidelity

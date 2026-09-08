@@ -317,14 +317,14 @@ plot_method_pair_significance(result, out_dir) -> list[Path]
 ### Phase 4: Wiring, publication, docs
 **Goal:** The sweep emits the figures and a human can publish a chosen subset.
 
-- [ ] 4.1 — Call the plotter in the `if not args.no_charts:` block of
+- [x] 4.1 — Call the plotter in the `if not args.no_charts:` block of
       `scripts/analyze/analyze_method_significance.py`, printing the directory and file count
       in the style of the existing `plot_method_trends` line.
-- [ ] 4.2 — Extend the script's module docstring output inventory.
-- [ ] 4.3 — Add roster entries to `config/analysis/figure_selection.yaml` for the two or three
+- [x] 4.2 — Extend the script's module docstring output inventory.
+- [x] 4.3 — Add roster entries to `config/analysis/figure_selection.yaml` for the two or three
       attributes actually published (each stem written out literally — there is no attribute
       placeholder, and a pinned literal is deliberate).
-- [ ] 4.4 — Update `docs/development/figure-conventions.md` (new grid family, its two
+- [x] 4.4 — Update `docs/development/figure-conventions.md` (new grid family, its two
       variants, the discrete-level helper), `docs/architecture/commands.md`, and
       `docs/architecture/sub-packages.md`.
 
@@ -398,14 +398,14 @@ plot_method_pair_significance(result, out_dir) -> list[Path]
 
 ## Documentation Plan
 
-- [ ] `docs/development/figure-conventions.md` — the new grid family, its two variants, the
+- [x] `docs/development/figure-conventions.md` — the new grid family, its two variants, the
       discrete-level helper, and the "not tested ≠ not significant" rule.
-- [ ] `docs/architecture/commands.md` — the new output under `analyze_method_significance.py`.
-- [ ] `docs/architecture/sub-packages.md` — `palette.heatmap_levels` in the presentation-layer
+- [x] `docs/architecture/commands.md` — the new output under `analyze_method_significance.py`.
+- [x] `docs/architecture/sub-packages.md` — `palette.heatmap_levels` in the presentation-layer
       description.
 - [ ] `CLAUDE.md` — only if the presentation-layer paragraph needs the discrete-ramp helper
       named; otherwise unchanged.
-- [ ] Docstrings: `_method_panel` states the sign convention is defined there and nowhere else;
+- [x] Docstrings: `_method_panel` states the sign convention is defined there and nowhere else;
       the chart docstring states the statistical design it draws and that it claims no p-value
       of its own.
 

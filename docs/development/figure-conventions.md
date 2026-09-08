@@ -50,6 +50,33 @@ the format set then drifts between call sites, which is the state — half the l
 half emitting raster only — that this arrangement exists to end. **Extending `save_figure` is the
 only sanctioned way to add a format.**
 
+### Vector text is text, and each backend needs telling separately
+
+Every one of the three fonttype keys is pinned in `style.house_rc_params()` and re-installed at
+write time by `figures.EXPORT_RC_KEYS`, because all three are read by their backend when the file
+is written — not when the figure is drawn — and several chart modules return an unsaved `Figure`
+for their driver to save under whatever ambient `rcParams` happen to be installed.
+
+| Key | Pinned to | matplotlib's default, and what it costs |
+|-----|-----------|------------------------------------------|
+| `ps.fonttype` / `pdf.fonttype` | `42` | `3` — Type 3 charprocs instead of the embedded TrueType face |
+| `svg.fonttype` | `"none"` | `"path"` — every glyph converted to an outline |
+
+The two policies point in opposite directions, deliberately, because the two formats have opposite
+jobs. The EPS **embeds** its face: it leaves the repository, and a venue's renderer must not need
+Arial installed. The SVG **references** its face by name, so it arrives in Inkscape as real `<text>`
+nodes that can be retyped — which is the whole reason the layer emits an editing artifact at all.
+
+Under matplotlib's default the SVG delivered neither: a model x method heatmap reached Inkscape as
+~1700 anonymous `<use>` shapes with no `<text>` node and no family named anywhere in the file.
+The cost of the fix is that a host lacking every family in `style.FONT_STACK` substitutes one with
+different metrics, which can shift or overlap tight annotations — accepted, because the SVG is the
+working copy and the PNG beside it is the fixed visual reference. matplotlib offers no third
+option; its `svgfont` embedding mode was removed.
+
+Guarded by `tests/test_figures.py`, one test per direction, each pinning matplotlib's own default
+first so the test states the condition it guards against.
+
 ### Budgets are checked on the written bytes, and a rejection writes nothing
 
 All three formats are rendered to memory first. The canvas is measured from the EPS
@@ -115,6 +142,18 @@ content.
 This is settled by
 [the 2026-08-12 ADR](decisions/2026-08-12-self-contained-typicality-axis.md), which rejected a
 diverging ramp. Introducing one requires an ADR superseding it.
+
+### Discrete levels come from the ramp, not from a second palette
+
+Some quantities are not continuous: a significance tier is one rung of a ladder a config file
+declares, and painting it on a continuous scale invites reading a `p` of 0.049 as meaningfully
+darker than one of 0.051. `palette.heatmap_levels(n)` returns an `n`-step resampling of the same
+house ramp, so a binned quantity stays in the one visual language instead of acquiring a palette of
+its own. It preserves `set_bad`, which is what keeps an unpainted cell legal — `grids` raises on a
+colormap whose missing colour is transparent.
+
+Its only sanctioned use is binning an **ordered** quantity. It is not a categorical-hue source: `n`
+steps of a sequential ramp read as "more" and "less", which is a lie about an unordered set.
 
 ---
 
@@ -221,14 +260,14 @@ frozen `GridVariant` record (`analysis/utils/grid_variants.py`), because a clean
 ### The unsuffixed filename is the clean figure
 
 Every grid family that publishes variants writes **two** files from one renderer, and the naming is
-the same for all five:
+the same for all six:
 
 | File | What a cell prints |
 |------|--------------------|
 | `{stem}.{png,svg,eps}` | the value alone — the **camera-ready** figure, the one the manuscript and the deck reference |
 | `{stem}_with_counts.{png,svg,eps}` | the same value over the count it rests on |
 
-The rule is one function, `grid_variants.variant_suffixes()`, so five drivers cannot drift into five
+The rule is one function, `grid_variants.variant_suffixes()`, so six drivers cannot drift into six
 naming schemes; a driver enumerates a family's `GRID_VARIANTS` instead of naming its variants, and
 adding a third publishes it without a CLI change. A family whose map carries no `clean` variant
 raises rather than promoting an arbitrary one into the name every downstream reference resolves to.
@@ -253,6 +292,38 @@ Dropping a line frees vertical room, which a variant may spend by moving one ste
 scale; it may never be spent the other way, and no annotation goes below `FONT_FLOOR_PT`. A cell
 carrying an inline qualifier is bound by the cell's *width* rather than by the line it dropped, so
 it keeps its size.
+
+### The method × method squares, and why "not tested" is not "not significant"
+
+`method_significance` draws the sixth family: one square per analysed category plus the pooled
+`overall` panel, written into `{country}_method_pair_significance/` as `{panel}.{png,svg,eps}` and
+its `{panel}_with_counts` sibling. It exists because the bracket figure beside it draws only the
+pairs its configured `pairs_mode` selects — four of ten on the live five-method axis — while all
+ten are computed and Holm-corrected. The square shows the other six.
+
+Its two channels are deliberately different, and that difference is the family's whole design. The
+**fill** is the pair's significance tier, binned onto the config's own star ladder through
+`palette.heatmap_levels`, and it is *symmetric* across the diagonal. The **text** is the signed
+row-minus-column difference in TV similarity, and it is *antisymmetric*. Direction therefore lives
+in the annotation, per the one-ramp rule above; the sign convention itself is oriented upstream, in
+`builder._method_panel`, so the renderer reads cell `(i, j)` and negates nothing. The `with_counts`
+variant adds each pair's paired-block count, which is the diagnostic reading, not the published one.
+
+Four cell states, and collapsing any two of them is a correctness failure rather than a cosmetic
+one:
+
+| State | Fill | Text |
+|-------|------|------|
+| tested, significant at some tier | the tier's level on the house ramp | the signed difference and the tier's symbol |
+| tested, not significant | the palest **painted** level | the signed difference and the `ns` symbol |
+| never tested — a degenerate panel, or too few paired blocks | **unpainted** (`set_bad`) | the policy's `absent_text` mark |
+| the diagonal — a method against itself | unpainted (`set_bad`) | nothing at all |
+
+A pair that was never tested carries no evidence; a pair tested and reported `ns` carries evidence
+of no difference. Painting the first as the second would report a finding the analysis never made,
+which is why the two differ in *fill* and the diagonal is separated from both by carrying no text.
+The in-figure key states each of those readings, so the distinction survives the figure leaving the
+repository.
 
 ---
 

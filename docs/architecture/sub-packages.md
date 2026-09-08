@@ -172,9 +172,15 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
   complete-case models, BH-FDR corrected across categories. `charts.py::plot_method_comparison` renders
   it as the publication **significance-bracket figure** (bars = per-method mean TV-similarity + model
   points + paired lines, pairwise brackets/stars over the configured pairs, in-figure star key; a
-  per-category grid and a standalone Overall panel, PNG + SVG). `builder.py` (`build_method_significance`
+  per-category grid and a standalone Overall panel, PNG + SVG). The pairs that figure's `pairs_mode`
+  leaves undrawn are nonetheless computed and Holm-corrected, so `charts.py::plot_method_pair_significance`
+  publishes the full square as well: one method × method grid per category plus Overall under
+  `{country}_method_pair_significance/`, in the layer's two grid variants, with the pair's
+  significance tier as the fill (symmetric) and the signed row-minus-column TV difference as the text
+  (antisymmetric, oriented once in `builder.py::_method_panel`'s `pair_matrix` block so the renderer
+  performs no arithmetic). `builder.py` (`build_method_significance`
   + JSON/CSV writers), `charts.py` (per-attribute trend facets, slope heatmap, CD diagram,
-  factor-dominance bar, method-comparison figure). Needs the optional `[analysis]` extra
+  factor-dominance bar, method-comparison figure, pair-significance squares). Needs the optional `[analysis]` extra
   (statsmodels + scikit-posthocs).
 - **`real_population_stats/`** -- Standalone real-only reference statistics (sits after the cap
   stage; driven by `analyze_real_population_stats.py`, depends on `population_cap`, reading the capped
@@ -335,7 +341,10 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
     `HEATMAP_CMAP`
     (`inferno`, matching the published `{country}_models_table` manuscript figures), `MISSING_COLOR`
     for the off-ramp "never measured" fill, `heatmap_cmap()` (a private copy with `set_bad`, because
-    matplotlib hands every caller the same registry object), and `text_color_on(im, value)`, which
+    matplotlib hands every caller the same registry object), `heatmap_levels(n)` (that copy resampled
+    to `n` discrete steps, `set_bad` preserved, for a quantity binned onto an **ordered** ladder such
+    as `method_significance`'s star tiers -- never a categorical-hue source), and
+    `text_color_on(im, value)`, which
     picks white/black annotation text from the colour the mappable *actually painted*, by WCAG
     relative luminance on linearised sRGB -- the BT.601 weights on gamma-encoded values it replaced
     left sampled points below the AA 4.5:1 floor. That
