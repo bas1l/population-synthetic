@@ -45,6 +45,50 @@ needs it, so importing it never pulls in a backend.
 
 from __future__ import annotations
 
+#: The module's public surface, listed rather than inferred so that *removing* a role is
+#: a deliberate act. ``tests/test_palette.py`` asserts this set equals the module's
+#: public names, so a colour added without an entry here fails the suite rather than
+#: quietly becoming a half-exported role.
+__all__ = [
+    "ACCENT_PAIR",
+    "ANNOTATION_GREY",
+    "BAND_EDGE",
+    "BAND_FILL",
+    "BAR_EDGE",
+    "BASELINE_DARK",
+    "BEST_CELL_EDGE",
+    "CAPTION_GREY",
+    "CATEGORICAL_SERIES",
+    "CELL_STROKE",
+    "ERROR_BAR_GREY",
+    "FAINT_LINK",
+    "FOOTNOTE_GREY",
+    "GRID_RULE",
+    "HEATMAP_CMAP",
+    "HIGHLIGHT_ACCENT",
+    "HOLLOW_EDGE",
+    "HOST_COLORS",
+    "LARGE_CATEGORICAL_CMAP",
+    "MISSING_COLOR",
+    "MUTED_GREY",
+    "NEUTRAL_GREY",
+    "ORDERED_QUALITATIVE_SERIES",
+    "PALE_FILL",
+    "RESIDUAL_GREY",
+    "SECONDARY_GREY",
+    "SEVERITY_SERIES",
+    "STAGE_SERIES",
+    "SURFACE",
+    "WARNING_FILL",
+    "WARNING_TEXT",
+    "heatmap_cmap",
+    "heatmap_levels",
+    "opaque",
+    "relative_luminance",
+    "text_color_for_rgb",
+    "text_color_on",
+]
+
 # ------------------------------------------------------------------
 # The sequential ramp
 # ------------------------------------------------------------------
@@ -288,6 +332,51 @@ def heatmap_cmap(name: str = HEATMAP_CMAP, *, missing: str = MISSING_COLOR):
     cmap = plt.get_cmap(name).copy()
     cmap.set_bad(color=missing)
     return cmap
+
+
+def heatmap_levels(n: int, *, name: str = HEATMAP_CMAP, missing: str = MISSING_COLOR):
+    """Colormap *name* reduced to *n* discrete steps, with ``set_bad`` at *missing*.
+
+    For a quantity that arrives already **binned into ordered tiers** -- a significance
+    ladder, a banded rate -- rather than as a continuous magnitude. Sampling the ramp at
+    *n* points instead of drawing it continuously is what makes a tier boundary visible:
+    on a continuous ramp two values either side of a cutoff are painted almost the same
+    colour, which invites reading the pair as near-identical when the figure's own claim
+    is that they fall on opposite sides of a threshold.
+
+    **Ordered quantities only.** This is a bin of the sequential house ramp, so its steps
+    inherit that ramp's meaning: step *k+1* reads as *more* than step *k*. It is
+    therefore not a source of categorical hues -- a set of unordered categories drawn on
+    it acquires a magnitude ordering it does not have. :data:`CATEGORICAL_SERIES` and its
+    siblings above exist for that case.
+
+    **``set_bad`` is preserved**, which is load-bearing rather than incidental:
+    :func:`~population_synthetic.analysis.utils.grids.render_grid` derives the colour of
+    an annotation over an unpainted cell from the colormap's bad colour and *raises* when
+    that colour is transparent. ``resampled`` carries the bad/under/over entries across in
+    the matplotlib versions this repository runs on; the entry is reapplied here anyway
+    so the guarantee is this function's own rather than a borrowed implementation detail.
+    Reapplying is safe because ``heatmap_cmap`` already handed back a private copy.
+
+    Args:
+        n: Number of discrete steps. The caller pairs it with its own norm -- typically a
+            ``BoundaryNorm`` over *n* bins whose cutoffs come from that figure's config.
+        name: Colormap to bin. Defaults to the house ramp, which is every caller today.
+        missing: Fill for a cell the ramp did not paint.
+
+    Returns:
+        A ``ListedColormap`` with ``N == n``, independent of matplotlib's registry.
+
+    Raises:
+        ValueError: If *n* is not a positive integer. A non-positive or fractional step
+            count is always a caller bug, and matplotlib would answer it with an empty or
+            silently rounded colormap rather than an error.
+    """
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError(f"heatmap_levels needs a positive integer step count, got {n!r}")
+    levels = heatmap_cmap(name, missing=missing).resampled(n)
+    levels.set_bad(color=missing)
+    return levels
 
 
 #: Relative-luminance crossover between white and black text, from WCAG 2 contrast:

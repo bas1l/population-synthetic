@@ -37,6 +37,7 @@ from population_synthetic.analysis.utils.grid_annotations import (  # noqa: E402
     RateOnlyPolicy,
     RateWithCountsPolicy,
     SignedValuePolicy,
+    SignedValueWithStarsPolicy,
 )
 from population_synthetic.analysis.utils.grids import (  # noqa: E402
     CELL_STROKE_WIDTH,
@@ -55,6 +56,8 @@ _ALL_POLICIES = (
     RateWithCountsPolicy(),
     RateOnlyPolicy(),
     SignedValuePolicy(),
+    SignedValueWithStarsPolicy(),
+    SignedValueWithStarsPolicy(count_key="n"),
     NoAnnotationPolicy(),
 )
 
@@ -160,6 +163,67 @@ def test_qualifier_is_read_from_the_record_never_derived() -> None:
     ) == "0.328  (-0.071)\nn=42"
 
 
+def test_the_star_policy_declares_the_count_only_when_the_caller_asked_for_it() -> None:
+    """The clean variant and its counted sibling differ by exactly one declared key."""
+    clean = SignedValueWithStarsPolicy()
+    counted = SignedValueWithStarsPolicy(count_key="n")
+
+    assert clean.required_keys == frozenset({"value", "stars"})
+    assert counted.required_keys == frozenset({"value", "stars", "n"})
+
+
+def test_the_star_policy_always_prints_the_sign() -> None:
+    """The fill is symmetric across the diagonal, so only the sign says which way it ran.
+
+    A square of pairwise comparisons paints ``(i, j)`` and ``(j, i)`` the same colour --
+    the tier is a property of the pair, not of its order. Dropping the sign would leave
+    the two cells indistinguishable while the figure claims to show a direction.
+    """
+    policy = SignedValueWithStarsPolicy()
+
+    assert policy.text({"value": 0.031, "stars": "***"}) == "+0.031\n***"
+    assert policy.text({"value": -0.031, "stars": "ns"}) == "-0.031\nns"
+    assert policy.text({"value": 0.0, "stars": "ns"}) == "+0.000\nns"
+
+
+def test_the_star_policy_prints_the_count_beneath_the_symbol() -> None:
+    counted = SignedValueWithStarsPolicy(count_key="n")
+    assert counted.text({"value": 0.031, "stars": "**", "n": 12}) == "+0.031\n**\nn=12"
+
+
+def test_an_untested_pair_is_marked_rather_than_starred() -> None:
+    """"Not tested" and "tested, not significant" are different findings.
+
+    Both cells would be handed to the same policy, and the untested one is unpainted, so
+    the fill cannot separate them either. The mark on its own line -- with neither symbol
+    nor count beneath it, which would each imply a test that never ran -- is the only
+    thing that does.
+    """
+    clean = SignedValueWithStarsPolicy()
+    counted = SignedValueWithStarsPolicy(count_key="n")
+
+    assert clean.text({"value": None, "stars": None}) == "—"
+    assert counted.text({"value": None, "stars": None, "n": None}) == "—"
+    assert clean.text({"value": 0.004, "stars": "ns"}) == "+0.004\nns"
+
+
+def test_the_star_policy_can_be_asked_to_treat_an_absent_value_as_an_error() -> None:
+    """The default marks the cell; a caller with no wording for it declares ``None``."""
+    with pytest.raises(MissingCellValue, match="absent_text"):
+        SignedValueWithStarsPolicy(absent_text=None).text({"value": None, "stars": "ns"})
+
+
+def test_a_measured_cell_missing_its_symbol_raises_rather_than_printing_none() -> None:
+    """A record claiming a value while withholding what is printed beside it is broken."""
+    with pytest.raises(MissingCellValue, match="'stars' = None"):
+        SignedValueWithStarsPolicy().text({"value": 0.031, "stars": None})
+
+    with pytest.raises(MissingCellValue, match="'n' = None"):
+        SignedValueWithStarsPolicy(count_key="n").text(
+            {"value": 0.031, "stars": "**", "n": None}
+        )
+
+
 # --------------------------------------------------------------------------- #
 # the contract the renderer enforces                                            #
 # --------------------------------------------------------------------------- #
@@ -188,6 +252,32 @@ def test_a_mismatched_cell_record_raises_rather_than_rendering_blank() -> None:
     message = str(excinfo.value)
     assert "'rate'" in message and "'numerator'" in message
     assert "'value'" in message
+    plt.close(fig)
+
+
+def test_a_star_record_without_its_symbol_is_caught_at_the_renderer_boundary() -> None:
+    """The declaration is enforced for the star policy too, naming policy and cell.
+
+    A pairwise square whose builder stopped emitting the symbol would otherwise render
+    with the fill intact and the text silently reduced to bare differences -- a figure
+    that looks finished while having dropped the channel it was drawn for.
+    """
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(3.0, 2.0))
+    cells = [[{"value": 0.03, "n": 12}]]
+    with pytest.raises(CellRecordMismatch) as excinfo:
+        render_grid(
+            ax, np.array([[0.03]]), cells,
+            policy=SignedValueWithStarsPolicy(count_key="n"),
+            cmap=heatmap_cmap(),
+            norm=mcolors.Normalize(vmin=0.0, vmax=1.0),
+        )
+    message = str(excinfo.value)
+    assert "SignedValueWithStarsPolicy" in message
+    assert "row 0, column 0" in message
+    assert "'stars'" in message
     plt.close(fig)
 
 

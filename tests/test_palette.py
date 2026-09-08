@@ -32,6 +32,7 @@ from population_synthetic.analysis.utils.palette import (  # noqa: E402
     STAGE_SERIES,
     SURFACE,
     heatmap_cmap,
+    heatmap_levels,
     opaque,
     relative_luminance,
     text_color_for_rgb,
@@ -71,6 +72,61 @@ def test_heatmap_cmap_is_a_copy_not_the_registry_object():
 def test_missing_colour_defaults_to_the_off_ramp_grey():
     cmap = heatmap_cmap()
     assert matplotlib.colors.to_hex(cmap.get_bad()).upper() == MISSING_COLOR.upper()
+
+
+def test_heatmap_levels_bins_the_house_ramp_into_the_requested_steps():
+    """A tiered quantity is drawn on *n* steps, sampled from the one house ramp."""
+    levels = heatmap_levels(5)
+
+    assert isinstance(levels, matplotlib.colors.ListedColormap)
+    assert levels.N == 5
+    # Sampled from the same ramp, not a second one: the extreme steps sit at the
+    # continuous ramp's own ends.
+    continuous = heatmap_cmap()
+    assert levels(0)[:3] == pytest.approx(continuous(0.0)[:3], abs=0.02)
+    assert levels(4)[:3] == pytest.approx(continuous(1.0)[:3], abs=0.02)
+
+
+def test_heatmap_levels_keeps_an_opaque_missing_colour():
+    """``render_grid`` derives the unpainted cell's text colour from ``set_bad``.
+
+    It raises outright on a fully transparent bad colour, so a discrete ramp that lost
+    the entry on the way through ``resampled`` would take every grid drawn on it down --
+    or, worse, take down only the grids that happen to have an unmeasured cell.
+    """
+    levels = heatmap_levels(5)
+
+    assert matplotlib.colors.to_hex(levels.get_bad()).upper() == MISSING_COLOR.upper()
+    assert levels.get_bad()[3] == pytest.approx(1.0)
+
+
+def test_heatmap_levels_is_a_copy_and_honours_a_declared_missing_colour():
+    levels = heatmap_levels(3, missing="#FF0000")
+    registry = plt.get_cmap(HEATMAP_CMAP)
+
+    assert levels is not registry
+    assert levels.get_bad()[:3] == pytest.approx((1.0, 0.0, 0.0))
+    assert registry(np.ma.masked_invalid([np.nan]))[0][3] == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize("bad_n", [0, -1, 2.5, True, "5"])
+def test_heatmap_levels_rejects_a_step_count_that_is_not_a_positive_integer(bad_n):
+    """Matplotlib would answer these with an empty or silently rounded colormap."""
+    with pytest.raises(ValueError, match="positive integer"):
+        heatmap_levels(bad_n)
+
+
+def test_every_public_name_is_exported():
+    """``__all__`` is listed by hand, so it can only stay complete if that is asserted.
+
+    A colour role added without an entry is half-exported: present on the module,
+    absent from its declared surface, and invisible to anything reading the latter.
+    """
+    public = {
+        name for name in vars(palette)
+        if not name.startswith("_") and name not in {"annotations"}
+    }
+    assert public == set(palette.__all__)
 
 
 @pytest.mark.parametrize(

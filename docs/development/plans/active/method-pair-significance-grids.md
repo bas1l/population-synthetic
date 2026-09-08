@@ -275,15 +275,15 @@ plot_method_pair_significance(result, out_dir) -> list[Path]
 ### Phase 2: Presentation-layer primitives
 **Goal:** Discrete house-ramp levels and a declaring policy exist as named, tested helpers.
 
-- [ ] 2.1 — Add `palette.heatmap_levels(n, *, name=HEATMAP_CMAP, missing=MISSING_COLOR)`
+- [x] 2.1 — Add `palette.heatmap_levels(n, *, name=HEATMAP_CMAP, missing=MISSING_COLOR)`
       returning `heatmap_cmap(name, missing=missing).resampled(n)`, with a docstring stating
       that it preserves `set_bad` and that binning an *ordered* quantity is its only sanctioned
       use (it is not a categorical-hue source).
-- [ ] 2.2 — Export it in `palette.__all__`.
-- [ ] 2.3 — Add `SignedValueWithStarsPolicy` to `grid_annotations.py`, frozen dataclass, with
+- [x] 2.2 — Export it in `palette.__all__`.
+- [x] 2.3 — Add `SignedValueWithStarsPolicy` to `grid_annotations.py`, frozen dataclass, with
       `value_key`, `stars_key`, `count_key: str | None = None`, `number_format`, `absent_text`,
       and a `required_keys` property conditional on `count_key`.
-- [ ] 2.4 — Export it in `grid_annotations.__all__`.
+- [x] 2.4 — Export it in `grid_annotations.__all__`.
 
 **Files Modified:**
 - `src/population_synthetic/analysis/utils/palette.py`
@@ -352,13 +352,13 @@ plot_method_pair_significance(result, out_dir) -> list[Path]
 
 ### Unit Tests
 
-- [ ] `heatmap_levels(5)` returns a `ListedColormap` with `N == 5` whose `get_bad()` is
+- [x] `heatmap_levels(5)` returns a `ListedColormap` with `N == 5` whose `get_bad()` is
       `MISSING_COLOR` and is **not** transparent (the condition `_missing_text_color` raises on).
-- [ ] `SignedValueWithStarsPolicy.required_keys` is `{"value","stars"}` without `count_key` and
+- [x] `SignedValueWithStarsPolicy.required_keys` is `{"value","stars"}` without `count_key` and
       `{"value","stars","n"}` with it.
-- [ ] The policy prints the sign explicitly (`"+0.031"`, not `"0.031"`) and returns
+- [x] The policy prints the sign explicitly (`"+0.031"`, not `"0.031"`) and returns
       `absent_text` for a `None` value rather than raising.
-- [ ] A cell record missing `stars` raises `CellRecordMismatch` naming the policy and the
+- [x] A cell record missing `stars` raises `CellRecordMismatch` naming the policy and the
       `(row, column)`.
 - [x] `_method_panel` on a synthetic 4-model × 3-method matrix produces a `pair_matrix` whose
       `p_holm` is symmetric, whose `mean_diff` is antisymmetric to within floating point, and
