@@ -28,6 +28,7 @@ and how it gets its number.
 | Strokes above the publisher's floor | `analysis/utils/style.py` | `MIN_STROKE_PT` and the stroke ladder below it |
 | 8-bit RGB, no alpha channel | `analysis/utils/style.py` | `house_rc_params()["savefig.transparent"] = False` |
 | Printable canvas | `analysis/utils/style.py`, checked on write in `figures.py` | `FULL` (width) and `MAX_HEIGHT`, via `_check_canvas` |
+| Manuscript text width and strip height (a manuscript rule, not a venue one) | `analysis/utils/style.py` | `TEXT_WIDTH` (456 pt) and `STRIP_HEIGHT` (150 pt); a strip's axis title is `STRIP_AXIS_TITLE`, at the floor |
 | File-size ceiling | `analysis/utils/figures.py` | `MAX_FILE_BYTES`, via `_check_file_size` |
 | Raster resolution | `analysis/utils/figures.py` | `RASTER_DPI` |
 
@@ -91,6 +92,17 @@ tight box, which put a figure drawn exactly at the printable cap over it and mad
 vocabulary unreachable by construction. At zero the written canvas *is* the content extent, so it
 can exceed the cap only when an artist genuinely overflows the figure rectangle — which is the case
 worth failing on.
+
+**The fixed-canvas mode.** `save_figure(fig, path, fixed_canvas=True)` writes the figure at its own
+size instead of the tight box (`bbox_inches=None`). It exists for a figure laid out in absolute
+points to an exact size — today the reference-method gain forest at `TEXT_WIDTH` × `STRIP_HEIGHT`.
+The tight box is built from text *layout* boxes, and a rotated multi-line tick label's layout box
+is wider than its ink, so the tight crop wrote that 150 pt strip 156 pt tall although nothing was
+drawn past its edge. Nothing can grow in fixed mode to hold an overflowing artist, so the mode adds
+one check, `_check_ink_inside_canvas`: ink on an outermost row or column of the rendered PNG, or
+ink beyond the canvas in a second raster rendered over the union of the canvas and the tight box,
+raises `FigureBudgetExceeded` and nothing is written. The canvas and file-size checks run
+unchanged, and the default tight mode is byte-for-byte what it was.
 
 ### No transparency
 

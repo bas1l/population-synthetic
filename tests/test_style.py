@@ -194,6 +194,19 @@ def test_the_size_vocabulary_stays_within_the_printable_canvas():
     assert style.MAX_WIDTH == style.FULL
 
 
+def test_the_strip_canvas_is_the_manuscript_text_width_and_fits_the_page():
+    assert style.TEXT_WIDTH == pytest.approx(456.0 / 72.0)
+    assert style.STRIP_HEIGHT == pytest.approx(150.0 / 72.0)
+    assert style.SINGLE < style.TEXT_WIDTH < style.DOUBLE < style.FULL
+    assert style.STRIP_HEIGHT < style.MAX_HEIGHT
+
+
+def test_the_strip_axis_title_sits_at_the_floor():
+    """A strip is set entirely at the floor, its axis title included."""
+    assert style.STRIP_AXIS_TITLE == style.FONT_FLOOR_PT
+    assert style.FONT_SCALE["STRIP_AXIS_TITLE"] == style.STRIP_AXIS_TITLE
+
+
 def test_figure_size_clamps_an_oversized_pair():
     width, height = style.figure_size(40.0, 40.0)
     assert width == style.FULL
