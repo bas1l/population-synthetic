@@ -135,6 +135,27 @@ def test_the_eps_embeds_the_house_font_even_when_saved_outside_the_style(tmp_pat
     assert b"/sfnts" in text, "the font program itself was not embedded"
 
 
+def test_the_svg_keeps_its_text_as_text_even_when_saved_outside_the_style(tmp_path):
+    """The SVG carries real ``<text>`` nodes, not glyph outlines.
+
+    The SVG is the format a figure is *edited* in, and matplotlib's default
+    ``svg.fonttype = 'path'`` converts every glyph to a shape -- which turned a
+    heatmap's labels into ~1700 anonymous paths an illustration tool cannot retype.
+    Guarded on the driver path (saved outside ``apply_house_style``) and against the
+    pinned default, for the same reason as the EPS test above.
+    """
+    with style.apply_house_style():
+        fig, ax = plt.subplots(figsize=(4.0, 3.0))
+        ax.set_title("Retypeable")
+
+    with plt.rc_context({"svg.fonttype": "path"}):
+        svg = figures.save_figure(fig, tmp_path / "chart.png", dpi=100).with_suffix(".svg")
+    markup = svg.read_text(encoding="utf-8")
+    assert "<text" in markup, "the SVG carries no text node; its glyphs were written as outlines"
+    assert "Retypeable" in markup, "the title is not present as editable text"
+    assert f"font-family: '{style.house_font()}'" in markup, "the text node names no font family"
+
+
 # ------------------------------------------------------------------
 # The budgets are enforced, and enforcement writes nothing
 # ------------------------------------------------------------------

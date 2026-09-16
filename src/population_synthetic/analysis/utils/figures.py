@@ -78,12 +78,20 @@ OUTPUT_SUFFIXES = (RASTER_SUFFIX, *VECTOR_SUFFIXES)
 #: :func:`~population_synthetic.analysis.utils.style.apply_house_style` -- which is what
 #: every chart module that *returns* an unsaved ``Figure`` for its driver to save does.
 #: Left unset, matplotlib's default ``ps.fonttype = 3`` writes vector text as Type 3
-#: charprocs instead of embedding the chosen TrueType face.
+#: charprocs instead of embedding the chosen TrueType face, and its default
+#: ``svg.fonttype = 'path'`` writes SVG text as glyph outlines -- which leaves the one
+#: format this layer emits to be *edited* with no editable text in it.
 #:
 #: The values are taken from the house style rather than restated, so the two can never
 #: disagree; a key disappearing from the style block raises here rather than silently
 #: reverting to a matplotlib default.
-EXPORT_RC_KEYS = ("ps.fonttype", "pdf.fonttype", "ps.useafm", "savefig.transparent")
+EXPORT_RC_KEYS = (
+    "ps.fonttype",
+    "pdf.fonttype",
+    "ps.useafm",
+    "savefig.transparent",
+    "svg.fonttype",
+)
 
 #: The file-size ceiling the standards document imposes, in bytes. Applied to every
 #: written format, not only the EPS: a PNG over the ceiling is equally unsubmittable.

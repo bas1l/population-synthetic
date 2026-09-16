@@ -627,6 +627,18 @@ def house_rc_params() -> dict[str, Any]:
         "pdf.fonttype": 42,
         "ps.fonttype": 42,
         "ps.useafm": False,
+        # The SVG backend reads neither of the two above, and matplotlib's default
+        # ``'path'`` converts every glyph to an outline -- so the one format this layer
+        # emits *to be edited* arrived with no editable text in it at all: a heatmap's
+        # labels reached Inkscape as ~1700 anonymous shapes. ``'none'`` writes real
+        # ``<text>`` nodes naming the family instead.
+        #
+        # The face is therefore referenced, not embedded, and a host lacking the whole
+        # of FONT_STACK substitutes one with different metrics -- accepted, because the
+        # SVG is the working copy and the EPS above is the submission artifact, which
+        # keeps its embedded face. matplotlib offers no third option: the old
+        # ``'svgfont'`` embedding mode was removed.
+        "svg.fonttype": "none",
     }
 
 
