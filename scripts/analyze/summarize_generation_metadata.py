@@ -18,7 +18,7 @@ tokens, timing, deep diagnostics, and cross-factor significance:
                               across the model and method factors) + pricing provenance
     charts/                   per-metric model x method mean-heatmaps, cross-factor
                               comparison charts (box/bar/heatmap + significance stars),
-                              and per-combo diagnostic charts (PNG+SVG via save_figure)
+                              and per-combo diagnostic charts (PNG+SVG+EPS via save_figure)
 
 This script recomputes nothing from populations -- it reads only the raw
 generation telemetry. It is an isolated island (no dependency on the map/compare

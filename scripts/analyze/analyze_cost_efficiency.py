@@ -41,7 +41,7 @@ Outputs, per country, under the analysis-stage cost_efficiency folder:
     {country}_cost_efficiency.json    the same quantities plus totals, the withdrawn
                                       combinations, the membership rule and pricing
                                       provenance
-    {country}_cost_vs_fidelity.png/.svg   accuracy against cost, symlog x with the
+    {country}_cost_vs_fidelity.png/.svg/.eps   accuracy against cost, symlog x with the
                                       labelled unmetered band
 
 The JSON carries no timestamp, so re-running over unchanged inputs rewrites the CSV and
@@ -57,7 +57,7 @@ Flags:
 --output-base   Base output directory. Default: config/synthetic/experiment_defaults.yaml.
 --no-charts     Skip the figure (the CSV and the JSON are still written).
 --force         Rewrite a country whose {country}_cost_efficiency.json already exists.
---dpi           PNG render resolution. Default: 200.
+--dpi           PNG render resolution. Default: the layer's one raster resolution (``figures.RASTER_DPI``).
 """
 
 import argparse
@@ -82,7 +82,7 @@ from population_synthetic.analysis.model_ranking.hosting import (
     load_hosting_config,
 )
 from population_synthetic.analysis.utils.cost_csv import write_cost_csv
-from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.figures import RASTER_DPI, save_figure
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -135,7 +135,7 @@ def _parse_args() -> argparse.Namespace:
         help="Rewrite a country even if its {country}_cost_efficiency.json already exists "
         "(default: skip that country if present).",
     )
-    parser.add_argument("--dpi", type=int, default=200, help="PNG render resolution. Default: 200.")
+    parser.add_argument("--dpi", type=int, default=RASTER_DPI, help=f"PNG render resolution. Default: {RASTER_DPI}.")
     return parser.parse_args()
 
 

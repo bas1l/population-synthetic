@@ -128,6 +128,27 @@ def strategy_versions(
     }
 
 
+def strategy_families(
+    strategy_ids: list[str],
+    *,
+    strategies_dir: str | Path | None = None,
+) -> dict[str, str]:
+    """Map each id in *strategy_ids* to its declared ``family`` (fail-fast).
+
+    The sibling of :func:`strategy_versions` over the other half of the same pair.
+    Like the version, the family is read from the strategy's own axis YAML and never
+    inferred from the id, and it is a **presentation** key: it is the first component
+    of :func:`strategy_complexity_order`'s sort key, and the label layer derives the
+    method letter from its rank in the family index. Raises on the same conditions as
+    :func:`strategy_complexity_order` (unknown id, missing/malformed metadata).
+    """
+    directory = Path(strategies_dir) if strategies_dir is not None else STRATEGIES_DIR
+    return {
+        strategy_id: _strategy_family_version(strategy_id, directory)[0]
+        for strategy_id in dict.fromkeys(strategy_ids)
+    }
+
+
 def strategy_complexity_order(
     strategy_ids: list[str],
     *,

@@ -1,5 +1,10 @@
 id: "openrouter_nemotron3_super"
 label: "OpenRouter Nemotron 3 Super 120B"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "Nemotron 3 Super 120B"
 model_config:
   provider: "openrouter"
   model: "nvidia/nemotron-3-super-120b-a12b"

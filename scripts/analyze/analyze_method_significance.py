@@ -34,9 +34,34 @@ Outputs, per country, under the analysis-stage method_significance folder:
                                             as blocks): per category + overall omnibus & pairwise p
     {country}_method_comparison.csv         one row per (category|overall, method-pair): omnibus
                                             stat/p/p_bh/W + pairwise p + significance stars
-    {country}_method_comparison.png/.svg    bars + model points + significance brackets/stars,
+    {country}_method_comparison.png/.svg/.eps    bars + model points + significance brackets/stars,
                                             one panel per category + overall (grid)
-    {country}_method_comparison_overall.png/.svg  the single Overall headline panel
+    {country}_method_comparison_overall.png/.svg/.eps  the single Overall headline panel
+    {country}_method_pair_significance/     one method x method significance square per
+                                            category + overall, in two variants: the
+                                            canonical {panel}.png/.svg/.eps and the
+                                            {panel}_with_counts.* diagnostic sibling.
+                                            Fill = the pair's Holm-corrected significance
+                                            tier, text = the signed row-minus-column TV
+                                            difference, so every pair is shown, not only
+                                            the ones the bracket figure's pairs_mode draws
+    {country}_reference_method_gap.png/.svg/.eps  one grid for the whole run: rows = the
+                                            simpler methods, columns = every analysed
+                                            category + Overall, cell = the most complex
+                                            method (derived from the method axis) against
+                                            that row's method. Text = REFERENCE minus row,
+                                            the opposite orientation from the squares
+                                            above, stated in the figure's own key.
+                                            {country}_reference_method_gap_with_counts.*
+                                            is the diagnostic sibling
+    {country}_reference_method_gain_forest.png/.svg/.eps  the same reference contrasts as a
+                                            456 x 150 pt strip: per category, the reference
+                                            minus each simpler method with its confidence
+                                            interval and Holm significance symbol, plus an
+                                            omnibus track. No title, key or caveat in the
+                                            graphic -- those go in the manuscript caption;
+                                            the identical-method caveat is printed to the
+                                            console for that caption
     {country}_slope_heatmap.png             attribute x model descriptive TV(method) slope
     {country}_cd_diagram.png                model critical-difference diagram (Nemenyi)
     {country}_factor_dominance.png          eta^2 variance shares (model/method/category)
@@ -80,7 +105,10 @@ from population_synthetic.analysis.method_significance.charts import (
     plot_cd_diagram,
     plot_factor_dominance,
     plot_method_comparison,
+    plot_method_pair_significance,
     plot_method_trends,
+    plot_reference_method_gain_forest,
+    plot_reference_method_gap,
     plot_slope_heatmap,
 )
 from population_synthetic.analysis.method_significance.marginal_charts import (
@@ -93,6 +121,7 @@ from population_synthetic.analysis.model_ranking.loader import (
     scheme_category_values,
 )
 from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.utils.labels import attribute_label, method_letters
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -153,6 +182,25 @@ def _split_csv(values: list[str] | None) -> list[str] | None:
     if values is None:
         return None
     return [v.strip() for item in values for v in item.split(",") if v.strip()] or None
+
+
+def _identical_method_lines(result: dict) -> list[str]:
+    """One line per category panel whose methods produced identical TV-similarity.
+
+    Reads the builder's ``identical_method_groups`` and its ``identical_methods_note``
+    clause; authors no statement of its own. The lines exist for whoever writes a figure
+    caption, since the gain forest carries no caveat in the graphic.
+    """
+    block = result.get("method_comparison") or {}
+    panels = block.get("panels") or {}
+    note = block.get("identical_methods_note")
+    letters = method_letters(result["metadata"]["method_order"])
+    lines = []
+    for attr in result["metadata"]["attributes"]:
+        for group in (panels.get(attr) or {}).get("identical_method_groups") or []:
+            methods = ", ".join(letters[method] for method in group)
+            lines.append(f"  {attribute_label(attr)}: methods {methods} {note}.")
+    return lines
 
 
 def _fmt_p(value: float | None) -> str:
@@ -408,6 +456,11 @@ def main() -> None:
             result, significance_dir / f"{country}_method_comparison.csv"
         )
         print(f"Method-comparison CSV written to {mc_csv}")
+        identical = _identical_method_lines(result)
+        if identical:
+            print("Identical-method caveat (for the gain-forest caption):")
+            for line in identical:
+                print(line)
 
         if not args.no_charts:
             heatmap = plot_slope_heatmap(result, significance_dir / f"{country}_slope_heatmap.png")
@@ -449,6 +502,36 @@ def main() -> None:
                 print(f"Method-comparison Overall panel written to {comparison_overall} (+ .svg)")
             else:
                 print("Method-comparison Overall panel skipped (no Overall panel / nothing plottable).")
+            pair_dir = significance_dir / f"{country}_method_pair_significance"
+            pair_grids = plot_method_pair_significance(result, pair_dir)
+            print(
+                f"Method pair-significance grids written to {pair_dir} "
+                f"({len(pair_grids)} file(s))"
+            )
+            reference_gap = plot_reference_method_gap(
+                result, significance_dir / f"{country}_reference_method_gap.png"
+            )
+            if reference_gap:
+                print(
+                    f"Reference-method gap grid written to {significance_dir} "
+                    f"({len(reference_gap)} file(s))"
+                )
+            else:
+                print(
+                    "Reference-method gap grid skipped (no method-comparison panels / "
+                    "fewer than two methods on the axis)."
+                )
+
+            gain_forest = plot_reference_method_gain_forest(
+                result, significance_dir / f"{country}_reference_method_gain_forest.png"
+            )
+            if gain_forest is not None:
+                print(f"Reference-method gain forest written to {gain_forest} (+ .svg, .eps)")
+            else:
+                print(
+                    "Reference-method gain forest skipped (no category panels / fewer than "
+                    "two methods / more comparators than the strip can separate)."
+                )
 
             # Descriptive per-method marginal-progression charts (additive side-output).
             # This is the one path that reads the mapped populations (not the fidelity

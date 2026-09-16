@@ -1,5 +1,10 @@
 id: "ollama_deepseek_r1_14b"
 label: "Ollama DeepSeek-R1 14B"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "DeepSeek-R1 14B"
 model_config:
   provider: "ollama"
   model: "deepseek-r1:14b"

@@ -32,7 +32,13 @@ from population_synthetic.analysis.method_significance.charts import (  # noqa: 
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from tests._performance_fixtures import make_combo  # noqa: E402
 
-MODELS = ["model_a", "model_b", "model_c", "model_d", "model_e"]
+# Real axis ids throughout: the charts resolve every printed id through
+# ``analysis/utils/labels.py``, which raises on an id config does not declare, so a
+# fixture of invented ids would only exercise that raise.
+MODELS = [
+    "claude_haiku", "claude_sonnet", "openrouter_kimi_k3",
+    "ollama_qwen3_14b", "gemini_flash",
+]
 # The five v1 families, ordered by the config-derived accessor (the same order
 # every consumer resolves; asserted against the legacy sequence in test_axes.py).
 STRATEGIES = strategy_complexity_order([
@@ -42,8 +48,15 @@ STRATEGIES = strategy_complexity_order([
     "all_pick_dag",
     "all_pick",
 ])
-ATTRS = ["trend_attr", "shift_attr"]
-CATEGORY_VALUES = {"trend_attr": ["a", "b", "c", "d"], "shift_attr": ["x", "y", "z"]}
+#: One attribute carrying a monotone method trend and one a level shift. Which
+#: canonical attribute plays which role is arbitrary -- the numbers below decide it.
+TREND_ATTR = "education_level"
+SHIFT_ATTR = "housing_tenure"
+ATTRS = [TREND_ATTR, SHIFT_ATTR]
+CATEGORY_VALUES = {
+    TREND_ATTR: ["Primary", "Upper secondary", "Tertiary", "Unknown"],
+    SHIFT_ATTR: ["Owned", "Rented", "Other"],
+}
 
 
 def _trend_tv(m_idx: int, rank: int) -> float:
@@ -60,8 +73,8 @@ def _full_grid(models=MODELS):
         for rank, strategy in enumerate(STRATEGIES, start=1):
             combos.append(make_combo(
                 slug=f"swedish_{strategy}_{model}", strategy=strategy, model=model,
-                tv_by_attr={"trend_attr": _trend_tv(m_idx, rank),
-                            "shift_attr": _shift_tv(m_idx, rank)},
+                tv_by_attr={TREND_ATTR: _trend_tv(m_idx, rank),
+                            SHIFT_ATTR: _shift_tv(m_idx, rank)},
             ))
     return combos
 
@@ -193,11 +206,11 @@ def test_zero_significant_pairs_panel_renders_without_brackets(tmp_path):
 def test_insufficient_n_panel_renders_without_error(tmp_path, caplog):
     # Two models only -> every panel is insufficient_n (n<3); must still render.
     result = build_method_significance(
-        _full_grid(models=["solo_a", "solo_b"]), ATTRS,
+        _full_grid(models=["claude_haiku", "claude_sonnet"]), ATTRS,
         category_values=CATEGORY_VALUES,
         comparison_config=load_comparison_config(),
     )
-    assert result["method_comparison"]["panels"]["trend_attr"]["insufficient_n"] is True
+    assert result["method_comparison"]["panels"][TREND_ATTR]["insufficient_n"] is True
     import logging
     with caplog.at_level(logging.WARNING):
         out = plot_method_comparison(result, tmp_path / "insufficient.png")

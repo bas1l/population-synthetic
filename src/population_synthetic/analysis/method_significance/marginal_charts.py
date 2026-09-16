@@ -32,7 +32,6 @@ from pathlib import Path
 
 from population_synthetic.analysis.fidelity.charts import _HIGH_CARDINALITY_FIELDS
 from population_synthetic.analysis.fidelity.scheme import load_scheme
-from population_synthetic.analysis.method_significance.charts import _COLOR_SERIES
 from population_synthetic.analysis.utils.axes import (
     decompose_slug,
     diagnose_slug,
@@ -40,7 +39,32 @@ from population_synthetic.analysis.utils.axes import (
 )
 from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    country_label,
+    method_key_lines,
+    method_letters,
+    model_label,
+)
 from population_synthetic.analysis.utils.marginals import compute_proportions
+from population_synthetic.analysis.utils.palette import (
+    BASELINE_DARK,
+    CATEGORICAL_SERIES,
+    SURFACE,
+)
+from population_synthetic.analysis.utils.style import (
+    AXIS_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    PANEL_TITLE,
+    TICK_LABEL,
+    figure_size,
+    grow_height,
+    grow_width,
+    house_style,
+)
+from population_synthetic.analysis.utils.table_style import fit_to_page
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 logger = logging.getLogger(__name__)
@@ -49,9 +73,14 @@ logger = logging.getLogger(__name__)
 # distinct from the method-progression series).
 REAL_SERIES_LABEL = "real"
 
-# Colour of the baseline series -- deliberately outside ``_COLOR_SERIES`` so the
+# What that baseline series is CALLED in the legend. The key above is a data-contract
+# token shared with the loader; this is the reader-facing phrase, and the two are
+# deliberately separate so renaming the caption cannot move the contract.
+_REAL_SERIES_CAPTION = "Real population"
+
+# Colour of the baseline series -- deliberately outside ``CATEGORICAL_SERIES`` so the
 # real distribution reads as distinct from the method-progression ramp.
-_BASELINE_COLOR = "#222222"
+_BASELINE_COLOR = BASELINE_DARK
 
 # Type alias for the assembled structure returned by load_marginal_series.
 PreparedSeries = dict[str, dict[str, list[tuple[str, dict[str, float]]]]]
@@ -224,12 +253,13 @@ def load_marginal_series(
 
 
 def _series_color(index: int) -> str:
-    """Colour for the *index*-th series: baseline distinct, methods ramp _COLOR_SERIES."""
+    """Colour for the *index*-th series: baseline distinct, methods ramp CATEGORICAL_SERIES."""
     if index == 0:
         return _BASELINE_COLOR
-    return _COLOR_SERIES[(index - 1) % len(_COLOR_SERIES)]
+    return CATEGORICAL_SERIES[(index - 1) % len(CATEGORICAL_SERIES)]
 
 
+@house_style
 def plot_marginal_progression(
     prepared: PreparedSeries,
     country: str,
@@ -240,7 +270,7 @@ def plot_marginal_progression(
     Pure visualization sink over the structure from :func:`load_marginal_series`:
     each figure overlays the real baseline (drawn distinct) with the method series
     (colour-ramped from
-    :data:`~population_synthetic.analysis.method_significance.charts._COLOR_SERIES`)
+    :data:`~population_synthetic.analysis.utils.palette.CATEGORICAL_SERIES`)
     as offset bar groups at every category on the scheme axis. Proportions use a
     fixed ``[0, 1]`` scale; high-cardinality attributes
     (:data:`~population_synthetic.analysis.fidelity.charts._HIGH_CARDINALITY_FIELDS`)
@@ -262,8 +292,6 @@ def plot_marginal_progression(
         The list of written PNG paths (SVG siblings are written alongside but not
         listed), in ``(model, attribute)`` iteration order.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -283,6 +311,14 @@ def plot_marginal_progression(
             if all(props.get(cat, 0.0) == 0.0 for _, props in series for cat in cats):
                 continue
 
+            # The series labels are the loader's contract tokens: the baseline key and
+            # strategy ids. Each is resolved to a reader-facing caption here, and the
+            # method captions carry their own key line, so the legend needs no
+            # separate key block of its own.
+            method_ids = [label for label, _ in series if label != REAL_SERIES_LABEL]
+            caption = {REAL_SERIES_LABEL: _REAL_SERIES_CAPTION}
+            caption.update(zip(method_letters(method_ids), method_key_lines(method_ids)))
+
             n_series = len(series)
             n_cats = len(cats)
             horizontal = attr in _HIGH_CARDINALITY_FIELDS
@@ -293,46 +329,52 @@ def plot_marginal_progression(
             offsets = [(i - (n_series - 1) / 2.0) * bar_size for i in range(n_series)]
 
             if horizontal:
-                fig_height = max(4.0, min(n_cats * (0.35 * n_series + 0.4) + 2.0, 22.0))
-                fig, ax = plt.subplots(figsize=(11.0, fig_height))
+                fig_height = grow_height(
+                    n_cats, per_item=0.35 * n_series + 0.4, padding=2.0, minimum=4.0
+                )
+                fig, ax = plt.subplots(figsize=figure_size(FULL, fig_height))
                 y_pos = np.arange(n_cats)
                 for i, (label, props) in enumerate(series):
                     vals = [props.get(cat, 0.0) for cat in cats]
                     ax.barh(
                         y_pos - offsets[i], vals, height=bar_size,
-                        color=_series_color(i), label=label,
-                        edgecolor="white", linewidth=0.3,
+                        color=_series_color(i), label=caption[label],
+                        edgecolor=SURFACE, linewidth=0.3,
                     )
                 ax.set_yticks(y_pos)
-                ax.set_yticklabels(cats, fontsize=7)
-                ax.set_xlabel("Proportion", fontsize=8)
+                ax.set_yticklabels(cats, fontsize=TICK_LABEL)
+                ax.set_xlabel("Proportion", fontsize=AXIS_TITLE)
                 ax.set_xlim(0.0, 1.0)
                 ax.invert_yaxis()
             else:
-                fig_width = max(8.0, n_cats * max(0.9, n_series * 0.22) + 2.0)
-                fig, ax = plt.subplots(figsize=(fig_width, 5.0))
+                fig_width = grow_width(
+                    n_cats, per_item=max(0.9, n_series * 0.22), padding=2.0, minimum=FULL
+                )
+                fig, ax = plt.subplots(figsize=figure_size(fig_width, 5.0))
                 x_pos = np.arange(n_cats)
                 for i, (label, props) in enumerate(series):
                     vals = [props.get(cat, 0.0) for cat in cats]
                     ax.bar(
                         x_pos + offsets[i], vals, width=bar_size,
-                        color=_series_color(i), label=label,
-                        edgecolor="white", linewidth=0.3,
+                        color=_series_color(i), label=caption[label],
+                        edgecolor=SURFACE, linewidth=0.3,
                     )
                 ax.set_xticks(x_pos)
-                ax.set_xticklabels(cats, rotation=30, ha="right", fontsize=7)
-                ax.set_ylabel("Proportion", fontsize=8)
+                ax.set_xticklabels(cats, rotation=30, ha="right", fontsize=TICK_LABEL)
+                ax.set_ylabel("Proportion", fontsize=AXIS_TITLE)
                 ax.set_ylim(0.0, 1.0)
 
             ax.set_title(
-                f"{country} / {model}: {attr}\nreal baseline vs method progression",
-                fontsize=10, fontweight="bold",
+                f"{country_label(country)} / {model_label(model)}: {attribute_label(attr)}"
+                f"\nreal baseline vs method progression",
+                fontsize=PANEL_TITLE, fontweight="bold",
             )
-            ax.legend(fontsize=7, title="series (simplest -> most complex)", title_fontsize=7)
-            ax.tick_params(axis="both", labelsize=7)
+            ax.legend(fontsize=LEGEND_LABEL, title="series (simplest -> most complex)", title_fontsize=LEGEND_TITLE)
+            ax.tick_params(axis="both", labelsize=TICK_LABEL)
             fig.tight_layout()
+            fit_to_page(fig)
 
             out_path = root / model / f"{attr}.png"
-            written.append(save_figure(fig, out_path, dpi=150))
+            written.append(save_figure(fig, out_path))
 
     return written

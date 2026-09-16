@@ -3,7 +3,7 @@
 Both renderers take the document
 :func:`~population_synthetic.analysis.validation_attrition.builder.build_document`
 assembled and **return** an unsaved ``Figure``; the driver owns the path, the dpi and
-the PNG+SVG pair (``analysis/utils/figures.py::save_figure``). Nothing here opens a
+the PNG+SVG+EPS trio (``analysis/utils/figures.py::save_figure``). Nothing here opens a
 file, resolves an output directory or knows which country it is drawing -- the country
 travels in the document like every other value.
 
@@ -38,6 +38,18 @@ grey is the layer's one "no value here" colour and inventing a second would impl
 value. The distinction that matters -- a measured cell is never grey, and a grey cell is
 never annotated with a number -- is asserted by the tests.
 
+**The grid is published twice from one renderer.** The clean variant -- the camera-ready
+one, published at the bare filename -- prints the rate alone, one step up the house scale
+on the room the dropped line frees; the ``_with_counts`` sibling prints it together with
+the two counts it is the quotient of. They are the same figure in every other respect --
+rows, columns, extent, colour scale, markings, marginals -- because the only thing that
+varies between them is the annotation policy handed to
+``analysis/utils/grids.py::render_grid``. A second ``..._clean()`` function would have
+duplicated the draw loop, and the two would have diverged on the first edit. The record
+that pairs a policy with its wording and its type size, and the rule that gives the clean
+variant the unsuffixed name, are shared with every other varianted grid in the layer
+(``analysis/utils/grid_variants.py``).
+
 Byte-reproducibility is claimed for the PNGs only. Matplotlib stamps every SVG with a
 creation timestamp, so no SVG in this repository is byte-stable and this module makes no
 such claim for its own.
@@ -45,33 +57,67 @@ such claim for its own.
 
 from __future__ import annotations
 
-import textwrap
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from population_synthetic.analysis.model_ranking.table_style import (
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
+from population_synthetic.analysis.utils.grid_annotations import (
+    RateOnlyPolicy,
+    RateWithCountsPolicy,
+)
+from population_synthetic.analysis.utils.grid_variants import (
+    CANONICAL_VARIANT,
+    COUNTED_VARIANT,
+    GridVariant,
+    variant_map,
+)
+from population_synthetic.analysis.utils.grids import render_grid
+from population_synthetic.analysis.utils.labels import (
+    country_label,
+    method_key_lines,
+    method_letters,
+    model_labels,
+)
+from population_synthetic.analysis.utils.palette import (
+    HOST_COLORS,
+    MISSING_COLOR,
+    STAGE_SERIES,
+    text_color_for_rgb,
+)
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    ANNOTATION_LARGE,
+    AXIS_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    PANEL_TITLE,
+    TICK_LABEL,
+    caption_block,
+    grow_height,
+    grow_width,
+    house_style,
+)
+from population_synthetic.analysis.utils.table_style import (
     ANNOT_FONTSIZE,
     BOX_EDGE,
-    HOST_COLORS,
     HOST_DEFAULT_CLASS,
     HOST_LABELS,
     add_percentage_colorbar,
     best_cells_per_column,
     categories_on_top,
+    fit_to_page,
     horizontal_divider,
     inferno_cmap,
     vertical_divider,
 )
-from population_synthetic.analysis.utils.axes import strategy_complexity_order
-from population_synthetic.analysis.utils.palette import (
-    MISSING_COLOR,
-    text_color_for_rgb,
-    text_color_on,
-)
 
 __all__ = [
     "CELL_STATES",
+    "GRID_VARIANTS",
+    "GRID_VARIANT_CLEAN",
+    "GRID_VARIANT_WITH_COUNTS",
     "plot_attrition_funnel",
     "plot_mapped_validity_grid",
 ]
@@ -94,22 +140,57 @@ _WITHDRAWN_HATCH = "xxx"
 _UNDEFINED_EDGE_STYLE = (0, (1, 1.6))
 
 #: The funnel's four disjoint slices of the generated pool, in draw order (widest stage
-#: of the funnel last). ColorBrewer's 4-class RdBu: these encode **which stage** a
+#: of the funnel last), on the palette's stage series: these encode **which stage** a
 #: persona left at -- a category with a direction, not a score -- so they are
 #: deliberately not the sequential score ramp, and the pair of blues (kept) reads against
 #: the pair of reds (lost) without relying on hue discrimination alone.
 _SEGMENTS: tuple[tuple[str, str, str], ...] = (
-    ("selected", "#0571B0", "selected (drawn by the cap)"),
-    ("clean_unselected", "#92C5DE", "clean, not drawn"),
-    ("failed_mapped", "#F4A582", "failed the mapped-value gate"),
-    ("failed_raw", "#CA0020", "failed the raw-completeness gate"),
+    ("selected", STAGE_SERIES[0], "selected (drawn by the cap)"),
+    ("clean_unselected", STAGE_SERIES[1], "clean, not drawn"),
+    ("failed_mapped", STAGE_SERIES[2], "failed the mapped-value gate"),
+    ("failed_raw", STAGE_SERIES[3], "failed the raw-completeness gate"),
 )
 
 #: Fill for a combination whose generated pool is empty: there is no composition to draw,
 #: and a zero-width bar is indistinguishable from a missing row.
 _EMPTY_POOL_COLOR = MISSING_COLOR
 
-_CAPTION_WRAP = 150
+
+#: The counted sibling: the rate over the two counts it is the quotient of. Written to
+#: ``..._with_counts``, so nothing this figure ever printed is lost.
+GRID_VARIANT_WITH_COUNTS = GridVariant(
+    name=COUNTED_VARIANT,
+    policy=RateWithCountsPolicy(
+        value_key="rate", numerator_key="numerator", denominator_key="denominator",
+    ),
+    cell_clause=(
+        "Cell: retention_rate (clean / generated) as published in the attrition CSV, "
+        "printed with the two counts it is the quotient of."
+    ),
+    fontsize=ANNOT_FONTSIZE,
+    linespacing=1.35,
+)
+
+#: The camera-ready variant, published at the bare filename: the rate alone, one step
+#: larger. The counts it drops are not lost -- they are in the CSV, in the counted sibling
+#: and in the row marginals -- so this variant costs ink rather than evidence.
+GRID_VARIANT_CLEAN = GridVariant(
+    name=CANONICAL_VARIANT,
+    policy=RateOnlyPolicy(value_key="rate"),
+    cell_clause=(
+        "Cell: retention_rate (clean / generated) as published in the attrition CSV. The "
+        "two counts behind each rate are printed on the with-counts sibling figure and in "
+        "the CSV; the pooled marginals here carry theirs."
+    ),
+    fontsize=ANNOTATION_LARGE,
+    linespacing=None,
+)
+
+#: The publishable variants by name, so a driver enumerates them instead of naming them.
+#: The clean one is first because it is the one published at the bare filename.
+GRID_VARIANTS: dict[str, GridVariant] = variant_map(
+    GRID_VARIANT_CLEAN, GRID_VARIANT_WITH_COUNTS,
+)
 
 
 def _combinations(document: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -195,6 +276,7 @@ def _pooled(entries: Sequence[Mapping[str, Any]]) -> tuple[float | None, int, in
     return (clean / generated, clean, generated)
 
 
+@house_style
 def plot_attrition_funnel(document: Mapping[str, Any]):
     """Per-combination attrition funnel, normalised, one horizontal bar per combination.
 
@@ -222,20 +304,25 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     """
     entries = sorted(_combinations(document), key=_sort_key)
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
 
     n_rows = len(entries)
-    fig, ax = plt.subplots(figsize=(15.0, max(4.0, n_rows * 0.26 + 3.4)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(n_rows, per_item=0.26, padding=3.4, minimum=4.0)))
 
+    # Row captions are the model's display name and the combination's method letter,
+    # resolved over the whole figure's id set because a letter's version marker is a
+    # property of the set. The key travels with the caption block below.
+    display_models = model_labels([entry["model"] for entry in entries])
+    letters = method_letters([entry["strategy"] for entry in entries])
     labels: list[str] = []
     for index, entry in enumerate(entries):
         y = n_rows - 1 - index  # worst at the top
         generated = _funnel_counts(entry)[0]
         suffix = "  [withdrawn]" if entry["excluded"] else ""
-        labels.append(f"{entry['slug']}{suffix}")
+        labels.append(
+            f"{display_models[entry['model']]} / {letters[entry['strategy']]}{suffix}"
+        )
 
         if generated == 0:
             # No composition exists. Drawn as a full-width grey band rather than as an
@@ -247,7 +334,7 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
                 fontsize=ANNOT_FONTSIZE,
                 color=text_color_for_rgb(_to_rgb(_EMPTY_POOL_COLOR)),
             )
-            ax.text(1.02, y, "N=0", ha="left", va="center", fontsize=7.0)
+            ax.text(1.02, y, "N=0", ha="left", va="center", fontsize=ANNOTATION)
             continue
 
         slices = _segment_counts(entry)
@@ -261,12 +348,12 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
         rate = entry["retention_rate"]
         ax.text(
             1.02, y, f"N={generated}   retained {rate * 100:.1f}%",
-            ha="left", va="center", fontsize=7.0,
+            ha="left", va="center", fontsize=ANNOTATION,
             fontweight="bold" if entry["excluded"] else "normal",
         )
 
     ax.set_yticks(range(n_rows))
-    ax.set_yticklabels(list(reversed(labels)), fontsize=6.5)
+    ax.set_yticklabels(list(reversed(labels)), fontsize=TICK_LABEL)
     for label, entry in zip(reversed(ax.get_yticklabels()), entries):
         if entry["excluded"]:
             label.set_color(_SEGMENTS[3][1])
@@ -275,18 +362,18 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(-0.8, n_rows - 0.2)
     ax.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
-    ax.set_xticklabels(["0", "25", "50", "75", "100"], fontsize=8)
-    ax.set_xlabel("share of the combination's generated pool (%)", fontsize=9)
+    ax.set_xticklabels(["0", "25", "50", "75", "100"], fontsize=TICK_LABEL)
+    ax.set_xlabel("share of the combination's generated pool (%)", fontsize=AXIS_TITLE)
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
 
     totals = document["totals"]
     ax.set_title(
-        f"{document['country']}: validation attrition per combination "
+        f"{country_label(document['country'])}: validation attrition per combination "
         f"({document['n_combinations']} combinations, {document['n_excluded']} withdrawn)\n"
         "each bar is one combination's generated pool, normalised -- absolute pools are "
         "not comparable",
-        fontsize=11, fontweight="bold", pad=14,
+        fontsize=PANEL_TITLE, fontweight="bold", pad=14,
     )
 
     handles = [
@@ -295,7 +382,7 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     ]
     ax.legend(
         handles=handles, loc="upper left", bbox_to_anchor=(0.0, -0.04),
-        ncol=4, fontsize=7.5, frameon=False,
+        ncol=4, fontsize=LEGEND_LABEL, frameon=False,
     )
 
     pooled_rate = totals["retention_rate"]
@@ -316,12 +403,15 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
         "gate excluded it: its personas were generated and validated but reach no other "
         "artifact in the analysis layer."
     )
-    ax.text(
-        0.0, -0.075, textwrap.fill(caption, _CAPTION_WRAP), transform=ax.transAxes,
-        ha="left", va="top", fontsize=7, clip_on=False,
-    )
-
-    fig.tight_layout()
+    # The row captions carry method letters, so the key travels on the figure with them.
+    key = "Methods:  " + "   ".join(method_key_lines([e["strategy"] for e in entries]))
+    # Drawn as a figure-width block rather than as unclipped axes text: the axes are
+    # inset from the paper by the label column, so a caption anchored at their left
+    # edge ran off the right of the page and grew the exported canvas with it.
+    caption_block(fig, f"{key}\n{caption}", fontsize=ANNOTATION)
+    # The title is centred on the axes and the legend is anchored to them, so both
+    # inherit the label column's inset and reach past the right edge of the page.
+    fit_to_page(fig)
     return fig
 
 
@@ -349,20 +439,32 @@ def _cell_state(entry: Mapping[str, Any] | None) -> str:
     return "measured"
 
 
+@house_style
 def plot_mapped_validity_grid(
     document: Mapping[str, Any],
     *,
     hosting: Mapping[str, str] | None = None,
+    variant: GridVariant = GRID_VARIANT_CLEAN,
 ):
     """Model x method grid of validation survival -- the mapping-survival figure.
 
     Each cell is that combination's ``retention_rate`` read from the document: the share
     of its generated pool that passed **both** validity gates and so was available to the
-    cap. Printed as a percentage together with the two counts it is the quotient of
-    (``clean/generated``), so the rate never travels without its denominator. Columns are
-    methods in :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order`
-    -- a config fact, not an artifact of this figure -- and rows are models ordered by
-    their pooled survival, worst last.
+    cap. Columns are methods in
+    :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order` -- a
+    config fact, not an artifact of this figure -- lettered from the family index, with
+    the key drawn on the figure; rows are models ordered by their pooled survival, worst
+    last, under their display labels. No axis carries a config id.
+
+    What a cell *prints* is the *variant*'s decision and the only difference between the
+    two publications of this figure: the clean one prints the rate alone one step larger,
+    the with-counts one prints it together with the two counts it is the quotient of.
+    Everything else -- the rows, the columns, the extent, the colour scale, the markings
+    and the marginals -- is shared, because both go through the same draw loop
+    (:func:`~population_synthetic.analysis.utils.grids.render_grid`) with different
+    annotation policies rather than through two functions that would diverge on the next
+    edit. The row and column marginals always print their counts, so the clean variant
+    still shows every rate on the figure over a stated base.
 
     This is the one artifact in the analysis layer on which a **withdrawn** combination
     appears at all: every other consumer reads the capped mirror, which an excluded
@@ -376,6 +478,9 @@ def plot_mapped_validity_grid(
             the row labels, matching the sibling fidelity grids. A model absent from it
             is drawn in the shared presentation default; ``None`` colours every row in
             it, which is a label colour and affects no value.
+        variant: Which publication of the figure to draw -- :data:`GRID_VARIANT_CLEAN`
+            (the default, and the one published at the bare filename) or
+            :data:`GRID_VARIANT_WITH_COUNTS`.
 
     Returns:
         An unsaved ``matplotlib.figure.Figure``. The caller saves and closes it.
@@ -383,6 +488,7 @@ def plot_mapped_validity_grid(
     Raises:
         ValueError: If the document carries no combination, or no method that
             ``strategy_complexity_order`` can rank.
+        UnknownAxisValue: If a model or strategy id on the grid has no display label.
     """
     entries = _combinations(document)
     by_cell = {(entry["model"], entry["strategy"]): entry for entry in entries}
@@ -405,18 +511,34 @@ def plot_mapped_validity_grid(
 
     values = np.full((len(models), len(methods)), np.nan, dtype=float)
     states: list[list[str]] = []
+    # One record per cell for the shared renderer, and the mask saying which annotations
+    # need a patch of their own fill under them. A cell with no rate carries no record:
+    # its wording is a statement about the *state* rather than about a value, and it is
+    # drawn below in the state's own colour.
+    cells: list[list[dict[str, Any] | None]] = []
+    text_on_fill: list[list[bool]] = []
     for i, model in enumerate(models):
-        row_states = []
+        row_states: list[str] = []
+        row_cells: list[dict[str, Any] | None] = []
+        row_fill: list[bool] = []
         for j, method in enumerate(methods):
             entry = by_cell.get((model, method))
             state = _cell_state(entry)
             row_states.append(state)
             if state in ("measured", "withdrawn"):
-                values[i, j] = float(entry["retention_rate"])
+                rate = float(entry["retention_rate"])
+                values[i, j] = rate
+                generated, _raw_valid, _mapped_valid, clean, _selected = _funnel_counts(entry)
+                row_cells.append({"rate": rate, "numerator": clean, "denominator": generated})
+                # A withdrawn cell is hatched; the patch keeps the hatch off its number.
+                row_fill.append(state == "withdrawn")
+            else:
+                row_cells.append(None)
+                row_fill.append(False)
         states.append(row_states)
+        cells.append(row_cells)
+        text_on_fill.append(row_fill)
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch, Rectangle
@@ -430,22 +552,27 @@ def plot_mapped_validity_grid(
     marginal_columns = 1.5
     fig, ax = plt.subplots(
         figsize=(
-            max(9.0, (n_methods + marginal_columns) * 1.5 + 3.0),
-            max(4.5, len(models) * 0.62 + 3.6),
-        )
+            grow_width(n_methods + marginal_columns, per_item=1.5, padding=3.0, minimum=FULL),
+            grow_height(len(models), per_item=0.62, padding=3.6, minimum=4.5),
+        ),
     )
-    im = ax.imshow(
-        np.ma.masked_invalid(values), cmap=cmap, norm=norm,
-        aspect="auto", interpolation="nearest",
+    im = render_grid(
+        ax, values, cells,
+        policy=variant.policy, cmap=cmap, norm=norm,
+        aspect="auto", interpolation="none",
         extent=(-0.5, n_methods - 0.5, len(models) - 0.5, -0.5),
+        fontsize=variant.fontsize, linespacing=variant.linespacing, zorder=5,
+        text_on_fill=text_on_fill,
     )
     marginal_y = len(models) - 0.5 + 0.7
     ax.set_xlim(-0.5, n_methods - 0.5 + marginal_columns)
     ax.set_ylim(marginal_y + 0.5, -0.5)
 
-    categories_on_top(ax, methods)
+    letters = method_letters(methods)
+    categories_on_top(ax, [letters[method] for method in methods])
+    display_models = model_labels(models)
     ax.set_yticks(range(len(models)))
-    ax.set_yticklabels(models, fontsize=8)
+    ax.set_yticklabels([display_models[model] for model in models], fontsize=TICK_LABEL)
     hosting = dict(hosting or {})
     for label, model in zip(ax.get_yticklabels(), models):
         label.set_color(HOST_COLORS[hosting.get(model, HOST_DEFAULT_CLASS)])
@@ -473,29 +600,13 @@ def plot_mapped_validity_grid(
                         linestyle=_UNDEFINED_EDGE_STYLE, edgecolor=BOX_EDGE, zorder=4,
                     )
                 )
-            else:
-                value = float(values[i, j])
-                clean = _funnel_counts(entry)[3]
-                generated = _funnel_counts(entry)[0]
-                color = text_color_on(im, value)
-                fill = cmap(norm(value))
-                ax.text(
-                    j, i, f"{value * 100:.1f}\n{clean}/{generated}",
-                    ha="center", va="center", fontsize=ANNOT_FONTSIZE,
-                    color=color, linespacing=1.35,
-                    bbox=(
-                        {"facecolor": fill, "edgecolor": "none", "pad": 1.4}
-                        if state == "withdrawn" else None
-                    ),
-                    zorder=5,
-                )
-                if (i, j) in best:
-                    ax.add_patch(
-                        Rectangle(
-                            (j - 0.5, i - 0.5), 1, 1, fill=False, linewidth=1.4,
-                            edgecolor=BOX_EDGE, zorder=3,
-                        )
+            elif (i, j) in best:
+                ax.add_patch(
+                    Rectangle(
+                        (j - 0.5, i - 0.5), 1, 1, fill=False, linewidth=1.4,
+                        edgecolor=BOX_EDGE, zorder=3,
                     )
+                )
             if entry is not None and entry["excluded"]:
                 # Drawn for `withdrawn` AND for an `undefined` cell that was also
                 # withdrawn: the fill cannot carry a rate there, but the withdrawal is a
@@ -515,17 +626,17 @@ def plot_mapped_validity_grid(
         text = "n/a" if rate is None else f"{rate * 100:.1f}%"
         ax.text(
             n_methods - 0.5 + 0.12, i, f"{text}  ({clean}/{generated})",
-            ha="left", va="center", fontsize=7.5, clip_on=False,
+            ha="left", va="center", fontsize=ANNOTATION, clip_on=False,
         )
     for j, method in enumerate(methods):
         rate, clean, generated = _pooled([e for e in entries if e["strategy"] == method])
         text = "n/a" if rate is None else f"{rate * 100:.1f}%"
         ax.text(
             j, marginal_y, f"{text}\n({clean}/{generated})",
-            ha="center", va="center", fontsize=7.5, linespacing=1.3,
+            ha="center", va="center", fontsize=ANNOTATION, linespacing=1.3,
         )
     ax.text(
-        -0.6, marginal_y, "method pooled", ha="right", va="center", fontsize=7.5,
+        -0.6, marginal_y, "method pooled", ha="right", va="center", fontsize=ANNOTATION,
         clip_on=False,
     )
 
@@ -550,21 +661,21 @@ def plot_mapped_validity_grid(
     ]
     ax.legend(
         handles=handles, loc="upper left", bbox_to_anchor=(0.0, -0.02),
-        ncol=2, fontsize=7.5, title="provenance / cell state", title_fontsize=8,
+        ncol=2, fontsize=LEGEND_LABEL, title="provenance / cell state", title_fontsize=LEGEND_TITLE,
         frameon=False,
     )
 
     ax.set_title(
-        f"{document['country']}: validation survival by model x method\n"
+        f"{country_label(document['country'])}: validation survival by model x method\n"
         "share of each combination's generated pool that passed both validity gates -- "
         f"{document['n_excluded']} of {document['n_combinations']} combinations withdrawn",
-        fontsize=11, fontweight="bold", pad=30,
+        fontsize=PANEL_TITLE, fontweight="bold", pad=30,
     )
 
     caption = (
-        "Cell: retention_rate (clean / generated) as published in the attrition CSV, "
-        "printed with the two counts it is the quotient of. 'clean' means a persona passed "
-        "the raw-completeness gate AND the mapped-value gate; the colour scale is the full "
+        f"{variant.cell_clause} "
+        "'clean' means a persona passed the raw-completeness gate AND the mapped-value "
+        "gate; the colour scale is the full "
         "0-100% range, not the observed one, so grids from different runs are comparable. "
         "Marginals are pooled over persona counts, not means of the cell rates -- the pools "
         "behind the cells differ by a factor of five, and an unweighted mean would give a "
@@ -574,10 +685,12 @@ def plot_mapped_validity_grid(
         "empty pool (dotted grey, no rate exists), and a pair that was never generated "
         "(plain grey). A withdrawn cell is not a zero and an absent cell is not a zero."
     )
-    ax.text(
-        0.0, -0.155, textwrap.fill(caption, _CAPTION_WRAP), transform=ax.transAxes,
-        ha="left", va="top", fontsize=7, clip_on=False,
-    )
-
-    fig.tight_layout()
+    # The method key travels in the graphic rather than being deferred to the caption:
+    # the letters on the column axis are meaningless without it, and a figure is read
+    # apart from the text that published it.
+    key = "Methods:  " + "   ".join(method_key_lines(methods))
+    caption_block(fig, f"{key}\n{caption}", fontsize=ANNOTATION)
+    # The title is centred on the axes and the legend is anchored to them, so both
+    # inherit the label column's inset and reach past the right edge of the page.
+    fit_to_page(fig)
     return fig

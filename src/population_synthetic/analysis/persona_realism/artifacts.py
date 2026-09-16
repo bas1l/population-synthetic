@@ -8,7 +8,7 @@ pure pipeline
     load_combo_verdicts -> reduce_combo -> compute_realism_stats -> cost -> sinks
 
 and materialises the publication artifacts idempotently (skip a unit whose output
-already exists unless ``force``; dual PNG+SVG via ``utils/figures.save_figure``;
+already exists unless ``force``; PNG+SVG+EPS via ``utils/figures.save_figure``;
 skip a chart only when its field is genuinely empty).
 
 **Strictly per-combination.** Every artifact written here is a deterministic function
@@ -498,8 +498,8 @@ def write_combo_artifacts(
     ``<out_dir>/persona_XXXXX.jsonl`` telemetry logs (fail-fast if the judge model's
     pricing row is absent), and writes ``{combo}.csv``, ``{combo}.json``,
     ``{combo}_personas.csv``, ``{combo}_clashes.csv``,
-    ``{combo}_clash_explanations.csv``, ``typicality.png/.svg`` and
-    ``clash_taxonomy.png/.svg``. The idempotent skip keys on those specific output
+    ``{combo}_clash_explanations.csv``, ``typicality.png/.svg/.eps`` and
+    ``clash_taxonomy.png/.svg/.eps``. The idempotent skip keys on those specific output
     filenames, so the sibling ``persona_*.json/.jsonl`` files never confuse it.
 
     Nothing written here depends on any other combination: judging this slug on an
@@ -695,10 +695,10 @@ def _emit_csv(csv_path, *, build_rows, write, force, logger) -> Path:
 
 
 def _emit_figure(png_path, *, present, build, empty_msg, dpi, force, logger) -> list[Path]:
-    """Render/save (or skip) one figure, returning the PNG+SVG paths it owns.
+    """Render/save (or skip) one figure, returning the PNG+SVG+EPS paths it owns.
 
     Returns ``[]`` when the field is genuinely empty (logged). Honours the
-    idempotent skip: an existing PNG+SVG pair is left in place unless *force*.
+    idempotent skip: an existing figure is left in place unless *force*.
     """
     png_path = Path(png_path)
     svg_path = png_path.with_suffix(".svg")

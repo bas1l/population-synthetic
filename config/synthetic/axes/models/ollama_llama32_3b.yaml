@@ -1,5 +1,10 @@
 id: "ollama_llama32_3b"
 label: "Ollama Llama3.2 3B"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "Llama3.2 3B"
 discarded: true            # retired from the sweep; absent key == active
 model_config:
   provider: "ollama"

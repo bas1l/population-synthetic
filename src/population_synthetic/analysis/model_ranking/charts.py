@@ -17,57 +17,156 @@ and renders, per country:
   the ranking.
 
 Follows the project charting conventions (deferred ``Agg`` matplotlib import,
-``dpi=150``/``bbox_inches="tight"``, ``plt.close`` on every path). The model x
+persistence delegated to ``analysis/utils/figures.py::save_figure``, which writes
+the PNG+SVG+EPS trio and closes the figure). The model x
 method heatmap additionally styles itself as a sibling of the manuscript tables
-by calling :mod:`population_synthetic.analysis.model_ranking.table_style` and
+by calling :mod:`population_synthetic.analysis.utils.table_style` and
 :mod:`population_synthetic.analysis.utils.palette` for every colour and contrast
 decision, so it can never drift from them.
 """
 
 from __future__ import annotations
 
-import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from population_synthetic.analysis.model_ranking.table_style import (
+from population_synthetic.analysis.utils.axes import strategy_complexity_order
+from population_synthetic.analysis.utils.cap_index import CapIndex
+from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.grid_annotations import (
+    RateOnlyPolicy,
+    RateWithCountsPolicy,
+)
+from population_synthetic.analysis.utils.grid_variants import (
+    CANONICAL_VARIANT,
+    COUNTED_VARIANT,
+    GridVariant,
+    variant_map,
+)
+from population_synthetic.analysis.utils.grids import render_grid
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    country_label,
+    method_key_lines,
+    method_letters,
+    model_labels,
+)
+from population_synthetic.analysis.utils.palette import (
+    ANNOTATION_GREY,
+    BAR_EDGE,
+    CATEGORICAL_SERIES,
+    GRID_RULE,
+    HOST_COLORS,
+    MISSING_COLOR,
+    MUTED_GREY,
+    SECONDARY_GREY,
+    SURFACE,
+    heatmap_cmap,
+    opaque,
+    text_color_for_rgb,
+)
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    ANNOTATION_LARGE,
+    AXIS_TITLE,
+    FIGURE_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    PANEL_TITLE,
+    TICK_LABEL,
+    caption_block,
+    figure_size,
+    grow_height,
+    grow_width,
+    house_style,
+)
+from population_synthetic.analysis.utils.table_style import (
     ANNOT_FONTSIZE,
     BOX_EDGE,
-    HOST_COLORS,
     HOST_DEFAULT_CLASS,
     HOST_LABELS,
     add_percentage_colorbar,
     categories_on_top,
+    fit_to_page,
     horizontal_divider,
     inferno_cmap,
     vertical_divider,
 )
-from population_synthetic.analysis.utils.axes import strategy_complexity_order
-from population_synthetic.analysis.utils.cap_index import CapIndex
-from population_synthetic.analysis.utils.figures import save_figure
-from population_synthetic.analysis.utils.palette import (
-    MISSING_COLOR,
-    heatmap_cmap,
-    text_color_for_rgb,
-    text_color_on,
+
+#: The combo table's cell annotation: TV-similarity at its own 0--1 scale, two decimals.
+_COMBO_CELL_POLICY = RateOnlyPolicy(value_key="value", scale=1.0, number_format=".2f")
+
+#: The model x method grid's counted variant: TV-similarity as a percentage over the
+#: persona count the cell rests on. Not a quotient of two printed counts, so the base is
+#: named ``n=``; a combination that was scored on no axis prints the count it does have
+#: beneath an explicit dash rather than a number it never measured.
+GRID_VARIANT_WITH_COUNTS = GridVariant(
+    name=COUNTED_VARIANT,
+    policy=RateWithCountsPolicy(
+        value_key="value", numerator_key=None, denominator_key="n",
+        scale=100.0, number_format=".1f", absent_text="--",
+    ),
+    cell_clause=(
+        "Cell: mean TV-similarity across every demographic axis (x100), printed over the "
+        "n personas the validation gate left for that combination."
+    ),
+    fontsize=ANNOT_FONTSIZE,
+    linespacing=1.35,
 )
 
-_COLOR_SERIES = (
-    "#4878CF",
-    "#D65F5F",
-    "#6AB187",
-    "#E8935A",
-    "#E9C46A",
-    "#8172B2",
-    "#64B5CD",
+#: The camera-ready variant, published at the bare filename: the score alone, one step up
+#: the house scale on the room the dropped count line frees. The persona count is not
+#: lost -- it is in the performance CSV, in the counted sibling, and on both marginals of
+#: this very figure -- and it is constant down most of a column, which is exactly the
+#: repetition a manuscript grid should not spend a line on.
+GRID_VARIANT_CLEAN = GridVariant(
+    name=CANONICAL_VARIANT,
+    policy=RateOnlyPolicy(
+        value_key="value", scale=100.0, number_format=".1f", absent_text="--",
+    ),
+    cell_clause=(
+        "Cell: mean TV-similarity across every demographic axis (x100). The n personas "
+        "each cell rests on are printed on the with-counts sibling figure and in the "
+        "performance CSV; the row and column marginals here carry their own counts."
+    ),
+    fontsize=ANNOTATION_LARGE,
+    linespacing=None,
+)
+
+#: The publishable variants by name, clean first because it takes the bare filename.
+GRID_VARIANTS: dict[str, GridVariant] = variant_map(
+    GRID_VARIANT_CLEAN, GRID_VARIANT_WITH_COUNTS,
 )
 
 
-def _combo_label(combo: dict[str, Any]) -> str:
-    return f"{combo['model']} / {combo['strategy']}"
+def _combo_label(
+    combo: dict[str, Any], display_models: dict[str, str], letters: dict[str, str]
+) -> str:
+    """Row caption for one combination: the model's display name and its method letter.
+
+    Both mappings are resolved by the caller over the *whole* figure's id set, because a
+    method letter's version marker is a property of the set, not of any one id.
+    """
+    return f"{display_models[combo['model']]} / {letters[combo['strategy']]}"
+
+
+def _combo_captions(
+    result: dict[str, Any], ranking: list[str]
+) -> tuple[dict[str, str], list[str]]:
+    """``(caption_by_slug, method_key_lines)`` for a figure keyed on combination slugs."""
+    combos = [result["combos"][slug] for slug in ranking]
+    display_models = model_labels([c["model"] for c in combos])
+    strategies = [c["strategy"] for c in combos]
+    letters = method_letters(strategies)
+    captions = {
+        slug: _combo_label(combo, display_models, letters)
+        for slug, combo in zip(ranking, combos)
+    }
+    return captions, method_key_lines(strategies)
 
 
 def _ordered_strategies(strategies: list[str]) -> list[str]:
@@ -79,6 +178,7 @@ def _ordered_strategies(strategies: list[str]) -> list[str]:
 # Heatmap (combos × attributes + overall)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Rank-ordered combo × attribute heatmap of TV-similarity, plus an overall column."""
     attributes: list[str] = result["metadata"]["attributes"]
@@ -86,18 +186,17 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
     if not attributes or not ranking:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     values = np.full((len(ranking), len(attributes) + 1), np.nan)
+    captions, key_lines = _combo_captions(result, ranking)
     labels: list[str] = []
     for i, slug in enumerate(ranking):
         combo = result["combos"][slug]
-        labels.append(_combo_label(combo))
+        labels.append(captions[slug])
         for j, attr in enumerate(attributes):
             values[i, j] = combo["per_attribute"][attr]["tv_similarity"]
         values[i, -1] = combo["overall"]["tv_similarity_mean"]
@@ -106,100 +205,110 @@ def plot_performance_heatmap(result: dict[str, Any], out_path: str | Path) -> Pa
         return None
 
     fig, ax = plt.subplots(
-        figsize=(max(8.0, (len(attributes) + 1) * 0.8 + 3.0), max(4.0, len(ranking) * 0.45 + 2.5))
+        figsize=(
+            grow_width(len(attributes) + 1, per_item=0.8, padding=3.0, minimum=FULL),
+            grow_height(len(ranking), per_item=0.45, padding=2.5, minimum=4.0),
+        ),
     )
-    masked = np.ma.masked_invalid(values)
-    im = ax.imshow(masked, aspect="auto", cmap=heatmap_cmap())
+    cells = [
+        [None if np.isnan(value) else {"value": float(value)} for value in row]
+        for row in values
+    ]
+    im = render_grid(
+        ax, values, cells,
+        policy=_COMBO_CELL_POLICY, cmap=heatmap_cmap(), aspect="auto",
+        fontsize=ANNOTATION, interpolation="none",
+    )
 
     ax.set_xticks(range(len(attributes) + 1))
-    ax.set_xticklabels(attributes + ["overall"], rotation=40, ha="right", fontsize=8)
+    ax.set_xticklabels(
+        [attribute_label(a) for a in attributes] + ["Overall"],
+        rotation=40, ha="right", fontsize=TICK_LABEL,
+    )
     ax.set_yticks(range(len(ranking)))
-    ax.set_yticklabels(labels, fontsize=8)
-    ax.axvline(len(attributes) - 0.5, color="white", linewidth=2.5)
+    ax.set_yticklabels(labels, fontsize=TICK_LABEL)
+    # The rule that sets the "Overall" column apart from the per-attribute ones. Drawn
+    # in the page colour rather than in a literal "white", so it stays a role like every
+    # other colour in the layer and follows the ground if that ever moves.
+    ax.axvline(len(attributes) - 0.5, color=SURFACE, linewidth=2.5)
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
-    cbar.set_label("TV-similarity (1 - TV distance)", fontsize=8)
-
-    for i in range(values.shape[0]):
-        for j in range(values.shape[1]):
-            v = values[i, j]
-            if np.isnan(v):
-                continue
-            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=6.5,
-                    color=text_color_on(im, v))
+    cbar.set_label("TV-similarity (1 - TV distance)", fontsize=AXIS_TITLE)
 
     country = result["metadata"]["country"]
     ax.set_title(
-        f"{country}: TV-similarity per attribute (combos in rank order)",
-        fontsize=12, fontweight="bold",
+        f"{country_label(country)}: TV-similarity per attribute (combos in rank order)",
+        fontsize=FIGURE_TITLE, fontweight="bold",
     )
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    caption_block(fig, "Methods:  " + "   ".join(key_lines), fontsize=ANNOTATION)
+    fit_to_page(fig)
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
 # Leaderboard (overall ranking)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_performance_leaderboard(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Horizontal bars of overall TV-similarity (best on top), coherence annotated."""
     ranking: list[str] = result["ranking"]
     if not ranking:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    captions, key_lines = _combo_captions(result, ranking)
     labels: list[str] = []
     means: list[float] = []
     coherences: list[float] = []
     for slug in ranking:
         combo = result["combos"][slug]
-        labels.append(_combo_label(combo))
+        labels.append(captions[slug])
         means.append(combo["overall"]["tv_similarity_mean"])
         coherences.append(combo["overall"]["coherence_score"])
 
     # Best combo at the top of the chart.
     positions = list(range(len(ranking)))[::-1]
 
-    fig, ax = plt.subplots(figsize=(9.0, max(3.5, len(ranking) * 0.45 + 1.8)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(len(ranking), per_item=0.45, padding=1.8, minimum=3.5)))
     ax.barh(
         positions, means,
-        color=_COLOR_SERIES[0], edgecolor="#33486F", linewidth=0.5, alpha=0.85, height=0.65,
+        color=opaque(CATEGORICAL_SERIES[0], 0.85), edgecolor=BAR_EDGE, linewidth=0.5, height=0.65,
     )
     for pos, mean, coherence in zip(positions, means, coherences):
         if mean == mean:
             ax.text(
                 mean, pos, f"  {mean:.3f}  (coh {coherence:.3f})",
-                va="center", ha="left", fontsize=7.5, color="#333333",
+                va="center", ha="left", fontsize=ANNOTATION, color=ANNOTATION_GREY,
             )
 
     ax.set_yticks(positions)
-    ax.set_yticklabels(labels, fontsize=8)
-    ax.set_xlabel("mean TV-similarity across attributes", fontsize=9)
+    ax.set_yticklabels(labels, fontsize=TICK_LABEL)
+    ax.set_xlabel("mean TV-similarity across attributes", fontsize=AXIS_TITLE)
     finite = [m for m in means if m == m]
     if finite:
         ax.set_xlim(0.0, min(1.0, max(finite) * 1.18))
-    ax.grid(axis="x", linestyle=":", alpha=0.4)
+    ax.grid(axis="x", linestyle=":", color=GRID_RULE)
 
     country = result["metadata"]["country"]
-    ax.set_title(f"{country}: model x strategy leaderboard", fontsize=12, fontweight="bold")
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    ax.set_title(
+        f"{country_label(country)}: model x method leaderboard",
+        fontsize=FIGURE_TITLE, fontweight="bold",
+    )
+    caption_block(fig, "Methods:  " + "   ".join(key_lines), fontsize=ANNOTATION)
+    fit_to_page(fig)
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
 # C2ST AUC vs mean TV-similarity scatter (multivariate summary)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Scatter of C2ST ROC-AUC vs mean TV-similarity across combos, coloured by strategy.
 
@@ -215,7 +324,10 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
     """
     combos: dict[str, Any] = result.get("combos", {})
     strategies = _ordered_strategies(result["metadata"]["strategies"])
-    color_for = {s: _COLOR_SERIES[i % len(_COLOR_SERIES)] for i, s in enumerate(strategies)}
+    color_for = {s: CATEGORICAL_SERIES[i % len(CATEGORICAL_SERIES)] for i, s in enumerate(strategies)}
+    # The legend entry is the method key line itself, so the letters this figure would
+    # otherwise need a key block for are explained where they are read.
+    method_key = dict(zip(method_letters(strategies), method_key_lines(strategies)))
 
     by_strategy: dict[str, list[tuple[float, float, str]]] = {}
     for combo in combos.values():
@@ -228,14 +340,12 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
     if not by_strategy:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(8.5, 6.0))
+    fig, ax = plt.subplots(figsize=figure_size(FULL, 6.0))
     all_aucs: list[float] = []
     for strategy in strategies:
         pts = by_strategy.get(strategy)
@@ -245,40 +355,40 @@ def plot_c2st_vs_tv(result: dict[str, Any], out_path: str | Path) -> Path | None
         ys = [p[1] for p in pts]
         all_aucs.extend(ys)
         ax.scatter(
-            xs, ys, s=70, color=color_for[strategy], label=strategy,
-            edgecolor="white", linewidth=0.6, alpha=0.9, zorder=3,
+            xs, ys, s=70, color=color_for[strategy], label=method_key[strategy],
+            edgecolor=SURFACE, linewidth=0.6, zorder=3,
         )
 
-    ax.axhline(0.5, color="#888888", linestyle="--", linewidth=1.0, zorder=1)
+    ax.axhline(0.5, color=MUTED_GREY, linestyle="--", linewidth=1.0, zorder=1)
     ax.text(
         0.01, 0.5, "0.5 = indistinguishable joint",
         transform=ax.get_yaxis_transform(), va="bottom", ha="left",
-        fontsize=7.5, color="#666666",
+        fontsize=ANNOTATION, color=SECONDARY_GREY,
     )
 
-    ax.set_xlabel("mean TV-similarity across attributes (marginal fidelity)", fontsize=9)
-    ax.set_ylabel("C2ST ROC-AUC (joint discriminability; 0.5 best)", fontsize=9)
+    ax.set_xlabel("mean TV-similarity across attributes (marginal fidelity)", fontsize=AXIS_TITLE)
+    ax.set_ylabel("C2ST ROC-AUC (joint discriminability; 0.5 best)", fontsize=AXIS_TITLE)
     lo = min([0.5] + all_aucs) - 0.03
     hi = max([0.5] + all_aucs) + 0.03
     ax.set_ylim(lo, min(1.02, hi))
-    ax.grid(True, linestyle=":", alpha=0.4)
-    ax.legend(title="strategy", fontsize=7.5, title_fontsize=8)
+    ax.grid(True, linestyle=":", color=GRID_RULE)
+    ax.legend(title="generation method", fontsize=LEGEND_LABEL, title_fontsize=LEGEND_TITLE)
 
     country = result["metadata"]["country"]
     ax.set_title(
-        f"{country}: joint discriminability (C2ST) vs marginal fidelity",
-        fontsize=12, fontweight="bold",
+        f"{country_label(country)}: joint discriminability (C2ST) vs marginal fidelity",
+        fontsize=FIGURE_TITLE, fontweight="bold",
     )
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    fit_to_page(fig)
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
 # Per-attribute grouped bars (optional)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Path]:
     """One grouped bar chart per attribute: strategies on x, one series per model."""
     attributes: list[str] = result["metadata"]["attributes"]
@@ -287,8 +397,6 @@ def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Pat
     if not attributes or not models or not strategies:
         return []
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_dir = Path(out_dir)
@@ -303,9 +411,14 @@ def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Pat
     written: list[Path] = []
     width = 0.8 / len(models)
     x = np.arange(len(strategies))
+    letters = method_letters(strategies)
+    method_key = "Methods:  " + "   ".join(method_key_lines(strategies))
+    display_models = model_labels(models)
 
     for attr in attributes:
-        fig, ax = plt.subplots(figsize=(max(7.0, len(strategies) * 1.4 + 2.0), 5.0))
+        fig, ax = plt.subplots(
+            figsize=figure_size(grow_width(len(strategies), per_item=1.4, padding=2.0, minimum=7.0), 5.0),
+        )
         for m_idx, model in enumerate(models):
             heights = []
             for strategy in strategies:
@@ -317,25 +430,25 @@ def plot_attribute_bars(result: dict[str, Any], out_dir: str | Path) -> list[Pat
             offsets = x - 0.4 + width * (m_idx + 0.5)
             ax.bar(
                 offsets, heights, width=width,
-                label=model, color=_COLOR_SERIES[m_idx % len(_COLOR_SERIES)],
-                edgecolor="#33486F", linewidth=0.4, alpha=0.85,
+                label=display_models[model],
+                color=CATEGORICAL_SERIES[m_idx % len(CATEGORICAL_SERIES)],
+                edgecolor=BAR_EDGE, linewidth=0.4,
             )
 
         ax.set_xticks(x)
-        ax.set_xticklabels(strategies, rotation=25, ha="right", fontsize=8)
-        ax.set_ylabel("TV-similarity", fontsize=9)
+        ax.set_xticklabels([letters[s] for s in strategies], fontsize=TICK_LABEL)
+        ax.set_ylabel("TV-similarity", fontsize=AXIS_TITLE)
         ax.set_ylim(0.0, 1.0)
-        ax.grid(axis="y", linestyle=":", alpha=0.4)
-        ax.legend(fontsize=7.5)
+        ax.grid(axis="y", linestyle=":", color=GRID_RULE)
+        ax.legend(fontsize=LEGEND_LABEL)
 
         country = result["metadata"]["country"]
-        ax.set_title(f"{country}: {attr} -- TV-similarity by model x strategy",
-                     fontsize=11, fontweight="bold")
-        out_path = out_dir / f"{attr}_bars.png"
-        fig.tight_layout()
-        fig.savefig(out_path, dpi=150, bbox_inches="tight")
-        plt.close(fig)
-        written.append(out_path)
+        ax.set_title(f"{country_label(country)}: {attribute_label(attr)} -- "
+                     f"TV-similarity by model x method",
+                     fontsize=PANEL_TITLE, fontweight="bold")
+        caption_block(fig, method_key, fontsize=ANNOTATION)
+        fit_to_page(fig)
+        written.append(save_figure(fig, out_dir / f"{attr}_bars.png"))
 
     return written
 
@@ -382,9 +495,6 @@ _HATCH_LINEWIDTH = 0.6
 #: same luminance-derived contrast rule the annotations use, so it stays visible on
 #: both the near-black low end and the bright-yellow high end of the ramp.
 _THIN_HATCH = "///"
-
-#: Wrap width (characters) for the caption block under the figure.
-_CAPTION_WRAP = 130
 
 #: Reason a Tier 2 model carries no rank. Stated on the figure, not merely "unranked":
 #: the natural misreading of a block at the bottom is "these are the bad models", and
@@ -553,7 +663,7 @@ def _column_marginals(
     return means, counts
 
 
-def _row_marginal_text(row: _ModelRow) -> str:
+def _row_marginal_text(row: _ModelRow, letters: dict[str, str]) -> str:
     """The ordering key as printed beside the row: best score, argmax method, cell count.
 
     Deliberately not a mean: the rows are sorted by their maximum, and a marginal
@@ -564,21 +674,32 @@ def _row_marginal_text(row: _ModelRow) -> str:
     if row.best_value is None:
         return "n/a  (no scored cell)"
     scope = "full-n" if row.tier == 1 else "cells, provisional"
-    return f"{row.best_value * 100:.1f}  {row.best_method}  ({row.key_cells} {scope})"
+    return f"{row.best_value * 100:.1f}  {letters[row.best_method]}  ({row.key_cells} {scope})"
 
 
+@house_style
 def plot_model_method_heatmap(
     result: dict[str, Any],
     requested_n: CapIndex,
     out_path: str | Path,
+    *,
+    variant: GridVariant = GRID_VARIANT_CLEAN,
 ) -> Path | None:
     """Model x method heatmap of overall TV-similarity, marked and tiered by persona count.
 
     Rows are models, columns are methods (strategies) in
     :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order`, and each
     cell is that combination's mean TV-similarity across every demographic axis, printed
-    as a percentage together with the persona count ``n`` it rests on. A cell whose ``n``
-    is below its own slug's requested cap is hatched, and never decides a Tier 1 rank.
+    as a percentage. A cell whose ``n`` is below its own slug's requested cap is hatched,
+    and never decides a Tier 1 rank.
+
+    What a cell *prints* is the *variant*'s decision, and the only difference between the
+    two publications of this figure: the clean one prints the score alone one step larger,
+    the with-counts one prints it over the persona count ``n`` it rests on. Rows, columns,
+    tiers, extent, colour scale, markings and both marginals are shared, because both go
+    through the same draw loop with different annotation policies rather than through two
+    functions that would diverge on the next edit. The marginals always print their
+    counts, so the clean variant still states a base on the figure.
 
     Rows are partitioned by evidence before they are ranked: a model with at least one
     full-n cell is **Tier 1** and is ordered by ``(-max, -mean, model_id)`` over its
@@ -593,7 +714,12 @@ def plot_model_method_heatmap(
             (:func:`~population_synthetic.analysis.utils.cap_index.load_cap_index`).
             Raises if a combination in *result* has no entry -- an unknown cap is never
             assumed to be met.
-        out_path: The PNG path; the ``.svg`` sibling is written beside it.
+        out_path: The PNG path; the ``.svg`` sibling is written beside it. The caller
+            owns the filename, including the variant's suffix
+            (:func:`~population_synthetic.analysis.utils.grid_variants.variant_suffixes`).
+        variant: Which publication of the figure to draw -- :data:`GRID_VARIANT_CLEAN`
+            (the default, and the one published at the bare filename) or
+            :data:`GRID_VARIANT_WITH_COUNTS`.
 
     Returns:
         The PNG path (the SVG sibling is written by
@@ -618,8 +744,6 @@ def plot_model_method_heatmap(
     if np.all(np.isnan(values)):
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch, Rectangle
@@ -634,7 +758,9 @@ def plot_model_method_heatmap(
 
     # The row marginal lives inside the axes, so its width is reserved up front (in
     # column units) and the figure is widened to match.
-    row_marginals = [_row_marginal_text(row) for row in ordered]
+    letters = method_letters(strategies)
+    display_models = model_labels([row.model for row in ordered])
+    row_marginals = [_row_marginal_text(row, letters) for row in ordered]
     marginal_columns = _ROW_MARGINAL_OFFSET + (
         max(len(text) for text in row_marginals) / _MARGINAL_CHARS_PER_COLUMN
     )
@@ -645,18 +771,39 @@ def plot_model_method_heatmap(
 
     fig, ax = plt.subplots(
         figsize=(
-            max(9.0, (n_methods + marginal_columns) * _COLUMN_INCHES + _FIXED_INCHES),
-            max(4.5, (len(ordered) + gap) * 0.62 + 3.2),
-        )
+            grow_width(n_methods + marginal_columns, per_item=_COLUMN_INCHES, padding=_FIXED_INCHES, minimum=FULL),
+            grow_height(len(ordered) + gap, per_item=0.62, padding=3.2, minimum=4.5),
+        ),
     )
 
     def _draw_block(block: list[_ModelRow], y_top: float):
-        """One imshow per tier block, so the break between them is a real gap."""
+        """One render per tier block, so the break between them is a real gap.
+
+        The cell records carry the value and the count it rests on; a combination absent
+        from the run carries none at all, so it is painted grey and left unannotated
+        rather than being given a dash it could be read as a measurement of. A thin cell's
+        annotation is set on a patch of its own fill, which is what keeps the hatch that
+        marks it from crossing the number it qualifies.
+        """
         block_values = np.vstack([row.values for row in block])
-        return ax.imshow(
-            np.ma.masked_invalid(block_values), cmap=cmap, norm=norm, aspect="auto",
-            interpolation="nearest",
+        cells = [
+            [
+                None if row.counts[j] is None else {
+                    "value": None if np.isnan(row.values[j]) else float(row.values[j]),
+                    "n": row.counts[j],
+                }
+                for j in range(n_methods)
+            ]
+            for row in block
+        ]
+        text_on_fill = [[not row.full[j] for j in range(n_methods)] for row in block]
+        return render_grid(
+            ax, block_values, cells,
+            policy=variant.policy, cmap=cmap, norm=norm, aspect="auto",
+            interpolation="none",
             extent=(-0.5, n_methods - 0.5, y_top + len(block) - 0.5, y_top - 0.5),
+            row_origin=y_top, fontsize=variant.fontsize, linespacing=variant.linespacing,
+            text_on_fill=text_on_fill,
         )
 
     im = _draw_block(tier1, 0.0) if tier1 else _draw_block(tier2, 0.0)
@@ -666,9 +813,9 @@ def plot_model_method_heatmap(
     ax.set_xlim(-0.5, n_methods - 0.5 + marginal_columns)
     ax.set_ylim(marginal_y + 0.5, -0.5)
 
-    categories_on_top(ax, strategies)
+    categories_on_top(ax, [letters[s] for s in strategies])
     ax.set_yticks(row_y)
-    ax.set_yticklabels([row.model for row in ordered], fontsize=8)
+    ax.set_yticklabels([display_models[row.model] for row in ordered], fontsize=TICK_LABEL)
     hosting: dict[str, str] = metadata.get("model_hosting", {})
     for label, row in zip(ax.get_yticklabels(), ordered):
         # Provenance side-marker (same rule and colours as the models table); Tier 2
@@ -677,37 +824,25 @@ def plot_model_method_heatmap(
         if row.tier == 2:
             label.set_fontstyle("italic")
 
-    # --- cells: value, n, and the thin marking.
+    # --- the thin marking, drawn under the annotations the blocks above already wrote
+    # (text sits at zorder 3), so the marking never costs the reader the value and the
+    # count it is qualifying.
     missing_text_color = text_color_for_rgb(mcolors.to_rgb(MISSING_COLOR))
     for i, row in enumerate(ordered):
         y = row_y[i]
         for j in range(n_methods):
-            n = row.counts[j]
-            if n is None:  # combination absent from the run -- grey, no value, no marking
+            if row.counts[j] is None or row.full[j]:
                 continue
             v = float(row.values[j])
             measured = not np.isnan(v)
-            fill = cmap(norm(v)) if measured else MISSING_COLOR
             color = text_color_for_rgb(cmap(norm(v))) if measured else missing_text_color
-            # A thin cell's annotation is set on a patch of the cell's own colour, so
-            # the hatch that marks the cell reads across the rest of it without
-            # crossing the number and the count it is qualifying.
-            bbox = None if row.full[j] else {"facecolor": fill, "edgecolor": "none", "pad": 1.4}
-            ax.text(
-                j, y, f"{v * 100:.1f}\nn={n}" if measured else f"--\nn={n}",
-                ha="center", va="center", fontsize=ANNOT_FONTSIZE, color=color,
-                linespacing=1.35, bbox=bbox,
-            )
-            if not row.full[j]:
-                # Under the annotation (text sits at zorder 3), so the marking never
-                # costs the reader the value and the count it is qualifying.
-                ax.add_patch(
-                    Rectangle(
-                        (j - 0.5, y - 0.5), 1, 1, fill=False, linewidth=0.0,
-                        hatch=_THIN_HATCH,
-                        edgecolor=color if measured else BOX_EDGE, zorder=2,
-                    )
+            ax.add_patch(
+                Rectangle(
+                    (j - 0.5, y - 0.5), 1, 1, fill=False, linewidth=0.0,
+                    hatch=_THIN_HATCH,
+                    edgecolor=color if measured else BOX_EDGE, zorder=2,
                 )
+            )
 
     # --- the break between the tiers: a gap, a dashed dark rule inside it, and the reason.
     if tier1 and tier2:
@@ -717,7 +852,7 @@ def plot_model_method_heatmap(
         )
         ax.text(
             -0.5, len(tier1) - 0.5 + gap / 2.0 - 0.08, _UNRANKED_NOTE,
-            ha="left", va="bottom", fontsize=7.5, color=BOX_EDGE, clip_on=False,
+            ha="left", va="bottom", fontsize=ANNOTATION, color=BOX_EDGE, clip_on=False,
         )
 
     # --- marginals, fenced off from the grid by the shared divider.
@@ -727,17 +862,17 @@ def plot_model_method_heatmap(
     for i, row in enumerate(ordered):
         ax.text(
             n_methods - 0.5 + _ROW_MARGINAL_OFFSET, row_y[i], row_marginals[i],
-            ha="left", va="center", fontsize=7.5,
+            ha="left", va="center", fontsize=ANNOTATION,
             fontstyle="italic" if row.tier == 2 else "normal", clip_on=False,
         )
 
     means, counts = _column_marginals(ordered, n_methods)
     for j, (mean, count) in enumerate(zip(means, counts)):
         text = f"{mean * 100:.1f}\n({count} full-n)" if count else f"n/a\n({count} full-n)"
-        ax.text(j, marginal_y, text, ha="center", va="center", fontsize=7.5, linespacing=1.35)
+        ax.text(j, marginal_y, text, ha="center", va="center", fontsize=ANNOTATION, linespacing=1.35)
     ax.text(
         -0.5 - _ROW_MARGINAL_OFFSET, marginal_y, "method mean",
-        ha="right", va="center", fontsize=7.5, clip_on=False,
+        ha="right", va="center", fontsize=ANNOTATION, clip_on=False,
     )
 
     add_percentage_colorbar(fig, im, ax, "TV-similarity (%)")
@@ -755,15 +890,15 @@ def plot_model_method_heatmap(
     )
     ax.legend(
         handles=handles, loc="upper left", bbox_to_anchor=(0.0, -0.02),
-        ncol=3, fontsize=7.5, title="provenance / sampling", title_fontsize=8, frameon=False,
+        ncol=3, fontsize=LEGEND_LABEL, title="provenance / sampling", title_fontsize=LEGEND_TITLE, frameon=False,
     )
 
     country = metadata["country"]
     ax.set_title(
-        f"{country}: overall fidelity by model x method (TV-similarity %)\n"
+        f"{country_label(country)}: overall fidelity by model x method (TV-similarity %)\n"
         "one cell per combination, averaged over every axis -- not the per-axis "
         "combo table or the single-method models table",
-        fontsize=11, fontweight="bold", pad=30,
+        fontsize=PANEL_TITLE, fontweight="bold", pad=30,
     )
 
     # The row-marginal scope clause names the tiers only when the grid actually has two,
@@ -772,9 +907,9 @@ def plot_model_method_heatmap(
         "(Tier 1: full-n cells only; Tier 2: all cells, provisional)" if tier2
         else "(full-n cells only)"
     )
+    method_key = "Methods:  " + "   ".join(method_key_lines(strategies)) + "  "
     caption = (
-        "Cell: mean TV-similarity across every demographic axis (x100), over the n personas "
-        "the validation gate left for that combination. "
+        f"{variant.cell_clause} "
         "Row marginal: the model's ordering key -- best qualifying score, the method that "
         f"achieved it, and the number of cells the key rested on {row_scope}. "
         "Column marginal: the method's mean across models over full-n cells only, with the "
@@ -783,13 +918,9 @@ def plot_model_method_heatmap(
     if tier2:
         lead = f"No model has a full-n cell: {_UNRANKED_NOTE}. " if not tier1 else ""
         caption = f"{lead}{_UNRANKED_CAVEAT} {caption}"
-    ax.text(
-        0.0, -0.13, textwrap.fill(caption, _CAPTION_WRAP), transform=ax.transAxes,
-        ha="left", va="top", fontsize=7, clip_on=False,
-    )
-
-    fig.tight_layout()
+    caption_block(fig, method_key + caption, fontsize=ANNOTATION)
+    fit_to_page(fig)
     # Hatch stroke width is an rcParam read at *draw* time, so it is set around the
     # save rather than on the patches, and scoped so no other figure inherits it.
     with plt.rc_context({"hatch.linewidth": _HATCH_LINEWIDTH}):
-        return save_figure(fig, Path(out_path), dpi=150)
+        return save_figure(fig, Path(out_path))

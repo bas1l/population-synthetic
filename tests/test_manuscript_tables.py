@@ -8,7 +8,7 @@ snippet emitters, and the empty / all-NaN ``None`` contract. Figures / snippets
 are written to a pytest ``tmp_path``, never the repo.
 
 A second group pins the *visual grammar* now shared with
-:mod:`population_synthetic.analysis.model_ranking.table_style`: the grid values
+:mod:`population_synthetic.analysis.utils.table_style`: the grid values
 actually drawn, the row and column order, the annotation text, the best-cell
 boxing and bolding, the Overall divider, the host label colours, and the
 extracted helpers' own contracts. These are structural assertions on the rendered
@@ -29,15 +29,23 @@ from population_synthetic.analysis.model_ranking.manuscript_tables import (
     write_method_fidelity_latex,
     write_model_fidelity_latex,
 )
-from population_synthetic.analysis.model_ranking.table_style import (
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    model_labels,
+    strategy_label,
+)
+from population_synthetic.analysis.utils.palette import (
+    HEATMAP_CMAP,
     HOST_COLORS,
+    MISSING_COLOR,
+)
+from population_synthetic.analysis.utils.table_style import (
     add_percentage_colorbar,
     best_cells_per_column,
     categories_on_top,
     inferno_cmap,
     vertical_divider,
 )
-from population_synthetic.analysis.utils.palette import HEATMAP_CMAP, MISSING_COLOR
 from tests._performance_fixtures import ATTRIBUTES, make_combo
 
 
@@ -151,7 +159,7 @@ def test_model_table_title_cites_global_best_strategy(tmp_path):
     out, ax = _render(plot_model_fidelity_table, result, tmp_path / "t.png")
 
     assert out is not None
-    assert f"strategy '{expected}'" in ax.get_title()
+    assert f"method {strategy_label(expected)}" in ax.get_title()
 
 
 def test_model_table_one_row_per_model_at_best_strategy(tmp_path):
@@ -162,7 +170,9 @@ def test_model_table_one_row_per_model_at_best_strategy(tmp_path):
     assert out is not None
     # 2 models both present at all_pick -> 2 rows; y ticks reflect them, Overall-sorted.
     labels = [t.get_text() for t in ax.get_yticklabels()]
-    assert labels == ["claude_haiku", "gemini_flash"]  # haiku 0.9 overall > flash 0.7
+    # haiku 0.9 overall > flash 0.7; the ticks carry display names, never the ids.
+    display = model_labels(["claude_haiku", "gemini_flash"])
+    assert labels == [display["claude_haiku"], display["gemini_flash"]]
 
 
 def test_model_missing_at_best_strategy_is_omitted(tmp_path, capsys):
@@ -190,7 +200,8 @@ def test_model_missing_at_best_strategy_is_omitted(tmp_path, capsys):
 
     assert out is not None
     labels = [t.get_text() for t in ax.get_yticklabels()]
-    assert labels == ["claude_haiku"]  # gemini_flash dropped (no all_pick combo)
+    # gemini_flash dropped (no all_pick combo).
+    assert labels == [model_labels(["claude_haiku"])["claude_haiku"]]
     assert "gemini_flash" in capsys.readouterr().out  # reported, not silent
 
 
@@ -204,7 +215,7 @@ def test_method_table_writes_both_formats_and_is_sorted(tmp_path):
 
     labels = [t.get_text() for t in ax.get_yticklabels()]
     # 2 strategies, Overall-sorted: all_pick (0.8) above all_generate_pick (0.7).
-    assert labels == ["all_pick", "all_generate_pick"]
+    assert labels == [strategy_label("all_pick"), strategy_label("all_generate_pick")]
 
 
 def test_model_table_none_on_empty_attributes(tmp_path):
@@ -244,8 +255,11 @@ def test_model_table_provenance_side_marker_colours_row_labels(tmp_path):
     out, ax = _render(plot_model_fidelity_table, result, tmp_path / "m.png")
 
     assert out is not None
+    display = model_labels(["claude_haiku", "gemini_flash"])
+    by_display = {label: model_id for model_id, label in display.items()}
     color_by_model = {
-        t.get_text(): mcolors.to_hex(t.get_color()).lower() for t in ax.get_yticklabels()
+        by_display[t.get_text()]: mcolors.to_hex(t.get_color()).lower()
+        for t in ax.get_yticklabels()
     }
     # claude_haiku is hosted, gemini_flash is local (per _HOSTING).
     assert color_by_model["claude_haiku"] == HOST_COLORS["hosted"].lower()
@@ -280,7 +294,9 @@ def test_model_table_columns_are_attributes_plus_overall(tmp_path):
     out, ax = _render(plot_model_fidelity_table, result, tmp_path / "m.png")
 
     assert out is not None
-    assert [t.get_text() for t in ax.get_xticklabels()] == ATTRIBUTES + ["overall"]
+    assert [t.get_text() for t in ax.get_xticklabels()] == (
+        [attribute_label(a) for a in ATTRIBUTES] + ["Overall"]
+    )
     assert list(ax.get_xticks()) == list(range(len(ATTRIBUTES) + 1))
 
 
@@ -289,7 +305,9 @@ def test_method_table_columns_are_attributes_plus_overall(tmp_path):
     out, ax = _render(plot_method_fidelity_table, result, tmp_path / "m.png")
 
     assert out is not None
-    assert [t.get_text() for t in ax.get_xticklabels()] == ATTRIBUTES + ["overall"]
+    assert [t.get_text() for t in ax.get_xticklabels()] == (
+        [attribute_label(a) for a in ATTRIBUTES] + ["Overall"]
+    )
     assert list(ax.get_xticks()) == list(range(len(ATTRIBUTES) + 1))
 
 

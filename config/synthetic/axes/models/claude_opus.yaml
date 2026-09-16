@@ -4,6 +4,11 @@
 # disk under this slug was generated with; newer Opus releases get their own id.
 id: "claude_opus"
 label: "Claude Opus 4.8"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "Claude Opus 4.8"
 model_config:
   provider: "claude"
   model: "claude-opus-4-8"

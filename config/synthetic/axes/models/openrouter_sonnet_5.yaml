@@ -1,5 +1,10 @@
 id: "openrouter_sonnet_5"
 label: "OpenRouter Claude Sonnet 5"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "Claude Sonnet 5"
 model_config:
   provider: "openrouter"
   model: "anthropic/claude-sonnet-5"

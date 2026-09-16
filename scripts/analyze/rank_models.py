@@ -18,15 +18,18 @@ Outputs, per country, under the analysis-stage model_ranking folder:
     {country}_c2st_vs_tv.png      joint discriminability (C2ST ROC-AUC) vs marginal
                                   fidelity, one point per combo, coloured by strategy
     {country}_model_method_heatmap.png
-                                  models x methods overall TV-similarity, each cell
-                                  annotated with its persona count n; cells below the
+                                  models x methods overall TV-similarity, the camera-ready
+                                  variant: the score alone in each cell. Cells below the
                                   requested cap hatched, models with no full-n cell
-                                  partitioned out of the ranking (PNG + SVG)
+                                  partitioned out of the ranking (PNG + SVG + EPS)
+    {country}_model_method_heatmap_with_counts.png
+                                  the same grid from the same renderer, each cell printed
+                                  over the persona count n it rests on (PNG + SVG + EPS)
     {country}_models_table.png    manuscript table: models at the global-best strategy x
                                   axes (+ overall), single inferno ramp with a
-                                  hosted/local provenance side-marker (PNG + SVG)
+                                  hosted/local provenance side-marker (PNG + SVG + EPS)
     {country}_methods_table.png   manuscript table: strategies x axes (+ overall),
-                                  mean-over-models TV-similarity, inferno ramp (PNG + SVG)
+                                  mean-over-models TV-similarity, inferno ramp (PNG + SVG + EPS)
     {country}_models_table.tex    manuscript LaTeX snippet mirroring the models table
                                   (booktabs tabular, inferno cell colours, best-per-column bold)
     {country}_methods_table.tex   manuscript LaTeX snippet mirroring the methods table
@@ -65,6 +68,7 @@ from population_synthetic.analysis.model_ranking.builder import (
     write_performance_json,
 )
 from population_synthetic.analysis.model_ranking.charts import (
+    GRID_VARIANTS,
     plot_attribute_bars,
     plot_c2st_vs_tv,
     plot_model_method_heatmap,
@@ -86,6 +90,7 @@ from population_synthetic.analysis.model_ranking.manuscript_tables import (
     write_model_fidelity_latex,
 )
 from population_synthetic.analysis.utils.cap_index import load_cap_index
+from population_synthetic.analysis.utils.grid_variants import variant_suffixes
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -318,11 +323,17 @@ def main() -> None:
             )
             if c2st_scatter is not None:
                 print(f"C2ST-vs-TV scatter written to {c2st_scatter}")
-            model_method_heatmap = plot_model_method_heatmap(
-                result, cap_index, performance_dir / f"{country}_model_method_heatmap.png"
-            )
-            if model_method_heatmap is not None:
-                print(f"Model x method heatmap written to {model_method_heatmap}")
+            # One publication per grid variant, enumerated from the chart module rather
+            # than named here: adding a variant there publishes it without touching this
+            # CLI, and the canonical (unsuffixed) name is the camera-ready figure.
+            for suffix, variant in variant_suffixes(GRID_VARIANTS):
+                model_method_heatmap = plot_model_method_heatmap(
+                    result, cap_index,
+                    performance_dir / f"{country}_model_method_heatmap{suffix}.png",
+                    variant=variant,
+                )
+                if model_method_heatmap is not None:
+                    print(f"Model x method heatmap written to {model_method_heatmap}")
             models_table = plot_model_fidelity_table(
                 result, performance_dir / f"{country}_models_table.png"
             )

@@ -31,11 +31,12 @@ for *presentation only*; this is a presentation default, not a data default --
 no computed value is affected.
 
 Follows the project charting conventions (deferred ``Agg`` matplotlib import,
-NaN -> grey, ``dpi=150``, white Overall divider, category labels on top) and
+NaN -> grey, white Overall divider, category labels on top) and
 persists via the shared
-:func:`population_synthetic.analysis.utils.figures.save_figure` (PNG + SVG pair).
+:func:`population_synthetic.analysis.utils.figures.save_figure` (PNG+SVG+EPS trio,
+at that module's single raster resolution).
 The visual grammar those conventions describe is not defined here: it lives in
-:mod:`population_synthetic.analysis.model_ranking.table_style`, shared with the
+:mod:`population_synthetic.analysis.utils.table_style`, shared with the
 other manuscript-style grids so they cannot drift apart.
 """
 
@@ -46,57 +47,81 @@ from typing import Any
 
 import numpy as np
 
-from population_synthetic.analysis.model_ranking.table_style import (
+from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.grid_annotations import RateOnlyPolicy
+from population_synthetic.analysis.utils.grids import render_grid
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    country_label,
+    model_labels,
+    strategy_label,
+)
+from population_synthetic.analysis.utils.palette import (
+    HOST_COLORS,
+    MISSING_COLOR,
+    text_color_for_rgb,
+)
+from population_synthetic.analysis.utils.style import (
+    FIGURE_TITLE,
+    FULL,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    TICK_LABEL,
+    grow_height,
+    grow_width,
+    house_style,
+)
+from population_synthetic.analysis.utils.table_style import (
     ANNOT_FONTSIZE,
     BOX_EDGE,
-    HOST_COLORS,
     HOST_DEFAULT_CLASS,
     HOST_LABELS,
     add_percentage_colorbar,
     best_cells_per_column,
     categories_on_top,
+    fit_to_page,
     inferno_cmap,
     vertical_divider,
 )
-from population_synthetic.analysis.utils.figures import save_figure
-from population_synthetic.analysis.utils.palette import MISSING_COLOR, text_color_for_rgb
 
 # ------------------------------------------------------------------
 # Table-specific private helpers
 # ------------------------------------------------------------------
 
-def _annotate_and_box(ax, values: np.ndarray, cmap, norm, best_cells: set[tuple[int, int]]) -> None:
-    """Write ``f"{v*100:.1f}"`` per finite cell; bold + draw a border on the best-per-column cells.
+#: The tables' cell annotation: the TV-similarity rescaled to a 0--100 percentage, one
+#: decimal. Colour and the best-per-column argmax stay on the underlying 0--1 value --
+#: only the printed number is rescaled.
+_CELL_POLICY = RateOnlyPolicy(value_key="value", scale=100.0, number_format=".1f")
 
-    The displayed number is the TV-similarity rescaled to a 0--100 percentage
-    (one decimal), while colour (``cmap(norm(v))``) and the best-per-column argmax
-    stay on the underlying 0--1 value -- only the annotation text is rescaled.
-    Text colour is chosen from the actual inferno cell colour by relative
-    luminance, so annotations stay legible on both the near-black low end and the
-    bright-yellow high end of the ramp.
+
+def _render_table(ax, values: np.ndarray, cmap, norm, best_cells: set[tuple[int, int]]):
+    """Draw the table grid, annotate it, and box the best cell of each column.
+
+    The image and the annotations come from the shared draw loop, so the text colour is
+    read off what the ramp actually painted rather than tuned to one ramp's luminance
+    profile, and a cell record that does not match the annotation policy raises instead
+    of rendering as an unmeasured cell. The box and the bold are this figure's own
+    emphasis and are handed over as plain cell coordinates.
     """
     from matplotlib.patches import Rectangle
 
-    n_rows, n_cols = values.shape
-    for i in range(n_rows):
-        for j in range(n_cols):
-            v = values[i, j]
-            if np.isnan(v):
-                continue
-            is_best = (i, j) in best_cells
-            ax.text(
-                j, i, f"{v * 100:.1f}",
-                ha="center", va="center", fontsize=ANNOT_FONTSIZE,
-                color=text_color_for_rgb(cmap(norm(v))),
-                fontweight="bold" if is_best else "normal",
+    cells = [
+        [None if np.isnan(value) else {"value": float(value)} for value in row]
+        for row in values
+    ]
+    im = render_grid(
+        ax, values, cells,
+        policy=_CELL_POLICY, cmap=cmap, norm=norm, aspect="auto",
+        fontsize=ANNOT_FONTSIZE, bold_cells=best_cells, interpolation="none",
+    )
+    for i, j in best_cells:
+        ax.add_patch(
+            Rectangle(
+                (j - 0.5, i - 0.5), 1, 1,
+                fill=False, edgecolor=BOX_EDGE, linewidth=2.0, zorder=5,
             )
-            if is_best:
-                ax.add_patch(
-                    Rectangle(
-                        (j - 0.5, i - 0.5), 1, 1,
-                        fill=False, edgecolor=BOX_EDGE, linewidth=2.0, zorder=5,
-                    )
-                )
+        )
+    return im
 
 
 def _global_best_strategy(matrix: dict[str, Any]) -> str | None:
@@ -213,6 +238,7 @@ def _shared_norm(values: np.ndarray):
 # Models table (rows = models at the global-best strategy)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Models x (axes + Overall) TV-similarity table at the single global-best strategy.
 
@@ -234,8 +260,6 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
     attributes: list[str] = result["metadata"]["attributes"]
     hosting: dict[str, str] = result["metadata"].get("model_hosting", {})
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
 
@@ -244,20 +268,23 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
 
     n_cols = len(attributes) + 1
     fig, ax = plt.subplots(
-        figsize=(max(8.0, n_cols * 0.8 + 3.0), max(4.0, len(row_models) * 0.5 + 2.5))
+        figsize=(
+            grow_width(n_cols, per_item=0.8, padding=3.0, minimum=FULL),
+            grow_height(len(row_models), per_item=0.5, padding=2.5, minimum=4.0),
+        ),
     )
-    im = ax.imshow(np.ma.masked_invalid(values), cmap=cmap, norm=norm, aspect="auto")
+    im = _render_table(ax, values, cmap, norm, best_cells_per_column(values))
 
-    categories_on_top(ax, attributes + ["overall"])
+    categories_on_top(ax, [attribute_label(a) for a in attributes] + ["Overall"])
+    display_models = model_labels(row_models)
     ax.set_yticks(range(len(row_models)))
-    ax.set_yticklabels(row_models, fontsize=8)
+    ax.set_yticklabels([display_models[m] for m in row_models], fontsize=TICK_LABEL)
     # Provenance side-marker: colour each model's row label by hosting class
     # (models absent from the map take the presentation default).
     for label, model in zip(ax.get_yticklabels(), row_models):
         label.set_color(HOST_COLORS[hosting.get(model, HOST_DEFAULT_CLASS)])
 
     vertical_divider(ax, len(attributes))
-    _annotate_and_box(ax, values, cmap, norm, best_cells_per_column(values))
 
     add_percentage_colorbar(fig, im, ax, "TV-similarity (%)")
 
@@ -269,22 +296,27 @@ def plot_model_fidelity_table(result: dict[str, Any], out_path: str | Path) -> P
     if handles:
         ax.legend(
             handles=handles, loc="upper left", bbox_to_anchor=(0.0, -0.02),
-            ncol=2, fontsize=7.5, title="provenance", title_fontsize=8, frameon=False,
+            ncol=2, fontsize=LEGEND_LABEL, title="provenance", title_fontsize=LEGEND_TITLE, frameon=False,
         )
 
     country = result["metadata"]["country"]
     ax.set_title(
-        f"{country}: model fidelity by axis at strategy '{best_strategy}' (TV-similarity %)",
-        fontsize=12, fontweight="bold", pad=28,
+        f"{country_label(country)}: model fidelity by axis at method "
+        f"{strategy_label(best_strategy)} (TV-similarity %)",
+        fontsize=FIGURE_TITLE, fontweight="bold", pad=28,
     )
     fig.tight_layout()
-    return save_figure(fig, Path(out_path), dpi=150)
+    # The title is centred on an axes inset by the model-label column, so it overhangs
+    # the page before it overhangs the axes.
+    fit_to_page(fig)
+    return save_figure(fig, Path(out_path))
 
 
 # ------------------------------------------------------------------
 # Methods table (rows = strategies)
 # ------------------------------------------------------------------
 
+@house_style
 def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> Path | None:
     """Strategies x (axes + Overall) mean-over-models TV-similarity table.
 
@@ -300,8 +332,6 @@ def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> 
     ordered, values = grid
     attributes: list[str] = result["metadata"]["attributes"]
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     norm = _shared_norm(values)
@@ -309,25 +339,33 @@ def plot_method_fidelity_table(result: dict[str, Any], out_path: str | Path) -> 
 
     n_cols = len(attributes) + 1
     fig, ax = plt.subplots(
-        figsize=(max(8.0, n_cols * 0.8 + 3.0), max(3.0, len(ordered) * 0.5 + 2.5))
+        figsize=(
+            grow_width(n_cols, per_item=0.8, padding=3.0, minimum=FULL),
+            grow_height(len(ordered), per_item=0.5, padding=2.5, minimum=3.0),
+        ),
     )
-    im = ax.imshow(np.ma.masked_invalid(values), cmap=cmap, norm=norm, aspect="auto")
+    im = _render_table(ax, values, cmap, norm, best_cells_per_column(values))
 
-    categories_on_top(ax, attributes + ["overall"])
+    categories_on_top(ax, [attribute_label(a) for a in attributes] + ["Overall"])
+    # Rows are the methods themselves, one per row with room for a phrase, so they are
+    # spelled out rather than lettered: there is no second axis to keep short here and
+    # no key block for a letter to be read against.
     ax.set_yticks(range(len(ordered)))
-    ax.set_yticklabels(ordered, fontsize=8)
+    ax.set_yticklabels([strategy_label(s) for s in ordered], fontsize=TICK_LABEL)
     vertical_divider(ax, len(attributes))
-    _annotate_and_box(ax, values, cmap, norm, best_cells_per_column(values))
 
     add_percentage_colorbar(fig, im, ax, "TV-similarity (%, mean over models)")
 
     country = result["metadata"]["country"]
     ax.set_title(
-        f"{country}: methods (strategy) fidelity by axis (TV-similarity %)",
-        fontsize=12, fontweight="bold", pad=28,
+        f"{country_label(country)}: method fidelity by axis (TV-similarity %)",
+        fontsize=FIGURE_TITLE, fontweight="bold", pad=28,
     )
     fig.tight_layout()
-    return save_figure(fig, Path(out_path), dpi=150)
+    # The title is centred on an axes inset by the model-label column, so it overhangs
+    # the page before it overhangs the axes.
+    fit_to_page(fig)
+    return save_figure(fig, Path(out_path))
 
 
 # ------------------------------------------------------------------
@@ -431,7 +469,9 @@ def write_model_fidelity_latex(result: dict[str, Any], out_path: str | Path) -> 
 
     caption = (
         f"{country}: model fidelity by axis at strategy '{best_strategy}' (TV-similarity, %). "
-        "Best per column in bold; Host = hosted (API) / local (Ollama)."
+        # Bound to the shared legend text rather than restated, so the LaTeX caption and
+        # the figure legend can never disagree about what a hosting class is called.
+        f"Best per column in bold; Host = {HOST_LABELS['hosted']} / {HOST_LABELS['local']}."
     )
     return _write_latex_table(Path(out_path), caption, ["Model", "Host"], attributes, body_rows)
 

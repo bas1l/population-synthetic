@@ -56,9 +56,52 @@ chi-squared + coherence), and the CSV marginals summary. Charts are only skipped
 has zero data in both populations -- if the real population provides the field, the chart
 must appear.
 
+### Presentation computes nothing
+
+HARD RULE. The presentation layer under `analysis/utils/` -- `palette.py`, `style.py`,
+`labels.py`, `figures.py`, `grids.py`, `grid_annotations.py`, `table_style.py` -- is a **pure
+sink**. It receives finished numbers and draws them. It computes no statistic, no rate, no
+threshold and no ranking; it imports no `scipy`, aggregates nothing, and decides nothing that
+a reader could quote as a finding. A number that appears on a figure was computed upstream and
+travelled to the renderer as data.
+
+The dependency direction is one-way and is the membership test: a module belongs to this layer
+**if and only if** it can draw or format without importing any analysis subpackage. Presentation
+modules import their `analysis/utils/` siblings, the standard library and matplotlib, and nothing
+else from the package. A chart module imports the presentation layer; the presentation layer never
+imports a chart module.
+
+Three consequences are enforced rather than merely stated:
+
+- **Caveat text is data, not code.** `reference_note`, `direction_reason`, `counting_unit`,
+  `n_confound`, `statistic_caveat` and their siblings are read from the data block the renderer
+  was handed and printed verbatim. A chart module never authors the sentence that qualifies a
+  number, because the qualification is a claim and claims are made upstream.
+- **Annotation policies are key-declaring and fail-fast.** A policy states the record keys it
+  reads (`grid_annotations.py`) and `render_grid` validates **every** cell record against that
+  declaration before drawing. Nothing falls back to a second key or reads through
+  `.get(key, default)`. The rule is a recorded near-miss, not defensive programming: a lenient
+  renderer that read `cell["rate"]` by literal key, handed a block whose value key was `value`,
+  painted every cell grey and labelled it unavailable **without raising** -- a silent-wrong-output
+  path producing a plausible figure. See
+  [the 2026-08-12 ADR](../development/decisions/2026-08-12-self-contained-typicality-axis.md).
+- **An unresolvable display label raises.** `labels.py` has no `.get(id, id)` and no id-to-string
+  table in Python: what a reader sees is read from the axis config that already declares it, and an
+  id with no entry raises `UnknownAxisValue` naming the id and the files searched. This is the
+  no-hardcoded-fallbacks rule above, applied to the last place ids were still leaking -- the canvas.
+
+Colour, type, canvas and export format each have exactly one home, so a figure is compliant by
+construction rather than by inspection: `src/` contains one `savefig` call site, one `imshow` call
+site, one backend selection and one `rcParams` block. The conventions those modules enforce, and
+the sources behind them, are recorded in
+[Figure conventions](../development/figure-conventions.md).
+
 ## See also
 
 - [Comparison & mapping](comparison-mapping.md) — where the "config is the single source of truth"
   and "full comparison output" rules are enforced.
 - [Sub-packages](sub-packages.md) — the packages these patterns shape
-  (`generators/real/`, `generators/synthetic/`, `analysis/`).
+  (`generators/real/`, `generators/synthetic/`, `analysis/`), including the presentation layer
+  module by module.
+- [Figure conventions](../development/figure-conventions.md) — the publication constraints the
+  presentation layer enforces, the labelling conventions and their sources, and the A–E method key.

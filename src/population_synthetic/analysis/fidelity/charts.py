@@ -16,8 +16,47 @@ import numpy as np
 from population_synthetic.analysis.fidelity.evaluator import attr_value
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.grid_annotations import RateOnlyPolicy
+from population_synthetic.analysis.utils.grids import render_grid
+from population_synthetic.analysis.utils.labels import (
+    attribute_label,
+    method_key_lines,
+    method_letters,
+    model_label,
+)
 from population_synthetic.analysis.utils.marginals import compute_proportions
-from population_synthetic.analysis.utils.palette import heatmap_cmap, text_color_on
+from population_synthetic.analysis.utils.palette import (
+    ACCENT_PAIR,
+    CATEGORICAL_SERIES,
+    GRID_RULE,
+    MUTED_GREY,
+    SECONDARY_GREY,
+    SURFACE,
+    heatmap_cmap,
+    opaque,
+)
+from population_synthetic.analysis.utils.style import (
+    ANNOTATION,
+    AXIS_TITLE,
+    CALLOUT,
+    CAPTION_MARGIN_IN,
+    FIGURE_TITLE,
+    FULL,
+    HEADING_WEIGHT,
+    LEGEND_LABEL,
+    LEGEND_TITLE,
+    LINE_SPACING,
+    MAX_HEIGHT,
+    PANEL_TITLE,
+    POINTS_PER_INCH,
+    TICK_LABEL,
+    figure_size,
+    grow_height,
+    grow_width,
+    house_style,
+    wrap_to_width,
+)
+from population_synthetic.analysis.utils.table_style import fit_to_page
 
 # ------------------------------------------------------------------
 # Chart styling constants
@@ -31,25 +70,19 @@ _HIGH_CARDINALITY_FIELDS = frozenset({
     "birth_country_detail",
 })
 
-_ATTR_COLORS = (
-    "#4878CF",
-    "#D65F5F",
-)
+# One slot of the house categorical series per compared population, in the order the
+# populations are passed. Positional, not semantic: nothing here knows which country
+# sits in which slot.
+_ATTR_COLORS = CATEGORICAL_SERIES[:2]
 
-_ATTR_COLORS_3WAY = (
-    "#4878CF",  # blue  (Sweden)
-    "#D65F5F",  # red   (Norway)
-    "#6AB187",  # green (Italy)
-)
+_ATTR_COLORS_3WAY = CATEGORICAL_SERIES[:3]
 
-_RADAR_TV_COLOR = "#2A9D8F"
-_RADAR_CHI_COLOR = "#E9C46A"
+# The radar overlays two filled polygons on the same axes, so its two series take the
+# palette's overlay accent pair rather than the first two slots of the series above.
+_RADAR_TV_COLOR, _RADAR_CHI_COLOR = ACCENT_PAIR
 
-_RADAR_3WAY_COLORS = ("#4878CF", "#D65F5F", "#6AB187")
+_RADAR_3WAY_COLORS = CATEGORICAL_SERIES[:3]
 _RADAR_3WAY_STYLES = ("solid", "dashed", "dotted")
-
-# Shared categorical palette (kept in step with analysis/{model_ranking,multivariate_fidelity}/charts.py).
-_COLOR_SERIES = ("#4878CF", "#D65F5F", "#6AB187", "#E8935A", "#E9C46A", "#8172B2", "#64B5CD")
 
 
 # ------------------------------------------------------------------
@@ -77,6 +110,7 @@ def _close_polygon(values: list[float]) -> list[float]:
 # Bar-chart comparison
 # ------------------------------------------------------------------
 
+@house_style
 def plot_comparison_charts(
     pop_a_data: dict,
     pop_b_data: dict,
@@ -96,8 +130,6 @@ def plot_comparison_charts(
     scheme's DB-grounded category set so no synthetic-only bar appears with a
     zero real-population count; otherwise categories fall back to the observed union.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir = Path(output_dir)
@@ -124,57 +156,62 @@ def plot_comparison_charts(
         n_cats = len(all_categories)
 
         if horizontal:
-            fig_height = max(4, min(n_cats * 0.5 + 2, 16))
-            fig, ax = plt.subplots(figsize=(10, fig_height))
+            fig_height = grow_height(n_cats, per_item=0.5, padding=2, minimum=4.0)
+            fig, ax = plt.subplots(figsize=figure_size(FULL, fig_height))
 
             bar_height = 0.35
             y_pos = np.arange(n_cats)
 
             ax.barh(y_pos + bar_height / 2, vals_a, height=bar_height,
-                    color=_ATTR_COLORS[0], label=pop_a_label, edgecolor="white", linewidth=0.4)
+                    color=_ATTR_COLORS[0], label=pop_a_label, edgecolor=SURFACE, linewidth=0.4)
             ax.barh(y_pos - bar_height / 2, vals_b, height=bar_height,
-                    color=_ATTR_COLORS[1], label=pop_b_label, edgecolor="white", linewidth=0.4)
+                    color=_ATTR_COLORS[1], label=pop_b_label, edgecolor=SURFACE, linewidth=0.4)
 
             ax.set_yticks(y_pos)
-            ax.set_yticklabels(all_categories, fontsize=7)
-            ax.set_xlabel("Proportion", fontsize=8)
+            ax.set_yticklabels(all_categories, fontsize=TICK_LABEL)
+            ax.set_xlabel("Proportion", fontsize=AXIS_TITLE)
             ax.set_xlim(0, 1.0)
         else:
-            fig, ax = plt.subplots(figsize=(max(8, n_cats * 0.9 + 2), 5))
+            fig, ax = plt.subplots(figsize=figure_size(grow_width(n_cats, per_item=0.9, padding=2, minimum=FULL), 5))
 
             bar_width = 0.35
             x_pos = np.arange(n_cats)
 
             ax.bar(x_pos - bar_width / 2, vals_a, width=bar_width,
-                   color=_ATTR_COLORS[0], label=pop_a_label, edgecolor="white", linewidth=0.4)
+                   color=_ATTR_COLORS[0], label=pop_a_label, edgecolor=SURFACE, linewidth=0.4)
             ax.bar(x_pos + bar_width / 2, vals_b, width=bar_width,
-                   color=_ATTR_COLORS[1], label=pop_b_label, edgecolor="white", linewidth=0.4)
+                   color=_ATTR_COLORS[1], label=pop_b_label, edgecolor=SURFACE, linewidth=0.4)
 
             ax.set_xticks(x_pos)
-            ax.set_xticklabels(all_categories, rotation=30, ha="right", fontsize=7)
-            ax.set_ylabel("Proportion", fontsize=8)
+            ax.set_xticklabels(all_categories, rotation=30, ha="right", fontsize=TICK_LABEL)
+            ax.set_ylabel("Proportion", fontsize=AXIS_TITLE)
             ax.set_ylim(0, 1.0)
 
         ax.set_title(
-            f"{attr} distribution: {pop_a_label} vs {pop_b_label}",
-            fontsize=10,
+            f"{attribute_label(attr)} distribution: {pop_a_label} vs {pop_b_label}",
+            fontsize=PANEL_TITLE,
             fontweight="bold",
         )
-        ax.legend(fontsize=8)
-        ax.tick_params(axis="both", labelsize=7)
+        ax.legend(fontsize=LEGEND_LABEL)
+        ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
         plt.tight_layout()
+        # The title is centred on the *axes*, and this family is drawn at the printable
+        # width exactly, so it has no headroom for the overhang: both labels are run
+        # slugs, and a slug pair reaches past the page by whatever it happens to be
+        # long. Re-wrapped to the room the page leaves, never resized.
+        fit_to_page(fig)
 
         fname = f"{prefix}_{attr}.png" if prefix else f"{attr}.png"
         out_path = output_dir / fname
-        fig.savefig(out_path, dpi=150, bbox_inches="tight")
-        plt.close(fig)
+        save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
 # Radar chart
 # ------------------------------------------------------------------
 
+@house_style
 def plot_radar_comparison(
     marginals: dict[str, dict[str, Any]],
     output_dir: Path,
@@ -189,8 +226,6 @@ def plot_radar_comparison(
 
     *attributes* (required) is the config-sourced comparison axis.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     attrs = [a for a in attributes if a in marginals]
@@ -207,7 +242,15 @@ def plot_radar_comparison(
     nan_mask = [np.isnan(v) for v in raw_chi]
     chi_plot = [0.0 if m else v for v, m in zip(raw_chi, nan_mask)]
 
-    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={"projection": "polar"})
+    fig, ax = plt.subplots(figsize=figure_size(FULL, 8), subplot_kw={"projection": "polar"})
+    # The spoke labels are drawn at r=1.18, i.e. outside the polar frame, and the legend
+    # sits below it. A polar axes fills its subplot box by default, which puts both past
+    # the paper -- and the exporter's tight bounding box then grows the page to contain
+    # them. Inset the box instead, so everything the figure draws is inside the canvas.
+    fig.subplots_adjust(
+        left=_RADAR_MARGIN, right=1.0 - _RADAR_MARGIN,
+        bottom=_RADAR_MARGIN, top=1.0 - _RADAR_MARGIN,
+    )
     ax.set_theta_offset(np.pi / 2)
     ax.set_theta_direction(-1)
 
@@ -215,7 +258,7 @@ def plot_radar_comparison(
     closed_tv = _close_polygon(tv_sim)
 
     ax.plot(closed_angles, closed_tv, color=_RADAR_TV_COLOR, linewidth=2, label="TV-similarity")
-    ax.fill(closed_angles, closed_tv, color=_RADAR_TV_COLOR, alpha=0.20)
+    ax.fill(closed_angles, closed_tv, color=opaque(_RADAR_TV_COLOR, 0.20))
 
     if show_chi_sq:
         closed_chi = _close_polygon(chi_plot)
@@ -223,7 +266,7 @@ def plot_radar_comparison(
             closed_angles, closed_chi, color=_RADAR_CHI_COLOR,
             linestyle="--", linewidth=1.5, label="Chi-sq p-value",
         )
-        ax.fill(closed_angles, closed_chi, color=_RADAR_CHI_COLOR, alpha=0.20)
+        ax.fill(closed_angles, closed_chi, color=opaque(_RADAR_CHI_COLOR, 0.20))
 
         nan_angles = [ang for ang, m in zip(angles, nan_mask) if m]
         if nan_angles:
@@ -231,15 +274,15 @@ def plot_radar_comparison(
 
     ax.set_xticks(angles)
     ax.set_xticklabels([])
-    for i, (ang, label) in enumerate(zip(angles, attrs)):
+    for i, (ang, attr) in enumerate(zip(angles, attrs)):
         rotation = np.degrees(ang) - 90 if ang <= np.pi else np.degrees(ang) + 90
         ax.text(
             ang,
             1.18,
-            label,
+            attribute_label(attr),
             ha="center",
             va="center",
-            fontsize=7,
+            fontsize=ANNOTATION,
             rotation=rotation,
             rotation_mode="anchor",
         )
@@ -249,7 +292,7 @@ def plot_radar_comparison(
             f"{val:.2f}",
             xy=(ang, val),
             xytext=(ang, val + 0.07),
-            fontsize=7,
+            fontsize=ANNOTATION,
             color=_RADAR_TV_COLOR,
             ha="center",
             va="center",
@@ -257,27 +300,45 @@ def plot_radar_comparison(
 
     ax.set_title(
         f"Per-dimension similarity\n{pop_a_label} vs {pop_b_label}",
-        fontsize=11,
+        fontsize=PANEL_TITLE,
         fontweight="bold",
         pad=24,
     )
 
     ax.set_ylim(0, 1)
     ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.yaxis.grid(True, color="lightgray")
+    ax.yaxis.grid(True, color=GRID_RULE)
     ax.spines["polar"].set_linewidth(1.2)
 
     if show_chi_sq:
-        ax.legend(loc="lower left", bbox_to_anchor=(-0.1, -0.05), fontsize=8)
+        # Anchored to the figure, not past the axes: the axes box is already inset, so an
+        # axes-relative anchor at a negative fraction lands outside the paper.
+        ax.legend(
+            loc="lower left", bbox_to_anchor=(0.0, 0.0), bbox_transform=fig.transFigure,
+            fontsize=LEGEND_LABEL,
+        )
+    fit_to_page(fig)
 
     out_path = Path(output_dir) / (f"{prefix}_radar.png" if prefix else "radar.png")
-    return save_figure(fig, out_path, dpi=150)
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
 # Multivariate association-fidelity heatmap (|Delta V|)
 # ------------------------------------------------------------------
 
+#: Fraction of the canvas held back on each side of a radar's polar box. The spoke
+#: labels sit at 1.18 of the frame radius and carry their own text width beyond that, so
+#: the frame has to stop short of the paper by more than the labels alone would suggest.
+_RADAR_MARGIN = 0.16
+
+#: The association heatmap's cell annotation: |Delta V| printed at its own scale, two
+#: decimals. Not a percentage -- it is a difference of two Cramer's V values, and
+#: rescaling it would invent a unit the statistic does not carry.
+_ASSOCIATION_CELL_POLICY = RateOnlyPolicy(value_key="value", scale=1.0, number_format=".2f")
+
+
+@house_style
 def plot_association_heatmap(
     report: dict[str, Any],
     output_dir: Path,
@@ -301,8 +362,7 @@ def plot_association_heatmap(
     if not pairs:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
+    import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
 
     # Attribute order: the config axis when supplied (stable across combos),
@@ -335,40 +395,49 @@ def plot_association_heatmap(
     masked = np.ma.masked_invalid(grid)
     if masked.count() == 0:
         return None
+    cells = [
+        [None if np.isnan(value) else {"value": float(value)} for value in row]
+        for row in grid
+    ]
 
-    fig, ax = plt.subplots(figsize=(max(6.0, n * 0.7 + 2.5), max(5.0, n * 0.7 + 2.0)))
+    fig, ax = plt.subplots(
+        figsize=(
+            grow_width(n, per_item=0.7, padding=2.5, minimum=6.0),
+            grow_height(n, per_item=0.7, padding=2.0, minimum=5.0),
+        ),
+    )
     vmax = max(float(masked.max()), 1e-6)
-    im = ax.imshow(masked, cmap=heatmap_cmap(), vmin=0.0, vmax=vmax)
+    # Anchored at a true zero: |Delta V| = 0 is identical association, a real floor, so a
+    # cell at the ramp's low end always means "no discrepancy" and never "least in this
+    # particular combo".
+    im = render_grid(
+        ax, grid, cells,
+        policy=_ASSOCIATION_CELL_POLICY, cmap=heatmap_cmap(),
+        norm=mcolors.Normalize(vmin=0.0, vmax=vmax),
+        fontsize=ANNOTATION, interpolation="none",
+    )
 
+    display_attrs = [attribute_label(attr) for attr in attrs]
     ax.set_xticks(range(n))
-    ax.set_xticklabels(attrs, rotation=40, ha="right", fontsize=7)
+    ax.set_xticklabels(display_attrs, rotation=40, ha="right", fontsize=TICK_LABEL)
     ax.set_yticks(range(n))
-    ax.set_yticklabels(attrs, fontsize=7)
+    ax.set_yticklabels(display_attrs, fontsize=TICK_LABEL)
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
-    cbar.set_label("|Delta V|  (Cramer's V: real vs synthetic)", fontsize=8)
-
-    for i in range(n):
-        for j in range(n):
-            v = grid[i, j]
-            if np.isnan(v):
-                continue
-            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=6,
-                    color=text_color_on(im, v))
+    cbar.set_label("|Delta V|  (Cramer's V: real vs synthetic)", fontsize=AXIS_TITLE)
 
     title = "Pairwise association fidelity  |Delta V|"
     if prefix:
         title = f"{prefix}: {title}"
-    ax.set_title(title, fontsize=11, fontweight="bold")
+    ax.set_title(title, fontsize=PANEL_TITLE, fontweight="bold")
     fig.tight_layout()
+    fit_to_page(fig)
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{prefix}_association_heatmap.png" if prefix else "association_heatmap.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -378,6 +447,7 @@ def plot_association_heatmap(
 _SUBPLOT_THRESHOLD = 30
 
 
+@house_style
 def plot_3way_comparison_charts(
     pop_a: dict,
     pop_b: dict,
@@ -389,8 +459,6 @@ def plot_3way_comparison_charts(
     prefix: str | None = None,
 ) -> None:
     """Generate grouped bar charts comparing three populations per attribute."""
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir = Path(output_dir)
@@ -412,60 +480,66 @@ def plot_3way_comparison_charts(
         use_subplots = n_cats > _SUBPLOT_THRESHOLD
 
         if use_subplots:
-            fig, axes = plt.subplots(1, 3, figsize=(18, max(4, n_cats * 0.35 + 2)), sharey=True)
+            fig, axes = plt.subplots(
+                1,
+                3,
+                figsize=(FULL, grow_height(n_cats, per_item=0.35, padding=2, minimum=4.0)),
+                sharey=True,
+            )
             for idx, (ax, label) in enumerate(zip(axes, labels)):
                 y_pos = np.arange(n_cats)
-                ax.barh(y_pos, vals[idx], color=_ATTR_COLORS_3WAY[idx], edgecolor="white", linewidth=0.3)
+                ax.barh(y_pos, vals[idx], color=_ATTR_COLORS_3WAY[idx], edgecolor=SURFACE, linewidth=0.3)
                 ax.set_yticks(y_pos)
                 if idx == 0:
-                    ax.set_yticklabels(all_categories, fontsize=6)
+                    ax.set_yticklabels(all_categories, fontsize=TICK_LABEL)
                 else:
                     ax.set_yticklabels([])
-                ax.set_xlabel("Proportion", fontsize=7)
+                ax.set_xlabel("Proportion", fontsize=AXIS_TITLE)
                 ax.set_xlim(0, max(max(v) for v in vals) * 1.15 or 1.0)
-                ax.set_title(label, fontsize=9, fontweight="bold")
-                ax.tick_params(axis="both", labelsize=6)
-            fig.suptitle(f"{attr} distribution", fontsize=11, fontweight="bold")
+                ax.set_title(label, fontsize=PANEL_TITLE, fontweight="bold")
+                ax.tick_params(axis="both", labelsize=TICK_LABEL)
+            fig.suptitle(f"{attribute_label(attr)} distribution", fontsize=FIGURE_TITLE, fontweight="bold")
         elif attr in _HIGH_CARDINALITY_FIELDS:
-            fig_height = max(4, min(n_cats * 0.6 + 2, 16))
-            fig, ax = plt.subplots(figsize=(10, fig_height))
+            fig_height = grow_height(n_cats, per_item=0.6, padding=2, minimum=4.0)
+            fig, ax = plt.subplots(figsize=figure_size(FULL, fig_height))
             bar_h = 0.25
             y_pos = np.arange(n_cats)
             for idx, label in enumerate(labels):
                 ax.barh(y_pos + (idx - 1) * bar_h, vals[idx], height=bar_h,
-                        color=_ATTR_COLORS_3WAY[idx], label=label, edgecolor="white", linewidth=0.3)
+                        color=_ATTR_COLORS_3WAY[idx], label=label, edgecolor=SURFACE, linewidth=0.3)
             ax.set_yticks(y_pos)
-            ax.set_yticklabels(all_categories, fontsize=7)
-            ax.set_xlabel("Proportion", fontsize=8)
+            ax.set_yticklabels(all_categories, fontsize=TICK_LABEL)
+            ax.set_xlabel("Proportion", fontsize=AXIS_TITLE)
             ax.set_xlim(0, 1.0)
-            ax.set_title(f"{attr} distribution", fontsize=10, fontweight="bold")
-            ax.legend(fontsize=8)
-            ax.tick_params(axis="both", labelsize=7)
+            ax.set_title(f"{attribute_label(attr)} distribution", fontsize=PANEL_TITLE, fontweight="bold")
+            ax.legend(fontsize=LEGEND_LABEL)
+            ax.tick_params(axis="both", labelsize=TICK_LABEL)
         else:
-            fig, ax = plt.subplots(figsize=(max(8, n_cats * 1.2 + 2), 5))
+            fig, ax = plt.subplots(figsize=figure_size(grow_width(n_cats, per_item=1.2, padding=2, minimum=FULL), 5))
             bar_w = 0.25
             x_pos = np.arange(n_cats)
             for idx, label in enumerate(labels):
                 ax.bar(x_pos + (idx - 1) * bar_w, vals[idx], width=bar_w,
-                       color=_ATTR_COLORS_3WAY[idx], label=label, edgecolor="white", linewidth=0.3)
+                       color=_ATTR_COLORS_3WAY[idx], label=label, edgecolor=SURFACE, linewidth=0.3)
             ax.set_xticks(x_pos)
-            ax.set_xticklabels(all_categories, rotation=30, ha="right", fontsize=7)
-            ax.set_ylabel("Proportion", fontsize=8)
+            ax.set_xticklabels(all_categories, rotation=30, ha="right", fontsize=TICK_LABEL)
+            ax.set_ylabel("Proportion", fontsize=AXIS_TITLE)
             ax.set_ylim(0, 1.0)
-            ax.set_title(f"{attr} distribution", fontsize=10, fontweight="bold")
-            ax.legend(fontsize=8)
-            ax.tick_params(axis="both", labelsize=7)
+            ax.set_title(f"{attribute_label(attr)} distribution", fontsize=PANEL_TITLE, fontweight="bold")
+            ax.legend(fontsize=LEGEND_LABEL)
+            ax.tick_params(axis="both", labelsize=TICK_LABEL)
 
         plt.tight_layout()
+        fit_to_page(fig)
         fname = f"{prefix}_{attr}.png" if prefix else f"{attr}.png"
-        fig.savefig(output_dir / fname, dpi=150, bbox_inches="tight")
-        plt.close(fig)
+        save_figure(fig, output_dir / fname)
 
 
 # ------------------------------------------------------------------
 # 3-way radar chart
 # ------------------------------------------------------------------
 
+@house_style
 def plot_3way_radar(
     pairwise: dict[str, dict],
     labels: tuple[str, ...],
@@ -475,8 +549,6 @@ def plot_3way_radar(
     prefix: str | None = None,
 ) -> Path | None:
     """Generate a radar chart with overlaid TV-similarity polygons for each pair."""
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     pair_names = list(pairwise.keys())
@@ -493,7 +565,14 @@ def plot_3way_radar(
     angles = [2 * np.pi * i / n for i in range(n)]
     closed_angles = _close_polygon(angles)
 
-    fig, ax = plt.subplots(figsize=(9, 9), subplot_kw={"projection": "polar"})
+    fig, ax = plt.subplots(figsize=(FULL, MAX_HEIGHT), subplot_kw={"projection": "polar"})
+    # Same inset as the two-way radar, for the same reason: the spoke labels are drawn
+    # outside the polar frame and a polar axes fills its subplot box, so an uninset box
+    # puts them past a page drawn at both caps already.
+    fig.subplots_adjust(
+        left=_RADAR_MARGIN, right=1.0 - _RADAR_MARGIN,
+        bottom=_RADAR_MARGIN, top=1.0 - _RADAR_MARGIN,
+    )
     ax.set_theta_offset(np.pi / 2)
     ax.set_theta_direction(-1)
 
@@ -512,35 +591,54 @@ def plot_3way_radar(
 
         closed_tv = _close_polygon(tv_sim)
         ax.plot(closed_angles, closed_tv, color=color, linewidth=2, linestyle=style, label=lbl)
-        ax.fill(closed_angles, closed_tv, color=color, alpha=0.08)
+        ax.fill(closed_angles, closed_tv, color=opaque(color, 0.08))
 
     ax.set_xticks(angles)
     ax.set_xticklabels([])
-    for i, (ang, label_text) in enumerate(zip(angles, attrs)):
+    for i, (ang, attr) in enumerate(zip(angles, attrs)):
         rotation = np.degrees(ang) - 90 if ang <= np.pi else np.degrees(ang) + 90
-        ax.text(ang, 1.18, label_text, ha="center", va="center", fontsize=7,
+        ax.text(ang, 1.18, attribute_label(attr), ha="center", va="center", fontsize=ANNOTATION,
                 rotation=rotation, rotation_mode="anchor")
 
-    ax.set_title("Per-dimension TV-similarity\n(3-way pairwise)", fontsize=11, fontweight="bold", pad=24)
+    ax.set_title("Per-dimension TV-similarity\n(3-way pairwise)", fontsize=PANEL_TITLE, fontweight="bold", pad=24)
     ax.set_ylim(0, 1)
     ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.yaxis.grid(True, color="lightgray")
+    ax.yaxis.grid(True, color=GRID_RULE)
     ax.spines["polar"].set_linewidth(1.2)
-    ax.legend(loc="lower left", bbox_to_anchor=(-0.15, -0.08), fontsize=8)
+    # Anchored to the figure, not past the axes: the axes box is already inset, so an
+    # axes-relative anchor at a negative fraction lands outside the paper.
+    ax.legend(
+        loc="lower left", bbox_to_anchor=(0.0, 0.0), bbox_transform=fig.transFigure,
+        fontsize=LEGEND_LABEL,
+    )
+    fit_to_page(fig)
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{prefix}_radar_3way.png" if prefix else "radar_3way.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
 # Radar grid (models × strategies)
 # ------------------------------------------------------------------
 
+def _text_strip_fraction(text: str, *, fontsize: float, height_in: float) -> float:
+    """Fraction of a *height_in* canvas a drawn block of *text* claims, margin included.
+
+    Counts the lines *text* has already been wrapped to rather than guessing at them, so
+    the strip the layout pass holds back is the one the draw will actually occupy. The
+    figure keeps the size the caller chose from the vocabulary: the room comes out of the
+    axes, never out of the canvas.
+    """
+    lines = text.count("\n") + 1
+    return (lines * fontsize * LINE_SPACING + POINTS_PER_INCH * CAPTION_MARGIN_IN) / (
+        POINTS_PER_INCH * height_in
+    )
+
+
+@house_style
 def plot_radar_grid(
     results: dict[tuple[str, str], dict[str, dict[str, Any]]],
     output_dir: Path,
@@ -553,8 +651,6 @@ def plot_radar_grid(
 
     *attributes* (required) is the config-sourced comparison axis.
     """
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     if not results:
@@ -583,11 +679,20 @@ def plot_radar_grid(
 
     n_rows = len(all_models)
     n_cols = len(strategies)
+    # Column headings are the method letters -- five stacked lowercase id fragments per
+    # column was the widest text on this figure -- with the key printed once beneath the
+    # whole grid rather than repeated per column.
+    letters = method_letters(strategies)
+    display_models = {model: model_label(model) for model in all_models}
 
     cell_size = 3.2
     fig, axes = plt.subplots(
-        n_rows, n_cols,
-        figsize=(n_cols * cell_size + 1.5, n_rows * cell_size + 1.2),
+        n_rows,
+        n_cols,
+        figsize=(
+            grow_width(n_cols, per_item=cell_size, padding=1.5),
+            grow_height(n_rows, per_item=cell_size, padding=1.2),
+        ),
         subplot_kw={"projection": "polar"},
     )
 
@@ -609,12 +714,12 @@ def plot_radar_grid(
                 ax.set_xticks([])
                 ax.set_yticks([])
                 ax.text(0.5, 0.5, "N/A", transform=ax.transAxes,
-                        ha="center", va="center", fontsize=11, color="gray")
+                        ha="center", va="center", fontsize=CALLOUT, color=SECONDARY_GREY)
                 if r == 0:
-                    ax.set_title(strategy.replace("_", "\n"), fontsize=7,
+                    ax.set_title(letters[strategy], fontsize=PANEL_TITLE,
                                  fontweight="bold", pad=14)
                 if c == 0:
-                    ax.set_ylabel(model, fontsize=7, labelpad=30,
+                    ax.set_ylabel(display_models[model], fontsize=AXIS_TITLE, labelpad=30,
                                   fontweight="bold")
                 continue
 
@@ -628,41 +733,68 @@ def plot_radar_grid(
             closed_tv = _close_polygon(tv_sim)
             ax.plot(closed_angles, closed_tv, color=_RADAR_TV_COLOR,
                     linewidth=1.5)
-            ax.fill(closed_angles, closed_tv, color=_RADAR_TV_COLOR,
-                    alpha=0.20)
+            ax.fill(closed_angles, closed_tv,
+                    color=opaque(_RADAR_TV_COLOR, 0.20))
 
             ax.set_ylim(0, 1)
             ax.set_yticks([0.5, 1.0])
-            ax.set_yticklabels(["0.5", "1.0"], fontsize=5, color="gray")
-            ax.yaxis.grid(True, color="lightgray", linewidth=0.5)
+            ax.set_yticklabels(["0.5", "1.0"], fontsize=TICK_LABEL, color=SECONDARY_GREY)
+            ax.yaxis.grid(True, color=GRID_RULE, linewidth=0.5)
 
             ax.set_xticks(angles)
             ax.set_xticklabels([])
-            for ang, label_text in zip(angles, attrs):
+            for ang, attr in zip(angles, attrs):
                 rotation = (np.degrees(ang) - 90 if ang <= np.pi
                             else np.degrees(ang) + 90)
-                ax.text(ang, 1.22, label_text, ha="center", va="center",
-                        fontsize=4.5, rotation=rotation,
+                ax.text(ang, 1.22, attribute_label(attr), ha="center", va="center",
+                        fontsize=ANNOTATION, rotation=rotation,
                         rotation_mode="anchor")
 
             mean_tv_sim = sum(tv_sim) / len(tv_sim)
             ax.text(0.5, -0.08, f"mean: {mean_tv_sim:.2f}",
-                    transform=ax.transAxes, ha="center", fontsize=6,
+                    transform=ax.transAxes, ha="center", fontsize=ANNOTATION,
                     color=_RADAR_TV_COLOR, fontweight="bold")
 
             if r == 0:
-                ax.set_title(strategy.replace("_", "\n"), fontsize=7,
+                ax.set_title(letters[strategy], fontsize=PANEL_TITLE,
                              fontweight="bold", pad=14)
             if c == 0:
-                ax.set_ylabel(model, fontsize=7, labelpad=30,
+                ax.set_ylabel(display_models[model], fontsize=AXIS_TITLE, labelpad=30,
                               fontweight="bold")
 
-    fig.suptitle("TV-similarity radar: models × strategies",
-                 fontsize=13, fontweight="bold", y=1.01)
-    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    # Both figure-level strings are wrapped to the paper before they are drawn, and the
+    # strips they need are then reserved from the measured line counts. Neither the
+    # layout pass nor `fit_to_page` can rescue one afterwards: `tight_layout` does not
+    # account for a suptitle, and `fit_to_page` re-wraps only what reaches past a *side*
+    # of the page. A headline hung above the figure rectangle -- which is what the
+    # `y=1.01` this replaces did -- therefore survived into the tight bounding box the
+    # exporter writes at and grew the written canvas past the printable height by its own
+    # overhang, on every grid tall enough to have been clamped to that height already.
+    figure_width, figure_height = (float(v) for v in fig.get_size_inches())
+    usable = figure_width - 2 * CAPTION_MARGIN_IN
+    headline = wrap_to_width(
+        "TV-similarity radar: models × methods", usable,
+        fontsize=FIGURE_TITLE, weight=HEADING_WEIGHT,
+    )
+    key_block = wrap_to_width(
+        "Methods:  " + "   ".join(method_key_lines(strategies)), usable, fontsize=ANNOTATION,
+    )
+
+    fig.suptitle(headline, fontsize=FIGURE_TITLE, fontweight=HEADING_WEIGHT)
+    fig.text(
+        CAPTION_MARGIN_IN / figure_width, CAPTION_MARGIN_IN / figure_height, key_block,
+        ha="left", va="bottom", fontsize=ANNOTATION, linespacing=LINE_SPACING,
+    )
+    fig.tight_layout(rect=(
+        0.0,
+        _text_strip_fraction(key_block, fontsize=ANNOTATION, height_in=figure_height),
+        1.0,
+        1.0 - _text_strip_fraction(headline, fontsize=FIGURE_TITLE, height_in=figure_height),
+    ))
+    fit_to_page(fig)
 
     out_path = Path(output_dir) / (f"{prefix}_radar_grid.png" if prefix else "radar_grid.png")
-    return save_figure(fig, out_path, dpi=180)
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -672,9 +804,10 @@ def plot_radar_grid(
 # Each mirrors :func:`plot_association_heatmap`: reads one report block, returns
 # ``None`` (before importing matplotlib) when there is nothing plottable -- an
 # absent block or all-NaN values from a tiny/failed synthetic population -- and
-# otherwise writes a single ``{prefix}_<metric>.png`` at dpi 150.
+# otherwise writes a single ``{prefix}_<metric>`` figure through ``save_figure``.
 
 
+@house_style
 def plot_c2st(
     report: dict[str, Any],
     output_dir: Path,
@@ -694,8 +827,6 @@ def plot_c2st(
     if auc is None or (isinstance(auc, float) and np.isnan(auc)):
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir = Path(output_dir)
@@ -705,31 +836,31 @@ def plot_c2st(
     method = c2st.get("method", "?")
     balanced_n = c2st.get("balanced_n", "?")
 
-    fig, ax = plt.subplots(figsize=(4.5, 5.0))
-    ax.bar([0], [auc], width=0.5, color=_COLOR_SERIES[0], edgecolor="white", linewidth=0.6, zorder=3)
-    ax.axhline(0.5, color="#888888", linestyle="--", linewidth=1.0, zorder=1)
+    fig, ax = plt.subplots(figsize=figure_size(4.5, 5.0))
+    ax.bar([0], [auc], width=0.5, color=CATEGORICAL_SERIES[0], edgecolor=SURFACE, linewidth=0.6, zorder=3)
+    ax.axhline(0.5, color=MUTED_GREY, linestyle="--", linewidth=1.0, zorder=1)
     ax.text(0.0, 0.5, "  0.5 = indistinguishable joint", va="bottom", ha="center",
-            fontsize=7.5, color="#666666")
-    ax.text(0.0, auc, f"{auc:.3f}", va="bottom", ha="center", fontsize=10, fontweight="bold")
+            fontsize=ANNOTATION, color=SECONDARY_GREY)
+    ax.text(0.0, auc, f"{auc:.3f}", va="bottom", ha="center", fontsize=CALLOUT, fontweight="bold")
 
     p_str = "nan" if p_value is None or (isinstance(p_value, float) and np.isnan(p_value)) else f"{p_value:.3f}"
     ax.set_xticks([0])
-    ax.set_xticklabels([f"p = {p_str}\n{method}, balanced n = {balanced_n}"], fontsize=8)
-    ax.set_ylabel("C2ST ROC-AUC", fontsize=9)
+    ax.set_xticklabels([f"p = {p_str}\n{method}, balanced n = {balanced_n}"], fontsize=TICK_LABEL)
+    ax.set_ylabel("C2ST ROC-AUC", fontsize=AXIS_TITLE)
     ax.set_ylim(0.4, 1.02)
-    ax.grid(True, axis="y", linestyle=":", alpha=0.4)
+    ax.grid(True, axis="y", linestyle=":", color=GRID_RULE)
 
     title = "C2ST: real vs synthetic separability"
-    ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=12, fontweight="bold")
+    ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
+    fit_to_page(fig)
 
     fname = f"{prefix}_c2st.png" if prefix else "c2st.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
+@house_style
 def plot_joint_fidelity(
     report: dict[str, Any],
     output_dir: Path,
@@ -755,50 +886,51 @@ def plot_joint_fidelity(
         order = {a: i for i, a in enumerate(attributes)}
         plottable.sort(key=lambda p: (order.get(p["attr_x"], len(order)), order.get(p["attr_y"], len(order))))
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    labels = [f"{p['attr_x']}×{p['attr_y']}" for p in plottable]
+    labels = [
+        f"{attribute_label(p['attr_x'])}×{attribute_label(p['attr_y'])}"
+        for p in plottable
+    ]
     values = [float(p["joint_tv"]) for p in plottable]
     grounded = [bool(p.get("grounded")) for p in plottable]
-    colors = [_COLOR_SERIES[2] if g else _COLOR_SERIES[3] for g in grounded]
+    colors = [CATEGORICAL_SERIES[2] if g else CATEGORICAL_SERIES[3] for g in grounded]
     hatches = ["" if g else "//" for g in grounded]
 
     y_pos = np.arange(len(plottable))
-    fig, ax = plt.subplots(figsize=(8.0, max(3.0, len(plottable) * 0.5 + 1.5)))
-    bars = ax.barh(y_pos, values, color=colors, edgecolor="white", linewidth=0.6, zorder=3)
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(len(plottable), per_item=0.5, padding=1.5, minimum=3.0)))
+    bars = ax.barh(y_pos, values, color=colors, edgecolor=SURFACE, linewidth=0.6, zorder=3)
     for bar, hatch in zip(bars, hatches):
         bar.set_hatch(hatch)
 
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels, fontsize=7)
+    ax.set_yticklabels(labels, fontsize=TICK_LABEL)
     ax.invert_yaxis()
-    ax.set_xlabel("joint TV distance  (0 = identical joint, lower better)", fontsize=9)
+    ax.set_xlabel("joint TV distance  (0 = identical joint, lower better)", fontsize=AXIS_TITLE)
     ax.set_xlim(0, max(1.0, max(values) * 1.1))
-    ax.grid(True, axis="x", linestyle=":", alpha=0.4)
+    ax.grid(True, axis="x", linestyle=":", color=GRID_RULE)
 
     from matplotlib.patches import Patch
     legend_handles = [
-        Patch(facecolor=_COLOR_SERIES[2], label="grounded"),
-        Patch(facecolor=_COLOR_SERIES[3], hatch="//", label="reference"),
+        Patch(facecolor=CATEGORICAL_SERIES[2], label="grounded"),
+        Patch(facecolor=CATEGORICAL_SERIES[3], hatch="//", label="reference"),
     ]
-    ax.legend(handles=legend_handles, fontsize=7.5, title="basis", title_fontsize=8)
+    ax.legend(handles=legend_handles, fontsize=LEGEND_LABEL, title="basis", title_fontsize=LEGEND_TITLE)
 
     title = "Grounded joint total-variation distance"
-    ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=12, fontweight="bold")
+    ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
+    fit_to_page(fig)
 
     fname = f"{prefix}_joint_fidelity.png" if prefix else "joint_fidelity.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
+@house_style
 def plot_combination_plausibility(
     report: dict[str, Any],
     output_dir: Path,
@@ -817,44 +949,44 @@ def plot_combination_plausibility(
     if not plottable:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    labels = [f"{' | '.join(c['attributes'])}\n(k={c['k']})" for c in plottable]
+    labels = [
+        f"{' | '.join(attribute_label(a) for a in c['attributes'])}\n(k={c['k']})"
+        for c in plottable
+    ]
     frac_impossible = [float(c["fraction_impossible"]) for c in plottable]
     frac_rare = [float(c["fraction_rare"]) for c in plottable]
     frac_plausible = [max(0.0, 1.0 - i - r) for i, r in zip(frac_impossible, frac_rare)]
 
     y_pos = np.arange(len(plottable))
-    fig, ax = plt.subplots(figsize=(9.0, max(3.0, len(plottable) * 0.6 + 1.5)))
+    fig, ax = plt.subplots(figsize=(FULL, grow_height(len(plottable), per_item=0.6, padding=1.5, minimum=3.0)))
     left_imp = [p + r for p, r in zip(frac_plausible, frac_rare)]
-    ax.barh(y_pos, frac_plausible, color=_COLOR_SERIES[2],
-            edgecolor="white", linewidth=0.6, label="plausible")
-    ax.barh(y_pos, frac_rare, left=frac_plausible, color=_COLOR_SERIES[4],
-            edgecolor="white", linewidth=0.6, label="rare")
-    ax.barh(y_pos, frac_impossible, left=left_imp, color=_COLOR_SERIES[1],
-            edgecolor="white", linewidth=0.6, label="impossible")
+    ax.barh(y_pos, frac_plausible, color=CATEGORICAL_SERIES[2],
+            edgecolor=SURFACE, linewidth=0.6, label="plausible")
+    ax.barh(y_pos, frac_rare, left=frac_plausible, color=CATEGORICAL_SERIES[4],
+            edgecolor=SURFACE, linewidth=0.6, label="rare")
+    ax.barh(y_pos, frac_impossible, left=left_imp, color=CATEGORICAL_SERIES[1],
+            edgecolor=SURFACE, linewidth=0.6, label="impossible")
 
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels, fontsize=7)
+    ax.set_yticklabels(labels, fontsize=TICK_LABEL)
     ax.invert_yaxis()
-    ax.set_xlabel("fraction of synthetic individuals", fontsize=9)
+    ax.set_xlabel("fraction of synthetic individuals", fontsize=AXIS_TITLE)
     ax.set_xlim(0, 1.0)
-    ax.legend(fontsize=7.5, ncol=3, loc="lower center", bbox_to_anchor=(0.5, 1.0))
+    ax.legend(fontsize=LEGEND_LABEL, ncol=3, loc="lower center", bbox_to_anchor=(0.5, 1.0))
 
     title = "K-way combination plausibility"
-    ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=12, fontweight="bold", pad=24)
+    ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=FIGURE_TITLE, fontweight="bold", pad=24)
     fig.tight_layout()
+    fit_to_page(fig)
 
     fname = f"{prefix}_combination_plausibility.png" if prefix else "combination_plausibility.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
 # ------------------------------------------------------------------
@@ -865,6 +997,7 @@ def plot_combination_plausibility(
 # so the pair can be dropped in one edit if the legacy tier is retired.
 
 
+@house_style
 def plot_joint_chi_sq(
     report: dict[str, Any],
     output_dir: Path,
@@ -882,41 +1015,43 @@ def plot_joint_chi_sq(
     if not items:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    labels = [k.replace("_x_", "×") for k, _ in items]
+    # The joint keys are two canonical attribute names joined by the report's own
+    # separator; each half is resolved, so the pair reads as a pair of phrases.
+    labels = [
+        "×".join(attribute_label(a) for a in k.split("_x_")) for k, _ in items
+    ]
     values = [float(v) for _, v in items]
-    colors = [_COLOR_SERIES[1] if v < 0.05 else _COLOR_SERIES[0] for v in values]
+    colors = [CATEGORICAL_SERIES[1] if v < 0.05 else CATEGORICAL_SERIES[0] for v in values]
 
     x_pos = np.arange(len(items))
-    fig, ax = plt.subplots(figsize=(max(6.0, len(items) * 1.1 + 2), 5.0))
-    ax.bar(x_pos, values, width=0.6, color=colors, edgecolor="white", linewidth=0.6, zorder=3)
-    ax.axhline(0.05, color="#D65F5F", linestyle="--", linewidth=1.0, zorder=1)
+    fig, ax = plt.subplots(figsize=figure_size(grow_width(len(items), per_item=1.1, padding=2, minimum=6.0), 5.0))
+    ax.bar(x_pos, values, width=0.6, color=colors, edgecolor=SURFACE, linewidth=0.6, zorder=3)
+    ax.axhline(0.05, color=CATEGORICAL_SERIES[1], linestyle="--", linewidth=1.0, zorder=1)
     ax.text(len(items) - 0.5, 0.05, " 0.05 significance", va="bottom", ha="right",
-            fontsize=7.5, color="#666666")
+            fontsize=ANNOTATION, color=SECONDARY_GREY)
 
     ax.set_xticks(x_pos)
-    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=7)
-    ax.set_ylabel("joint chi-squared p-value  (higher = consistent)", fontsize=9)
+    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=TICK_LABEL)
+    ax.set_ylabel("joint chi-squared p-value  (higher = consistent)", fontsize=AXIS_TITLE)
     ax.set_ylim(0, 1.0)
-    ax.grid(True, axis="y", linestyle=":", alpha=0.4)
+    ax.grid(True, axis="y", linestyle=":", color=GRID_RULE)
 
     title = "Joint chi-squared p-value per pair"
-    ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=12, fontweight="bold")
+    ax.set_title(f"{prefix}: {title}" if prefix else title, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout()
+    fit_to_page(fig)
 
     fname = f"{prefix}_joint_chi_sq.png" if prefix else "joint_chi_sq.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)
 
 
+@house_style
 def plot_coherence(
     report: dict[str, Any],
     output_dir: Path,
@@ -931,8 +1066,6 @@ def plot_coherence(
     if not coherence:
         return None
 
-    import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     output_dir = Path(output_dir)
@@ -943,43 +1076,42 @@ def plot_coherence(
     n_flagged = len(flagged)
     score = coherence.get("score")
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.0, 4.6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figure_size(FULL, 4.6))
 
     ax1.pie(
         [n_plausible, n_flagged],
         labels=[f"plausible\n{n_plausible}", f"flagged\n{n_flagged}"],
-        colors=[_COLOR_SERIES[2], _COLOR_SERIES[1]],
+        colors=[CATEGORICAL_SERIES[2], CATEGORICAL_SERIES[1]],
         autopct=lambda pct: f"{pct:.1f}%" if pct > 0 else "",
         startangle=90,
         wedgeprops={"width": 0.42, "edgecolor": "white"},
-        textprops={"fontsize": 8},
+        textprops={"fontsize": ANNOTATION},
     )
     score_str = "nan" if score is None else f"{score:.2f}"
-    ax1.text(0, 0, score_str, ha="center", va="center", fontsize=16, fontweight="bold",
-             color=_COLOR_SERIES[2])
-    ax1.set_title("Coherence score", fontsize=10, fontweight="bold")
+    ax1.text(0, 0, score_str, ha="center", va="center", fontsize=FIGURE_TITLE, fontweight="bold",
+             color=CATEGORICAL_SERIES[2])
+    ax1.set_title("Coherence score", fontsize=PANEL_TITLE, fontweight="bold")
 
     probs = [f.get("probability", 0.0) for f in flagged
              if f.get("probability") is not None]
     if probs:
-        ax2.hist(probs, bins=min(20, max(3, len(set(probs)))), color=_COLOR_SERIES[1],
-                 edgecolor="white", linewidth=0.5)
-        ax2.set_xlabel("combination probability in real A", fontsize=8)
-        ax2.set_ylabel("flagged individuals", fontsize=8)
+        ax2.hist(probs, bins=min(20, max(3, len(set(probs)))), color=CATEGORICAL_SERIES[1],
+                 edgecolor=SURFACE, linewidth=0.5)
+        ax2.set_xlabel("combination probability in real A", fontsize=AXIS_TITLE)
+        ax2.set_ylabel("flagged individuals", fontsize=AXIS_TITLE)
     else:
         ax2.text(0.5, 0.5, "no flagged individuals", transform=ax2.transAxes,
-                 ha="center", va="center", fontsize=10, color="gray")
+                 ha="center", va="center", fontsize=CALLOUT, color=SECONDARY_GREY)
         ax2.set_xticks([])
         ax2.set_yticks([])
-    ax2.set_title("Flagged-probability distribution", fontsize=10, fontweight="bold")
-    ax2.tick_params(axis="both", labelsize=7)
+    ax2.set_title("Flagged-probability distribution", fontsize=PANEL_TITLE, fontweight="bold")
+    ax2.tick_params(axis="both", labelsize=TICK_LABEL)
 
     suptitle = "Individual coherence"
-    fig.suptitle(f"{prefix}: {suptitle}" if prefix else suptitle, fontsize=12, fontweight="bold")
+    fig.suptitle(f"{prefix}: {suptitle}" if prefix else suptitle, fontsize=FIGURE_TITLE, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.96])
+    fit_to_page(fig)
 
     fname = f"{prefix}_coherence.png" if prefix else "coherence.png"
     out_path = output_dir / fname
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path)

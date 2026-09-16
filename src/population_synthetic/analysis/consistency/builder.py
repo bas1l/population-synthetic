@@ -30,6 +30,7 @@ class RuleResult:
     """One rule's outcome against one population: count, rate, capped examples."""
 
     rule_id: str
+    rule_label: str
     description: str
     severity: str
     n_violations: int
@@ -78,6 +79,7 @@ def scan_population(
         results.append(
             RuleResult(
                 rule_id=rule.id,
+                rule_label=rule.label,
                 description=rule.description,
                 severity=rule.severity,
                 n_violations=n_violations,
@@ -101,6 +103,7 @@ def scan_population(
 def _rule_result_to_dict(result: RuleResult, *, include_examples: bool) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "rule_id": result.rule_id,
+        "rule_label": result.rule_label,
         "description": result.description,
         "severity": result.severity,
         "n_violations": result.n_violations,
@@ -134,6 +137,10 @@ def build_summary_rows(reports: list[ConsistencyReport]) -> list[dict[str, Any]]
             rows.append({
                 "population": report.population,
                 "rule_id": result.rule_id,
+                # The display label travels with the row rather than being resolved in
+                # the chart: what a rule is *called* is config, and a renderer that had
+                # to look it up would need to know where this process keeps its config.
+                "rule_label": result.rule_label,
                 "severity": result.severity,
                 "n_individuals": report.n_individuals,
                 "violations": result.n_violations,

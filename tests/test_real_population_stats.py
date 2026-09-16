@@ -188,6 +188,12 @@ def test_write_proportions_csv_creates_parent_dir(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
+#: Canonical attributes, because the charts resolve the name they print through
+#: ``analysis/utils/labels.py`` and it raises on an attribute config does not declare.
+_ATTR = "age_group"
+_PANEL_ATTRS = ("age_group", "biological_sex", "education_level")
+
+
 def _chart_rows(n: int = 3) -> list[CategoryStat]:
     return [
         CategoryStat(value=f"c{i}", count=i, total=10, proportion=i / 10, percent=i * 10.0)
@@ -197,7 +203,7 @@ def _chart_rows(n: int = 3) -> list[CategoryStat]:
 
 def test_plot_category_bars_returns_figure_no_disk_write(tmp_path: Path):
     before = set(tmp_path.iterdir())
-    fig = plot_category_bars(_chart_rows(), "some_attr")
+    fig = plot_category_bars(_chart_rows(), _ATTR)
     try:
         assert isinstance(fig, matplotlib.figure.Figure)
         assert set(tmp_path.iterdir()) == before  # nothing written to disk
@@ -206,7 +212,7 @@ def test_plot_category_bars_returns_figure_no_disk_write(tmp_path: Path):
 
 
 def test_plot_category_bars_ylim_fixed_0_100():
-    fig = plot_category_bars(_chart_rows(), "some_attr")
+    fig = plot_category_bars(_chart_rows(), _ATTR)
     try:
         ax = fig.axes[0]
         assert ax.get_ylim() == (0.0, 100.0)
@@ -215,7 +221,7 @@ def test_plot_category_bars_ylim_fixed_0_100():
 
 
 def test_plot_category_bars_has_four_dashed_reference_lines():
-    fig = plot_category_bars(_chart_rows(), "some_attr")
+    fig = plot_category_bars(_chart_rows(), _ATTR)
     try:
         ax = fig.axes[0]
         horizontal_ys = set()
@@ -230,7 +236,7 @@ def test_plot_category_bars_has_four_dashed_reference_lines():
 
 def test_plot_category_bars_has_per_bar_labels():
     rows = _chart_rows(4)
-    fig = plot_category_bars(rows, "some_attr")
+    fig = plot_category_bars(rows, _ATTR)
     try:
         ax = fig.axes[0]
         assert len(ax.texts) == len(rows)
@@ -240,7 +246,7 @@ def test_plot_category_bars_has_per_bar_labels():
 
 def test_plot_overview_panel_returns_figure(tmp_path: Path):
     before = set(tmp_path.iterdir())
-    stats_by_attr = {"attr1": _chart_rows(2), "attr2": _chart_rows(3)}
+    stats_by_attr = dict(zip(_PANEL_ATTRS, (_chart_rows(2), _chart_rows(3))))
     fig = plot_overview_panel(stats_by_attr)
     try:
         assert isinstance(fig, matplotlib.figure.Figure)
@@ -250,7 +256,9 @@ def test_plot_overview_panel_returns_figure(tmp_path: Path):
 
 
 def test_plot_overview_panel_has_one_axes_per_attribute_at_least():
-    stats_by_attr = {"attr1": _chart_rows(2), "attr2": _chart_rows(3), "attr3": _chart_rows(2)}
+    stats_by_attr = dict(
+        zip(_PANEL_ATTRS, (_chart_rows(2), _chart_rows(3), _chart_rows(2)))
+    )
     fig = plot_overview_panel(stats_by_attr)
     try:
         assert len(fig.axes) >= len(stats_by_attr)

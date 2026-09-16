@@ -28,8 +28,16 @@ Two derived rates, denominated deliberately:
 Outputs, per country, under the analysis-stage validation_attrition folder:
     {country}_attrition.csv     one row per combination (schema v1, 15 columns)
     {country}_attrition.json    counts, both rates, totals, the withdrawn list, provenance
-    {country}_attrition_funnel.png/.svg          per-combination normalised funnel
-    {country}_mapped_validity_grid.png/.svg      model x method validation-survival grid
+    {country}_attrition_funnel.png/.svg/.eps          per-combination normalised funnel
+    {country}_mapped_validity_grid.png/.svg/.eps      model x method validation-survival grid
+    {country}_mapped_validity_grid_with_counts.png/.svg/.eps  the same grid, counts under each rate
+
+The grid is published twice from ONE renderer: the bare filename carries the camera-ready
+variant, which prints the rate alone at a larger size, and the _with_counts sibling prints
+each rate over the two counts it is the quotient of. They share their rows, columns,
+extent, colour scale and markings by construction -- the only difference is the annotation
+policy handed to the shared draw loop -- so the camera-ready figure can never drift from
+the diagnostic one.
 
 The JSON carries no timestamp, so re-running over unchanged gate records rewrites the
 CSV and the JSON byte-for-byte. That claim covers the PNGs too but NOT the SVG siblings:
@@ -45,7 +53,7 @@ Flags:
 --no-charts     Skip both figures (the CSV and the JSON are still written).
 --strict        Fail instead of skipping a combination missing from a validator roll-up.
 --force         Rewrite a country whose {country}_attrition.json already exists.
---dpi           PNG render resolution. Default: 200.
+--dpi           PNG render resolution. Default: the layer's one raster resolution (``figures.RASTER_DPI``).
 """
 
 import argparse
@@ -59,7 +67,8 @@ from population_synthetic.analysis.model_ranking.hosting import (
     load_hosting_config,
 )
 from population_synthetic.analysis.utils.attrition_csv import write_attrition_csv
-from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.figures import RASTER_DPI, save_figure
+from population_synthetic.analysis.utils.grid_variants import variant_suffixes
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -70,6 +79,7 @@ from population_synthetic.analysis.validation_attrition.builder import (
     build_rows,
 )
 from population_synthetic.analysis.validation_attrition.charts import (
+    GRID_VARIANTS,
     plot_attrition_funnel,
     plot_mapped_validity_grid,
 )
@@ -130,7 +140,7 @@ def _parse_args() -> argparse.Namespace:
         help="Rewrite a country even if its {country}_attrition.json already exists "
         "(default: skip that country if present).",
     )
-    parser.add_argument("--dpi", type=int, default=200, help="PNG render resolution. Default: 200.")
+    parser.add_argument("--dpi", type=int, default=RASTER_DPI, help=f"PNG render resolution. Default: {RASTER_DPI}.")
     return parser.parse_args()
 
 
@@ -260,11 +270,18 @@ def main() -> None:
         if not args.no_charts:
             charts = [
                 (f"{country}_attrition_funnel", lambda: plot_attrition_funnel(document)),
-                (
-                    f"{country}_mapped_validity_grid",
-                    lambda: plot_mapped_validity_grid(document, hosting=model_hosting),
-                ),
             ]
+            # One entry per grid variant, enumerated from the chart module rather than
+            # named here: adding a variant there publishes it without touching the CLI.
+            for suffix, variant in variant_suffixes(GRID_VARIANTS):
+                charts.append((
+                    f"{country}_mapped_validity_grid{suffix}",
+                    # `variant` is bound per iteration; a closure over the loop name
+                    # would render the last variant under every filename.
+                    lambda variant=variant: plot_mapped_validity_grid(
+                        document, hosting=model_hosting, variant=variant,
+                    ),
+                ))
             for name, build in charts:
                 try:
                     saved = save_figure(build(), attrition_dir / f"{name}.png", dpi=args.dpi)

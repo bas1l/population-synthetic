@@ -1,5 +1,10 @@
 id: "openrouter_haiku_45"
 label: "OpenRouter Claude Haiku 4.5"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "Claude Haiku 4.5"
 model_config:
   provider: "openrouter"
   model: "anthropic/claude-haiku-4.5"

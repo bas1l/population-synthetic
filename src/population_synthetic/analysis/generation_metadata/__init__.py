@@ -17,7 +17,7 @@ Module boundaries (see each module's docstring for the exact contract):
 - ``diagnostics.py``        -- ``compute_metrics``: deep per-combo diagnostics.
 - ``combo_aggregator.py``   -- per-metric distribution stats + scalar diagnostics.
 - ``report_writer.py``      -- serialize a country's combo summaries to CSV + JSON.
-- ``charts.py``             -- metric heatmaps + per-combo diagnostic charts (PNG+SVG).
+- ``charts.py``             -- metric heatmaps + per-combo diagnostic charts (PNG+SVG+EPS).
 
 Public entrypoint: :func:`summarize`. Stats primitives live in
 ``analysis/utils/_stats.py`` (single source of truth), never inlined here.

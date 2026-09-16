@@ -57,9 +57,9 @@ from population_synthetic.analysis.realism_ranking.loader import load_competitor
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
 from population_synthetic.analysis.utils.figures import save_figure  # noqa: E402
+from population_synthetic.analysis.utils.labels import method_letters  # noqa: E402
 from population_synthetic.analysis.utils.palette import HEATMAP_CMAP  # noqa: E402
 from population_synthetic.analysis.utils.registry import analysis_output_dir  # noqa: E402
-
 from tests.test_persona_realism_smoke import _stub_factory  # noqa: E402
 
 _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
@@ -177,6 +177,8 @@ def test_judge_emits_combination_directories_only(judged_base):
     entries = sorted(p.name for p in country_root.iterdir())
     assert entries == sorted([slug for slug, *_ in _COMBOS] + [f"real_{_COUNTRY}"])
     assert all((country_root / name).is_dir() for name in entries)
+
+
 
 
 def test_ranking_produces_every_declared_output(judged_base, tmp_path):
@@ -508,11 +510,16 @@ def test_typicality_competitor_order_changes_no_emitted_byte(judged_base, tmp_pa
         assert first == second, name
 
     # The method axis is the complexity order of the ids present, taken from the grid
-    # verbatim rather than re-sorted at render time.
+    # verbatim rather than re-sorted at render time. The ticks carry the resolver's
+    # letters, so the expectation is stated through the resolver: asserting the raw ids
+    # would only be asserting that no display layer exists.
     methods = forward["typicality"]["grid"]["methods"]
     assert methods == strategy_complexity_order(methods)
+    letters = method_letters(methods)
     ax = plot_typicality_heatmap(forward).axes[0]
-    assert [label.get_text() for label in ax.get_xticklabels()] == methods
+    assert [label.get_text() for label in ax.get_xticklabels()] == [
+        letters[method] for method in methods
+    ]
 
 
 def test_a_single_slug_judged_alone_produces_its_complete_artifact_set(tmp_path):

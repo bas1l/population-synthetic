@@ -24,11 +24,15 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
     {country}/realism_ranking.json        ranking + contrasts + factor significance + honesty block
     {country}/realism_summary.csv         one row per competitor, in rank order
     {country}/scb_contrast.csv            one row per synthetic competitor vs the real population
-    {country}/headline_map.png/.svg       Axis A x Axis B map (real population plotted, not pinned)
-    {country}/impossibility_forest.png/.svg  every competitor's rate + bootstrap CI, rank order
-    {country}/impossibility_heatmap.png/.svg model x method grid of the rate, with the real
+    {country}/headline_map.png/.svg/.eps       Axis A x Axis B map (real population plotted, not pinned)
+    {country}/impossibility_forest.png/.svg/.eps  every competitor's rate + bootstrap CI, rank order
+    {country}/impossibility_heatmap.png/.svg/.eps model x method grid of the rate, with the real
                                           population as a separate band (grey = not judged,
-                                          which is NOT a rate of zero)
+                                          which is NOT a rate of zero). Every model x method
+                                          grid below is published twice from one renderer:
+                                          the bare filename is the camera-ready figure (the
+                                          value alone in each cell) and a `_with_counts`
+                                          sibling prints each value over its denominator.
     {country}/severity_drivers.csv        what clashed in each cell: the attribute pairs
                                           ranked by how many of that cell's personas
                                           exhibit them, with the cell's own denominator.
@@ -43,7 +47,7 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
                                           clashes, each names two attributes, and the levels
                                           are not a partition -- never a pie, never a
                                           100%-stacked bar.
-    {country}/severity_heatmap_s3/s2/s1.png/.svg  same grid layout, one per clash severity:
+    {country}/severity_heatmap_s3/s2/s1[_with_counts].png/.svg/.eps  same grid layout, one per severity:
                                           the share of a combination's personas carrying >=1
                                           clash at that level. Counted INDEPENDENTLY -- a
                                           persona with both an S3 and an S2 appears on both.
@@ -51,7 +55,7 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
                                           impossibility rate is unaffected. S3/S2 are defects
                                           (lower is better); S1 is unusual-but-possible and is
                                           reported, never penalised, so it uses a neutral ramp.
-    {country}/severity_pair_summary_s3/s2/s1.png/.svg  the complement of those heatmaps, one
+    {country}/severity_pair_summary_s3/s2/s1.png/.svg/.eps  the complement of those heatmaps, one
                                           per level: WHAT clashed, ranked country-wide at the
                                           attribute-pair grain. Computed from every per-clash
                                           row -- NOT from severity_drivers.csv, which is already
@@ -71,15 +75,19 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
     {country}/typicality_histogram.csv    the same statistic's published object, one row per
                                           (competitor, level) over the full 0..10 scale, so the
                                           levels nobody scored are explicit zeros.
-    {country}/typicality_heatmap.png/.svg model x method grid of that statistic on a DIVERGING
-                                          ramp whose midpoint is the real population's own value,
-                                          read from the document. There is no better/worse
-                                          direction -- the optimum is interior -- so the two ends
-                                          are more-collapsed-than-real and more-dispersed-than-
-                                          real. Four distinct states: a value, an under-powered
-                                          value (hatched), a judged competitor with no
-                                          typicality-bearing persona, and an unjudged pair.
-    {country}/typicality_by_method.png/.svg the same statistic with methods on x in complexity
+    {country}/typicality_heatmap[_with_counts].png/.svg/.eps model x method grid of that statistic on the house
+                                          SEQUENTIAL ramp, which orders cells by magnitude alone.
+                                          There is no better/worse direction -- the optimum is
+                                          interior -- so the side of the real population's own
+                                          value is carried in the annotations rather than in the
+                                          hue: a signed delta printed in every cell and a rule
+                                          across the colourbar at the reference, both dropped
+                                          with a printed reason when the real population is not
+                                          in the consumption set. Four distinct states: a value,
+                                          an under-powered value (hatched), a judged competitor
+                                          with no typicality-bearing persona, and an unjudged
+                                          pair.
+    {country}/typicality_by_method.png/.svg/.eps the same statistic with methods on x in complexity
                                           order, one mark per model, and the real population as a
                                           horizontal reference line (the only figure here that
                                           draws it as a reference rather than a series -- this
@@ -128,7 +136,7 @@ Usage:
 --typicality-min-n    Typicality-bearing personas a competitor needs before its cell is read
                 as powered. Default: 30. Below it the cell is flagged and counted, never dropped.
 --typicality-tail-threshold  k0 of the secondary P(typicality <= k0) column. Default: 5.
---dpi           PNG render resolution. Default: 200.
+--dpi           PNG render resolution. Default: the layer's one raster resolution (``figures.RASTER_DPI``).
 """
 
 import argparse
@@ -151,6 +159,8 @@ from population_synthetic.analysis.realism_ranking.builder import (
     typicality_summary_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (
+    RATE_GRID_VARIANTS,
+    TYPICALITY_GRID_VARIANTS,
     plot_headline_map,
     plot_impossibility_forest,
     plot_impossibility_heatmap,
@@ -160,7 +170,8 @@ from population_synthetic.analysis.realism_ranking.charts import (
     plot_typicality_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors
-from population_synthetic.analysis.utils.figures import save_figure
+from population_synthetic.analysis.utils.figures import RASTER_DPI, save_figure
+from population_synthetic.analysis.utils.grid_variants import variant_suffixes
 from population_synthetic.analysis.utils.realism_csv import SEVERITY_LEVELS
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
@@ -284,7 +295,7 @@ def _parse_args() -> argparse.Namespace:
         "tail_coverage): at k0=3 a sixth of the swedish_02 cells sit at exactly 0.000 and "
         "the column carries almost nothing.",
     )
-    parser.add_argument("--dpi", type=int, default=200, help="PNG render resolution. Default: 200.")
+    parser.add_argument("--dpi", type=int, default=RASTER_DPI, help=f"PNG render resolution. Default: {RASTER_DPI}.")
     return parser.parse_args()
 
 
@@ -365,21 +376,22 @@ def _print_country_summary(ranking: dict) -> None:
 
     # Same purpose as the driver line above: the typicality cells a reader must not read
     # as ordinary ones, on the same screen as the axis they belong to. The reference is
-    # printed because it is the figure's midpoint -- when it is absent, the heatmap
-    # degrades to a neutral ramp and the reader needs to know that from the console too.
+    # printed because every cell's signed delta is measured against it -- when it is
+    # absent, the heatmap drops both the deltas and the colourbar rule, and the reader
+    # needs to know that from the console too.
     typicality = ranking["typicality"]
     if typicality is not None:
         excluded = typicality["excluded"]
         reference = typicality["reference_value"]
-        midpoint = (
-            "no real population -- neutral ramp"
+        reference_note = (
+            "no real population -- no signed delta printed"
             if reference is None
             else f"{typicality['reference_slug']} = {reference:.4f}"
         )
         print(
             f"typicality: {typicality['statistic']} over "
             f"{typicality['n_levels']} levels, min_n {typicality['min_n']}, "
-            f"tail P(T<={typicality['tail_threshold']}). Reference midpoint -- {midpoint}. "
+            f"tail P(T<={typicality['tail_threshold']}). Reference -- {reference_note}. "
             f"Excluded -- {excluded['competitors_under_powered']} under-powered "
             f"competitor(s), {excluded['competitors_without_typicality']} with no "
             f"typicality-bearing persona, {excluded['cells_unjudged']} unjudged cell(s)."
@@ -553,19 +565,33 @@ def main() -> None:
             charts = [
                 ("headline_map", lambda: plot_headline_map(ranking)),
                 ("impossibility_forest", lambda: plot_impossibility_forest(ranking)),
-                ("impossibility_heatmap", lambda: plot_impossibility_heatmap(ranking)),
                 # The typicality axis, on the same grid as the impossibility one and then
-                # on the method axis. Both render the block verbatim -- the midpoint is
+                # on the method axis. Both render the block verbatim -- the reference is
                 # the real population's own value read from the document, never a literal.
-                ("typicality_heatmap", lambda: plot_typicality_heatmap(ranking)),
                 ("typicality_by_method", lambda: plot_typicality_by_method(ranking)),
             ]
-            # One heatmap per severity level, same layout. `level=level` binds the loop
-            # variable at definition time; a bare closure would render S1 three times.
+            # Every model x method grid is published once per variant, enumerated from the
+            # chart module rather than named here: the canonical (unsuffixed) file is the
+            # camera-ready figure, the `_with_counts` sibling keeps every denominator.
+            # `variant=variant` / `level=level` bind the loop variables at definition
+            # time; a bare closure would render the last one under every filename.
             charts += [
-                (f"severity_heatmap_{level.lower()}",
-                 lambda level=level: plot_severity_heatmap(ranking, level))
+                (f"impossibility_heatmap{suffix}",
+                 lambda variant=variant: plot_impossibility_heatmap(ranking, variant=variant))
+                for suffix, variant in variant_suffixes(RATE_GRID_VARIANTS)
+            ]
+            charts += [
+                (f"typicality_heatmap{suffix}",
+                 lambda variant=variant: plot_typicality_heatmap(ranking, variant=variant))
+                for suffix, variant in variant_suffixes(TYPICALITY_GRID_VARIANTS)
+            ]
+            charts += [
+                (f"severity_heatmap_{level.lower()}{suffix}",
+                 lambda level=level, variant=variant: plot_severity_heatmap(
+                     ranking, level, variant=variant,
+                 ))
                 for level in SEVERITY_LEVELS
+                for suffix, variant in variant_suffixes(RATE_GRID_VARIANTS)
             ]
             # The complement of those heatmaps: what clashed, ranked country-wide. Built
             # from the loaded records rather than from `ranking`, because it must see the

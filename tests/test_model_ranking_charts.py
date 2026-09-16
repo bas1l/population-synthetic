@@ -29,12 +29,21 @@ import pytest
 
 from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.model_ranking.builder import build_performance_comparison
-from population_synthetic.analysis.model_ranking.charts import plot_model_method_heatmap
+from population_synthetic.analysis.model_ranking.charts import (
+    GRID_VARIANT_WITH_COUNTS,
+    plot_model_method_heatmap,
+)
 from population_synthetic.analysis.model_ranking.loader import scheme_attributes
-from population_synthetic.analysis.model_ranking.table_style import BOX_EDGE, HOST_COLORS
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.cap_index import INDEX_FILENAME, CapIndex
+from population_synthetic.analysis.utils.labels import (
+    country_label,
+    method_letters,
+    model_labels,
+)
+from population_synthetic.analysis.utils.palette import HOST_COLORS, SURFACE
 from population_synthetic.analysis.utils.registry import analysis_output_dir
+from population_synthetic.analysis.utils.table_style import BOX_EDGE
 from tests._performance_fixtures import ATTRIBUTES, build_workspace, make_combo, make_report
 
 # The cap every fixture combination was drawn against. Deliberately not 100.
@@ -47,6 +56,21 @@ STRATEGIES = strategy_complexity_order(["all_pick", "all_generate_pick"])
 S1, S2 = STRATEGIES
 
 _FIXTURE_INDEX = Path("fixture") / INDEX_FILENAME
+
+# Every model id any fixture below uses, and the display name the renderer draws for it.
+# Inverted so an assertion can keep naming models by id while the figure names them the
+# way a reader sees them.
+_MODELS = (
+    "claude_haiku", "claude_sonnet", "gemini_flash",
+    "ollama_qwen3_14b", "openrouter_kimi_k3",
+)
+_DISPLAY_BY_ID = model_labels(list(_MODELS))
+_ID_BY_DISPLAY = {display: model_id for model_id, display in _DISPLAY_BY_ID.items()}
+
+# The method letters the columns and the row marginal carry, over the fixture's own
+# strategy set -- derived, never spelled, so reordering _families.yaml moves them here
+# exactly as it moves them on the figure.
+_LETTERS = method_letters(list(STRATEGIES))
 
 
 def _slug(model: str, strategy: str) -> str:
@@ -77,11 +101,16 @@ def _cap(cells, requested: int = REQUESTED_N) -> CapIndex:
     )
 
 
-def _render(cells, tmp_path, *, hosting=None, requested: int = REQUESTED_N):
-    """Draw *cells* and return ``(returned_path, ax)``.
+def _render(cells, tmp_path, *, hosting=None, requested: int = REQUESTED_N, variant=None):
+    """Draw *cells* and return ``(requested_path, ax)``.
 
     The renderer owns and closes its figure and returns only a path, so the axes has
     to be captured as it is created.
+
+    *variant* selects which publication of the grid is drawn; ``None`` takes the chart
+    module's own default, which is the camera-ready one written at the bare filename. A
+    test asserting on a cell's count line passes the counted variant explicitly, because
+    that is the figure the count line lives on.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -96,11 +125,11 @@ def _render(cells, tmp_path, *, hosting=None, requested: int = REQUESTED_N):
         captured["ax"] = ax
         return fig, ax
 
+    out = tmp_path / f"{COUNTRY}_model_method_heatmap.png"
+    kwargs = {} if variant is None else {"variant": variant}
     plt.subplots = spy
     try:
-        out = plot_model_method_heatmap(
-            result, _cap(cells, requested), tmp_path / f"{COUNTRY}_model_method_heatmap.png"
-        )
+        plot_model_method_heatmap(result, _cap(cells, requested), out, **kwargs)
     finally:
         plt.subplots = orig
     return out, captured.get("ax")
@@ -118,7 +147,13 @@ def _grid(ax) -> np.ndarray:
 
 
 def _row_models(ax) -> list[str]:
-    return [t.get_text() for t in ax.get_yticklabels()]
+    """Row model **ids**, recovered from the display names the renderer drew.
+
+    The ticks carry display names, not ids -- that is the property this inversion also
+    asserts: a raw id reaching the axis has no entry here and raises a ``KeyError``
+    naming it, which is louder than an assertion on a string nobody reads.
+    """
+    return [_ID_BY_DISPLAY[t.get_text()] for t in ax.get_yticklabels()]
 
 
 def _row_y(ax) -> list[float]:
@@ -188,11 +223,27 @@ def _break_lines(ax) -> list:
 
 
 def _divider_lines(ax) -> list:
-    return [line for line in ax.lines if line.get_color() == "white"]
+    """The rules table_style draws between the grid and its marginals.
+
+    Matched on the resolved colour rather than on the string the module happens to
+    pass, so the helper keeps finding them when that colour is renamed or rebound.
+    """
+    import matplotlib.colors as mcolors
+
+    divider = mcolors.to_rgba(SURFACE)
+    return [line for line in ax.lines if mcolors.to_rgba(line.get_color()) == divider]
 
 
 def _all_text(ax) -> str:
-    return "\n".join(t.get_text() for t in ax.texts)
+    """Every string the figure draws, wherever it hangs.
+
+    The cell annotations and the marginals belong to the axes; the caption and the
+    method key are page-width blocks placed in figure coordinates. A test asking what
+    the figure says must see both, and must not pin which artist carries which.
+    """
+    from matplotlib.text import Text
+
+    return "\n".join(t.get_text() for t in ax.figure.findobj(Text) if t.get_text())
 
 
 # ------------------------------------------------------------------
@@ -202,22 +253,22 @@ def _all_text(ax) -> str:
 def _full_grid():
     """3 models x 2 methods, every cell exactly at the requested cap."""
     return [
-        ("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, 0.80, REQUESTED_N),
-        ("model_b", S1, 0.70, REQUESTED_N), ("model_b", S2, 0.60, REQUESTED_N),
-        ("model_c", S1, 0.50, REQUESTED_N), ("model_c", S2, 0.40, REQUESTED_N),
+        ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, 0.80, REQUESTED_N),
+        ("claude_sonnet", S1, 0.70, REQUESTED_N), ("claude_sonnet", S2, 0.60, REQUESTED_N),
+        ("gemini_flash", S1, 0.50, REQUESTED_N), ("gemini_flash", S2, 0.40, REQUESTED_N),
     ]
 
 
 def _mixed_grid():
     """One fully-sampled model, one with a single full-n cell, one with none.
 
-    ``model_b``'s *best* cell is thin, so its rank must come from its weaker full-n
-    cell; ``model_c`` has no full-n cell at all and belongs to Tier 2.
+    ``claude_sonnet``'s *best* cell is thin, so its rank must come from its weaker full-n
+    cell; ``gemini_flash`` has no full-n cell at all and belongs to Tier 2.
     """
     return [
-        ("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, 0.80, REQUESTED_N),
-        ("model_b", S1, 0.60, REQUESTED_N), ("model_b", S2, 0.95, REQUESTED_N - 1),
-        ("model_c", S1, 0.99, REQUESTED_N - 1), ("model_c", S2, 0.85, 5),
+        ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, 0.80, REQUESTED_N),
+        ("claude_sonnet", S1, 0.60, REQUESTED_N), ("claude_sonnet", S2, 0.95, REQUESTED_N - 1),
+        ("gemini_flash", S1, 0.99, REQUESTED_N - 1), ("gemini_flash", S2, 0.85, 5),
     ]
 
 
@@ -239,8 +290,9 @@ def test_cell_values_are_the_overall_tv_similarity(tmp_path):
 
 
 def test_cell_annotations_print_the_rescaled_value_and_n(tmp_path):
+    """The count line lives on the counted variant; the bare filename drops it."""
     cells = _mixed_grid()
-    _out, ax = _render(cells, tmp_path)
+    _out, ax = _render(cells, tmp_path, variant=GRID_VARIANT_WITH_COUNTS)
 
     for model, strategy, similarity, n in cells:
         assert _cell_text(ax, model, strategy) == f"{similarity * 100:.1f}\nn={n}"
@@ -252,7 +304,9 @@ def test_column_order_is_the_config_order_and_agrees_with_methods_matrix(tmp_pat
     _out, ax = _render(cells, tmp_path)
 
     expected = strategy_complexity_order(result["metadata"]["strategies"])
-    assert [t.get_text() for t in ax.get_xticklabels()] == expected
+    # The ticks are the method letters, so the order assertion runs on the letters the
+    # config order maps to -- which is also what pins that no id reaches the axis.
+    assert [t.get_text() for t in ax.get_xticklabels()] == [_LETTERS[s] for s in expected]
     # Pinned, not depended on: the chart derives the order itself, and this asserts the
     # unrelated aggregation still agrees.
     assert result["methods_matrix"]["strategies"] == expected
@@ -266,36 +320,37 @@ def test_tier_assignment_splits_on_having_any_full_n_cell(tmp_path):
     _out, ax = _render(_mixed_grid(), tmp_path)
 
     models = _row_models(ax)
-    assert models[-1] == "model_c"  # no full-n cell -> Tier 2, drawn last
-    assert set(models[:-1]) == {"model_a", "model_b"}
+    assert models[-1] == "gemini_flash"  # no full-n cell -> Tier 2, drawn last
+    assert set(models[:-1]) == {"claude_haiku", "claude_sonnet"}
 
 
 def test_tier1_ordering_key_ignores_thin_cells(tmp_path):
-    """``model_b``'s best cell (0.95) is thin, so it ranks on its 0.60 full-n cell."""
-    _out, ax = _render(_mixed_grid(), tmp_path)
+    """``claude_sonnet``'s best cell (0.95) is thin, so it ranks on its 0.60 full-n cell."""
+    # Counted variant: the last assertion is about the thin cell's printed n.
+    _out, ax = _render(_mixed_grid(), tmp_path, variant=GRID_VARIANT_WITH_COUNTS)
 
-    assert _row_models(ax) == ["model_a", "model_b", "model_c"]
-    assert _row_marginals(ax)["model_b"].startswith("60.0")
+    assert _row_models(ax) == ["claude_haiku", "claude_sonnet", "gemini_flash"]
+    assert _row_marginals(ax)["claude_sonnet"].startswith("60.0")
     # The thin cell is still drawn and still marked.
-    assert ("model_b", S2) in _hatched(ax)
-    assert _cell_text(ax, "model_b", S2) == f"95.0\nn={REQUESTED_N - 1}"
+    assert ("claude_sonnet", S2) in _hatched(ax)
+    assert _cell_text(ax, "claude_sonnet", S2) == f"95.0\nn={REQUESTED_N - 1}"
 
 
 def test_single_full_n_cell_is_ranked_on_that_one_cell(tmp_path):
     _out, ax = _render(_mixed_grid(), tmp_path)
 
-    assert _row_marginals(ax)["model_b"] == f"60.0  {S1}  (1 full-n)"
+    assert _row_marginals(ax)["claude_sonnet"] == f"60.0  {_LETTERS[S1]}  (1 full-n)"
 
 
 def test_tier1_rows_precede_tier2_rows_regardless_of_values(tmp_path):
     """The Tier 2 model holds the highest value in the grid and still sorts last."""
     cells = [
-        ("model_a", S1, 0.10, REQUESTED_N), ("model_a", S2, 0.20, REQUESTED_N),
-        ("model_z", S1, 0.99, REQUESTED_N - 1), ("model_z", S2, 0.98, 3),
+        ("claude_haiku", S1, 0.10, REQUESTED_N), ("claude_haiku", S2, 0.20, REQUESTED_N),
+        ("openrouter_kimi_k3", S1, 0.99, REQUESTED_N - 1), ("openrouter_kimi_k3", S2, 0.98, 3),
     ]
     _out, ax = _render(cells, tmp_path)
 
-    assert _row_models(ax) == ["model_a", "model_z"]
+    assert _row_models(ax) == ["claude_haiku", "openrouter_kimi_k3"]
 
 
 def test_tier2_block_is_annotated_with_the_reason(tmp_path):
@@ -310,10 +365,10 @@ def test_tier2_block_is_annotated_with_the_reason(tmp_path):
 def test_tier2_row_labels_are_styled_distinctly(tmp_path):
     _out, ax = _render(_mixed_grid(), tmp_path)
 
-    styles = {t.get_text(): t.get_fontstyle() for t in ax.get_yticklabels()}
-    assert styles["model_c"] == "italic"
-    assert styles["model_a"] == "normal"
-    assert styles["model_b"] == "normal"
+    styles = {_ID_BY_DISPLAY[t.get_text()]: t.get_fontstyle() for t in ax.get_yticklabels()}
+    assert styles["gemini_flash"] == "italic"
+    assert styles["claude_haiku"] == "normal"
+    assert styles["claude_sonnet"] == "normal"
 
 
 def test_no_tier2_draws_no_break_and_no_unranked_annotation(tmp_path):
@@ -326,8 +381,8 @@ def test_no_tier2_draws_no_break_and_no_unranked_annotation(tmp_path):
 
 def test_all_tier2_grid_renders_fully_marked_and_provisional(tmp_path):
     cells = [
-        ("model_a", S1, 0.50, REQUESTED_N - 1), ("model_a", S2, 0.40, 5),
-        ("model_b", S1, 0.30, 7), ("model_b", S2, 0.20, 9),
+        ("claude_haiku", S1, 0.50, REQUESTED_N - 1), ("claude_haiku", S2, 0.40, 5),
+        ("claude_sonnet", S1, 0.30, 7), ("claude_sonnet", S2, 0.20, 9),
     ]
     out, ax = _render(cells, tmp_path)
 
@@ -345,34 +400,34 @@ def test_all_tier2_grid_renders_fully_marked_and_provisional(tmp_path):
 
 def test_tier1_tie_on_max_breaks_on_mean_before_model_id(tmp_path):
     cells = [
-        ("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, 0.30, REQUESTED_N),
-        ("model_b", S1, 0.90, REQUESTED_N), ("model_b", S2, 0.50, REQUESTED_N),
+        ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, 0.30, REQUESTED_N),
+        ("claude_sonnet", S1, 0.90, REQUESTED_N), ("claude_sonnet", S2, 0.50, REQUESTED_N),
     ]
     _out, ax = _render(cells, tmp_path)
 
-    # Equal maxima; model_b's mean is higher, which outranks the alphabetical id.
-    assert _row_models(ax) == ["model_b", "model_a"]
+    # Equal maxima; claude_sonnet's mean is higher, which outranks the alphabetical id.
+    assert _row_models(ax) == ["claude_sonnet", "claude_haiku"]
 
 
 def test_tier1_tie_on_max_and_mean_breaks_on_model_id(tmp_path):
     cells = [
-        ("model_z", S1, 0.90, REQUESTED_N), ("model_z", S2, 0.50, REQUESTED_N),
-        ("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, 0.50, REQUESTED_N),
+        ("openrouter_kimi_k3", S1, 0.90, REQUESTED_N), ("openrouter_kimi_k3", S2, 0.50, REQUESTED_N),
+        ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, 0.50, REQUESTED_N),
     ]
     _out, ax = _render(cells, tmp_path)
 
-    assert _row_models(ax) == ["model_a", "model_z"]
+    assert _row_models(ax) == ["claude_haiku", "openrouter_kimi_k3"]
 
 
 def test_tier2_tie_on_max_breaks_on_model_id_only(tmp_path):
     """Tier 2's key is ``(-max, model_id)`` -- the mean is deliberately not in it."""
     cells = [
-        ("model_z", S1, 0.90, 5), ("model_z", S2, 0.10, 5),
-        ("model_a", S1, 0.90, 5), ("model_a", S2, 0.50, 5),
+        ("openrouter_kimi_k3", S1, 0.90, 5), ("openrouter_kimi_k3", S2, 0.10, 5),
+        ("claude_haiku", S1, 0.90, 5), ("claude_haiku", S2, 0.50, 5),
     ]
     _out, ax = _render(cells, tmp_path)
 
-    assert _row_models(ax) == ["model_a", "model_z"]
+    assert _row_models(ax) == ["claude_haiku", "openrouter_kimi_k3"]
 
 
 def test_row_order_is_stable_across_repeated_calls(tmp_path):
@@ -390,31 +445,31 @@ def test_row_order_is_stable_across_repeated_calls(tmp_path):
 def test_a_row_with_no_scored_full_n_cell_sorts_last_in_its_tier(tmp_path):
     """NaN full-n values leave the row keyless; it stays in Tier 1 and sorts last."""
     cells = [
-        ("model_z", S1, 0.90, REQUESTED_N), ("model_z", S2, 0.80, REQUESTED_N),
-        ("model_a", S1, float("nan"), REQUESTED_N), ("model_a", S2, 0.99, 5),
+        ("openrouter_kimi_k3", S1, 0.90, REQUESTED_N), ("openrouter_kimi_k3", S2, 0.80, REQUESTED_N),
+        ("claude_haiku", S1, float("nan"), REQUESTED_N), ("claude_haiku", S2, 0.99, 5),
     ]
     _out, ax = _render(cells, tmp_path)
 
-    assert _row_models(ax) == ["model_z", "model_a"]
-    assert _row_marginals(ax)["model_a"] == "n/a  (no scored cell)"
-    assert _break_lines(ax) == []  # model_a has a full-n cell -> still Tier 1
+    assert _row_models(ax) == ["openrouter_kimi_k3", "claude_haiku"]
+    assert _row_marginals(ax)["claude_haiku"] == "n/a  (no scored cell)"
+    assert _break_lines(ax) == []  # openrouter_kimi_k3 has a full-n cell -> still Tier 1
 
 
 def test_a_model_with_no_finite_cell_sorts_last_in_whichever_tier_it_lands(tmp_path):
     """The keyless rule is the same in both tiers, and never compares against NaN."""
     nan = float("nan")
     cells = [
-        ("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, 0.80, REQUESTED_N),
-        ("model_b", S1, nan, REQUESTED_N), ("model_b", S2, nan, REQUESTED_N),
-        ("model_c", S1, 0.50, 5), ("model_c", S2, 0.40, 5),
-        ("model_d", S1, nan, 5), ("model_d", S2, nan, 5),
+        ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, 0.80, REQUESTED_N),
+        ("claude_sonnet", S1, nan, REQUESTED_N), ("claude_sonnet", S2, nan, REQUESTED_N),
+        ("gemini_flash", S1, 0.50, 5), ("gemini_flash", S2, 0.40, 5),
+        ("ollama_qwen3_14b", S1, nan, 5), ("ollama_qwen3_14b", S2, nan, 5),
     ]
     _out, ax = _render(cells, tmp_path)
 
-    assert _row_models(ax) == ["model_a", "model_b", "model_c", "model_d"]
+    assert _row_models(ax) == ["claude_haiku", "claude_sonnet", "gemini_flash", "ollama_qwen3_14b"]
     marginals = _row_marginals(ax)
-    assert marginals["model_b"] == "n/a  (no scored cell)"
-    assert marginals["model_d"] == "n/a  (no scored cell)"
+    assert marginals["claude_sonnet"] == "n/a  (no scored cell)"
+    assert marginals["ollama_qwen3_14b"] == "n/a  (no scored cell)"
 
 
 # ------------------------------------------------------------------
@@ -425,40 +480,42 @@ def test_row_marginal_prints_the_ordering_key_not_a_mean(tmp_path):
     _out, ax = _render(_full_grid(), tmp_path)
 
     marginals = _row_marginals(ax)
-    assert marginals["model_a"] == f"90.0  {S1}  (2 full-n)"
-    assert marginals["model_b"] == f"70.0  {S1}  (2 full-n)"
+    assert marginals["claude_haiku"] == f"90.0  {_LETTERS[S1]}  (2 full-n)"
+    assert marginals["claude_sonnet"] == f"70.0  {_LETTERS[S1]}  (2 full-n)"
 
 
 def test_row_marginal_argmax_tie_resolves_to_the_simpler_method(tmp_path):
     cells = [
-        ("model_a", S1, 0.70, REQUESTED_N), ("model_a", S2, 0.70, REQUESTED_N),
-        ("model_b", S1, 0.50, REQUESTED_N), ("model_b", S2, 0.50, REQUESTED_N),
+        ("claude_haiku", S1, 0.70, REQUESTED_N), ("claude_haiku", S2, 0.70, REQUESTED_N),
+        ("claude_sonnet", S1, 0.50, REQUESTED_N), ("claude_sonnet", S2, 0.50, REQUESTED_N),
     ]
     _out, ax = _render(cells, tmp_path)
 
-    assert _row_marginals(ax)["model_a"] == f"70.0  {STRATEGIES[0]}  (2 full-n)"
+    assert _row_marginals(ax)["claude_haiku"] == f"70.0  {_LETTERS[STRATEGIES[0]]}  (2 full-n)"
 
 
 def test_tier2_row_marginal_is_flagged_provisional(tmp_path):
     _out, ax = _render(_mixed_grid(), tmp_path)
 
-    assert _row_marginals(ax)["model_c"] == f"99.0  {S1}  (2 cells, provisional)"
+    assert _row_marginals(ax)["gemini_flash"] == (
+        f"99.0  {_LETTERS[S1]}  (2 cells, provisional)"
+    )
 
 
 def test_column_marginal_averages_full_n_cells_only_and_prints_the_count(tmp_path):
     _out, ax = _render(_mixed_grid(), tmp_path)
 
     marginals = _column_marginals(ax)
-    # S1: model_a 0.90 + model_b 0.60 (model_c's cell is thin) -> 0.75 over 2 cells.
+    # S1: claude_haiku 0.90 + claude_sonnet 0.60 (gemini_flash's cell is thin) -> 0.75 over 2 cells.
     assert marginals[S1] == "75.0\n(2 full-n)"
-    # S2: only model_a's cell is full-n -> the mean is that cell, over 1.
+    # S2: only claude_haiku's cell is full-n -> the mean is that cell, over 1.
     assert marginals[S2] == "80.0\n(1 full-n)"
 
 
 def test_column_with_no_full_n_cell_reports_no_mean(tmp_path):
     cells = [
-        ("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, 0.80, REQUESTED_N - 1),
-        ("model_b", S1, 0.70, REQUESTED_N), ("model_b", S2, 0.60, 5),
+        ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, 0.80, REQUESTED_N - 1),
+        ("claude_sonnet", S1, 0.70, REQUESTED_N), ("claude_sonnet", S2, 0.60, 5),
     ]
     _out, ax = _render(cells, tmp_path)
 
@@ -475,7 +532,10 @@ def test_marginals_are_fenced_off_by_the_shared_dividers(tmp_path):
 def test_caption_states_both_marginal_scopes(tmp_path):
     _out, ax = _render(_mixed_grid(), tmp_path)
 
-    text = _all_text(ax)
+    # Wrapping is a layout decision the caption block owns, so the phrases are checked
+    # against the unwrapped text: a line break falling inside one of them is not a
+    # missing sentence.
+    text = " ".join(_all_text(ax).split())
     assert "Row marginal" in text and "Column marginal" in text
     assert "full-n cells only" in text
 
@@ -487,24 +547,24 @@ def test_caption_states_both_marginal_scopes(tmp_path):
 def test_marking_fires_exactly_on_the_cells_below_the_cap(tmp_path):
     _out, ax = _render(_mixed_grid(), tmp_path)
 
-    assert _hatched(ax) == {("model_b", S2), ("model_c", S1), ("model_c", S2)}
+    assert _hatched(ax) == {("claude_sonnet", S2), ("gemini_flash", S1), ("gemini_flash", S2)}
 
 
 def test_boundary_cell_at_exactly_the_requested_cap_is_unmarked(tmp_path):
     cells = [
-        ("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, 0.80, REQUESTED_N - 1),
-        ("model_b", S1, 0.70, REQUESTED_N + 1), ("model_b", S2, 0.60, REQUESTED_N),
+        ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, 0.80, REQUESTED_N - 1),
+        ("claude_sonnet", S1, 0.70, REQUESTED_N + 1), ("claude_sonnet", S2, 0.60, REQUESTED_N),
     ]
     _out, ax = _render(cells, tmp_path)
 
-    assert _hatched(ax) == {("model_a", S2)}
+    assert _hatched(ax) == {("claude_haiku", S2)}
 
 
 def test_marking_follows_the_slugs_own_cap_not_a_literal(tmp_path):
     """The same persona counts flip from full-n to thin when the cap changes."""
     cells = [
-        ("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, 0.80, REQUESTED_N),
-        ("model_b", S1, 0.70, REQUESTED_N), ("model_b", S2, 0.60, REQUESTED_N),
+        ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, 0.80, REQUESTED_N),
+        ("claude_sonnet", S1, 0.70, REQUESTED_N), ("claude_sonnet", S2, 0.60, REQUESTED_N),
     ]
     _out, ax = _render(cells, tmp_path, requested=REQUESTED_N)
     assert _hatched(ax) == set()
@@ -524,7 +584,7 @@ def test_a_slug_missing_from_the_cap_index_raises(tmp_path):
     cells = _full_grid()
     result = _result(cells)
     partial = CapIndex(
-        {_slug("model_a", S1): REQUESTED_N}, source=_FIXTURE_INDEX
+        {_slug("claude_haiku", S1): REQUESTED_N}, source=_FIXTURE_INDEX
     )
 
     with pytest.raises(KeyError):
@@ -536,14 +596,14 @@ def test_a_slug_missing_from_the_cap_index_raises(tmp_path):
 # ------------------------------------------------------------------
 
 def test_model_label_colours_follow_the_hosting_map(tmp_path):
-    hosting = {"model_a": "hosted", "model_b": "local"}
+    hosting = {"claude_haiku": "hosted", "claude_sonnet": "local"}
     _out, ax = _render(_full_grid(), tmp_path, hosting=hosting)
 
-    colors = {t.get_text(): t.get_color() for t in ax.get_yticklabels()}
-    assert colors["model_a"] == HOST_COLORS["hosted"]
-    assert colors["model_b"] == HOST_COLORS["local"]
-    # model_c is absent from the map -> the family's presentation default.
-    assert colors["model_c"] == HOST_COLORS["hosted"]
+    colors = {_ID_BY_DISPLAY[t.get_text()]: t.get_color() for t in ax.get_yticklabels()}
+    assert colors["claude_haiku"] == HOST_COLORS["hosted"]
+    assert colors["claude_sonnet"] == HOST_COLORS["local"]
+    # gemini_flash is absent from the map -> the family's presentation default.
+    assert colors["gemini_flash"] == HOST_COLORS["hosted"]
 
 
 # ------------------------------------------------------------------
@@ -552,32 +612,33 @@ def test_model_label_colours_follow_the_hosting_map(tmp_path):
 
 def test_missing_combination_renders_as_a_masked_cell_never_zero(tmp_path):
     cells = [
-        ("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, 0.80, REQUESTED_N),
-        ("model_b", S1, 0.70, REQUESTED_N),  # no (model_b, S2) combination in the run
+        ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, 0.80, REQUESTED_N),
+        ("claude_sonnet", S1, 0.70, REQUESTED_N),  # no (claude_sonnet, S2) combination in the run
     ]
     _out, ax = _render(cells, tmp_path)
 
     grid = _grid(ax)
-    row = _row_models(ax).index("model_b")
+    row = _row_models(ax).index("claude_sonnet")
     assert np.isnan(grid[row, STRATEGIES.index(S2)])
-    assert ("model_b", S2) not in _hatched(ax)
+    assert ("claude_sonnet", S2) not in _hatched(ax)
     assert (_row_y(ax)[row], STRATEGIES.index(S2)) not in _cell_texts(ax)
 
 
 def test_all_nan_column_does_not_crash_the_marginals(tmp_path):
     nan = float("nan")
     cells = [
-        ("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, nan, REQUESTED_N),
-        ("model_b", S1, 0.70, REQUESTED_N), ("model_b", S2, nan, REQUESTED_N),
+        ("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, nan, REQUESTED_N),
+        ("claude_sonnet", S1, 0.70, REQUESTED_N), ("claude_sonnet", S2, nan, REQUESTED_N),
     ]
-    _out, ax = _render(cells, tmp_path)
+    # Counted variant: the cell assertion below is about the dash printed over its base.
+    _out, ax = _render(cells, tmp_path, variant=GRID_VARIANT_WITH_COUNTS)
 
     assert _column_marginals(ax)[S2] == "n/a\n(0 full-n)"
-    assert _cell_text(ax, "model_a", S2) == f"--\nn={REQUESTED_N}"
+    assert _cell_text(ax, "claude_haiku", S2) == f"--\nn={REQUESTED_N}"
 
 
 def test_single_method_grid_renders(tmp_path):
-    cells = [("model_a", S1, 0.90, REQUESTED_N), ("model_b", S1, 0.70, REQUESTED_N)]
+    cells = [("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_sonnet", S1, 0.70, REQUESTED_N)]
     out, ax = _render(cells, tmp_path)
 
     assert out is not None
@@ -585,7 +646,7 @@ def test_single_method_grid_renders(tmp_path):
 
 
 def test_single_model_grid_renders(tmp_path):
-    cells = [("model_a", S1, 0.90, REQUESTED_N), ("model_a", S2, 0.70, REQUESTED_N)]
+    cells = [("claude_haiku", S1, 0.90, REQUESTED_N), ("claude_haiku", S2, 0.70, REQUESTED_N)]
     out, ax = _render(cells, tmp_path)
 
     assert out is not None
@@ -608,7 +669,7 @@ def test_title_distinguishes_the_figure_from_its_two_siblings(tmp_path):
     _out, ax = _render(_full_grid(), tmp_path)
 
     title = ax.get_title()
-    assert COUNTRY in title
+    assert country_label(COUNTRY) in title
     assert "model x method" in title
     assert "\n" in title  # headline plus the distinguishing subtitle
 

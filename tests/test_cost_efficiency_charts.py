@@ -42,7 +42,9 @@ from population_synthetic.analysis.cost_efficiency.charts import (  # noqa: E402
 )
 from population_synthetic.analysis.cost_efficiency.loader import load_cost_records  # noqa: E402
 from population_synthetic.analysis.utils.cost_csv import read_cost_csv  # noqa: E402
+from population_synthetic.analysis.utils.labels import method_key_lines  # noqa: E402
 from population_synthetic.analysis.utils.registry import analysis_output_dir  # noqa: E402
+from population_synthetic.analysis.utils.table_style import HOST_LABELS  # noqa: E402
 from tests._cost_efficiency_fixtures import (  # noqa: E402
     COMPLEX_STRATEGY,
     COUNTRY,
@@ -187,8 +189,10 @@ def test_hosting_changes_the_marker_shape(tmp_path) -> None:
     hosting = {METERED_MODEL: "hosted", UNMETERED_MODEL: "local"}
     fig = plot_cost_vs_accuracy(document, hosting=hosting)
     labels = {t.get_text() for t in fig.legends[1].get_texts()}
-    assert "local (Ollama)" in labels
-    assert "hosted (API)" in labels
+    # Asserted against the shared legend vocabulary, not a literal: the hosting class is
+    # named on the figure, the serving software is not, and that wording has one home.
+    assert HOST_LABELS["local"] in labels
+    assert HOST_LABELS["hosted"] in labels
     assert set(HOST_MARKERS) == {"hosted", "local"}
     matplotlib.pyplot.close(fig)
 
@@ -197,7 +201,9 @@ def test_method_legend_is_in_complexity_order(tmp_path) -> None:
     document = _document(tmp_path, joined=_MIXED)
     fig = plot_cost_vs_accuracy(document)
     labels = [t.get_text() for t in fig.legends[0].get_texts()]
-    assert labels == [SIMPLE_STRATEGY, COMPLEX_STRATEGY]
+    # The legend entry is the method's own key line -- letter plus family phrase -- so no
+    # id reaches the canvas, and the order is still the config-derived complexity order.
+    assert labels == method_key_lines([SIMPLE_STRATEGY, COMPLEX_STRATEGY])
     matplotlib.pyplot.close(fig)
 
 
@@ -235,6 +241,8 @@ def test_no_charts_leaves_no_png_and_no_svg(workspace) -> None:
     assert (out_dir / f"{COUNTRY}_cost_efficiency.json").is_file()
     assert list(out_dir.glob("*.png")) == []
     assert list(out_dir.glob("*.svg")) == []
+
+
 
 
 def test_a_normal_run_emits_both_formats(workspace) -> None:
