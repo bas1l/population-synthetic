@@ -3,7 +3,7 @@
 **Date:** 2026-09-16
 **Author:** Basil
 **Status:** Draft
-**Base Branch:** `feature/publication-figure-presentation-layer`
+**Base Branch:** `dev`
 **Branch:** `feature/plan-backlog-organisation`
 
 > **Scope note.** A housekeeping plan. It changes plan documents (moves between `pending/`,
@@ -11,9 +11,9 @@
 > items (the failing flow-default test and the uncommitted rm-ANOVA worktree) are decision gates,
 > not fixes written here.
 >
-> **Base branch note.** The base is recorded as the branch this plan was written on, per the
-> planning procedure. That branch is deleted once its PR merges into `dev`; the branch hygiene
-> section therefore resets this plan's own base to `dev` along with the others.
+> **Base branch note.** The plan was written on `feature/publication-figure-presentation-layer`.
+> That branch was merged into local `dev` on 2026-09-16 (PR process bypassed on Basil's
+> authorization) and deleted, so the base is now `dev`.
 
 ---
 
@@ -22,8 +22,8 @@
 The plan folders no longer describe the repository. Nine of the twelve `pending/` documents
 describe work that is already shipped, refer to modules that no longer exist, or name a base
 branch that is gone. The figure work is now folded into one branch,
-`feature/publication-figure-presentation-layer` (35 commits ahead of `dev`), which cannot reach
-`dev` until `gh` is re-authenticated and one failing test is resolved. A worktree holds
+`feature/publication-figure-presentation-layer`, merged into local `dev` on 2026-09-16 without a
+PR. Local `dev` is ahead of `origin/dev` and still carries one failing test. A worktree holds
 uncommitted rm-ANOVA assumption-check work built on a commit that predates the gain forest. This
 plan records the evidence, lists the decisions only Basil can take, and orders the work so each
 step starts from a clean `dev`.
@@ -34,8 +34,8 @@ step starts from a clean `dev`.
    May-2026 note about `src/population_synthetic/comparison/extractor.py`, which does not exist.
 2. **Base branches that no longer exist.** `/plan-implement` reads `**Base Branch:**`; five
    pending plans would branch from a ref that is gone.
-3. **The figure branch is blocked outside the code.** Opening its PR needs `gh auth login`
-   (token returns 401), and the branch tip has one failing test.
+3. **Local `dev` carries one failing test and is unpushed.** The figure branch landed locally;
+   pushing `dev` still needs `gh auth login` (token returns 401) or plain git credentials.
 4. **Uncommitted statistics work sits on a stale base.** The rm-ANOVA worktree edits
    `stats_tests.py`, `builder.py`, `test_method_comparison.py` and `sub-packages.md`, all of which
    the gain forest also changed after that worktree's base commit.
@@ -45,7 +45,7 @@ step starts from a clean `dev`.
 ### In Scope
 1. Classify every plan in `pending/`, `ideas/`, `active/` with evidence.
 2. Move shipped/superseded plans to `completed/` or `archived/` with a one-line reason.
-3. Land `feature/publication-figure-presentation-layer` into `dev` via PR.
+3. Make `dev` green after the local merge of `feature/publication-figure-presentation-layer`.
 4. Decide the fate of the rm-ANOVA worktree and, if kept, bring it onto `dev`.
 5. Delete merged or empty branches locally and on `origin`.
 6. Order what remains and state what blocks each item.
@@ -60,7 +60,8 @@ step starts from a clean `dev`.
 - [ ] Every file in `pending/` describes work that is neither shipped nor referring to deleted modules.
 - [ ] `active/` holds only plans whose branch exists.
 - [ ] Every pending plan's `**Base Branch:**` names a branch that exists (`dev` by default).
-- [ ] `feature/publication-figure-presentation-layer` is merged into `dev` via PR; `pytest` passes on `dev`.
+- [x] `feature/publication-figure-presentation-layer` is merged into `dev` (locally, 2026-09-16).
+- [ ] `pytest` passes on `dev`.
 - [ ] The rm-ANOVA worktree is either merged/queued on a branch rebased onto `dev`, or explicitly discarded; no uncommitted work remains in `.claude/worktrees/`.
 - [ ] `git branch -a` lists no branch that is 0 commits ahead of `dev`, except `dev`/`main`.
 
@@ -153,13 +154,10 @@ additionally has uncommitted run-knob edits to that file (`n: 600 → 160`, mode
 Its work is uncommitted, has a completed-plan file that was never committed, and four of its six
 modified files were also changed on the figure branch after its base commit.
 
-- **Commit in place, then rebase onto `dev` after the figure PR merges.** History stays a normal
-  feature branch; conflicts are resolved once, against the final shape of `stats_tests.py` and
-  `builder.py`. Cost: the work waits for the PR, and the plan file must move from `completed/` to
-  `active/` because nothing is merged yet.
-- **Commit in place, rebase onto `feature/publication-figure-presentation-layer` now, fold it into
-  that PR.** One PR carries all method-significance statistics. Cost: enlarges an already
-  35-commit PR, and its review then covers unrelated statistics work.
+- **Commit in place, then rebase onto `dev`.** The figure branch is already on local `dev`, so
+  this is the only remaining landing path. History stays a normal feature branch; conflicts are
+  resolved once against the final shape of `stats_tests.py` and `builder.py`. Cost: the plan file
+  must move from `completed/` to `active/` because nothing is merged yet.
 - **Discard it.** Cost: loses roughly 365 changed lines plus a test file; only sensible if the
   assumption checks are no longer wanted.
 
@@ -237,13 +235,14 @@ uncommitted work is committed before any branch operation near it.
 **Dependencies:** none. Can be done on `dev` independently of the figure PR.
 
 ### Phase 2: Land the figure branch
-**Goal:** `feature/publication-figure-presentation-layer` merged into `dev`, tests green.
+**Goal:** `dev` green after the local merge of `feature/publication-figure-presentation-layer`.
 
-- [ ] 2.1 Apply Decision 1 (flow file or test); confirm full `pytest` is green. Leave the `n`/model knob edits uncommitted.
+- [ ] 2.1 On `dev`: apply Decision 1 (flow file or test); confirm full `pytest` is green. Leave the `n`/model knob edits uncommitted.
 - [ ] 2.2 Resolve the open box in `publication-figure-presentation-layer.md`: add a regression test for a very long attribute label at single-column width, or strike the box with a reason.
 - [ ] 2.3 Run the manual GUI check recorded open in `completed/figure-selection-04-figures.md` (node last, unlocks after its nine upstreams, honours `bypass`); tick it and drop "(with open items)".
-- [ ] 2.4 `gh auth login` (token currently returns 401), then open the PR `feature/publication-figure-presentation-layer` → `dev` with `/plan-pr`.
-- [ ] 2.5 After merge: `/plan-finish` sync, move `publication-figure-presentation-layer.md` → `completed/`.
+- [x] 2.4 ~~Open the PR with `/plan-pr`~~ — bypassed: merged into local `dev` with `--no-ff` on 2026-09-16 on Basil's authorization.
+- [ ] 2.4b Push `dev` to `origin` once credentials work (`gh auth login`).
+- [x] 2.5 `publication-figure-presentation-layer.md` moved to `completed/` (Completed with open items: 2.2).
 
 **Files Modified:** `config/gui/flows/generate_parallel.yaml` or `tests/test_axis_facet_defaults.py`; possibly a test for label wrapping; the two plan files.
 
@@ -254,7 +253,7 @@ uncommitted work is committed before any branch operation near it.
 
 - [ ] 3.1 Commit the worktree's edits and untracked files on `feature/rm-anova-assumption-checks` (or discard, per Decision 2).
 - [ ] 3.2 If kept: move its plan file from `completed/` to `active/`, set Status In Progress and Base Branch `dev`.
-- [ ] 3.3 If kept: rebase onto `dev` (after Phase 2) or onto the figure branch (per Decision 2); resolve conflicts in `stats_tests.py`, `builder.py`, `test_method_comparison.py`, `sub-packages.md`; run `pytest`.
+- [ ] 3.3 If kept: rebase onto `dev`; resolve conflicts in `stats_tests.py`, `builder.py`, `test_method_comparison.py`, `sub-packages.md`; run `pytest`.
 - [ ] 3.4 Remove the worktree (`git worktree remove`) once its branch holds everything.
 
 **Dependencies:** Decision 2; Phase 2 merged for the default option.
@@ -294,8 +293,8 @@ re-checking `git rev-list --count dev..<branch>` is 0.
 - [ ] `origin/feature/method-marginal-progression-charts` (`ff720b8`): 0 ahead of `dev`, plan in `completed/`: delete.
 - [ ] Local `backup/enrich-preclean-refactor`: 0 ahead of `dev`: delete.
 - [ ] Local `worktree-agent-a591e644675bb0a90`: points at `168b399`, the same commit as `main`, no unique work: delete once no worktree uses it (after Phase 3.4).
-- [ ] Local `feature/publication-figure-presentation-layer`: delete after Phase 2.5 (not pushed yet; the PR push creates the remote, delete that too after merge).
-- [ ] This plan's `**Base Branch:**`: reset to `dev` once the figure branch is deleted.
+- [x] Local `feature/publication-figure-presentation-layer`: deleted after the local merge into `dev` (never pushed).
+- [x] This plan's `**Base Branch:**`: reset to `dev`.
 - [ ] `feature/rm-anova-assumption-checks` and its worktree: **keep** until Phase 3 completes.
 - [ ] Local `main` is 280 behind `dev` (1 ahead = its own merge commit): refresh with `/publish-main` only when a release is intended; no action here.
 
