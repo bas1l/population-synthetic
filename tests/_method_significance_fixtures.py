@@ -190,3 +190,115 @@ def pairs_from_means(
         for i in range(len(methods))
         for j in range(i + 1, len(methods))
     }
+
+
+# --------------------------------------------------------------------------- #
+# The reference-method gain forest                                            #
+# --------------------------------------------------------------------------- #
+
+#: One comparator's contrast against the reference:
+#: ``(p_holm, gain, n_blocks, half_width)``, where *gain* is reference minus comparator
+#: and *half_width* the half-width of its confidence interval. ``p_holm is None`` is an
+#: undefined test and leaves the interval ``None`` too, as the builder does.
+Contrast = tuple[float | None, float, int, float | None]
+
+
+def forest_pair_matrix(
+    methods: Sequence[str],
+    contrasts: Mapping[int, Contrast],
+) -> dict[str, Any]:
+    """The builder's oriented pair matrix with only the reference contrasts filled in.
+
+    *contrasts* maps a comparator's index in *methods* to its :data:`Contrast` against the
+    reference, the last method. Both orientations are written the way
+    ``builder._pair_matrices`` writes them: at ``(reference, comparator)`` the gain and its
+    interval, at ``(comparator, reference)`` their negations with the bounds swapped.
+    """
+    k = len(methods)
+    ref = k - 1
+    square = {name: [[None] * k for _ in range(k)] for name in (
+        "p_holm", "mean_diff", "n_blocks", "dz", "ci_low", "ci_high", "sd_diff",
+    )}
+    for c, (p, gain, n, half_width) in contrasts.items():
+        square["p_holm"][ref][c] = square["p_holm"][c][ref] = p
+        square["n_blocks"][ref][c] = square["n_blocks"][c][ref] = n
+        square["mean_diff"][ref][c] = float(gain)
+        square["mean_diff"][c][ref] = -float(gain)
+        if p is not None:
+            square["ci_low"][ref][c] = gain - half_width
+            square["ci_high"][ref][c] = gain + half_width
+            square["ci_low"][c][ref] = -(gain + half_width)
+            square["ci_high"][c][ref] = -(gain - half_width)
+            square["sd_diff"][ref][c] = square["sd_diff"][c][ref] = half_width
+        else:
+            square["sd_diff"][ref][c] = square["sd_diff"][c][ref] = 0.0
+    square["methods"] = list(methods)
+    return square
+
+
+def forest_panel(
+    methods: Sequence[str],
+    contrasts: Mapping[int, Contrast],
+    *,
+    statistic: float = 42.0,
+    df: tuple[int, int] = (4, 36),
+    partial_eta_sq: float = 0.8,
+    p_bh: float = 1e-9,
+    insufficient_n: bool = False,
+    note: str | None = None,
+    identical_method_groups: list[list[str]] | None = None,
+) -> dict[str, Any]:
+    """One serialised panel carrying what the gain forest reads."""
+    tested = sum(1 for p, *_ in contrasts.values() if p is not None)
+    return {
+        "n_models": 10,
+        "insufficient_n": insufficient_n,
+        "note": note,
+        "omnibus": {
+            "test": "rm_anova", "statistic": statistic, "p": p_bh / 2.0, "p_bh": p_bh,
+            "df1": df[0], "df2": df[1], "partial_eta_sq": partial_eta_sq,
+        },
+        "pair_matrix": forest_pair_matrix(methods, contrasts),
+        "correction": {"method": "holm", "scope": "all-pairs", "family_size": tested},
+        "identical_method_groups": identical_method_groups or [],
+    }
+
+
+def forest_result(
+    methods: Sequence[str],
+    panels: Mapping[str, dict[str, Any]],
+    *,
+    country: str = "swedish_02",
+) -> dict[str, Any]:
+    """The built analysis, reduced to what the gain forest consumes."""
+    out = result(methods, panels, country=country)
+    out["method_comparison"]["confidence_level"] = load_comparison_config()["confidence_level"]
+    out["method_comparison"]["identical_methods_note"] = "give identical TV-similarity"
+    return out
+
+
+def live_shape_forest_result(methods: Sequence[str] = FIVE_METHODS) -> dict[str, Any]:
+    """The gain forest's live shape: fourteen categories, four comparators, varied evidence.
+
+    Gains, interval widths and p values cycle through deterministic patterns spanning the
+    live range (gains 0.05 to 0.62, half-widths 0.02 to 0.2, from ``****`` down to
+    ``ns``), so labels land at every height and some neighbours have to be lifted.
+    """
+    ps = [1e-6, 3e-4, 4e-3, 0.03, 0.2]
+    panels = {}
+    for a, attr in enumerate(LIVE_ATTRIBUTES):
+        base = 0.08 + 0.5 * ((a * 7) % 13) / 12.0
+        contrasts = {
+            c: (
+                ps[(a + 2 * c) % len(ps)],
+                round(base - 0.04 * c + 0.03 * ((a + c) % 3), 4),
+                10,
+                round(0.02 + 0.18 * (((a * 5 + c * 3) % 7) / 6.0), 4),
+            )
+            for c in range(len(methods) - 1)
+        }
+        panels[attr] = forest_panel(methods, contrasts, statistic=5.0 + 23.0 * a, p_bh=10.0 ** -(a + 3))
+    panels["overall"] = forest_panel(
+        methods, {c: (1e-6, 0.3, 10, 0.05) for c in range(len(methods) - 1)},
+    )
+    return forest_result(methods, panels)
