@@ -207,6 +207,27 @@ tasks:
     # generation_metadata's capped-mirror figures.
     depends_on: [model_ranking, generation_metadata, validation_attrition]
 
+  figure_selection:               # per_country dispatch -- copies bytes, computes nothing
+    enabled: false                # opt-in: a sweep must not fail at its last step because
+                                  # the roster has not been curated for this tree yet
+    bypass: false                 # assume already done -> unlock dependents, run nothing
+    supports_force: true          # node shows a Force checkbox -> --force (clears the set's
+                                  # two naming folders first, so a roster that SHRANK leaves
+                                  # nothing stale behind)
+    force: false
+    options:
+      set: manuscript             # --set (a set name in config/analysis/figure_selection.yaml)
+      output-base:                # --output-base (blank = script default)
+    # Every figure-producing task that is ENABLED in this workflow. depends_on gives
+    # ORDERING only -- the real guard is the roster's missing-file check, which raises
+    # naming the figure. The three disabled figure producers (multivariate_fidelity,
+    # consistency, pairwise_comparison) and the out-of-workflow cross_country are
+    # deliberately absent: a disabled task never enters completed_tasks, so depending on
+    # one would park this node at SKIPPED_DEP forever.
+    depends_on: [fidelity, model_ranking, method_significance, real_population_stats,
+                 generation_metadata, persona_realism, realism_ranking,
+                 validation_attrition, cost_efficiency]
+
 selection:                        # shared by ALL tasks in the chain
   models: [claude_haiku, claude_sonnet, ollama_deepseek_r1_14b, 
       ollama_gemma4_e4b, ollama_llama31_8b, ollama_mistral_nemo_12b, 

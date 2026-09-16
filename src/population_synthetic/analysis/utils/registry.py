@@ -1,17 +1,22 @@
 """Analysis registry accessor -- single source of truth for analysis output paths.
 
 Loads ``config/analysis/analysis_registry.yaml`` (the authoritative id ->
-{label, description, folder, script, dispatch} table) and exposes the helpers that
-every analysis consumer routes through:
+{label, description, stage, folder, script, dispatch} table) and exposes the helpers
+that every analysis consumer routes through:
 
-- ``ANALYSIS_STAGE_DIR`` -- the ``03_Analysis`` stage-folder literal, defined in
-  exactly ONE place in code (sourced from the registry's ``stage_dir``).
+- ``ANALYSIS_STAGE_DIR`` / ``FIGURES_STAGE_DIR`` -- the ``03_Analysis`` and
+  ``04_Figures`` stage-folder literals, each defined in exactly ONE place in code
+  (sourced from the registry's ``stage_dir`` / ``figures_stage_dir``).
 - ``get_process(process_id)`` -- the ``AnalysisProcess`` for a canonical id.
 - ``analysis_output_dir(process_id, output_base, *, for_read=False)`` --
   ``output_base / ANALYSIS_STAGE_DIR / process.folder``. When ``for_read=True`` and
   the process declares a ``legacy_folder``, the accessor falls back to the legacy
   folder (deprecation-logged) if the primary folder is absent but the legacy one
   exists -- the back-compat read path for the ``mapped`` -> ``mapping`` rename.
+  Raises when handed a figures-stage id, which has no analysis-stage folder.
+- ``figures_output_dir(output_base, *, country, set_name, naming)`` --
+  ``output_base / FIGURES_STAGE_DIR / country / set_name / naming``, the layout of
+  the figures stage, whose processes own the stage root instead of a subfolder.
 - ``resolve_output_base(cli_value)`` -- the single home for the resolver previously
   copy-pasted across scripts (``--output-base`` else
   ``config/synthetic/experiment_defaults.yaml``).
@@ -37,8 +42,17 @@ logger = logging.getLogger(__name__)
 _REGISTRY_PATH = PROJECT_ROOT / "config" / "analysis" / "analysis_registry.yaml"
 _DEFAULTS_PATH = PROJECT_ROOT / "config" / "synthetic" / "experiment_defaults.yaml"
 
-# The metadata keys every process entry must declare (fail-fast if any is absent).
-_REQUIRED_PROCESS_KEYS = ("label", "description", "folder", "script", "dispatch")
+# The two stages a process's outputs can live in. ``STAGE_ANALYSIS`` is the
+# documented default for an entry that omits ``stage``; ``STAGE_FIGURES`` is the
+# published-figures sibling stage. The mapping's values are the registry top-level
+# keys holding each stage's folder literal -- the literals themselves stay in YAML.
+STAGE_ANALYSIS = "analysis"
+STAGE_FIGURES = "figures"
+_STAGE_DIR_KEYS = {STAGE_ANALYSIS: "stage_dir", STAGE_FIGURES: "figures_stage_dir"}
+
+# The metadata keys every process entry must declare whatever its stage (fail-fast if
+# any is absent). ``folder`` is required per-stage, checked in ``_build_process``.
+_REQUIRED_PROCESS_KEYS = ("label", "description", "script", "dispatch")
 
 
 @dataclass(frozen=True)
@@ -48,9 +62,15 @@ class AnalysisProcess:
     id: str
     label: str
     description: str
-    folder: str
     script: str
     dispatch: str
+    # Which stage folder the process writes into: ``STAGE_ANALYSIS`` (the documented
+    # default when the entry omits ``stage``) or ``STAGE_FIGURES``.
+    stage: str = STAGE_ANALYSIS
+    # The process's subfolder under the analysis stage. Always set for an
+    # analysis-stage process; ``None`` for a figures-stage one, which owns the
+    # figures stage root itself and therefore declares no folder.
+    folder: str | None = None
     # Optional pre-rename folder name. Present only for processes whose output
     # folder was renamed; READERS fall back to it (deprecation-logged) so existing
     # on-disk data under the old name keeps working. ``None`` when never renamed.
@@ -68,8 +88,9 @@ def _load_registry_raw() -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError(f"Analysis registry must be a mapping, got {type(raw).__name__}: {_REGISTRY_PATH}")
 
-    if "stage_dir" not in raw or not raw["stage_dir"]:
-        raise ValueError(f"Analysis registry missing required top-level key 'stage_dir': {_REGISTRY_PATH}")
+    for stage_key in _STAGE_DIR_KEYS.values():
+        if not raw.get(stage_key):
+            raise ValueError(f"Analysis registry missing required top-level key {stage_key!r}: {_REGISTRY_PATH}")
 
     processes = raw.get("processes")
     if not isinstance(processes, dict) or not processes:
@@ -87,14 +108,40 @@ def _build_process(process_id: str, entry: Any) -> AnalysisProcess:
     missing = [key for key in _REQUIRED_PROCESS_KEYS if not entry.get(key)]
     if missing:
         raise ValueError(f"Registry entry for {process_id!r} missing required key(s) {missing}: {_REGISTRY_PATH}")
+
+    # ``stage`` is optional; its ABSENCE means the analysis stage (the documented
+    # default). A present-but-blank value is not absent -- it falls through to the
+    # unknown-stage raise below rather than being defaulted away.
+    stage = STAGE_ANALYSIS if "stage" not in entry else str(entry["stage"])
+    if stage not in _STAGE_DIR_KEYS:
+        raise ValueError(
+            f"Registry entry for {process_id!r} declares unknown stage {stage!r}: "
+            f"known stages are {sorted(_STAGE_DIR_KEYS)}: {_REGISTRY_PATH}"
+        )
+    # ``folder`` is required by the analysis stage and forbidden in the figures stage,
+    # whose processes own the stage root and have no per-process subfolder.
+    folder = entry.get("folder")
+    if stage == STAGE_ANALYSIS and not folder:
+        raise ValueError(
+            f"Registry entry for {process_id!r} missing required key(s) ['folder']: "
+            f"every {STAGE_ANALYSIS!r}-stage process declares its subfolder: {_REGISTRY_PATH}"
+        )
+    if stage == STAGE_FIGURES and folder:
+        raise ValueError(
+            f"Registry entry for {process_id!r} is a {STAGE_FIGURES!r}-stage process and must not "
+            f"declare 'folder' (got {folder!r}): it owns the {FIGURES_STAGE_DIR} stage root itself: "
+            f"{_REGISTRY_PATH}"
+        )
+
     legacy_folder = entry.get("legacy_folder")
     return AnalysisProcess(
         id=process_id,
         label=str(entry["label"]),
         description=str(entry["description"]).strip(),
-        folder=str(entry["folder"]),
         script=str(entry["script"]),
         dispatch=str(entry["dispatch"]),
+        stage=stage,
+        folder=str(folder) if folder else None,
         legacy_folder=str(legacy_folder) if legacy_folder else None,
     )
 
@@ -105,13 +152,16 @@ def load_registry() -> dict[str, AnalysisProcess]:
     return {pid: _build_process(pid, entry) for pid, entry in raw["processes"].items()}
 
 
-def _load_stage_dir() -> str:
-    """Read the stage-folder literal from the registry (the one code source)."""
-    return str(_load_registry_raw()["stage_dir"])
+def _load_stage_dirs() -> dict[str, str]:
+    """Read both stage-folder literals from the registry (the one code source)."""
+    raw = _load_registry_raw()
+    return {stage: str(raw[key]) for stage, key in _STAGE_DIR_KEYS.items()}
 
 
-# The single definition of the "03_Analysis" stage-folder literal in code.
-ANALYSIS_STAGE_DIR: str = _load_stage_dir()
+# The single definition of the "03_Analysis" / "04_Figures" stage-folder literals in code.
+_STAGE_DIRS: dict[str, str] = _load_stage_dirs()
+ANALYSIS_STAGE_DIR: str = _STAGE_DIRS[STAGE_ANALYSIS]
+FIGURES_STAGE_DIR: str = _STAGE_DIRS[STAGE_FIGURES]
 
 
 def get_process(process_id: str) -> AnalysisProcess:
@@ -134,8 +184,16 @@ def analysis_output_dir(process_id: str, output_base: str | Path, *, for_read: b
     returned (with a deprecation log) so pre-rename on-disk data keeps working. When
     neither exists (or there is no legacy folder), the canonical primary path is returned
     so the caller fails on the canonical location.
+
+    Raises when ``process_id`` names a figures-stage process: those write into the
+    ``FIGURES_STAGE_DIR`` stage and are served by ``figures_output_dir``.
     """
     process = get_process(process_id)
+    if process.stage != STAGE_ANALYSIS:
+        raise ValueError(
+            f"Analysis process {process_id!r} is a {process.stage!r}-stage process: its outputs live "
+            f"under {FIGURES_STAGE_DIR}/, not {ANALYSIS_STAGE_DIR}/ -- call figures_output_dir()."
+        )
     base = Path(output_base)
     primary = base / ANALYSIS_STAGE_DIR / process.folder
     if not for_read or process.legacy_folder is None:
@@ -154,6 +212,25 @@ def analysis_output_dir(process_id: str, output_base: str | Path, *, for_read: b
         )
         return legacy
     return primary
+
+
+def figures_output_dir(output_base: str | Path, *, country: str, set_name: str, naming: str) -> Path:
+    """Return the ``04_Figures`` output dir for one country / figure set / naming.
+
+    The figures stage has no per-process subfolder -- a figures-stage process owns
+    ``output_base / FIGURES_STAGE_DIR`` and lays it out as
+    ``{country}/{set_name}/{naming}``: country outermost because the analysis stage
+    carries it in the directory for some processes and in the filename for others, so
+    without it two countries' figures collide; the naming folders innermost so one
+    set's figures stay together under every naming.
+
+    Every component is required and must be non-empty -- a blank one would silently
+    collapse the layout, so it raises instead.
+    """
+    for label, value in (("country", country), ("set_name", set_name), ("naming", naming)):
+        if not value or not str(value).strip():
+            raise ValueError(f"figures_output_dir requires a non-empty {label} (got {value!r}).")
+    return Path(output_base) / FIGURES_STAGE_DIR / country / set_name / naming
 
 
 def resolve_output_base(cli_value: str | None) -> Path:

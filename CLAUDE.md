@@ -62,7 +62,7 @@ These are enforced guardrails, not suggestions. Full rationale in
 - **A discarded model is still a model** -- A model axis YAML retires itself from the sweep with a top-level `discarded: true`; **an absent key means active** (a documented default -- the 15 live model files carry no key, never `discarded: false`), and a non-boolean value raises. Like `version`, it is a selection-side concept only: nothing downstream reads it, and a discarded model stays runnable if checked. The GUI's Global tab derives its `Active`/`Discarded` chip row from it (opening on `Active`), just as it derives the strategy `v{n}` chips from `version` (opening on the highest discovered version) -- both defaults come from config, never a literal. Filtering is view-only and retaining (`visible = matches(chips) OR isChecked()`), so a default can never hide something a flow selects. See [Axis composition](docs/architecture/axis-composition.md).
 - **Strategy × country compatibility** -- A pair is valid iff the strategy's categories cover the country's required raw keys (mapping `_index.json` attributes **minus** `deprecated_attributes`, `age_group`→`age`). Sweden requires 14 keys **without** `birth_location`; Italy requires 14 **with** it, so **v2 is Sweden-only**. Enforced pre-generation by `scripts/generate/generate_identities_parallel.py::_assert_strategy_covers_country` on the axis-composition path (`--model-id`/`--strategy-id`/`--country-id`); `--manifest` and explicit `--config`/`--strategy` carry no country id and are unchecked.
 - **Generation is crash-safe and resumable** -- The process may die at any instruction (the GUI's Abort is `taskkill /F /T`), so every durable write is atomic (tmp + `fsync` + `os.replace`) and a persona checkpoints after **every** resolved category into `identity.partial.json`. Re-running the same command resumes: a *complete* persona (parses, flat, every category in this run's resolved order present and non-empty -- not merely "the file exists") is skipped, an unfinished one continues from its checkpoint, and a checkpoint written under a different strategy/schema/model/category-order fingerprint is discarded rather than spliced. **`--force` is the only thing that discards a checkpoint** -- a retry round deliberately keeps it. There is **no `--resume` flag and none may be added**: resuming is the default. `llm_interactions.jsonl` is truncated **iff** the checkpoint is discarded, which is what keeps `(persona_id, call_index)` unique without any downstream dedupe. No signal handler -- explicitly rejected, it cannot help against `taskkill /F` and would be a second, weaker recovery path. See [Aborted and resumed runs](docs/development/aborted-and-resumed-runs.md).
-- **Presentation computes nothing** -- The seven modules under `analysis/utils/` that every `charts.py` draws through (`palette`, `style`, `labels`, `figures`, `grids`, `grid_annotations`, `table_style`) form a **presentation boundary**: they receive finished numbers and draw them, computing no statistic, rate, threshold or ranking, and importing nothing from any analysis subpackage -- which is also the membership test for the layer. Each publication decision has exactly one home, so `src/` holds one `savefig` call site, one `imshow` call site, one backend selection and one `rcParams` block; the canvas and file-size budgets are enforced **on write** and a rejection leaves nothing partial on disk. Caveat text is read from the data block, never authored in a chart; an annotation policy declares the cell keys it reads and every record is validated against that declaration; and an id with no display label **raises** rather than printing itself -- so `openrouter_kimi_k3` can never reach a canvas. No artist is drawn with `alpha=` anywhere in the layer (`palette.opaque()` composites the colour instead): matplotlib's PostScript backend flattens transparency, so an EPS drawn with it diverges from its PNG and SVG siblings in the one file that leaves the repository. See [Figure conventions](docs/development/figure-conventions.md).
+- **Presentation computes nothing** -- The seven modules under `analysis/utils/` that every `charts.py` draws through (`palette`, `style`, `labels`, `figures`, `grids`, `grid_annotations`, `table_style`) form a **presentation boundary**: they receive finished numbers and draw them, computing no statistic, rate, threshold or ranking, and importing nothing from any analysis subpackage -- which is also the membership test for the layer. Each publication decision has exactly one home, so `src/` holds one `savefig` call site, one `imshow` call site, one backend selection and one `rcParams` block; the canvas and file-size budgets are enforced **on write** and a rejection leaves nothing partial on disk. Caveat text is read from the data block, never authored in a chart; an annotation policy declares the cell keys it reads and every record is validated against that declaration; and an id with no display label **raises** rather than printing itself -- so `openrouter_kimi_k3` can never reach a canvas. No artist is drawn with `alpha=` anywhere in the layer (`palette.opaque()` composites the colour instead): matplotlib's PostScript backend flattens transparency, so an EPS drawn with it diverges from its PNG and SVG siblings in the one file that leaves the repository. Which of those figures is *published* is decided one layer further out, by `figure_selection`, and it is **config, not code**: `config/analysis/figure_selection.yaml` holds named sets of extension-less stems, nothing is auto-discovered, and a figure enters a set because a human listed it — with its manuscript number (`n`) beside it, which is what makes a citation resolve to a file. See [Figure conventions](docs/development/figure-conventions.md).
 - **Fail-fast** -- Raise loudly on unexpected or malformed input rather than silently defaulting.
 
 ## Architecture
@@ -182,11 +182,19 @@ top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
 **Analysis registry (single source of truth for the analysis layer):**
 `config/analysis/analysis_registry.yaml` (+ its accessor `analysis/utils/registry.py`) maps each
-analysis process's **canonical id** → {label, description, output folder, script, dispatch}, and is
-consumed by BOTH the GUI workflow and the analysis scripts. The canonical id is simultaneously the
-registry key, the GUI workflow task key, and the `03_Analysis/` output-folder name, so those three
-can never drift. Scripts resolve their output dir via `analysis_output_dir(id, base)` — no hardcoded
-`03_Analysis`/folder literals (the sole `"03_Analysis"` definition lives in `registry.py`). The map
+analysis process's **canonical id** → {label, description, stage, output folder, script, dispatch},
+and is consumed by BOTH the GUI workflow and the analysis scripts. The canonical id is simultaneously
+the registry key, the GUI workflow task key, and the `03_Analysis/` output-folder name, so those three
+can never drift. There are **two** stage folders under `output_base`, and both literals are declared
+only in that YAML — `stage_dir: 03_Analysis` and its sibling `figures_stage_dir: 04_Figures`, read by
+`registry.py` and by nothing else. An entry's `stage:` picks which one it writes into and **defaults
+to `analysis` on absence** (a documented default — the 17 analysis processes carry no key; a
+present-but-blank or unknown value raises rather than being defaulted away), and `folder` is
+conditional on it: **required** for an analysis-stage process, **forbidden** for a figures-stage one,
+which owns the figures stage root itself and has no per-process subfolder. Scripts resolve their
+output dir via `analysis_output_dir(id, base)` — no hardcoded `03_Analysis`/folder literals — which
+**raises** if handed a figures-stage id; that stage is served by `figures_output_dir(base, country=..., set_name=..., naming=...)`
+instead. The map
 stage folder was renamed `mapped/` → `mapping/`; readers pass `for_read=True` to transparently fall
 back to any legacy on-disk `mapped/` (deprecation-logged) until re-mapped. The analysis DAG is a
 validation gate: `validate_raw` (**root**) → `mapping` (reads the full `01_Raw` pool) →
@@ -206,7 +214,13 @@ nodes rather than the gate: `realism_ranking` declares `depends_on: [persona_rea
 `cost_efficiency` declares `depends_on: [model_ranking, generation_metadata, validation_attrition]`.
 That third edge is why `generation_metadata` is `enabled: true` in the workflow — a disabled task
 never enters `completed_tasks`, so every dependent would sit at `SKIPPED_DEP` and never fire; an
-operator who has already run it ticks `bypass` on that node rather than disabling it. A workflow task's
+operator who has already run it ticks `bypass` on that node rather than disabling it. `figure_selection`
+closes the DAG as its **terminal** node and the only figures-stage process: it depends on the nine
+figure-producing tasks the workflow *enables* — the disabled ones (`multivariate_fidelity`,
+`consistency`, `pairwise_comparison`) are deliberately omitted, since depending on them would park it
+at `SKIPPED_DEP` forever, and the real guard is its own missing-file check — and it ships
+`enabled: false` itself, because a sweep must not fail at its last step over a roster nobody has
+curated yet. A workflow task's
 per-node **`bypass`** flag is GUI-only orchestration that is invisible to every script and emits no
 CLI flag: it runs nothing yet still unlocks the dependents, asserting with **zero** verification
 that the task's outputs are already on disk — so it is confirmed by an unskippable pre-run modal.

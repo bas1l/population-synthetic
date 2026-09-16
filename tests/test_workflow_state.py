@@ -137,7 +137,7 @@ def test_shipped_workflow_ordering():
         "fidelity", "multivariate_fidelity", "consistency",
         "model_ranking", "method_significance", "pairwise_comparison", "real_population_stats",
         "generation_metadata", "persona_realism", "realism_ranking",
-        "validation_attrition", "cost_efficiency",
+        "validation_attrition", "cost_efficiency", "figure_selection",
     }
     # validate_raw is the DAG root; the validation gate is a linear chain
     # validate_raw -> mapping -> validate_mapped -> population_cap, and every
@@ -165,6 +165,15 @@ def test_shipped_workflow_ordering():
     assert order.index("model_ranking") < order.index("cost_efficiency")
     assert order.index("generation_metadata") < order.index("cost_efficiency")
     assert order.index("validation_attrition") < order.index("cost_efficiency")
+    # The figure publisher is terminal: it orders itself behind every figure-producing
+    # task the workflow enables, and nothing depends on it.
+    assert order[-1] == "figure_selection"
+    for producer in (
+        "fidelity", "model_ranking", "method_significance", "real_population_stats",
+        "generation_metadata", "persona_realism", "realism_ranking",
+        "validation_attrition", "cost_efficiency",
+    ):
+        assert order.index(producer) < order.index("figure_selection")
 
 
 def test_shipped_workflow_ordering_deterministic():
@@ -183,7 +192,7 @@ def test_shipped_workflow_ordering_deterministic():
 def test_disabled_task_cannot_run():
     state = _shipped_state()
     # Satisfy pairwise_comparison's only dependency so the sole blocker under test
-    # is its `enabled: false` flag (the last remaining disabled node in the YAML).
+    # is its `enabled: false` flag.
     state.mark_completed("mapping")
     assert not state.can_run("pairwise_comparison")  # enabled: false in YAML
 

@@ -135,6 +135,27 @@ def test_the_eps_embeds_the_house_font_even_when_saved_outside_the_style(tmp_pat
     assert b"/sfnts" in text, "the font program itself was not embedded"
 
 
+def test_the_svg_keeps_its_text_as_text_even_when_saved_outside_the_style(tmp_path):
+    """The SVG carries real ``<text>`` nodes, not glyph outlines.
+
+    The SVG is the format a figure is *edited* in, and matplotlib's default
+    ``svg.fonttype = 'path'`` converts every glyph to a shape -- which turned a
+    heatmap's labels into ~1700 anonymous paths an illustration tool cannot retype.
+    Guarded on the driver path (saved outside ``apply_house_style``) and against the
+    pinned default, for the same reason as the EPS test above.
+    """
+    with style.apply_house_style():
+        fig, ax = plt.subplots(figsize=(4.0, 3.0))
+        ax.set_title("Retypeable")
+
+    with plt.rc_context({"svg.fonttype": "path"}):
+        svg = figures.save_figure(fig, tmp_path / "chart.png", dpi=100).with_suffix(".svg")
+    markup = svg.read_text(encoding="utf-8")
+    assert "<text" in markup, "the SVG carries no text node; its glyphs were written as outlines"
+    assert "Retypeable" in markup, "the title is not present as editable text"
+    assert f"font-family: '{style.house_font()}'" in markup, "the text node names no font family"
+
+
 # ------------------------------------------------------------------
 # The budgets are enforced, and enforcement writes nothing
 # ------------------------------------------------------------------
@@ -178,6 +199,117 @@ def test_the_figure_is_closed_even_when_a_budget_is_broken(tmp_path):
             _figure(style.MAX_WIDTH + 4.0, 3.0), tmp_path / "wide.png", dpi=100
         )
     assert plt.get_fignums() == []
+
+
+# ------------------------------------------------------------------
+# The fixed-canvas mode
+# ------------------------------------------------------------------
+
+def _strip(bottom: float, *, rotation: int = 45, outside: bool = False):
+    """A strip-sized figure with two-line rotated tick labels, laid out to its canvas.
+
+    A full-canvas edgeless rectangle pins the tight crop to at least the canvas, so any
+    difference between the two modes is growth rather than trimming. *bottom* is the
+    axes' lower edge as a figure fraction; the lower it is, the further the labels
+    reach towards (and past) the canvas bottom.
+    """
+    from matplotlib.patches import Rectangle
+
+    with style.apply_house_style():
+        fig = plt.figure(figsize=(style.TEXT_WIDTH, style.STRIP_HEIGHT))
+        fig.patches.append(
+            Rectangle((0, 0), 1, 1, transform=fig.transFigure, fill=False, edgecolor="none")
+        )
+        ax = fig.add_axes([0.1, bottom, 0.85, 0.9 - bottom])
+        ax.plot([0, 3], [0, 1])
+        ax.set_xticks(range(4))
+        ax.set_xticklabels(
+            ["Socioeconomic\nclass"] * 4, rotation=rotation, ha="right",
+            rotation_mode="anchor", multialignment="right", linespacing=1.0,
+        )
+        if outside:
+            fig.text(1.05, 0.5, "past the right edge")
+    return fig
+
+
+def _written_points(png_path: Path, dpi: int) -> dict[str, tuple[float, float]]:
+    """The written canvas of each format of a trio, in points."""
+    import struct
+
+    width_px, height_px = struct.unpack(">II", png_path.read_bytes()[16:24])
+    svg = png_path.with_suffix(".svg").read_text(encoding="utf-8")
+    svg_size = re.search(r'<svg[^>]*width="([\d.]+)pt"[^>]*height="([\d.]+)pt"', svg)
+    eps_in = figures._canvas_inches(png_path.with_suffix(".eps").read_bytes())
+    return {
+        ".png": (width_px / dpi * style.POINTS_PER_INCH, height_px / dpi * style.POINTS_PER_INCH),
+        ".svg": (float(svg_size.group(1)), float(svg_size.group(2))),
+        ".eps": (eps_in[0] * style.POINTS_PER_INCH, eps_in[1] * style.POINTS_PER_INCH),
+    }
+
+
+def test_the_strip_constants_are_stated_in_points():
+    assert style.TEXT_WIDTH * style.POINTS_PER_INCH == pytest.approx(456.0)
+    assert style.STRIP_HEIGHT * style.POINTS_PER_INCH == pytest.approx(150.0)
+
+
+def test_fixed_mode_writes_exactly_the_figure_size_in_every_format(tmp_path):
+    png = figures.save_figure(_strip(0.45), tmp_path / "strip.png", fixed_canvas=True)
+    for suffix, (width_pt, height_pt) in _written_points(png, figures.RASTER_DPI).items():
+        assert width_pt == pytest.approx(456.0, abs=1.0), suffix
+        assert height_pt == pytest.approx(150.0, abs=1.0), suffix
+
+
+def test_fixed_mode_does_not_grow_a_canvas_the_tight_crop_grows(tmp_path):
+    """Rotated two-line labels: their layout box overshoots the canvas, their ink does not."""
+    tight = figures.save_figure(_strip(0.35), tmp_path / "tight.png", dpi=100)
+    fixed = figures.save_figure(_strip(0.35), tmp_path / "fixed.png", dpi=100, fixed_canvas=True)
+    tight_height = _written_points(tight, 100)[".eps"][1]
+    assert tight_height > 150.0 + 1.0, "the fixture no longer makes the tight crop grow"
+    for suffix, (width_pt, height_pt) in _written_points(fixed, 100).items():
+        assert (width_pt, height_pt) == pytest.approx((456.0, 150.0), abs=1.0), suffix
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        pytest.param(lambda: _strip(0.25), id="labels-cut-by-the-bottom-edge"),
+        pytest.param(lambda: _strip(0.45, outside=True), id="text-wholly-past-the-right-edge"),
+    ],
+)
+def test_fixed_mode_rejects_ink_past_the_canvas_and_writes_nothing(tmp_path, make):
+    with pytest.raises(figures.FigureBudgetExceeded, match="fixed canvas"):
+        figures.save_figure(make(), tmp_path / "clipped.png", dpi=100, fixed_canvas=True)
+    assert list(tmp_path.iterdir()) == [], "a rejected figure must leave nothing on disk"
+    assert plt.get_fignums() == []
+
+
+def test_fixed_mode_still_enforces_the_printable_canvas(tmp_path):
+    with pytest.raises(figures.FigureBudgetExceeded, match="width"):
+        figures.save_figure(
+            _figure(style.MAX_WIDTH + 4.0, 3.0), tmp_path / "wide.png", dpi=100, fixed_canvas=True
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_fixed_mode_still_enforces_the_file_size_ceiling(tmp_path, monkeypatch):
+    monkeypatch.setattr(figures, "MAX_FILE_BYTES", 1024)
+    with pytest.raises(figures.FigureBudgetExceeded, match="ceiling"):
+        figures.save_figure(_strip(0.45), tmp_path / "big.png", dpi=100, fixed_canvas=True)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_tight_mode_is_unchanged_by_the_fixed_mode_seam(tmp_path):
+    """The default still writes the tight crop at zero pad, byte for byte."""
+    import io
+
+    reference = _figure(4.0, 3.0)
+    buffer = io.BytesIO()
+    with plt.rc_context(figures._export_rc_params()):
+        reference.savefig(buffer, format="png", dpi=100, bbox_inches="tight", pad_inches=0.0)
+    plt.close(reference)
+
+    png = figures.save_figure(_figure(4.0, 3.0), tmp_path / "chart.png", dpi=100)
+    assert png.read_bytes() == buffer.getvalue()
 
 
 def test_an_eps_without_a_bounding_box_cannot_pass_unmeasured():

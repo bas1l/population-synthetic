@@ -54,10 +54,11 @@ comparison that `analysis/` performs, mirroring `analysis/mapping/`'s `real_mapp
 **`analysis/`** -- The post-generation analysis family, one subpackage per process
 (`validate_raw/`, `mapping/`, `validate_mapped/`, `population_cap/`, `validation_attrition/`,
 `fidelity/`, `multivariate_fidelity/`, `model_ranking/`, `method_significance/`,
-`real_population_stats/`, `generation_metadata/`, `cost_efficiency/`, plus a shared `utils/`). The
-DAG is a **validation gate**:
+`real_population_stats/`, `generation_metadata/`, `cost_efficiency/`, `figure_selection/`, plus a
+shared `utils/`). The DAG is a **validation gate**:
 `validate_raw` (root) -> `mapping` -> `validate_mapped` -> `population_cap` -> the mapped-file
-consumers + `generation_metadata` + `validation_attrition`:
+consumers + `generation_metadata` + `validation_attrition`, closed at the far end by
+`figure_selection`, the terminal node that publishes chosen figures into the second stage folder:
 
 - **`validate_raw/`** -- The analysis-DAG **root**, a non-destructive validation gate. It
   atomistically checks each combo's `01_Raw/{slug}/persona_*` and writes one CSV per combo
@@ -171,9 +172,31 @@ consumers + `generation_metadata` + `validation_attrition`:
   complete-case models, BH-FDR corrected across categories. `charts.py::plot_method_comparison` renders
   it as the publication **significance-bracket figure** (bars = per-method mean TV-similarity + model
   points + paired lines, pairwise brackets/stars over the configured pairs, in-figure star key; a
-  per-category grid and a standalone Overall panel, PNG + SVG). `builder.py` (`build_method_significance`
+  per-category grid and a standalone Overall panel, PNG + SVG). The pairs that figure's `pairs_mode`
+  leaves undrawn are nonetheless computed and Holm-corrected, so `charts.py::plot_method_pair_significance`
+  publishes the full square as well: one method × method grid per category plus Overall under
+  `{country}_method_pair_significance/`, in the layer's two grid variants, with the pair's
+  significance tier as the fill (symmetric) and the signed row-minus-column TV difference as the text
+  (antisymmetric, oriented once in `builder.py::_method_panel`'s `pair_matrix` block so the renderer
+  performs no arithmetic). `charts.py::plot_reference_method_gap` is the summary of those squares --
+  one grid for the whole run at `{country}_reference_method_gap`, rows the simpler methods, columns
+  every analysed category plus Overall, each cell the **reference** method (the last of the
+  complexity-ordered `method_order`, derived rather than named) against that row's method. It reads
+  the *other* index pair of the same oriented block, so its text is reference-minus-row and its key
+  says so. `charts.py::plot_reference_method_gain_forest` draws the same reference contrasts as a
+  forest at `{country}_reference_method_gain_forest`: one column per analysed category (no Overall),
+  one marker per simpler method at the reference-minus-method gain with its confidence interval as a
+  bar, filled when the Holm-corrected pair is significant, and an omnibus track (statistic, partial
+  η², BH p) above. The interval is not computed in the chart: `utils/stats_tests.py::paired_t_pairwise`
+  emits `sd_diff`, `ci_low` and `ci_high` per pair at the config's `confidence_level`, and
+  `_pair_matrices` orients them like `mean_diff`. Each panel also carries `identical_method_groups`
+  (methods whose per-model TV-similarity columns are bit-identical, detected generically) and
+  `correction.family_size` (the pairs that entered Holm), and the block carries the
+  `identical_methods_note` clause the driver prints for the caption, since that strip carries no
+  caveat in the graphic. `builder.py` (`build_method_significance`
   + JSON/CSV writers), `charts.py` (per-attribute trend facets, slope heatmap, CD diagram,
-  factor-dominance bar, method-comparison figure). Needs the optional `[analysis]` extra
+  factor-dominance bar, method-comparison figure, pair-significance squares, reference-method gap
+  grid, reference-method gain forest). Needs the optional `[analysis]` extra
   (statsmodels + scikit-posthocs).
 - **`real_population_stats/`** -- Standalone real-only reference statistics (sits after the cap
   stage; driven by `analyze_real_population_stats.py`, depends on `population_cap`, reading the capped
@@ -250,6 +273,29 @@ consumers + `generation_metadata` + `validation_attrition`:
   `withdrawn_combinations` rather than inner-joined away. Schema in `utils/cost_csv.py`; see the
   [ADR](../development/decisions/2026-08-20-cost-denominator-and-reconstructed-join-key.md) for both
   load-bearing decisions.
+- **`figure_selection/`** -- The **terminal** node of the DAG and the only figures-stage process
+  (driven by `select_figures.py`, `per_country` dispatch, `depends_on:` the nine figure-producing
+  tasks the workflow *enables*). It **computes nothing**: it draws no figure, imports no chart
+  module and makes no publication decision -- it sits downstream of the presentation boundary, not
+  inside it, and the analysis stage is read-only to it. `config.py` loads and validates the roster
+  (`config/analysis/figure_selection.yaml`: named sets of extension-less stems relative to the
+  analysis stage, each carrying the manuscript figure number `n` and a filename slug `name`);
+  `resolve.py` expands a stem's `{country}` and optional `{slug}` placeholders -- the latter through
+  `manifest_loader.axis_slug`, so a roster entry can never disagree with the folder name the
+  producing task wrote -- into one concrete path per published format (`figures.OUTPUT_SUFFIXES`,
+  never a local list); `export.py` copies the bytes into `{output_base}/04_Figures/{country}/{set}/`
+  under two namings: `as_generated/` keeps the source filenames, so a staged image is traceable by
+  name alone, and `numbered/` carries `F{n:02d}_{name}`, so a citation resolves to a file. Resolve-all,
+  validate-all, **then** copy: an unknown set, an unregistered process id, a stem with nothing
+  behind it, a partial format set (a `.png` whose `.eps` was never drawn), a duplicate `n` or a
+  colliding destination basename each raise before a byte moves -- and every missing figure is
+  named, not just the first -- so a run that is going to fail leaves the figures stage exactly as it
+  found it. Each copy is atomic (`utils/atomic_io.atomic_copy_file`), and `_index.json` is written
+  **last**, so its presence is the completion marker: it records `output_base`, country, set and run
+  timestamp, plus per format the resolved source path, size, mtime and SHA-256, which is what makes
+  drift against a re-run analysis stage detectable without re-reading the analysis stage. Re-runs
+  overwrite what they publish and report at WARNING any destination file the current roster no
+  longer claims; `--force` clears the set's two naming folders first, bounded to `{country}/{set}/`.
 - **`utils/`** -- cross-process shared infra:
   - `realism_csv.py` -- the per-persona tidy schema shared by the two persona-realism tasks
     (writer used by the producer, reader by the consumer, one definition). Keeps *absent* distinct
@@ -309,9 +355,15 @@ consumers + `generation_metadata` + `validation_attrition`:
     `STAGE_SERIES` / `SEVERITY_SERIES` / `HOST_COLORS`, the named furniture and text greys
     (`ANNOTATION_GREY`, `CAPTION_GREY`, `GRID_RULE`, `CELL_STROKE`, `BAR_EDGE`, ...), and the ramp:
     `HEATMAP_CMAP`
-    (`inferno`, matching the published `{country}_models_table` manuscript figures), `MISSING_COLOR`
+    (`inferno`, matching the published `{country}_models_table` manuscript figures),
+    `SIGNIFICANCE_CMAP` (`Blues_r`, the one sanctioned departure: a significance tier is an ordinal
+    grade, not a magnitude, so a single hue carries it by brightness alone, reversed so the darkest
+    step is the most significant rung), `MISSING_COLOR`
     for the off-ramp "never measured" fill, `heatmap_cmap()` (a private copy with `set_bad`, because
-    matplotlib hands every caller the same registry object), and `text_color_on(im, value)`, which
+    matplotlib hands every caller the same registry object), `heatmap_levels(n)` (that copy resampled
+    to `n` discrete steps, `set_bad` preserved, for a quantity binned onto an **ordered** ladder such
+    as `method_significance`'s star tiers -- never a categorical-hue source), and
+    `text_color_on(im, value)`, which
     picks white/black annotation text from the colour the mappable *actually painted*, by WCAG
     relative luminance on linearised sRGB -- the BT.601 weights on gamma-encoded values it replaced
     left sampled points below the AA 4.5:1 floor. That

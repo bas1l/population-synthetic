@@ -10,13 +10,14 @@ path: the seven-hue series below was copy-pasted verbatim into five chart module
 renamed into a sixth, and roughly twenty-five greys were written as bare hex literals at
 the call site that used them.
 
-**The ramp is sequential, and every heatmap in the layer now uses it** -- including the
-two whose quantity is genuinely two-sided (``realism_ranking``'s typicality statistic,
-read against the real population's own value, and ``method_significance``'s trend slope,
-read against zero). Those two previously used diverging ramps, and unifying them has a
-real cost that their renderers must pay back explicitly: a sequential ramp orders cells
-by **magnitude alone**, so two values equally far above and below the reference are drawn
-differently and neither drawing says which side it was on.
+**The ramp is sequential, and every heatmap that plots a magnitude now uses it** --
+including the two whose quantity is genuinely two-sided (``realism_ranking``'s
+typicality statistic, read against the real population's own value, and
+``method_significance``'s trend slope, read against zero). Those two previously used
+diverging ramps, and unifying them has a real cost that their renderers must pay back
+explicitly: a sequential ramp orders cells by **magnitude alone**, so two values equally
+far above and below the reference are drawn differently and neither drawing says which
+side it was on.
 
 Both renderers therefore carry the side in the annotations instead of in the hue -- a
 signed number in every cell plus a rule across the colourbar at the reference -- and say
@@ -24,6 +25,10 @@ so in a printed caption. A future two-sided heatmap must do the same or keep its
 diverging ramp; what it must not do is adopt this ramp and leave the sign implicit,
 because the resulting figure looks complete while having silently dropped half its
 content.
+
+One family departs from the house ramp on purpose: the significance grids paint an
+*ordinal grade* rather than a magnitude, and take the single-hue
+:data:`SIGNIFICANCE_CMAP` for the reason given at that entry.
 
 Annotation colour is *derived*, never chosen: :func:`text_color_on` asks the
 mappable what colour it actually painted the cell and picks white or black by that
@@ -45,6 +50,51 @@ needs it, so importing it never pulls in a backend.
 
 from __future__ import annotations
 
+#: The module's public surface, listed rather than inferred so that *removing* a role is
+#: a deliberate act. ``tests/test_palette.py`` asserts this set equals the module's
+#: public names, so a colour added without an entry here fails the suite rather than
+#: quietly becoming a half-exported role.
+__all__ = [
+    "ACCENT_PAIR",
+    "ANNOTATION_GREY",
+    "BAND_EDGE",
+    "BAND_FILL",
+    "BAR_EDGE",
+    "BASELINE_DARK",
+    "BEST_CELL_EDGE",
+    "CAPTION_GREY",
+    "CATEGORICAL_SERIES",
+    "CELL_STROKE",
+    "ERROR_BAR_GREY",
+    "FAINT_LINK",
+    "FOOTNOTE_GREY",
+    "GRID_RULE",
+    "HEATMAP_CMAP",
+    "HIGHLIGHT_ACCENT",
+    "HOLLOW_EDGE",
+    "HOST_COLORS",
+    "LARGE_CATEGORICAL_CMAP",
+    "MISSING_COLOR",
+    "MUTED_GREY",
+    "NEUTRAL_GREY",
+    "ORDERED_QUALITATIVE_SERIES",
+    "PALE_FILL",
+    "RESIDUAL_GREY",
+    "SECONDARY_GREY",
+    "SEVERITY_SERIES",
+    "SIGNIFICANCE_CMAP",
+    "STAGE_SERIES",
+    "SURFACE",
+    "WARNING_FILL",
+    "WARNING_TEXT",
+    "heatmap_cmap",
+    "heatmap_levels",
+    "opaque",
+    "relative_luminance",
+    "text_color_for_rgb",
+    "text_color_on",
+]
+
 # ------------------------------------------------------------------
 # The sequential ramp
 # ------------------------------------------------------------------
@@ -56,6 +106,26 @@ from __future__ import annotations
 #: perceptually uniform and monotone in lightness, so the annotated numbers stay
 #: legible at both ends once :func:`text_color_on` picks their colour.
 HEATMAP_CMAP = "inferno"
+
+#: The ramp for a **significance tier**, and the layer's one sanctioned departure from
+#: :data:`HEATMAP_CMAP`. ``Blues_r``: a single hue, so brightness alone carries the
+#: ordering and no step can be told from its neighbour by anything but how dark it is;
+#: reversed, so the *darkest* step is the *most* significant rung and the palest is the
+#: one reported not significant.
+#:
+#: Deliberately not the house ramp, and the reason is what the quantity is rather than a
+#: preference. A tier is an ordinal grade read off a ladder a config file declares, not a
+#: magnitude: the distance between two rungs is not a number. Inferno moves through
+#: black, purple, red, orange and yellow, and a hue change of that size across adjacent
+#: steps invites reading the ladder as a set of *kinds* -- the red tier and the yellow
+#: tier -- when the only relation between them is more and less. One hue removes the
+#: invitation.
+#:
+#: The palest step must also stay distinguishable from :data:`MISSING_COLOR`, because
+#: "never tested" and "tested, not significant" are different findings that the
+#: significance grids paint differently on purpose. ``Blues_r`` ends near white, well
+#: clear of that grey; ``Greys_r`` was rejected for landing a painted step on top of it.
+SIGNIFICANCE_CMAP = "Blues_r"
 
 #: Fill for a cell with no value at all. Deliberately off-ramp: rendering an
 #: unmeasured cell at the ramp's low end would present "never measured" as "measured
@@ -280,14 +350,60 @@ def heatmap_cmap(name: str = HEATMAP_CMAP, *, missing: str = MISSING_COLOR):
     cells of every other figure drawn in the same process.
 
     *name* is a parameter rather than a constant read so a chart that must depart from
-    the house ramp still routes through one ``set_bad`` policy; callers wanting the
-    house ramp pass nothing, which is all of them today.
+    the house ramp -- the significance grids do, on :data:`SIGNIFICANCE_CMAP` -- still
+    routes through one ``set_bad`` policy; callers wanting the house ramp pass nothing.
     """
     import matplotlib.pyplot as plt
 
     cmap = plt.get_cmap(name).copy()
     cmap.set_bad(color=missing)
     return cmap
+
+
+def heatmap_levels(n: int, *, name: str = HEATMAP_CMAP, missing: str = MISSING_COLOR):
+    """Colormap *name* reduced to *n* discrete steps, with ``set_bad`` at *missing*.
+
+    For a quantity that arrives already **binned into ordered tiers** -- a significance
+    ladder, a banded rate -- rather than as a continuous magnitude. Sampling the ramp at
+    *n* points instead of drawing it continuously is what makes a tier boundary visible:
+    on a continuous ramp two values either side of a cutoff are painted almost the same
+    colour, which invites reading the pair as near-identical when the figure's own claim
+    is that they fall on opposite sides of a threshold.
+
+    **Ordered quantities only.** This is a bin of a sequential ramp, so its steps inherit
+    that ramp's meaning: step *k+1* reads as *more* than step *k*. It is
+    therefore not a source of categorical hues -- a set of unordered categories drawn on
+    it acquires a magnitude ordering it does not have. :data:`CATEGORICAL_SERIES` and its
+    siblings above exist for that case.
+
+    **``set_bad`` is preserved**, which is load-bearing rather than incidental:
+    :func:`~population_synthetic.analysis.utils.grids.render_grid` derives the colour of
+    an annotation over an unpainted cell from the colormap's bad colour and *raises* when
+    that colour is transparent. ``resampled`` carries the bad/under/over entries across in
+    the matplotlib versions this repository runs on; the entry is reapplied here anyway
+    so the guarantee is this function's own rather than a borrowed implementation detail.
+    Reapplying is safe because ``heatmap_cmap`` already handed back a private copy.
+
+    Args:
+        n: Number of discrete steps. The caller pairs it with its own norm -- typically a
+            ``BoundaryNorm`` over *n* bins whose cutoffs come from that figure's config.
+        name: Colormap to bin. Defaults to the house ramp; the significance grids pass
+            :data:`SIGNIFICANCE_CMAP` instead.
+        missing: Fill for a cell the ramp did not paint.
+
+    Returns:
+        A ``ListedColormap`` with ``N == n``, independent of matplotlib's registry.
+
+    Raises:
+        ValueError: If *n* is not a positive integer. A non-positive or fractional step
+            count is always a caller bug, and matplotlib would answer it with an empty or
+            silently rounded colormap rather than an error.
+    """
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError(f"heatmap_levels needs a positive integer step count, got {n!r}")
+    levels = heatmap_cmap(name, missing=missing).resampled(n)
+    levels.set_bad(color=missing)
+    return levels
 
 
 #: Relative-luminance crossover between white and black text, from WCAG 2 contrast:

@@ -1,10 +1,10 @@
 """Durable, all-or-nothing overwrite of a single file.
 
-Defines ``atomic_write_text`` and ``atomic_write_json``: both serialise into a
-unique temporary file in the *target's own directory*, force it to stable
-storage, and then ``os.replace`` it over the destination. A reader therefore
-only ever observes the previous complete file or the new complete file -- never
-a half-written one -- which is what makes a killed run recoverable instead of
+Defines ``atomic_write_text``, ``atomic_write_json`` and ``atomic_copy_file``: all
+three serialise into a unique temporary file in the *target's own directory*, force
+it to stable storage, and then ``os.replace`` it over the destination. A reader
+therefore only ever observes the previous complete file or the new complete file --
+never a half-written one -- which is what makes a killed run recoverable instead of
 silently corrupting its own outputs.
 
 The module deliberately knows nothing about what it is writing: no JSON schema,
@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import random
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -115,3 +116,37 @@ def atomic_write_json(
         lambda handle: json.dump(obj, handle, indent=indent, ensure_ascii=ensure_ascii, sort_keys=sort_keys),
         encoding="utf-8",
     )
+
+
+def atomic_copy_file(source: Path | str, target: Path | str) -> None:
+    """Replace ``target`` with a byte-for-byte copy of ``source``, atomically.
+
+    The binary sibling of :func:`atomic_write_text`, for the case where the bytes
+    already exist on disk rather than being serialised in memory. A half-copied file
+    under a published name is worse than no file at all: it is the right size for
+    nothing and still looks like an artifact, so the copy lands via the same
+    temp-fsync-replace sequence and a failure leaves the destination untouched.
+
+    Metadata is carried across (``shutil.copystat``, as ``shutil.copy2`` would), so
+    the copy's mtime is the *source's* -- the moment the content was produced, not
+    the moment it was copied, which is what makes a stale copy visible.
+    """
+    source_path = Path(source)
+    target_path = Path(target)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fd, tmp_name = tempfile.mkstemp(dir=target_path.parent, prefix=f".{target_path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            with open(source_path, "rb") as reader:
+                shutil.copyfileobj(reader, handle)
+            # Same load-bearing order as ``_atomic_write``: write -> flush -> fsync
+            # -> replace. copystat lands on the temp file, before it is published.
+            handle.flush()
+            os.fsync(handle.fileno())
+        shutil.copystat(source_path, tmp_path)
+        _replace_with_retry(tmp_path, target_path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise

@@ -14,8 +14,12 @@ import pytest
 from population_synthetic.analysis.utils import registry
 from population_synthetic.analysis.utils.registry import (
     ANALYSIS_STAGE_DIR,
+    FIGURES_STAGE_DIR,
+    STAGE_ANALYSIS,
+    STAGE_FIGURES,
     AnalysisProcess,
     analysis_output_dir,
+    figures_output_dir,
     get_process,
     load_registry,
     resolve_output_base,
@@ -43,14 +47,43 @@ _EXPECTED_FOLDERS = {
     "cost_efficiency": "cost_efficiency",
 }
 
+# The figures-stage ids: no analysis-stage folder at all (they own the figures stage
+# root), so they are deliberately absent from the folder map above.
+_EXPECTED_FIGURES_PROCESSES = {"figure_selection"}
+
 
 def test_stage_dir_constant() -> None:
     assert ANALYSIS_STAGE_DIR == "03_Analysis"
 
 
+def test_figures_stage_dir_constant() -> None:
+    assert FIGURES_STAGE_DIR == "04_Figures"
+
+
+def test_both_stage_literals_are_read_from_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Neither folder name is a Python literal: swap the registry and both follow it.
+    other = tmp_path / "reg.yaml"
+    other.write_text(
+        "stage_dir: 'AA_Analysis'\nfigures_stage_dir: 'BB_Figures'\nprocesses:\n  fidelity: {}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(registry, "_REGISTRY_PATH", other)
+    assert registry._load_stage_dirs() == {STAGE_ANALYSIS: "AA_Analysis", STAGE_FIGURES: "BB_Figures"}
+
+
+def test_load_registry_missing_figures_stage_dir_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    bad = tmp_path / "reg.yaml"
+    bad.write_text("stage_dir: '03_Analysis'\nprocesses:\n  fidelity:\n    label: x\n", encoding="utf-8")
+    monkeypatch.setattr(registry, "_REGISTRY_PATH", bad)
+    with pytest.raises(ValueError, match="figures_stage_dir"):
+        load_registry()
+
+
 def test_registry_has_all_expected_processes() -> None:
     reg = load_registry()
-    assert set(reg) == set(_EXPECTED_FOLDERS)
+    assert set(reg) == set(_EXPECTED_FOLDERS) | _EXPECTED_FIGURES_PROCESSES
     assert all(isinstance(p, AnalysisProcess) for p in reg.values())
 
 
@@ -139,6 +172,7 @@ def test_load_registry_missing_required_key_raises(monkeypatch: pytest.MonkeyPat
     bad = tmp_path / "reg.yaml"
     bad.write_text(
         "stage_dir: '03_Analysis'\n"
+        "figures_stage_dir: '04_Figures'\n"
         "processes:\n"
         "  fidelity:\n"
         "    label: 'Compare'\n"
@@ -154,10 +188,109 @@ def test_load_registry_missing_required_key_raises(monkeypatch: pytest.MonkeyPat
 
 def test_load_registry_empty_processes_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     bad = tmp_path / "reg.yaml"
-    bad.write_text("stage_dir: '03_Analysis'\nprocesses: {}\n", encoding="utf-8")
+    bad.write_text(
+        "stage_dir: '03_Analysis'\nfigures_stage_dir: '04_Figures'\nprocesses: {}\n", encoding="utf-8"
+    )
     monkeypatch.setattr(registry, "_REGISTRY_PATH", bad)
     with pytest.raises(ValueError):
         load_registry()
+
+
+# --- the two stages: `stage` defaults to analysis, `folder` is conditional on it ---
+
+
+def _write_registry(tmp_path: Path, entry_body: str) -> Path:
+    """Write a one-process registry whose single entry is `probe`, and return its path."""
+    path = tmp_path / "reg.yaml"
+    path.write_text(
+        "stage_dir: '03_Analysis'\n"
+        "figures_stage_dir: '04_Figures'\n"
+        "processes:\n"
+        "  probe:\n"
+        "    label: 'Probe'\n"
+        "    description: 'a probe process'\n"
+        "    script: 'scripts/analyze/probe.py'\n"
+        "    dispatch: 'per_country'\n" + entry_body,
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_shipped_stages_split_exactly_along_the_folder_contract() -> None:
+    # The analysis-stage processes declare no `stage` (the documented default) and every
+    # one of them declares a folder; the figures-stage ones declare no folder at all.
+    reg = load_registry()
+    assert {pid for pid, p in reg.items() if p.stage == STAGE_ANALYSIS} == set(_EXPECTED_FOLDERS)
+    assert {pid for pid, p in reg.items() if p.stage == STAGE_FIGURES} == _EXPECTED_FIGURES_PROCESSES
+    assert all(p.folder for pid, p in reg.items() if pid in _EXPECTED_FOLDERS)
+    assert all(p.folder is None for pid, p in reg.items() if pid in _EXPECTED_FIGURES_PROCESSES)
+
+
+def test_figures_stage_entry_without_folder_loads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(registry, "_REGISTRY_PATH", _write_registry(tmp_path, "    stage: 'figures'\n"))
+    proc = get_process("probe")
+    assert proc.stage == STAGE_FIGURES
+    assert proc.folder is None
+
+
+def test_figures_stage_entry_with_folder_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        registry, "_REGISTRY_PATH", _write_registry(tmp_path, "    stage: 'figures'\n    folder: 'probe'\n")
+    )
+    with pytest.raises(ValueError, match="must not"):
+        load_registry()
+
+
+def test_analysis_stage_entry_without_folder_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # No `stage` key -> the documented analysis-stage default, which requires `folder`.
+    monkeypatch.setattr(registry, "_REGISTRY_PATH", _write_registry(tmp_path, ""))
+    with pytest.raises(ValueError, match="folder"):
+        load_registry()
+
+
+@pytest.mark.parametrize("declared", ["'posters'", "''", "null"])
+def test_unknown_stage_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, declared: str) -> None:
+    # A present-but-blank stage is never defaulted away -- only an absent key is.
+    monkeypatch.setattr(
+        registry,
+        "_REGISTRY_PATH",
+        _write_registry(tmp_path, f"    stage: {declared}\n    folder: 'probe'\n"),
+    )
+    with pytest.raises(ValueError, match="unknown stage"):
+        load_registry()
+
+
+def test_analysis_output_dir_on_figures_stage_id_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(registry, "_REGISTRY_PATH", _write_registry(tmp_path, "    stage: 'figures'\n"))
+    with pytest.raises(ValueError, match="figures_output_dir"):
+        analysis_output_dir("probe", tmp_path)
+
+
+# --- the 04_Figures layout ---
+
+
+def test_figures_output_dir_layout() -> None:
+    base = Path("F:/some/output_base")
+    assert figures_output_dir(
+        base, country="swedish_02", set_name="manuscript", naming="numbered"
+    ) == base / "04_Figures" / "swedish_02" / "manuscript" / "numbered"
+
+
+def test_figures_output_dir_accepts_string_base() -> None:
+    assert figures_output_dir(
+        "/tmp/base", country="italian_01", set_name="deck", naming="as_generated"
+    ) == Path("/tmp/base") / "04_Figures" / "italian_01" / "deck" / "as_generated"
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+@pytest.mark.parametrize("component", ["country", "set_name", "naming"])
+def test_figures_output_dir_blank_component_raises(component: str, blank: str) -> None:
+    kwargs = {"country": "swedish_02", "set_name": "manuscript", "naming": "numbered"}
+    kwargs[component] = blank
+    with pytest.raises(ValueError, match=component):
+        figures_output_dir(Path("F:/base"), **kwargs)
 
 
 def test_resolve_output_base_honors_cli_value() -> None:

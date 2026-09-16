@@ -10,6 +10,7 @@ rather than by a threshold tuned to one ramp.
 
 from __future__ import annotations
 
+import colorsys
 from pathlib import Path
 
 import matplotlib
@@ -29,9 +30,11 @@ from population_synthetic.analysis.utils.palette import (  # noqa: E402
     MISSING_COLOR,
     ORDERED_QUALITATIVE_SERIES,
     SEVERITY_SERIES,
+    SIGNIFICANCE_CMAP,
     STAGE_SERIES,
     SURFACE,
     heatmap_cmap,
+    heatmap_levels,
     opaque,
     relative_luminance,
     text_color_for_rgb,
@@ -71,6 +74,61 @@ def test_heatmap_cmap_is_a_copy_not_the_registry_object():
 def test_missing_colour_defaults_to_the_off_ramp_grey():
     cmap = heatmap_cmap()
     assert matplotlib.colors.to_hex(cmap.get_bad()).upper() == MISSING_COLOR.upper()
+
+
+def test_heatmap_levels_bins_the_house_ramp_into_the_requested_steps():
+    """A tiered quantity is drawn on *n* steps, sampled from the one house ramp."""
+    levels = heatmap_levels(5)
+
+    assert isinstance(levels, matplotlib.colors.ListedColormap)
+    assert levels.N == 5
+    # Sampled from the same ramp, not a second one: the extreme steps sit at the
+    # continuous ramp's own ends.
+    continuous = heatmap_cmap()
+    assert levels(0)[:3] == pytest.approx(continuous(0.0)[:3], abs=0.02)
+    assert levels(4)[:3] == pytest.approx(continuous(1.0)[:3], abs=0.02)
+
+
+def test_heatmap_levels_keeps_an_opaque_missing_colour():
+    """``render_grid`` derives the unpainted cell's text colour from ``set_bad``.
+
+    It raises outright on a fully transparent bad colour, so a discrete ramp that lost
+    the entry on the way through ``resampled`` would take every grid drawn on it down --
+    or, worse, take down only the grids that happen to have an unmeasured cell.
+    """
+    levels = heatmap_levels(5)
+
+    assert matplotlib.colors.to_hex(levels.get_bad()).upper() == MISSING_COLOR.upper()
+    assert levels.get_bad()[3] == pytest.approx(1.0)
+
+
+def test_heatmap_levels_is_a_copy_and_honours_a_declared_missing_colour():
+    levels = heatmap_levels(3, missing="#FF0000")
+    registry = plt.get_cmap(HEATMAP_CMAP)
+
+    assert levels is not registry
+    assert levels.get_bad()[:3] == pytest.approx((1.0, 0.0, 0.0))
+    assert registry(np.ma.masked_invalid([np.nan]))[0][3] == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize("bad_n", [0, -1, 2.5, True, "5"])
+def test_heatmap_levels_rejects_a_step_count_that_is_not_a_positive_integer(bad_n):
+    """Matplotlib would answer these with an empty or silently rounded colormap."""
+    with pytest.raises(ValueError, match="positive integer"):
+        heatmap_levels(bad_n)
+
+
+def test_every_public_name_is_exported():
+    """``__all__`` is listed by hand, so it can only stay complete if that is asserted.
+
+    A colour role added without an entry is half-exported: present on the module,
+    absent from its declared surface, and invisible to anything reading the latter.
+    """
+    public = {
+        name for name in vars(palette)
+        if not name.startswith("_") and name not in {"annotations"}
+    }
+    assert public == set(palette.__all__)
 
 
 @pytest.mark.parametrize(
@@ -161,10 +219,40 @@ def test_host_colours_are_slots_of_the_house_series():
     assert HOST_COLORS["local"] == CATEGORICAL_SERIES[3]
 
 
-def test_the_sequential_ramp_is_the_only_ramp():
+def test_the_sequential_ramp_is_the_only_magnitude_ramp():
     """Settled by ADR 2026-08-12: one house ramp, off-ramp grey for the unmeasured cells."""
     assert HEATMAP_CMAP == "inferno"
     assert MISSING_COLOR == "#DDDDDD"
+
+
+def test_the_significance_ramp_is_single_hue_and_darkest_where_it_matters_most():
+    """The one sanctioned departure from the house ramp, and why it is worth having.
+
+    A significance tier is an ordinal grade read off a config-declared ladder, not a
+    magnitude: the rungs are ranked but the gap between two of them is not a number.
+    A multi-hue ramp invites reading them as kinds rather than as degrees, so this one
+    is a single hue that carries the ordering by brightness alone, reversed so the
+    darkest step is the most significant rung.
+
+    All three properties are asserted rather than assumed, because each fails silently:
+    a ramp swapped for a multi-hue one still renders, and one left un-reversed paints
+    the strongest finding as the faintest cell.
+    """
+    assert SIGNIFICANCE_CMAP == "Blues_r"
+    assert SIGNIFICANCE_CMAP != HEATMAP_CMAP
+
+    steps = [heatmap_levels(5, name=SIGNIFICANCE_CMAP)(i)[:3] for i in range(5)]
+    luminances = [relative_luminance(rgb) for rgb in steps]
+    assert all(a < b for a, b in zip(luminances, luminances[1:]))
+
+    hues = [colorsys.rgb_to_hls(*rgb)[0] * 360.0 for rgb in steps]
+    assert max(hues) - min(hues) < 30.0
+
+    # The palest painted step has to stay clear of the unpainted "never measured" fill:
+    # a grid drawn on this ramp reports those as different findings.
+    assert luminances[-1] > relative_luminance(
+        matplotlib.colors.to_rgb(MISSING_COLOR)
+    )
 
 
 # ------------------------------------------------------------------
