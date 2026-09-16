@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-27 (revived 2026-08-27)
 **Author:** Basil
-**Status:** In Progress
+**Status:** Completed (with open items)
+**Completed:** 2026-09-16 18:48
 **Base Branch:** `feature/publication-figure-presentation-layer`
 **Branch:** `feature/figure-selection-04-figures`
 
