@@ -250,3 +250,61 @@ def test_mixed_logit_interaction_needs_two_models():
     )
     with pytest.raises(ValueError):
         mixed_logit_interaction(frame)
+
+
+# --------------------------------------------------------------------------- #
+# paired_t_pairwise -- confidence interval of the mean paired difference       #
+# --------------------------------------------------------------------------- #
+
+def _paired_matrix() -> np.ndarray:
+    rng = np.random.default_rng(20260916)
+    base = rng.uniform(0.2, 0.8, size=(10, 1))
+    return base + rng.normal(0.0, 0.05, size=(10, 4)) + np.array([0.0, 0.03, 0.08, 0.2])
+
+
+@pytest.mark.parametrize("level", [0.9, 0.95, 0.99])
+def test_paired_t_interval_matches_scipy_t_interval(level):
+    from population_synthetic.analysis.utils.stats_tests import paired_t_pairwise
+
+    matrix = _paired_matrix()
+    labels = ["m0", "m1", "m2", "m3"]
+    pairs = paired_t_pairwise(matrix, labels=labels, confidence_level=level)["pairs"]
+    n = matrix.shape[0]
+    for i in range(4):
+        for j in range(i + 1, 4):
+            diff = matrix[:, j] - matrix[:, i]
+            rec = pairs[f"{labels[i]}|{labels[j]}"]
+            sd = float(np.std(diff, ddof=1))
+            low, high = stats.t.interval(level, n - 1, loc=diff.mean(), scale=sd / math.sqrt(n))
+            assert rec["sd_diff"] == pytest.approx(sd, abs=1e-12)
+            assert rec["ci_low"] == pytest.approx(float(low), abs=1e-12)
+            assert rec["ci_high"] == pytest.approx(float(high), abs=1e-12)
+            assert rec["ci_low"] < rec["mean_diff"] < rec["ci_high"]
+
+
+def test_paired_t_bit_identical_columns_give_zero_sd_and_no_interval():
+    from population_synthetic.analysis.utils.stats_tests import paired_t_pairwise
+
+    matrix = _paired_matrix()
+    matrix[:, 1] = matrix[:, 0]
+    out = paired_t_pairwise(matrix, labels=["a", "b", "c", "d"], confidence_level=0.95)
+    rec = out["pairs"]["a|b"]
+    assert rec["sd_diff"] == 0.0
+    assert rec["ci_low"] is None and rec["ci_high"] is None
+    assert rec["p_raw"] is None and rec["p_holm"] is None
+    assert sum(1 for r in out["pairs"].values() if r["p_holm"] is not None) == 5
+
+
+def test_paired_t_confidence_level_is_required():
+    from population_synthetic.analysis.utils.stats_tests import paired_t_pairwise
+
+    with pytest.raises(TypeError):
+        paired_t_pairwise(_paired_matrix(), labels=["a", "b", "c", "d"])
+
+
+@pytest.mark.parametrize("level", [0, 0.0, 1, 1.0, 1.2, -0.5, True])
+def test_paired_t_confidence_level_outside_the_open_unit_interval_raises(level):
+    from population_synthetic.analysis.utils.stats_tests import paired_t_pairwise
+
+    with pytest.raises(ValueError, match="confidence_level"):
+        paired_t_pairwise(_paired_matrix(), labels=["a", "b", "c", "d"], confidence_level=level)

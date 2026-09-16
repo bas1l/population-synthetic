@@ -1010,6 +1010,7 @@ def paired_t_pairwise(
     blocks: Sequence[Sequence[float]],
     *,
     labels: Sequence[str],
+    confidence_level: float,
 ) -> dict[str, Any]:
     """All pairwise paired t-tests across treatments, Holm-corrected.
 
@@ -1032,12 +1033,27 @@ def paired_t_pairwise(
     reported p depend on a rendering decision, and would invite the objection
     that the family was narrowed after seeing the results.
 
+    Each pair also carries the **confidence interval of its mean difference**:
+    ``mean_diff +/- t_{(1+L)/2, n-1} * sd_diff / sqrt(n)``, where *L* is
+    *confidence_level* (required, no default -- the caller reads it from config) and
+    ``sd_diff`` the ddof-1 standard deviation of the paired differences.  It rests on
+    the same normality assumption as the t-test beside it.
+
     Returns ``{"test","n","k","pairs"}`` where ``pairs`` maps ``"a|b"`` to
-    ``{"mean_diff","dz","p_raw","p_holm","wins","n_blocks","p_sign"}``.
+    ``{"mean_diff","sd_diff","ci_low","ci_high","dz","p_raw","p_holm","wins",
+    "n_blocks","p_sign"}``, every difference signed second minus first.
     Degenerate input (``<2`` treatments/blocks) returns an empty ``pairs`` map
     plus a ``"note"``.  A pair whose differences are all identical yields
-    ``dz``/``p_raw`` ``None`` with its own per-pair ``note`` rather than a NaN.
+    ``sd_diff == 0.0`` and ``dz``/``p_raw``/``p_holm``/``ci_low``/``ci_high``
+    ``None`` with its own per-pair ``note`` rather than a NaN or a zero-width
+    interval; it is left out of the Holm family.
+
+    Raises ``ValueError`` when *confidence_level* is not strictly between 0 and 1.
     """
+    if isinstance(confidence_level, bool) or not 0.0 < float(confidence_level) < 1.0:
+        raise ValueError(
+            f"confidence_level must lie strictly between 0 and 1, got {confidence_level!r}"
+        )
     arr = _as_block_matrix(blocks)
     n, k = arr.shape
     if len(labels) != k:
@@ -1050,6 +1066,7 @@ def paired_t_pairwise(
     keys: list[str] = []
     raw_ps: list[float] = []
     records: dict[str, dict[str, Any]] = {}
+    t_critical = stats.t.ppf((1.0 + float(confidence_level)) / 2.0, n - 1)
     for i in range(k):
         for j in range(i + 1, k):
             diff = arr[:, j] - arr[:, i]
@@ -1057,6 +1074,9 @@ def paired_t_pairwise(
             wins = int((diff > 0).sum())
             rec: dict[str, Any] = {
                 "mean_diff": float(diff.mean()),
+                "sd_diff": None,
+                "ci_low": None,
+                "ci_high": None,
                 "wins": wins,
                 "n_blocks": n,
                 "p_sign": _two_sided_sign_p(wins, n),
@@ -1065,9 +1085,13 @@ def paired_t_pairwise(
                 "p_holm": None,
             }
             sd = float(diff.std(ddof=1)) if n > 1 else 0.0
+            rec["sd_diff"] = sd
             if sd <= 0:
                 rec["note"] = "all paired differences identical; t is undefined"
             else:
+                half_width = float(t_critical) * sd / math.sqrt(n)
+                rec["ci_low"] = rec["mean_diff"] - half_width
+                rec["ci_high"] = rec["mean_diff"] + half_width
                 rec["dz"] = float(diff.mean() / sd)
                 rec["p_raw"] = float(stats.ttest_rel(arr[:, j], arr[:, i]).pvalue)
                 keys.append(key)
