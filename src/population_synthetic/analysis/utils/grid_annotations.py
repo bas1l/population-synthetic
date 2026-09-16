@@ -44,6 +44,7 @@ __all__ = [
     "RateOnlyPolicy",
     "RateWithCountsPolicy",
     "SignedValuePolicy",
+    "SignedValueWithStarsPolicy",
 ]
 
 
@@ -56,6 +57,10 @@ class MissingCellValue(ValueError):
     "not measured". A caller that genuinely wants wording for a value-less record
     declares it (``absent_text=``); a caller with nothing to say passes ``None`` in place
     of the record and the renderer draws no text at all.
+
+    Also raised for the mirror case: a record that supplies its value but withholds a
+    field the policy prints *beside* it. That record contradicts itself, and formatting
+    it leniently would set the word ``None`` in a published cell.
     """
 
 
@@ -275,6 +280,96 @@ class SignedValuePolicy:
             absent_text=self.absent_text,
             policy_name=type(self).__name__,
         )
+
+
+@dataclass(frozen=True)
+class SignedValueWithStarsPolicy:
+    """A signed value, the symbol qualifying it, and optionally the count behind it.
+
+    For a grid whose **fill and text carry different channels**: the fill encodes a tier
+    the cell was binned into and the text encodes the magnitude and direction that tier
+    was assigned to. A pairwise-comparison square is the case it is written for -- the
+    tier is symmetric across the diagonal while the difference is not, so the square can
+    only be read at all if the direction travels in the annotation.
+
+    The sign is therefore load-bearing for the same reason it is in
+    :class:`SignedValuePolicy`, and is prepended rather than left to the caller's format
+    spec so that no figure can be published having quietly dropped it.
+
+    The symbol is **read, never derived**: mapping a p-value onto a star ladder needs the
+    thresholds, which are a fact about that analysis's config and belong to the chart
+    that owns the figure. This policy is handed the resolved symbol and prints it.
+
+    A record whose value is ``None`` -- a comparison that was never made -- prints
+    *absent_text* alone, on one line, with neither the symbol nor the count beneath it.
+    That is the point of the default: a cell that was not tested must not print the
+    palest tier's symbol, because "not tested" and "tested, not significant" are
+    different findings and a reader cannot recover the difference from the fill, which is
+    the colormap's unpainted colour in both the untested and the diagonal case.
+
+    It declares no ``scale``, unlike its rate-shaped siblings: a difference is already in
+    the unit its figure prints, and an attribute no caller sets is a decision with no
+    owner.
+
+    Attributes:
+        value_key: Record key holding the signed value. ``None`` there prints
+            *absent_text*.
+        stars_key: Record key holding the already-resolved significance symbol.
+        count_key: Record key holding the count the comparison rests on, or ``None`` to
+            print no count line -- the difference between the ``_with_counts`` variant
+            and its clean sibling.
+        number_format: Python format spec **without** the sign flag, which is prepended.
+        absent_text: Wording printed for a record whose value is ``None``. Defaults to an
+            em dash, so an untested cell is marked rather than blank; ``None`` restores
+            the sibling policies' behaviour of treating a value-less record as an error.
+    """
+
+    value_key: str = "value"
+    stars_key: str = "stars"
+    count_key: str | None = None
+    number_format: str = ".3f"
+    absent_text: str | None = "—"
+
+    @property
+    def required_keys(self) -> frozenset[str]:
+        keys = {self.value_key, self.stars_key}
+        if self.count_key is not None:
+            keys.add(self.count_key)
+        return frozenset(keys)
+
+    def _companion(self, cell: Mapping[str, Any], key: str) -> Any:
+        """A field printed beside a value that *was* measured, which must not be absent.
+
+        Raised on rather than printed, because ``None`` here means the record disagrees
+        with itself: it claims a measured value while withholding something the figure
+        prints next to it. Formatting that as text would put the word ``None`` in a
+        published cell.
+        """
+        companion = cell[key]
+        if companion is None:
+            raise MissingCellValue(
+                f"{type(self).__name__}: cell record carries {self.value_key!r} = "
+                f"{cell[self.value_key]!r} but {key!r} = None. A cell with a value must "
+                "carry every field printed beside it; a cell that was never measured "
+                "sets its value to None as well, which 'absent_text' then covers."
+            )
+        return companion
+
+    def text(self, cell: Mapping[str, Any]) -> str:
+        head = _head(
+            cell,
+            value_key=self.value_key,
+            scale=1.0,
+            number_format=f"+{self.number_format}",
+            absent_text=self.absent_text,
+            policy_name=type(self).__name__,
+        )
+        if cell[self.value_key] is None:
+            return head
+        lines = [head, str(self._companion(cell, self.stars_key))]
+        if self.count_key is not None:
+            lines.append(f"n={self._companion(cell, self.count_key)}")
+        return "\n".join(lines)
 
 
 @dataclass(frozen=True)

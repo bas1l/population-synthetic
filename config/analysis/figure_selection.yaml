@@ -78,6 +78,34 @@ sets:
       name: method_comparison_overall
       source: "method_significance/{country}_method_comparison_overall"
 
+    # The pairwise-significance squares. The process emits one per analysed category
+    # plus the pooled Overall panel (30 stems on the Swedish axis); nothing is
+    # auto-discovered, so the three published here are written out as literals -- there
+    # is no attribute placeholder and none is wanted. The published stem is always the
+    # canonical (unsuffixed) variant: `_with_counts` is the diagnostic sibling, read
+    # while checking how many paired blocks a cell rests on, not the camera-ready file.
+    #
+    # Overall takes 12 because it expands the pairwise half of the Overall panel at 11:
+    # that figure draws only the pairs `pairs_mode` selects, this one draws all ten. The
+    # two categories beside it are where the method factor separates hardest: `region`
+    # carries both the strongest omnibus and the largest signed method-to-method
+    # difference, and `industry_sector` the most Holm-surviving pairs of any category
+    # whose square is publishable here.
+    #
+    # That qualifier is a real constraint, not a hedge. `as_generated/` flattens the set
+    # into one folder and rejects two entries sharing a basename, so a square named for
+    # a category that already has a marginal-progression panel (parental_structure,
+    # socioeconomic_class -- 14 and 16, whose stems end in exactly those basenames)
+    # cannot be published alongside it. Those two categories are read from the panels at
+    # 14-17; the squares publish the two the article does not otherwise open up.
+    - n: 12
+      name: method_pairs_overall
+      source: "method_significance/{country}_method_pair_significance/overall"
+
+    - n: 13
+      name: method_pairs_region
+      source: "method_significance/{country}_method_pair_significance/region"
+
     # The two marginal-progression panels pin `claude_haiku` as a literal segment.
     # The analysis stage carries the same two attributes for every surviving model;
     # publishing one model is the point of the pair, and keeping the SAME model
@@ -97,6 +125,11 @@ sets:
     - n: 17
       name: trend_socioeconomic_class
       source: "method_significance/{country}_method_trends/socioeconomic_class_method_trend"
+
+    # The second category square. 18 is the next free number after the block above.
+    - n: 18
+      name: method_pairs_industry_sector
+      source: "method_significance/{country}_method_pair_significance/industry_sector"
 
     - n: 19
       name: axisA_impossibility_heatmap
@@ -134,3 +167,25 @@ sets:
     - n: 27
       name: cost_vs_fidelity_linear
       source: "cost_efficiency/{country}_cost_vs_fidelity_linear"
+
+    # The reference-method gap grid: the most complex method against every simpler
+    # one, on all 14 categories plus Overall at once. It is the summary the three
+    # squares above (12, 13, 18) are the per-category detail of -- those show every
+    # method pair on one category, this shows one method pair per cell on every
+    # category -- so it earns its own entry rather than replacing any of them.
+    #
+    # 28 is the next free number, taken for the same reason 27 was: `n` is a unique
+    # integer within the set and every number below it either belongs to a figure
+    # here or is a gap the manuscript's own numbering has reserved (1, 3, 4, 6, 20),
+    # so claiming one of those would name this figure something the draft may already
+    # intend for another. It renumbers when the manuscript places it.
+    #
+    # No basename collision: `as_generated/` flattens the set into one folder and
+    # rejects two entries sharing a basename, and this stem's is
+    # `{country}_reference_method_gap` -- a per-country filename in the
+    # method_significance folder, unlike the squares above whose basenames are bare
+    # category names. The published stem is the canonical (unsuffixed) variant;
+    # `_with_counts` is the diagnostic sibling.
+    - n: 28
+      name: reference_method_gap
+      source: "method_significance/{country}_reference_method_gap"

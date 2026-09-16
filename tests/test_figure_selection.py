@@ -130,7 +130,7 @@ def test_shipped_roster_declares_the_manuscript_set() -> None:
 def test_shipped_manuscript_set_loads_and_is_ordered() -> None:
     figure_set = load_figure_set("manuscript")
     assert figure_set.name == "manuscript"
-    assert len(figure_set.entries) == 19
+    assert len(figure_set.entries) == 23
     numbers = [entry.n for entry in figure_set.entries]
     assert numbers == sorted(numbers)
     assert len(set(numbers)) == len(numbers)
@@ -140,8 +140,8 @@ def test_shipped_manuscript_set_resolves_without_a_tree(tmp_path: Path) -> None:
     # Resolution is pure path arithmetic: no analysis tree is needed to produce paths,
     # only to check they exist. Every entry must survive the collision gate.
     resolved = resolve_set(load_figure_set("manuscript"), country=COUNTRY, output_base=tmp_path)
-    assert len(resolved) == 19
-    assert len({figure.basename for figure in resolved}) == 19
+    assert len(resolved) == 23
+    assert len({figure.basename for figure in resolved}) == 23
 
 
 # --- the six live path shapes ------------------------------------------------

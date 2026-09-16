@@ -98,18 +98,34 @@ _CAVEATS = (
 )
 
 
+#: The clause the method-comparison block carries for a panel whose
+#: ``identical_method_groups`` is non-empty. Authored here, beside the detection it
+#: describes, so a figure or a caption writer reads the statement as data rather than
+#: composing one -- the same arrangement as :data:`_CAVEATS`. It states only what the
+#: builder can see (identical per-model TV-similarity, and what that does to the
+#: contrasts), never a cause, which would need the mapped populations this module does
+#: not read. The subject -- the group's methods -- is prepended by whoever prints it.
+_IDENTICAL_METHODS_NOTE = (
+    "give identical TV-similarity in every complete model, so their contrasts with any "
+    "other method are identical and the pairs among them have no t statistic"
+)
+
+
 def load_comparison_config(path: str | Path = DEFAULT_COMPARISON_CONFIG_PATH) -> dict[str, Any]:
     """Load and validate the method-comparison figure config (fail-fast).
 
     The config declares ``pairs_mode`` (which method pairs get a significance
     bracket) constrained to ``allowed_pairs_modes``, plus ``star_thresholds`` (the
-    p-value -> star-symbol cutoffs) and the ``ns_symbol`` for a non-significant
-    pair. Everything the figure needs about pair selection and star mapping lives
+    p-value -> star-symbol cutoffs), the ``ns_symbol`` for a non-significant
+    pair, and ``confidence_level`` -- the coverage of the t interval reported for
+    every tested pair's mean difference, a number strictly between 0 and 1.
+    Everything the figure needs about pair selection and star mapping lives
     here, not in code -- there is no baked-in mode list or threshold fallback.
 
     Raises :class:`FileNotFoundError` when the file is missing and
-    :class:`ValueError` when its shape is malformed or ``pairs_mode`` is not one of
-    the declared ``allowed_pairs_modes``.
+    :class:`ValueError` when its shape is malformed, ``pairs_mode`` is not one of
+    the declared ``allowed_pairs_modes``, or ``confidence_level`` is absent,
+    non-numeric or outside the open interval (0, 1).
     """
     path = Path(path)
     if not path.is_file():
@@ -154,6 +170,13 @@ def load_comparison_config(path: str | Path = DEFAULT_COMPARISON_CONFIG_PATH) ->
     if not isinstance(raw.get("ns_symbol"), str):
         raise ValueError(
             f"Method-comparison config {path} must have a string 'ns_symbol', got {raw.get('ns_symbol')!r}."
+        )
+
+    level = raw.get("confidence_level")
+    if isinstance(level, bool) or not isinstance(level, (int, float)) or not 0.0 < float(level) < 1.0:
+        raise ValueError(
+            f"Method-comparison config {path} must have a numeric 'confidence_level' strictly "
+            f"between 0 and 1, got {level!r}."
         )
     return raw
 
@@ -585,11 +608,129 @@ def _complete_case_matrix(
     return matrix, complete, dropped
 
 
+def _negated(value: float | None) -> float | None:
+    """Sign-flip *value*, mapping the resulting ``-0.0`` back to ``0.0``.
+
+    A mirrored cell of an antisymmetric matrix is the negation of its partner; a
+    zero difference must still serialise as ``0.0``, since ``-0.0`` reaches a
+    consumer as a signed magnitude it would print with a leading minus.
+    """
+    if value is None:
+        return None
+    flipped = -float(value)
+    return 0.0 if flipped == 0.0 else flipped
+
+
+def _pair_matrices(methods: list[str], pairs: dict[str, Any]) -> dict[str, Any]:
+    """Oriented ``k x k`` views of the unordered method-pair map *pairs*.
+
+    :func:`_pair_key` stores each unordered pair once, under a single ordering,
+    with its difference signed against *that* ordering. Filling a square from it
+    means negating the stored value for every mirrored cell -- arithmetic on a
+    signed quantity, performed in whichever layer happens to draw it. It is
+    performed here instead, once, under the row-minus-column convention stated in
+    :func:`_method_panel`.
+
+    *pairs* is the record map of
+    :func:`~population_synthetic.analysis.utils.stats_tests.paired_t_pairwise`,
+    whose ``mean_diff``, ``dz`` and interval ``[ci_low, ci_high]`` are signed
+    *second minus first* for the key ``"a|b"``; cell ``(i, j)`` therefore carries the
+    negation of the record stored under ``methods[i] | methods[j]`` -- for the
+    interval that is ``[-ci_high, -ci_low]``, so the bounds swap as well as flip, and
+    ``ci_low[i][j] == -ci_high[j][i]``. ``p_holm``, ``n_blocks`` and ``sd_diff`` are
+    properties of the unordered pair and are mirrored unchanged. The diagonal stays ``None``,
+    as does any field the record itself left ``None`` -- an untested pair is
+    absent, never ``0.0``. An empty *pairs* map (a degenerate panel) yields
+    all-``None`` matrices, so the block is emitted unconditionally. Nothing is
+    computed here: every value is already in *pairs*.
+    """
+    k = len(methods)
+    p_holm: list[list[float | None]] = [[None] * k for _ in range(k)]
+    mean_diff: list[list[float | None]] = [[None] * k for _ in range(k)]
+    n_blocks: list[list[int | None]] = [[None] * k for _ in range(k)]
+    dz: list[list[float | None]] = [[None] * k for _ in range(k)]
+    ci_low: list[list[float | None]] = [[None] * k for _ in range(k)]
+    ci_high: list[list[float | None]] = [[None] * k for _ in range(k)]
+    sd_diff: list[list[float | None]] = [[None] * k for _ in range(k)]
+    if pairs:
+        for i, j in combinations(range(k), 2):
+            key = _pair_key(methods[i], methods[j])
+            if key not in pairs:
+                raise KeyError(
+                    f"pair_matrix: no record for method pair {key!r}; "
+                    f"the pairwise map holds {sorted(pairs)}"
+                )
+            rec = pairs[key]
+            stored_p = rec.get("p_holm")
+            p_holm[i][j] = p_holm[j][i] = None if stored_p is None else float(stored_p)
+            stored_n = rec.get("n_blocks")
+            n_blocks[i][j] = n_blocks[j][i] = None if stored_n is None else int(stored_n)
+            stored_diff = rec.get("mean_diff")
+            mean_diff[i][j] = _negated(stored_diff)
+            mean_diff[j][i] = None if stored_diff is None else float(stored_diff)
+            stored_dz = rec.get("dz")
+            dz[i][j] = _negated(stored_dz)
+            dz[j][i] = None if stored_dz is None else float(stored_dz)
+            stored_sd = rec.get("sd_diff")
+            sd_diff[i][j] = sd_diff[j][i] = None if stored_sd is None else float(stored_sd)
+            stored_lo, stored_hi = rec.get("ci_low"), rec.get("ci_high")
+            if (stored_lo is None) != (stored_hi is None):
+                raise ValueError(
+                    f"pair_matrix: method pair {key!r} carries only one confidence bound "
+                    f"(ci_low={stored_lo!r}, ci_high={stored_hi!r})"
+                )
+            # Row minus column at (i, j) negates the stored second-minus-first
+            # interval, which swaps its bounds as well as flipping them.
+            ci_low[i][j] = _negated(stored_hi)
+            ci_high[i][j] = _negated(stored_lo)
+            ci_low[j][i] = None if stored_lo is None else float(stored_lo)
+            ci_high[j][i] = None if stored_hi is None else float(stored_hi)
+    return {
+        "methods": list(methods),
+        "p_holm": p_holm,
+        "mean_diff": mean_diff,
+        "n_blocks": n_blocks,
+        "dz": dz,
+        "ci_low": ci_low,
+        "ci_high": ci_high,
+        "sd_diff": sd_diff,
+    }
+
+
+def _identical_method_groups(matrix: np.ndarray, methods: list[str]) -> list[list[str]]:
+    """Maximal groups of >= 2 methods whose complete-case columns are bit-identical.
+
+    *matrix* is the panel's ``complete models x methods`` TV-similarity matrix.
+    Identity is ``numpy.array_equal`` -- exact, with no tolerance: the case this
+    detects is identical by construction (the same category counts give the same TV),
+    and a tolerance would be a threshold nobody configured. Groups, and the methods
+    inside each group, follow *methods* order. A matrix with no rows returns ``[]``:
+    empty columns are equal vacuously, which is no finding.
+    """
+    if matrix.shape[0] == 0:
+        return []
+    groups: list[list[str]] = []
+    assigned: set[int] = set()
+    for i in range(len(methods)):
+        if i in assigned:
+            continue
+        group = [i] + [
+            j for j in range(i + 1, len(methods))
+            if j not in assigned and np.array_equal(matrix[:, i], matrix[:, j])
+        ]
+        if len(group) > 1:
+            assigned.update(group)
+            groups.append([methods[j] for j in group])
+    return groups
+
+
 def _method_panel(
     matrix: np.ndarray,
     methods: list[str],
     complete_models: list[str],
     dropped_models: list[str],
+    *,
+    confidence_level: float,
 ) -> dict[str, Any]:
     """One panel: Friedman omnibus + Nemenyi pairwise over methods on *matrix*.
 
@@ -600,6 +741,32 @@ def _method_panel(
     ``_MIN_COMPLETE_MODELS`` complete models are flagged ``insufficient_n`` (the
     chart skips them); the omnibus still runs when Friedman is computable
     (``n >= 2``) so the number is available, but is ``None`` below that.
+
+    Alongside the unordered pair map the panel also carries ``pair_matrix``:
+    oriented ``k x k`` views of that same map, indexed by
+    ``pair_matrix["methods"]``, so a square-matrix consumer reads cell ``(i, j)``
+    verbatim. **Sign convention -- row minus column.** ``mean_diff[i][j]`` is the
+    mean TV similarity of ``methods[i]`` minus that of ``methods[j]``, over the
+    complete-case models entering this panel's test, so a positive cell means the
+    *row* method scored closer to the real population; ``dz`` carries the same
+    orientation, and so do ``ci_low``/``ci_high`` -- the *confidence_level* t interval
+    of ``mean_diff[i][j]`` itself, so ``ci_low[i][j] == -ci_high[j][i]``. ``p_holm``,
+    ``n_blocks`` and ``sd_diff`` belong to the unordered pair and are symmetric. The
+    diagonal is ``None``, and so is a pair the panel did not test -- distinguishable
+    from a tested pair whose difference is ``0.0``.
+
+    **This docstring is the convention's only home.** No consumer re-signs,
+    negates or re-derives the matrix; the orientation is fixed once, here, by
+    :func:`_pair_matrices`. Degenerate panels emit the block too, with ``methods``
+    populated and every entry ``None``, so the key is unconditional and no
+    consumer branches on its absence.
+
+    ``identical_method_groups`` lists the groups of methods whose per-model
+    TV-similarity columns are identical on this panel (see
+    :func:`_identical_method_groups`; ``[]`` for a degenerate panel), and
+    ``correction["family_size"]`` is the number of pairs that actually entered the
+    Holm family -- a pair whose differences are all identical has no t statistic and
+    leaves it.
     """
     n = int(matrix.shape[0])
     k = len(methods)
@@ -640,7 +807,7 @@ def _method_panel(
         if "note" in anova:
             omnibus["note"] = anova["note"]
 
-        paired = paired_t_pairwise(matrix, labels=methods)
+        paired = paired_t_pairwise(matrix, labels=methods, confidence_level=confidence_level)
         pairwise_p = {}
         pairwise_detail: dict[str, Any] = {}
         for key, rec in paired.get("pairs", {}).items():
@@ -670,9 +837,21 @@ def _method_panel(
         "omnibus": omnibus,
         "pairwise_p": pairwise_p,
         "pairwise_detail": pairwise_detail,
+        # Oriented views of the pair map above; a degenerate panel hands in an
+        # empty map and gets the all-``None`` square, so the key is unconditional.
+        "pair_matrix": _pair_matrices(methods, pairwise_detail),
         "omnibus_friedman": omnibus_friedman,
         "pairwise_p_nemenyi": pairwise_p_nemenyi,
-        "correction": {"method": "holm", "scope": "all-pairs"},
+        "correction": {
+            "method": "holm",
+            "scope": "all-pairs",
+            "family_size": sum(
+                1 for rec in pairwise_detail.values() if rec.get("p_holm") is not None
+            ),
+        },
+        "identical_method_groups": (
+            _identical_method_groups(matrix, methods) if n >= 2 and k >= 2 else []
+        ),
         "insufficient_n": n < _MIN_COMPLETE_MODELS,
     }
     if n < _MIN_COMPLETE_MODELS:
@@ -707,17 +886,24 @@ def _method_comparison(
     single level count and omits the key.
 
     *methods* are the compared methods in complexity order; *config* supplies
-    ``pairs_mode`` (exposed for the renderer, which resolves the bracketed pairs).
+    ``pairs_mode`` (exposed for the renderer, which resolves the bracketed pairs) and
+    ``confidence_level`` (the coverage of every pair's interval, echoed in the block;
+    a missing key raises). The block also carries ``identical_methods_note``, the
+    clause describing any panel's ``identical_method_groups``.
     The block is a pure serialisable contract -- no colormaps, no bracket geometry.
     """
     panels: dict[str, Any] = {}
+    # Read once at the edge; a config without the key raises rather than defaulting.
+    confidence_level = float(config["confidence_level"])
 
     for attr in attributes:
         per_model = {
             m: {s: _tv_sim(by_ms.get((m, s)), attr) for s in methods} for m in models
         }
         matrix, complete, dropped = _complete_case_matrix(per_model, models, methods)
-        panel = _method_panel(matrix, methods, complete, dropped)
+        panel = _method_panel(
+            matrix, methods, complete, dropped, confidence_level=confidence_level
+        )
         values = category_values.get(attr)
         if not values:
             raise ValueError(
@@ -733,7 +919,9 @@ def _method_comparison(
         m: {s: _overall_tv_sim(by_ms.get((m, s))) for s in methods} for m in models
     }
     o_matrix, o_complete, o_dropped = _complete_case_matrix(per_model_overall, models, methods)
-    panels["overall"] = _method_panel(o_matrix, methods, o_complete, o_dropped)
+    panels["overall"] = _method_panel(
+        o_matrix, methods, o_complete, o_dropped, confidence_level=confidence_level
+    )
 
     # BH-FDR across the *category* omnibus p-values (Overall excluded: single test).
     indexed = [(attr, panels[attr]["omnibus"].get("p")) for attr in attributes]
@@ -755,6 +943,8 @@ def _method_comparison(
         # pure consumer (falls back to load_comparison_config only if absent).
         "star_thresholds": config.get("star_thresholds"),
         "ns_symbol": config.get("ns_symbol"),
+        "confidence_level": confidence_level,
+        "identical_methods_note": _IDENTICAL_METHODS_NOTE,
         "panels": panels,
     }
 

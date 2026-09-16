@@ -48,7 +48,7 @@ CATEGORY_VALUES = {
     "trend_attr": ["a", "b", "c", "d"],   # 4 levels
     "shift_attr": ["x", "y", "z"],        # 3 levels
 }
-_CMP_CONFIG = {"pairs_mode": "adjacent"}
+_CMP_CONFIG = {"pairs_mode": "adjacent", "confidence_level": 0.95}
 
 
 def _trend_tv(m_idx: int, rank: int) -> float:
@@ -126,6 +126,30 @@ def test_malformed_star_thresholds_raises(tmp_path):
         "ns_symbol": "ns",
     }), encoding="utf-8")
     with pytest.raises(ValueError, match="star_thresholds"):
+        load_comparison_config(bad)
+
+
+def test_default_config_declares_a_confidence_level():
+    level = load_comparison_config()["confidence_level"]
+    assert 0.0 < level < 1.0
+
+
+_ABSENT = object()
+
+
+@pytest.mark.parametrize("level", [_ABSENT, "0.95", None, True, 0, 1, 1.2])
+def test_malformed_confidence_level_raises(tmp_path, level):
+    raw = {
+        "pairs_mode": "adjacent",
+        "allowed_pairs_modes": ["adjacent"],
+        "star_thresholds": [{"max_p": 0.05, "symbol": "*"}],
+        "ns_symbol": "ns",
+    }
+    if level is not _ABSENT:
+        raw["confidence_level"] = level
+    bad = tmp_path / "comparison.json"
+    bad.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="confidence_level"):
         load_comparison_config(bad)
 
 
@@ -346,6 +370,202 @@ def test_insufficient_n_flagged_and_recorded():
     assert panel["n_models"] == 2
     assert panel["insufficient_n"] is True
     assert "note" in panel
+
+
+# --------------------------------------------------------------------------- #
+# Oriented pair matrix                                                        #
+# --------------------------------------------------------------------------- #
+
+
+def _assert_mirrors(cell: float | None, mirror: float | None) -> None:
+    """A cell and its mirror are negations -- or both absent, never one of each."""
+    if cell is None or mirror is None:
+        assert cell is None and mirror is None
+    else:
+        assert cell == pytest.approx(-mirror)
+
+
+def test_pair_matrix_is_oriented_row_minus_column():
+    by_ms, models, methods = _by_ms(_full_grid())
+    block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
+    panel = block["panels"]["trend_attr"]
+    square = panel["pair_matrix"]
+    k = len(methods)
+
+    assert square["methods"] == methods
+    for name in ("p_holm", "mean_diff", "n_blocks", "dz"):
+        assert len(square[name]) == k
+        assert all(len(row) == k for row in square[name])
+        # The diagonal is never a comparison.
+        assert all(square[name][i][i] is None for i in range(k))
+
+    for i, j in [(a, b) for a in range(k) for b in range(k) if a != b]:
+        # Significance and block count belong to the unordered pair.
+        assert square["p_holm"][i][j] == square["p_holm"][j][i]
+        assert square["n_blocks"][i][j] == square["n_blocks"][j][i]
+        assert square["n_blocks"][i][j] == panel["n_models"]
+        # Difference and effect size are antisymmetric.
+        _assert_mirrors(square["mean_diff"][i][j], square["mean_diff"][j][i])
+        _assert_mirrors(square["dz"][i][j], square["dz"][j][i])
+        # Row minus column, against the panel's own per-method means.
+        assert square["mean_diff"][i][j] == pytest.approx(
+            panel["means"][methods[i]] - panel["means"][methods[j]]
+        )
+
+
+def test_pair_matrix_matches_the_stored_pair_map():
+    by_ms, models, methods = _by_ms(_full_grid())
+    block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
+    panel = block["panels"]["overall"]
+    square = panel["pair_matrix"]
+    # Every value is a re-orientation of the pair map, not a new quantity: the
+    # record under "a|b" is signed second-minus-first, i.e. cell (j, i).
+    for i, a in enumerate(methods):
+        for j, b in list(enumerate(methods))[i + 1:]:
+            rec = panel["pairwise_detail"][f"{a}|{b}"]
+            assert square["mean_diff"][j][i] == pytest.approx(rec["mean_diff"])
+            _assert_mirrors(square["dz"][i][j], rec["dz"])
+            assert square["p_holm"][i][j] == rec["p_holm"]
+            assert square["n_blocks"][i][j] == rec["n_blocks"]
+
+
+def test_untested_pair_is_none_not_zero():
+    # trend_attr's TV lines are exactly parallel across models, so every paired
+    # difference is identical, t is undefined and the pair carries no p_holm --
+    # the "not tested" state, which must stay distinguishable from a real 0.0.
+    by_ms, models, methods = _by_ms(_full_grid())
+    block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
+    panel = block["panels"]["trend_attr"]
+    square = panel["pair_matrix"]
+
+    untested = [
+        (i, j)
+        for i in range(len(methods)) for j in range(len(methods))
+        if i != j and panel["pairwise_detail"][
+            f"{methods[min(i, j)]}|{methods[max(i, j)]}"
+        ]["p_holm"] is None
+    ]
+    assert untested, "fixture no longer produces an untested pair"
+    for i, j in untested:
+        assert square["p_holm"][i][j] is None
+        assert square["dz"][i][j] is None
+        # The difference itself is still known, and is not zero.
+        assert square["mean_diff"][i][j] != 0.0
+
+
+def test_degenerate_panel_still_emits_an_all_none_pair_matrix():
+    # One model -> no paired blocks; the key must still be present and shaped.
+    combos = [
+        make_combo(slug=f"swedish_{strategy}_solo", strategy=strategy, model="solo",
+                   tv_by_attr={"trend_attr": _trend_tv(0, rank),
+                               "shift_attr": _shift_tv(0, rank)})
+        for rank, strategy in enumerate(STRATEGIES, start=1)
+    ]
+    by_ms, models, methods = _by_ms(combos)
+    block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
+    square = block["panels"]["trend_attr"]["pair_matrix"]
+
+    assert square["methods"] == methods
+    for name in ("p_holm", "mean_diff", "n_blocks", "dz"):
+        assert square[name] == [[None] * len(methods) for _ in methods]
+
+
+def test_pair_matrix_orients_the_confidence_interval_row_minus_column():
+    by_ms, models, methods = _by_ms(_full_grid())
+    block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
+    assert block["confidence_level"] == 0.95
+    panel = block["panels"]["shift_attr"]
+    square = panel["pair_matrix"]
+    k = len(methods)
+    tested = 0
+    for name in ("ci_low", "ci_high", "sd_diff"):
+        assert all(square[name][i][i] is None for i in range(k))
+    for i in range(k):
+        for j in range(k):
+            if i == j:
+                continue
+            assert square["sd_diff"][i][j] == square["sd_diff"][j][i]
+            _assert_mirrors(square["ci_low"][i][j], square["ci_high"][j][i])
+            if square["ci_low"][i][j] is None:
+                assert square["ci_high"][i][j] is None
+                continue
+            tested += 1
+            assert square["ci_low"][i][j] < square["mean_diff"][i][j] < square["ci_high"][i][j]
+    assert tested, "fixture no longer produces a tested pair with an interval"
+    # The record under "a|b" is second minus first, i.e. cell (j, i), unchanged.
+    for i, a in enumerate(methods):
+        for j, b in list(enumerate(methods))[i + 1:]:
+            rec = panel["pairwise_detail"][f"{a}|{b}"]
+            assert square["ci_low"][j][i] == rec["ci_low"]
+            assert square["ci_high"][j][i] == rec["ci_high"]
+            assert square["sd_diff"][i][j] == rec["sd_diff"]
+
+
+def test_identical_method_groups_detection():
+    from population_synthetic.analysis.method_significance.builder import (
+        _identical_method_groups,
+    )
+
+    rng = np.random.default_rng(7)
+    methods = ["m0", "m1", "m2", "m3", "m4"]
+    matrix = rng.uniform(size=(6, 5))
+    assert _identical_method_groups(matrix, methods) == []
+
+    two = matrix.copy()
+    two[:, 3] = two[:, 1]
+    assert _identical_method_groups(two, methods) == [["m1", "m3"]]
+
+    three = two.copy()
+    three[:, 4] = three[:, 1]
+    assert _identical_method_groups(three, methods) == [["m1", "m3", "m4"]]
+
+    split = matrix.copy()
+    split[:, 2] = split[:, 0]
+    split[:, 4] = split[:, 3]
+    assert _identical_method_groups(split, methods) == [["m0", "m2"], ["m3", "m4"]]
+
+    # Exact identity, no tolerance.
+    near = matrix.copy()
+    near[:, 1] = near[:, 0] + 1e-15
+    assert _identical_method_groups(near, methods) == []
+    assert _identical_method_groups(np.empty((0, 5)), methods) == []
+
+
+@pytest.mark.parametrize(
+    ("identical", "family_size", "groups"),
+    [
+        ([], 10, []),
+        ([(0, 1)], 9, [[0, 1]]),
+        ([(0, 1), (0, 2), (0, 3)], 4, [[0, 1, 2, 3]]),
+    ],
+)
+def test_panel_carries_groups_and_holm_family_size(identical, family_size, groups):
+    from population_synthetic.analysis.method_significance.builder import _method_panel
+
+    rng = np.random.default_rng(11)
+    matrix = rng.uniform(0.2, 0.8, size=(10, 5))
+    for source, target in identical:
+        matrix[:, target] = matrix[:, source]
+    methods = STRATEGIES
+    models = [f"model_{i}" for i in range(10)]
+    panel = _method_panel(matrix, methods, models, [], confidence_level=0.95)
+    assert panel["correction"]["family_size"] == family_size
+    assert panel["identical_method_groups"] == [[methods[i] for i in group] for group in groups]
+    assert family_size == sum(1 for rec in panel["pairwise_detail"].values() if rec["p_holm"] is not None)
+
+
+def test_block_carries_the_identical_methods_note():
+    by_ms, models, methods = _by_ms(_full_grid())
+    block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
+    assert isinstance(block["identical_methods_note"], str) and block["identical_methods_note"]
+    for panel in block["panels"].values():
+        assert isinstance(panel["identical_method_groups"], list)
+
+
+def test_block_without_a_confidence_level_raises():
+    by_ms, models, methods = _by_ms(_full_grid())
+    with pytest.raises(KeyError, match="confidence_level"):
+        _method_comparison(by_ms, models, ATTRS, methods, {"pairs_mode": "adjacent"}, CATEGORY_VALUES)
 
 
 # --------------------------------------------------------------------------- #

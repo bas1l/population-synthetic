@@ -156,6 +156,13 @@ CALLOUT = 10.0
 #: Axis titles: 10 pt, as the standard specifies.
 AXIS_TITLE = 10.0
 
+#: The axis title of a **strip** -- a figure at :data:`STRIP_HEIGHT` set entirely at the
+#: floor. At that height the standard's 10 pt axis title is the only text off the floor,
+#: and two type sizes on a canvas a sixth of a page tall read as a mistake rather than as
+#: a hierarchy. A role of its own rather than a borrowed :data:`TICK_LABEL`, so the name
+#: at the call site still says what the text is.
+STRIP_AXIS_TITLE = FONT_FLOOR_PT
+
 #: Panel headers: the standard's 11-12 pt bold band. :data:`PANEL_TITLE` heads one
 #: panel of a figure, :data:`FIGURE_TITLE` heads the whole canvas. Boldness is carried
 #: by the ``rcParams`` below, not by the size.
@@ -173,6 +180,7 @@ FONT_SCALE: dict[str, float] = {
     "ANNOTATION_LARGE": ANNOTATION_LARGE,
     "CALLOUT": CALLOUT,
     "AXIS_TITLE": AXIS_TITLE,
+    "STRIP_AXIS_TITLE": STRIP_AXIS_TITLE,
     "PANEL_TITLE": PANEL_TITLE,
     "FIGURE_TITLE": FIGURE_TITLE,
 }
@@ -237,6 +245,17 @@ SINGLE = cm_to_inches(8.9)
 
 #: Double-column target width (17.4 cm), for a figure spanning the text block.
 DOUBLE = cm_to_inches(17.4)
+
+#: The manuscript's text width (456 pt, about 16.1 cm): the width a figure is drawn at
+#: when it is placed at the width of the manuscript's own text block rather than at a
+#: venue's column. A manuscript rule, not a venue one, which is why it is stated in
+#: points; narrower than :data:`DOUBLE`, so it sits inside every venue's printable area.
+TEXT_WIDTH = 456.0 / POINTS_PER_INCH
+
+#: The height of a **strip** (150 pt, about 5.3 cm): a figure one text width wide and a
+#: sixth of a page tall, written at exactly this size (``save_figure(...,
+#: fixed_canvas=True)``) with every text at :data:`FONT_FLOOR_PT`.
+STRIP_HEIGHT = 150.0 / POINTS_PER_INCH
 
 #: The maximum printable width (19.05 cm). Not a target -- a ceiling. Every width the
 #: growth helpers return is clamped to it.
@@ -627,6 +646,18 @@ def house_rc_params() -> dict[str, Any]:
         "pdf.fonttype": 42,
         "ps.fonttype": 42,
         "ps.useafm": False,
+        # The SVG backend reads neither of the two above, and matplotlib's default
+        # ``'path'`` converts every glyph to an outline -- so the one format this layer
+        # emits *to be edited* arrived with no editable text in it at all: a heatmap's
+        # labels reached Inkscape as ~1700 anonymous shapes. ``'none'`` writes real
+        # ``<text>`` nodes naming the family instead.
+        #
+        # The face is therefore referenced, not embedded, and a host lacking the whole
+        # of FONT_STACK substitutes one with different metrics -- accepted, because the
+        # SVG is the working copy and the EPS above is the submission artifact, which
+        # keeps its embedded face. matplotlib offers no third option: the old
+        # ``'svgfont'`` embedding mode was removed.
+        "svg.fonttype": "none",
     }
 
 

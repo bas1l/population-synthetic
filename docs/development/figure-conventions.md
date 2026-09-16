@@ -28,6 +28,7 @@ and how it gets its number.
 | Strokes above the publisher's floor | `analysis/utils/style.py` | `MIN_STROKE_PT` and the stroke ladder below it |
 | 8-bit RGB, no alpha channel | `analysis/utils/style.py` | `house_rc_params()["savefig.transparent"] = False` |
 | Printable canvas | `analysis/utils/style.py`, checked on write in `figures.py` | `FULL` (width) and `MAX_HEIGHT`, via `_check_canvas` |
+| Manuscript text width and strip height (a manuscript rule, not a venue one) | `analysis/utils/style.py` | `TEXT_WIDTH` (456 pt) and `STRIP_HEIGHT` (150 pt); a strip's axis title is `STRIP_AXIS_TITLE`, at the floor |
 | File-size ceiling | `analysis/utils/figures.py` | `MAX_FILE_BYTES`, via `_check_file_size` |
 | Raster resolution | `analysis/utils/figures.py` | `RASTER_DPI` |
 
@@ -50,6 +51,33 @@ the format set then drifts between call sites, which is the state — half the l
 half emitting raster only — that this arrangement exists to end. **Extending `save_figure` is the
 only sanctioned way to add a format.**
 
+### Vector text is text, and each backend needs telling separately
+
+Every one of the three fonttype keys is pinned in `style.house_rc_params()` and re-installed at
+write time by `figures.EXPORT_RC_KEYS`, because all three are read by their backend when the file
+is written — not when the figure is drawn — and several chart modules return an unsaved `Figure`
+for their driver to save under whatever ambient `rcParams` happen to be installed.
+
+| Key | Pinned to | matplotlib's default, and what it costs |
+|-----|-----------|------------------------------------------|
+| `ps.fonttype` / `pdf.fonttype` | `42` | `3` — Type 3 charprocs instead of the embedded TrueType face |
+| `svg.fonttype` | `"none"` | `"path"` — every glyph converted to an outline |
+
+The two policies point in opposite directions, deliberately, because the two formats have opposite
+jobs. The EPS **embeds** its face: it leaves the repository, and a venue's renderer must not need
+Arial installed. The SVG **references** its face by name, so it arrives in Inkscape as real `<text>`
+nodes that can be retyped — which is the whole reason the layer emits an editing artifact at all.
+
+Under matplotlib's default the SVG delivered neither: a model x method heatmap reached Inkscape as
+~1700 anonymous `<use>` shapes with no `<text>` node and no family named anywhere in the file.
+The cost of the fix is that a host lacking every family in `style.FONT_STACK` substitutes one with
+different metrics, which can shift or overlap tight annotations — accepted, because the SVG is the
+working copy and the PNG beside it is the fixed visual reference. matplotlib offers no third
+option; its `svgfont` embedding mode was removed.
+
+Guarded by `tests/test_figures.py`, one test per direction, each pinning matplotlib's own default
+first so the test states the condition it guards against.
+
 ### Budgets are checked on the written bytes, and a rejection writes nothing
 
 All three formats are rendered to memory first. The canvas is measured from the EPS
@@ -64,6 +92,17 @@ tight box, which put a figure drawn exactly at the printable cap over it and mad
 vocabulary unreachable by construction. At zero the written canvas *is* the content extent, so it
 can exceed the cap only when an artist genuinely overflows the figure rectangle — which is the case
 worth failing on.
+
+**The fixed-canvas mode.** `save_figure(fig, path, fixed_canvas=True)` writes the figure at its own
+size instead of the tight box (`bbox_inches=None`). It exists for a figure laid out in absolute
+points to an exact size — today the reference-method gain forest at `TEXT_WIDTH` × `STRIP_HEIGHT`.
+The tight box is built from text *layout* boxes, and a rotated multi-line tick label's layout box
+is wider than its ink, so the tight crop wrote that 150 pt strip 156 pt tall although nothing was
+drawn past its edge. Nothing can grow in fixed mode to hold an overflowing artist, so the mode adds
+one check, `_check_ink_inside_canvas`: ink on an outermost row or column of the rendered PNG, or
+ink beyond the canvas in a second raster rendered over the union of the canvas and the tight box,
+raises `FigureBudgetExceeded` and nothing is written. The canvas and file-size checks run
+unchanged, and the default tight mode is byte-for-byte what it was.
 
 ### No transparency
 
@@ -99,9 +138,12 @@ reads as a doubled rule rather than as a gap.
 
 ### One ramp
 
-`palette.HEATMAP_CMAP` is `inferno` and it is the only ramp. It is perceptually uniform, monotone
-in lightness, and it matches the published manuscript tables, so the internal grids read as drafts
-of the published ones rather than as a separate visual language.
+`palette.HEATMAP_CMAP` is `inferno` and it is the ramp for every **magnitude** in the layer. It is
+perceptually uniform, monotone in lightness, and it matches the published manuscript tables, so the
+internal grids read as drafts of the published ones rather than as a separate visual language.
+
+There is exactly one sanctioned departure, `palette.SIGNIFICANCE_CMAP` (`Blues_r`), and it exists
+because a significance tier is not a magnitude. See "A tier is not a magnitude" below.
 
 A sequential ramp orders cells by **magnitude alone**. The two quantities in the layer that are
 genuinely two-sided — `realism_ranking`'s typicality statistic, read against the real population's
@@ -115,6 +157,41 @@ content.
 This is settled by
 [the 2026-08-12 ADR](decisions/2026-08-12-self-contained-typicality-axis.md), which rejected a
 diverging ramp. Introducing one requires an ADR superseding it.
+
+### Discrete levels come from the ramp, not from a second palette
+
+Some quantities are not continuous: a significance tier is one rung of a ladder a config file
+declares, and painting it on a continuous scale invites reading a `p` of 0.049 as meaningfully
+darker than one of 0.051. `palette.heatmap_levels(n)` returns an `n`-step resampling of a
+sequential ramp — the house ramp unless the caller names another — so a binned quantity stays in a
+single visual language instead of acquiring a palette of its own. It preserves `set_bad`, which is
+what keeps an unpainted cell legal — `grids` raises on a colormap whose missing colour is
+transparent.
+
+Its only sanctioned use is binning an **ordered** quantity. It is not a categorical-hue source: `n`
+steps of a sequential ramp read as "more" and "less", which is a lie about an unordered set.
+
+### A tier is not a magnitude
+
+The two `method_significance` grids — the method × method squares and the reference-method gap grid,
+and only those — bin `palette.SIGNIFICANCE_CMAP` (`Blues_r`) rather than the house ramp. They are
+the layer's only callers of `heatmap_levels` that pass a `name`.
+
+The reason is what they paint. A tier is an **ordinal grade** read off a ladder a config file
+declares: the rungs are ranked, but the distance between two of them is not a number. Inferno runs
+black → purple → red → orange → yellow, and a hue change of that size between adjacent steps invites
+reading the ladder as a set of *kinds* — the red tier, the yellow tier — when the only relation
+between them is more and less. `Blues_r` is a single hue, so brightness alone carries the ordering,
+and it is reversed, so the darkest step is the most significant rung (`****`) and the palest is `ns`.
+
+The palest **painted** step also has to stay clear of `palette.MISSING_COLOR`, the unpainted
+"never tested" fill, because those two states are different findings (see the four-state table
+below). `Blues_r` ends at `#f7fbff`, near white and unmistakable against the `#DDDDDD` grey.
+`Greys_r` was rejected for exactly this: its fourth step lands on top of that grey.
+
+Annotation colour needs no adjustment for the change. `palette.text_color_on` asks the mappable
+what it actually painted and picks white or black by WCAG relative luminance, so the two dark rungs
+take white text and the three light ones black, without a threshold tuned to any one ramp.
 
 ---
 
@@ -194,6 +271,14 @@ Two properties are deliberate:
 graphic rather than deferred to the caption. `labels.method_key_lines()` supplies it; captions
 repeat it. A figure that prints letters without printing the key is incomplete.
 
+**One recorded exception: the reference-method gain forest.** `{country}_reference_method_gain_forest`
+prints letters in its legend and axis label and carries no method key — and no title and no
+significance key either. All three are in its manuscript caption. The reason is the canvas: the
+strip is 150 pt tall (`STRIP_HEIGHT`) with every text at the 8 pt floor, and a method key plus a
+star key would take two 8 pt lines, about 19 pt of the 150, which the plot cannot give up. The
+exception is this figure's alone; it does not relax the rule for any other figure, and a figure
+with room for the key prints it.
+
 The families, simplest first, are the order `_families.yaml` declares. Read that file for the
 current assignment — it is the source, and this page deliberately keeps no second copy.
 
@@ -221,14 +306,14 @@ frozen `GridVariant` record (`analysis/utils/grid_variants.py`), because a clean
 ### The unsuffixed filename is the clean figure
 
 Every grid family that publishes variants writes **two** files from one renderer, and the naming is
-the same for all five:
+the same for all six:
 
 | File | What a cell prints |
 |------|--------------------|
 | `{stem}.{png,svg,eps}` | the value alone — the **camera-ready** figure, the one the manuscript and the deck reference |
 | `{stem}_with_counts.{png,svg,eps}` | the same value over the count it rests on |
 
-The rule is one function, `grid_variants.variant_suffixes()`, so five drivers cannot drift into five
+The rule is one function, `grid_variants.variant_suffixes()`, so six drivers cannot drift into six
 naming schemes; a driver enumerates a family's `GRID_VARIANTS` instead of naming its variants, and
 adding a third publishes it without a CLI change. A family whose map carries no `clean` variant
 raises rather than promoting an arbitrary one into the name every downstream reference resolves to.
@@ -253,6 +338,113 @@ Dropping a line frees vertical room, which a variant may spend by moving one ste
 scale; it may never be spent the other way, and no annotation goes below `FONT_FLOOR_PT`. A cell
 carrying an inline qualifier is bound by the cell's *width* rather than by the line it dropped, so
 it keeps its size.
+
+### The method × method squares, and why "not tested" is not "not significant"
+
+`method_significance` draws the sixth family: one square per analysed category plus the pooled
+`overall` panel, written into `{country}_method_pair_significance/` as `{panel}.{png,svg,eps}` and
+its `{panel}_with_counts` sibling. It exists because the bracket figure beside it draws only the
+pairs its configured `pairs_mode` selects — four of ten on the live five-method axis — while all
+ten are computed and Holm-corrected. The square shows the other six.
+
+Its two channels are deliberately different, and that difference is the family's whole design. The
+**fill** is the pair's significance tier, binned onto the config's own star ladder through
+`palette.heatmap_levels` on `palette.SIGNIFICANCE_CMAP`, darkest rung most significant, and it is
+*symmetric* across the diagonal. The **text** is the signed row-minus-column difference in TV
+similarity, and it is *antisymmetric*. Direction therefore lives
+in the annotation, per the one-ramp rule above; the sign convention itself is oriented upstream, in
+`builder._method_panel`, so the renderer reads cell `(i, j)` and negates nothing. The `with_counts`
+variant adds each pair's paired-block count, which is the diagnostic reading, not the published one.
+
+Four cell states, and collapsing any two of them is a correctness failure rather than a cosmetic
+one:
+
+| State | Fill | Text |
+|-------|------|------|
+| tested, significant at some tier | the tier's level on the single-hue significance ramp | the signed difference and the tier's symbol |
+| tested, not significant | the palest **painted** level | the signed difference and the `ns` symbol |
+| never tested — a degenerate panel, or too few paired blocks | **unpainted** (`set_bad`) | the policy's `absent_text` mark |
+| the diagonal — a method against itself | unpainted (`set_bad`) | nothing at all |
+
+A pair that was never tested carries no evidence; a pair tested and reported `ns` carries evidence
+of no difference. Painting the first as the second would report a finding the analysis never made,
+which is why the two differ in *fill* and the diagonal is separated from both by carrying no text.
+The in-figure key states each of those readings, so the distinction survives the figure leaving the
+repository.
+
+### The reference-method gap grid, and why its sign runs the other way
+
+The squares are per category: fifteen files, each showing every method pair on one demographic
+axis. `{country}_reference_method_gap` is the seventh family and the summary of them — one figure
+for the whole run, rows the simpler methods, columns every analysed category with the pooled
+`overall` panel last, and each cell the **reference method** against that row's method on that
+category. Fill, ladder, levels and the four cell states are the squares'; there is no diagonal,
+because the two axes are different things.
+
+Two properties are the family's own.
+
+The reference method is **derived, never named**: it is the last entry of the run's
+`method_order`, the most complex method under the config-resolved complexity ordering, and it is
+labelled by its letter and family phrase — so retiring a family, adding one, or running both
+strategy versions re-points the figure without an edit, and the letters become `A1/A2/…` on their
+own.
+
+And its cells read **reference minus row**, the opposite orientation from the squares'
+row-minus-column, because the question this figure asks is what the hardest method *gains*. The
+inversion costs nothing in the renderer: `pair_matrix` already stores both orders, so the figure
+reads the other index pair rather than negating anything, and the sign convention still has exactly
+one home in `builder._method_panel`. Because two figures in one process folder then carry opposite
+orientations, the in-figure key names this one's explicitly — it is the one place a reader could
+otherwise carry an assumption from the figure beside it.
+
+The omnibus is per column here rather than per figure, so it travels under each column heading
+instead of in the title, and the test that produced it is named once in the key rather than fifteen
+times — the same ink economy that puts a constant denominator in the `_with_counts` sibling. A
+category whose panel is flagged `insufficient_n` keeps its column, unpainted and marked, and is
+logged with the panel's own note: blanking it would drop the category from the figure's own axis
+and read as "analysed, nothing separated".
+
+### The reference-method gain forest, and why it has no caption in the graphic
+
+`{country}_reference_method_gain_forest` draws the gap grid's contrasts a second way: as a forest
+on one common axis, so the reader sees each gain's **size and its uncertainty** together — a large
+but imprecise gain and a small, tight one no longer print as two numbers under the same fill. One
+column per analysed category, in the scheme's order, with no pooled Overall column; one marker per
+simpler method at `pair_matrix["mean_diff"][reference][method]` — reference minus method, the gap
+grid's orientation — with that pair's confidence interval as a vertical bar. Above the plot a track
+prints each category's omnibus statistic, partial η² and BH-corrected p. The strip is 456 × 150 pt,
+written in fixed-canvas mode, with every text at 8 pt.
+
+**The interval is data.** `stats_tests.paired_t_pairwise` emits `sd_diff`, `ci_low` and `ci_high`
+per pair at `confidence_level` from `config/analysis/method_significance/comparison.json` (a t
+interval, on the same normality assumption as the paired t beside it), and `builder._pair_matrices`
+orients them like `mean_diff`. A pair whose paired differences are all identical has `sd_diff = 0`
+and no interval — an absent state, never a zero-width bar.
+
+**Three marker states.** Filled: the Holm-corrected pair reaches the config's loosest star cutoff.
+Open, with a bar and a symbol: tested, not significant (`ns`). Open, with **no bar and no symbol**:
+the test is undefined. That last one is not drawn as `ns`, for the reason the squares keep "not
+tested" apart from "not significant".
+
+**Why the Holm family is ten pairs, not four.** The symbol above a bar is the pair's `p_holm` from
+the full per-category family — every defined method pair, as the squares and the gap grid print —
+not a correction over the four reference contrasts the strip draws. A family narrowed to what a
+figure shows would make one pair's reported p depend on which figure it was read from.
+
+**Labels are vertical, ink-centred, and move only upwards.** Each symbol is set at 90° on its bar's
+top, shifted by its glyph *ink* centre (measured on the outlines, because the layout box of `*` is
+lopsided) so it sits on its marker's x within half a point. A label that would touch another label,
+another bar or marker, or its own marker is lifted vertically until clear; the y range and the
+plot's bottom edge are then solved so the highest ink sits under the frame and the lowest tick-label
+glyph clears the canvas bottom. Either solve raises rather than accept an overlap or a clip.
+
+**No title, key or caveat in the graphic.** At 150 pt all of them live in the manuscript caption
+(the recorded exception under *Generation methods render as A–E*). The caveat still travels as data:
+each panel carries `identical_method_groups` — methods whose per-model TV-similarity is
+bit-identical on that category, detected generically — and the block carries the
+`identical_methods_note` clause. `analyze_method_significance.py` prints one line per affected
+category for whoever writes the caption. The builder states the fact it can see, never its cause:
+why two methods coincide needs the mapped populations, which the builder does not read.
 
 ---
 

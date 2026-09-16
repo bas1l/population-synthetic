@@ -101,6 +101,21 @@ python scripts/analyze/rank_models.py --country swedish --per-attribute-charts
 # ({country}_method_comparison.json/.csv: per-category + Overall Friedman omnibus & Nemenyi pairwise
 # p, models as blocks) and the significance-bracket figures ({country}_method_comparison.png/.svg
 # grid + {country}_method_comparison_overall.png/.svg): bars + model points + pairwise brackets/stars.
+# Alongside those, {country}_method_pair_significance/ holds one method × method square per analysed
+# category plus the pooled Overall panel, in the layer's two grid variants ({panel}.png/.svg/.eps
+# and {panel}_with_counts.*): cell fill is the pair's Holm-corrected significance tier, cell text the
+# signed row-minus-column TV difference -- so it shows all k(k-1)/2 pairs, not only the ones the
+# bracket figure's configured pairs_mode draws. {country}_reference_method_gap.png/.svg/.eps (+ its
+# _with_counts sibling) is the summary of those squares: one grid for the whole run, rows = the
+# simpler methods, columns = every analysed category + Overall, cell = the most complex method
+# (derived from the method axis, never named in code) against that row's method. Same fill, but the
+# text is REFERENCE minus row -- the opposite orientation, stated in that figure's own key.
+# {country}_reference_method_gain_forest.png/.svg/.eps draws those same reference contrasts as a
+# 456 × 150 pt strip: per analysed category (no Overall), the reference minus each simpler method
+# with its confidence interval and Holm significance symbol, under an omnibus track. It has no
+# title, key or caveat in the graphic; the run prints the identical-method caveat lines for its
+# caption. JSON written before the confidence intervals existed lacks the keys it reads -- rerun
+# with --force.
 python scripts/analyze/analyze_method_significance.py --country swedish
 
 # Extract demographic profiles from a pipeline output tree into a single population file

@@ -172,9 +172,31 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
   complete-case models, BH-FDR corrected across categories. `charts.py::plot_method_comparison` renders
   it as the publication **significance-bracket figure** (bars = per-method mean TV-similarity + model
   points + paired lines, pairwise brackets/stars over the configured pairs, in-figure star key; a
-  per-category grid and a standalone Overall panel, PNG + SVG). `builder.py` (`build_method_significance`
+  per-category grid and a standalone Overall panel, PNG + SVG). The pairs that figure's `pairs_mode`
+  leaves undrawn are nonetheless computed and Holm-corrected, so `charts.py::plot_method_pair_significance`
+  publishes the full square as well: one method × method grid per category plus Overall under
+  `{country}_method_pair_significance/`, in the layer's two grid variants, with the pair's
+  significance tier as the fill (symmetric) and the signed row-minus-column TV difference as the text
+  (antisymmetric, oriented once in `builder.py::_method_panel`'s `pair_matrix` block so the renderer
+  performs no arithmetic). `charts.py::plot_reference_method_gap` is the summary of those squares --
+  one grid for the whole run at `{country}_reference_method_gap`, rows the simpler methods, columns
+  every analysed category plus Overall, each cell the **reference** method (the last of the
+  complexity-ordered `method_order`, derived rather than named) against that row's method. It reads
+  the *other* index pair of the same oriented block, so its text is reference-minus-row and its key
+  says so. `charts.py::plot_reference_method_gain_forest` draws the same reference contrasts as a
+  forest at `{country}_reference_method_gain_forest`: one column per analysed category (no Overall),
+  one marker per simpler method at the reference-minus-method gain with its confidence interval as a
+  bar, filled when the Holm-corrected pair is significant, and an omnibus track (statistic, partial
+  η², BH p) above. The interval is not computed in the chart: `utils/stats_tests.py::paired_t_pairwise`
+  emits `sd_diff`, `ci_low` and `ci_high` per pair at the config's `confidence_level`, and
+  `_pair_matrices` orients them like `mean_diff`. Each panel also carries `identical_method_groups`
+  (methods whose per-model TV-similarity columns are bit-identical, detected generically) and
+  `correction.family_size` (the pairs that entered Holm), and the block carries the
+  `identical_methods_note` clause the driver prints for the caption, since that strip carries no
+  caveat in the graphic. `builder.py` (`build_method_significance`
   + JSON/CSV writers), `charts.py` (per-attribute trend facets, slope heatmap, CD diagram,
-  factor-dominance bar, method-comparison figure). Needs the optional `[analysis]` extra
+  factor-dominance bar, method-comparison figure, pair-significance squares, reference-method gap
+  grid, reference-method gain forest). Needs the optional `[analysis]` extra
   (statsmodels + scikit-posthocs).
 - **`real_population_stats/`** -- Standalone real-only reference statistics (sits after the cap
   stage; driven by `analyze_real_population_stats.py`, depends on `population_cap`, reading the capped
@@ -333,9 +355,15 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
     `STAGE_SERIES` / `SEVERITY_SERIES` / `HOST_COLORS`, the named furniture and text greys
     (`ANNOTATION_GREY`, `CAPTION_GREY`, `GRID_RULE`, `CELL_STROKE`, `BAR_EDGE`, ...), and the ramp:
     `HEATMAP_CMAP`
-    (`inferno`, matching the published `{country}_models_table` manuscript figures), `MISSING_COLOR`
+    (`inferno`, matching the published `{country}_models_table` manuscript figures),
+    `SIGNIFICANCE_CMAP` (`Blues_r`, the one sanctioned departure: a significance tier is an ordinal
+    grade, not a magnitude, so a single hue carries it by brightness alone, reversed so the darkest
+    step is the most significant rung), `MISSING_COLOR`
     for the off-ramp "never measured" fill, `heatmap_cmap()` (a private copy with `set_bad`, because
-    matplotlib hands every caller the same registry object), and `text_color_on(im, value)`, which
+    matplotlib hands every caller the same registry object), `heatmap_levels(n)` (that copy resampled
+    to `n` discrete steps, `set_bad` preserved, for a quantity binned onto an **ordered** ladder such
+    as `method_significance`'s star tiers -- never a categorical-hue source), and
+    `text_color_on(im, value)`, which
     picks white/black annotation text from the colour the mappable *actually painted*, by WCAG
     relative luminance on linearised sRGB -- the BT.601 weights on gamma-encoded values it replaced
     left sampled points below the AA 4.5:1 floor. That

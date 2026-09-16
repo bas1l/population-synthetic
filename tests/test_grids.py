@@ -37,6 +37,7 @@ from population_synthetic.analysis.utils.grid_annotations import (  # noqa: E402
     RateOnlyPolicy,
     RateWithCountsPolicy,
     SignedValuePolicy,
+    SignedValueWithStarsPolicy,
 )
 from population_synthetic.analysis.utils.grids import (  # noqa: E402
     CELL_STROKE_WIDTH,
@@ -55,6 +56,8 @@ _ALL_POLICIES = (
     RateWithCountsPolicy(),
     RateOnlyPolicy(),
     SignedValuePolicy(),
+    SignedValueWithStarsPolicy(),
+    SignedValueWithStarsPolicy(count_key="n"),
     NoAnnotationPolicy(),
 )
 
@@ -160,6 +163,67 @@ def test_qualifier_is_read_from_the_record_never_derived() -> None:
     ) == "0.328  (-0.071)\nn=42"
 
 
+def test_the_star_policy_declares_the_count_only_when_the_caller_asked_for_it() -> None:
+    """The clean variant and its counted sibling differ by exactly one declared key."""
+    clean = SignedValueWithStarsPolicy()
+    counted = SignedValueWithStarsPolicy(count_key="n")
+
+    assert clean.required_keys == frozenset({"value", "stars"})
+    assert counted.required_keys == frozenset({"value", "stars", "n"})
+
+
+def test_the_star_policy_always_prints_the_sign() -> None:
+    """The fill is symmetric across the diagonal, so only the sign says which way it ran.
+
+    A square of pairwise comparisons paints ``(i, j)`` and ``(j, i)`` the same colour --
+    the tier is a property of the pair, not of its order. Dropping the sign would leave
+    the two cells indistinguishable while the figure claims to show a direction.
+    """
+    policy = SignedValueWithStarsPolicy()
+
+    assert policy.text({"value": 0.031, "stars": "***"}) == "+0.031\n***"
+    assert policy.text({"value": -0.031, "stars": "ns"}) == "-0.031\nns"
+    assert policy.text({"value": 0.0, "stars": "ns"}) == "+0.000\nns"
+
+
+def test_the_star_policy_prints_the_count_beneath_the_symbol() -> None:
+    counted = SignedValueWithStarsPolicy(count_key="n")
+    assert counted.text({"value": 0.031, "stars": "**", "n": 12}) == "+0.031\n**\nn=12"
+
+
+def test_an_untested_pair_is_marked_rather_than_starred() -> None:
+    """"Not tested" and "tested, not significant" are different findings.
+
+    Both cells would be handed to the same policy, and the untested one is unpainted, so
+    the fill cannot separate them either. The mark on its own line -- with neither symbol
+    nor count beneath it, which would each imply a test that never ran -- is the only
+    thing that does.
+    """
+    clean = SignedValueWithStarsPolicy()
+    counted = SignedValueWithStarsPolicy(count_key="n")
+
+    assert clean.text({"value": None, "stars": None}) == "—"
+    assert counted.text({"value": None, "stars": None, "n": None}) == "—"
+    assert clean.text({"value": 0.004, "stars": "ns"}) == "+0.004\nns"
+
+
+def test_the_star_policy_can_be_asked_to_treat_an_absent_value_as_an_error() -> None:
+    """The default marks the cell; a caller with no wording for it declares ``None``."""
+    with pytest.raises(MissingCellValue, match="absent_text"):
+        SignedValueWithStarsPolicy(absent_text=None).text({"value": None, "stars": "ns"})
+
+
+def test_a_measured_cell_missing_its_symbol_raises_rather_than_printing_none() -> None:
+    """A record claiming a value while withholding what is printed beside it is broken."""
+    with pytest.raises(MissingCellValue, match="'stars' = None"):
+        SignedValueWithStarsPolicy().text({"value": 0.031, "stars": None})
+
+    with pytest.raises(MissingCellValue, match="'n' = None"):
+        SignedValueWithStarsPolicy(count_key="n").text(
+            {"value": 0.031, "stars": "**", "n": None}
+        )
+
+
 # --------------------------------------------------------------------------- #
 # the contract the renderer enforces                                            #
 # --------------------------------------------------------------------------- #
@@ -188,6 +252,32 @@ def test_a_mismatched_cell_record_raises_rather_than_rendering_blank() -> None:
     message = str(excinfo.value)
     assert "'rate'" in message and "'numerator'" in message
     assert "'value'" in message
+    plt.close(fig)
+
+
+def test_a_star_record_without_its_symbol_is_caught_at_the_renderer_boundary() -> None:
+    """The declaration is enforced for the star policy too, naming policy and cell.
+
+    A pairwise square whose builder stopped emitting the symbol would otherwise render
+    with the fill intact and the text silently reduced to bare differences -- a figure
+    that looks finished while having dropped the channel it was drawn for.
+    """
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(3.0, 2.0))
+    cells = [[{"value": 0.03, "n": 12}]]
+    with pytest.raises(CellRecordMismatch) as excinfo:
+        render_grid(
+            ax, np.array([[0.03]]), cells,
+            policy=SignedValueWithStarsPolicy(count_key="n"),
+            cmap=heatmap_cmap(),
+            norm=mcolors.Normalize(vmin=0.0, vmax=1.0),
+        )
+    message = str(excinfo.value)
+    assert "SignedValueWithStarsPolicy" in message
+    assert "row 0, column 0" in message
+    assert "'stars'" in message
     plt.close(fig)
 
 
@@ -554,7 +644,9 @@ def _assert_clean_drops_only_the_count_line(counted, clean, label: str) -> None:
     assert set(counted_texts) == set(clean_texts), label
     dropped = 0
     for position, text in counted_texts.items():
-        head, _, tail = text.partition("\n")
+        # The count is the LAST line of a cell, whatever precedes it: one family prints
+        # it under a bare value, another under a value and the symbol qualifying it.
+        head, _, tail = text.rpartition("\n")
         if clean_texts[position] == text:
             # A cell the caller wrote rather than the policy -- "not generated", the real
             # population's own band -- reads the same on both, which is the point: only
@@ -732,6 +824,50 @@ def _variant_pairs():
         )):
             yield f"generation_metadata::metric_heatmap[{index}]", counted, clean
 
+        # The method x method pairwise-significance square. Built from the serialised
+        # block rather than from a fitted grid: the renderer is a pure consumer of it,
+        # and that block is the only place a test can state which pairs were never
+        # tested -- the cell state this family exists to keep distinct.
+        import population_synthetic.analysis.method_significance.charts as pair_mod
+        from tests import _method_significance_fixtures as ms_fixtures
+
+        pair_methods = ms_fixtures.FIVE_METHODS
+        pair_result = ms_fixtures.result(pair_methods, {
+            "overall": ms_fixtures.panel(
+                pair_methods, ms_fixtures.significant_pairs(pair_methods),
+            ),
+        })
+        pair_figures = _capture_saved(
+            pair_mod,
+            lambda: pair_mod.plot_method_pair_significance(pair_result, "unused"),
+        )
+        pair_by_variant = dict(zip(pair_mod.GRID_VARIANTS, pair_figures))
+        yield (
+            "method_significance::plot_method_pair_significance",
+            pair_by_variant[pair_mod.GRID_VARIANT_WITH_COUNTS.name],
+            pair_by_variant[pair_mod.GRID_VARIANT_CLEAN.name],
+        )
+
+        # The reference-method gap grid, from the same block: one figure for the whole
+        # run, and the one family in the layer whose cell text is oriented the other way
+        # round. Substitutability is a property of the pair either way.
+        gap_result = ms_fixtures.result(pair_methods, {
+            attr: ms_fixtures.panel(
+                pair_methods, ms_fixtures.significant_pairs(pair_methods),
+            )
+            for attr in (*ms_fixtures.ATTRIBUTES, "overall")
+        })
+        gap_figures = _capture_saved(
+            pair_mod,
+            lambda: pair_mod.plot_reference_method_gap(gap_result, "unused.png"),
+        )
+        gap_by_variant = dict(zip(pair_mod.REFERENCE_GRID_VARIANTS, gap_figures))
+        yield (
+            "method_significance::plot_reference_method_gap",
+            gap_by_variant[pair_mod.REFERENCE_GRID_VARIANT_WITH_COUNTS.name],
+            gap_by_variant[pair_mod.REFERENCE_GRID_VARIANT_CLEAN.name],
+        )
+
 
 @pytest.fixture(scope="module")
 def variant_pairs():
@@ -749,6 +885,7 @@ def test_every_grid_family_publishes_a_variant_pair(variant_pairs) -> None:
     families = {label.split("::")[0] for label, _counted, _clean in variant_pairs}
     assert families == {
         "validation_attrition", "model_ranking", "realism_ranking", "generation_metadata",
+        "method_significance",
     }
 
 
@@ -767,6 +904,7 @@ def test_the_clean_variant_of_every_grid_drops_only_the_count_line(variant_pairs
 def _variant_maps():
     """Every family's variant map, as ``(label, map)``."""
     import population_synthetic.analysis.generation_metadata.charts as gm_mod
+    import population_synthetic.analysis.method_significance.charts as pair_mod
     import population_synthetic.analysis.model_ranking.charts as ranking_mod
     import population_synthetic.analysis.realism_ranking.charts as realism_mod
     import population_synthetic.analysis.validation_attrition.charts as attrition_mod
@@ -777,11 +915,13 @@ def _variant_maps():
         ("realism_ranking::rate", realism_mod.RATE_GRID_VARIANTS),
         ("realism_ranking::typicality", realism_mod.TYPICALITY_GRID_VARIANTS),
         ("generation_metadata", gm_mod.GRID_VARIANTS),
+        ("method_significance", pair_mod.GRID_VARIANTS),
+        ("method_significance::reference_gap", pair_mod.REFERENCE_GRID_VARIANTS),
     ]
 
 
 def test_every_family_names_the_canonical_variant_the_same_way() -> None:
-    """One naming rule across five families, so no driver invents a sixth."""
+    """One naming rule across every family, so no driver invents one of its own."""
     from population_synthetic.analysis.utils.grid_variants import (
         CANONICAL_VARIANT,
         COUNTED_VARIANT,
