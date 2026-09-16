@@ -11,6 +11,7 @@ scikit-posthocs).
 
 from __future__ import annotations
 
+import colorsys
 import logging
 from pathlib import Path
 
@@ -20,6 +21,8 @@ pytest.importorskip("statsmodels")
 pytest.importorskip("scikit_posthocs")
 matplotlib = pytest.importorskip("matplotlib")
 matplotlib.use("Agg")
+
+import matplotlib.colors as mcolors  # noqa: E402
 
 import population_synthetic.analysis.method_significance.charts as charts_module  # noqa: E402
 from population_synthetic.analysis.method_significance.builder import (  # noqa: E402
@@ -39,6 +42,13 @@ from population_synthetic.analysis.utils.labels import (  # noqa: E402
     attribute_label,
     method_key_lines,
     method_letters,
+)
+from population_synthetic.analysis.utils.palette import (  # noqa: E402
+    HEATMAP_CMAP,
+    MISSING_COLOR,
+    SIGNIFICANCE_CMAP,
+    heatmap_levels,
+    relative_luminance,
 )
 from tests import _method_significance_fixtures as ms_fixtures  # noqa: E402
 from tests._performance_fixtures import make_combo  # noqa: E402
@@ -589,3 +599,134 @@ def test_a_tested_comparison_with_no_difference_to_print_raises(tmp_path):
 
     with pytest.raises(ValueError, match="no mean difference"):
         plot_reference_method_gap(result, tmp_path / _GAP_STEM)
+
+
+# ------------------------------------------------------------------
+# The ramp the two grids share
+# ------------------------------------------------------------------
+#
+# Both grids paint an *ordinal grade* rather than a magnitude, which is why they are the
+# layer's only departure from the house ramp. The properties below are what make the
+# departure worth having, so each is asserted on the mappable the renderer actually
+# built rather than on the constant it was built from.
+
+
+def _significance_steps():
+    """The RGB the ladder's rungs are painted, in ladder order (most significant first)."""
+    ladder = charts_module._star_ladder(
+        ms_fixtures.star_thresholds(), ms_fixtures.ns_symbol(),
+    )
+    cmap = heatmap_levels(len(ladder), name=SIGNIFICANCE_CMAP)
+    return ladder, [cmap(i)[:3] for i in range(len(ladder))]
+
+
+@pytest.mark.parametrize("draw", [
+    pytest.param(_draw_one, id="pair_squares"),
+    pytest.param(_draw_gap, id="reference_gap"),
+])
+def test_both_significance_grids_paint_on_the_significance_ramp(tmp_path, draw):
+    """Not the house ramp: a tier is an ordinal grade, and inferno's hue changes read
+    as changes of kind rather than of degree.
+
+    Asserted on the drawn mappable, so a call site left on the default would fail here
+    rather than only in the picture. Both grids are checked because a cell is meant to
+    read the same in either figure.
+    """
+    methods = ms_fixtures.FIVE_METHODS
+    pairs = ms_fixtures.significant_pairs(methods)
+    result = (
+        ms_fixtures.result(methods, {"overall": ms_fixtures.panel(methods, pairs)})
+        if draw is _draw_one
+        else _gap_result(methods, pairs)
+    )
+
+    _paths, figures = draw(result, tmp_path)
+    cmap = figures[0].axes[0].get_images()[0].cmap
+
+    assert cmap.name == SIGNIFICANCE_CMAP
+    assert cmap.name != HEATMAP_CMAP
+    ladder, _steps = _significance_steps()
+    assert cmap.N == len(ladder)
+
+
+def test_the_significance_ramp_darkens_towards_the_most_significant_rung():
+    """Brightness alone carries the ladder, and it runs the right way round.
+
+    Index 0 of the ladder is ``****``. A ramp that brightened towards it would paint the
+    strongest finding as the faintest cell -- the reading every other grid in the layer
+    gives to its lowest value.
+    """
+    ladder, steps = _significance_steps()
+    luminances = [relative_luminance(rgb) for rgb in steps]
+
+    assert ladder[0] == "****" and ladder[-1] == ms_fixtures.ns_symbol()
+    assert luminances == sorted(luminances)
+    assert all(a < b for a, b in zip(luminances, luminances[1:]))
+    # The palest painted rung stays clearly lighter than the unpainted "never tested"
+    # grey, because those are different findings the grids draw differently on purpose.
+    assert luminances[-1] > relative_luminance(mcolors.to_rgb(MISSING_COLOR))
+
+
+def test_the_significance_ramp_is_a_single_hue():
+    """One hue, so no step can be told from its neighbour by anything but its darkness.
+
+    A multi-hue ramp invites reading the ladder as a set of kinds -- the red tier, the
+    yellow tier -- when the only relation between the rungs is more and less.
+    """
+    _ladder, steps = _significance_steps()
+    hues = [colorsys.rgb_to_hls(*rgb)[0] * 360.0 for rgb in steps]
+
+    assert max(hues) - min(hues) < 30.0
+
+
+@pytest.mark.parametrize("draw", [
+    pytest.param(_draw_one, id="pair_squares"),
+    pytest.param(_draw_gap, id="reference_gap"),
+])
+def test_the_cell_text_stays_legible_at_both_ends_of_the_ramp(tmp_path, draw):
+    """Derived from the painted colour, never hardcoded: white on the darkest rung,
+    black on the palest.
+
+    A ramp change that left an annotation colour behind produces a figure that renders
+    without error and cannot be read, so the two extreme rungs are drawn together and
+    both are checked.
+    """
+    methods = ms_fixtures.FIVE_METHODS
+    ladder = charts_module._star_ladder(
+        ms_fixtures.star_thresholds(), ms_fixtures.ns_symbol(),
+    )
+    # The tightest configured cutoff lands on the darkest rung; a p of 0.9 on the palest.
+    # Two cells carry it, because the two figures read opposite index pairs of the same
+    # matrix: the square draws (0, 1), the gap grid the reference against row 0.
+    strongest = min(float(entry["max_p"]) for entry in ms_fixtures.star_thresholds())
+    pairs = ms_fixtures.significant_pairs(methods, p=0.9)
+    pairs[(0, 1)] = (strongest, 0.02, 6)
+    pairs[(0, len(methods) - 1)] = (strongest, 0.02, 6)
+    result = (
+        ms_fixtures.result(methods, {"overall": ms_fixtures.panel(methods, pairs)})
+        if draw is _draw_one
+        else _gap_result(methods, pairs)
+    )
+
+    _paths, figures = draw(result, tmp_path)
+    ax = figures[0].axes[0]
+    painted = ax.get_images()[0].get_array()
+    colors = {
+        tuple(text.get_position()): text.get_color() for text in ax.texts
+    }
+
+    darkest = 0
+    palest = ladder.index(ms_fixtures.ns_symbol())
+    seen = set()
+    for (x, y), color in colors.items():
+        j, i = int(round(x)), int(round(y))
+        if painted.mask[i, j]:
+            continue
+        tier = int(painted[i, j])
+        if tier == darkest:
+            assert color == "white"
+            seen.add("dark")
+        elif tier == palest:
+            assert color == "black"
+            seen.add("pale")
+    assert seen == {"dark", "pale"}

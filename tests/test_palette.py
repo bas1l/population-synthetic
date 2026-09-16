@@ -10,6 +10,7 @@ rather than by a threshold tuned to one ramp.
 
 from __future__ import annotations
 
+import colorsys
 from pathlib import Path
 
 import matplotlib
@@ -29,6 +30,7 @@ from population_synthetic.analysis.utils.palette import (  # noqa: E402
     MISSING_COLOR,
     ORDERED_QUALITATIVE_SERIES,
     SEVERITY_SERIES,
+    SIGNIFICANCE_CMAP,
     STAGE_SERIES,
     SURFACE,
     heatmap_cmap,
@@ -217,10 +219,40 @@ def test_host_colours_are_slots_of_the_house_series():
     assert HOST_COLORS["local"] == CATEGORICAL_SERIES[3]
 
 
-def test_the_sequential_ramp_is_the_only_ramp():
+def test_the_sequential_ramp_is_the_only_magnitude_ramp():
     """Settled by ADR 2026-08-12: one house ramp, off-ramp grey for the unmeasured cells."""
     assert HEATMAP_CMAP == "inferno"
     assert MISSING_COLOR == "#DDDDDD"
+
+
+def test_the_significance_ramp_is_single_hue_and_darkest_where_it_matters_most():
+    """The one sanctioned departure from the house ramp, and why it is worth having.
+
+    A significance tier is an ordinal grade read off a config-declared ladder, not a
+    magnitude: the rungs are ranked but the gap between two of them is not a number.
+    A multi-hue ramp invites reading them as kinds rather than as degrees, so this one
+    is a single hue that carries the ordering by brightness alone, reversed so the
+    darkest step is the most significant rung.
+
+    All three properties are asserted rather than assumed, because each fails silently:
+    a ramp swapped for a multi-hue one still renders, and one left un-reversed paints
+    the strongest finding as the faintest cell.
+    """
+    assert SIGNIFICANCE_CMAP == "Blues_r"
+    assert SIGNIFICANCE_CMAP != HEATMAP_CMAP
+
+    steps = [heatmap_levels(5, name=SIGNIFICANCE_CMAP)(i)[:3] for i in range(5)]
+    luminances = [relative_luminance(rgb) for rgb in steps]
+    assert all(a < b for a, b in zip(luminances, luminances[1:]))
+
+    hues = [colorsys.rgb_to_hls(*rgb)[0] * 360.0 for rgb in steps]
+    assert max(hues) - min(hues) < 30.0
+
+    # The palest painted step has to stay clear of the unpainted "never measured" fill:
+    # a grid drawn on this ramp reports those as different findings.
+    assert luminances[-1] > relative_luminance(
+        matplotlib.colors.to_rgb(MISSING_COLOR)
+    )
 
 
 # ------------------------------------------------------------------

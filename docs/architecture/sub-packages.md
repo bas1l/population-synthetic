@@ -345,7 +345,10 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
     `STAGE_SERIES` / `SEVERITY_SERIES` / `HOST_COLORS`, the named furniture and text greys
     (`ANNOTATION_GREY`, `CAPTION_GREY`, `GRID_RULE`, `CELL_STROKE`, `BAR_EDGE`, ...), and the ramp:
     `HEATMAP_CMAP`
-    (`inferno`, matching the published `{country}_models_table` manuscript figures), `MISSING_COLOR`
+    (`inferno`, matching the published `{country}_models_table` manuscript figures),
+    `SIGNIFICANCE_CMAP` (`Blues_r`, the one sanctioned departure: a significance tier is an ordinal
+    grade, not a magnitude, so a single hue carries it by brightness alone, reversed so the darkest
+    step is the most significant rung), `MISSING_COLOR`
     for the off-ramp "never measured" fill, `heatmap_cmap()` (a private copy with `set_bad`, because
     matplotlib hands every caller the same registry object), `heatmap_levels(n)` (that copy resampled
     to `n` discrete steps, `set_bad` preserved, for a quantity binned onto an **ordered** ladder such

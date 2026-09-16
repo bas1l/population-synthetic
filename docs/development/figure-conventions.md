@@ -126,9 +126,12 @@ reads as a doubled rule rather than as a gap.
 
 ### One ramp
 
-`palette.HEATMAP_CMAP` is `inferno` and it is the only ramp. It is perceptually uniform, monotone
-in lightness, and it matches the published manuscript tables, so the internal grids read as drafts
-of the published ones rather than as a separate visual language.
+`palette.HEATMAP_CMAP` is `inferno` and it is the ramp for every **magnitude** in the layer. It is
+perceptually uniform, monotone in lightness, and it matches the published manuscript tables, so the
+internal grids read as drafts of the published ones rather than as a separate visual language.
+
+There is exactly one sanctioned departure, `palette.SIGNIFICANCE_CMAP` (`Blues_r`), and it exists
+because a significance tier is not a magnitude. See "A tier is not a magnitude" below.
 
 A sequential ramp orders cells by **magnitude alone**. The two quantities in the layer that are
 genuinely two-sided — `realism_ranking`'s typicality statistic, read against the real population's
@@ -147,13 +150,36 @@ diverging ramp. Introducing one requires an ADR superseding it.
 
 Some quantities are not continuous: a significance tier is one rung of a ladder a config file
 declares, and painting it on a continuous scale invites reading a `p` of 0.049 as meaningfully
-darker than one of 0.051. `palette.heatmap_levels(n)` returns an `n`-step resampling of the same
-house ramp, so a binned quantity stays in the one visual language instead of acquiring a palette of
-its own. It preserves `set_bad`, which is what keeps an unpainted cell legal — `grids` raises on a
-colormap whose missing colour is transparent.
+darker than one of 0.051. `palette.heatmap_levels(n)` returns an `n`-step resampling of a
+sequential ramp — the house ramp unless the caller names another — so a binned quantity stays in a
+single visual language instead of acquiring a palette of its own. It preserves `set_bad`, which is
+what keeps an unpainted cell legal — `grids` raises on a colormap whose missing colour is
+transparent.
 
 Its only sanctioned use is binning an **ordered** quantity. It is not a categorical-hue source: `n`
 steps of a sequential ramp read as "more" and "less", which is a lie about an unordered set.
+
+### A tier is not a magnitude
+
+The two `method_significance` grids — the method × method squares and the reference-method gap grid,
+and only those — bin `palette.SIGNIFICANCE_CMAP` (`Blues_r`) rather than the house ramp. They are
+the layer's only callers of `heatmap_levels` that pass a `name`.
+
+The reason is what they paint. A tier is an **ordinal grade** read off a ladder a config file
+declares: the rungs are ranked, but the distance between two of them is not a number. Inferno runs
+black → purple → red → orange → yellow, and a hue change of that size between adjacent steps invites
+reading the ladder as a set of *kinds* — the red tier, the yellow tier — when the only relation
+between them is more and less. `Blues_r` is a single hue, so brightness alone carries the ordering,
+and it is reversed, so the darkest step is the most significant rung (`****`) and the palest is `ns`.
+
+The palest **painted** step also has to stay clear of `palette.MISSING_COLOR`, the unpainted
+"never tested" fill, because those two states are different findings (see the four-state table
+below). `Blues_r` ends at `#f7fbff`, near white and unmistakable against the `#DDDDDD` grey.
+`Greys_r` was rejected for exactly this: its fourth step lands on top of that grey.
+
+Annotation colour needs no adjustment for the change. `palette.text_color_on` asks the mappable
+what it actually painted and picks white or black by WCAG relative luminance, so the two dark rungs
+take white text and the three light ones black, without a threshold tuned to any one ramp.
 
 ---
 
@@ -303,8 +329,9 @@ ten are computed and Holm-corrected. The square shows the other six.
 
 Its two channels are deliberately different, and that difference is the family's whole design. The
 **fill** is the pair's significance tier, binned onto the config's own star ladder through
-`palette.heatmap_levels`, and it is *symmetric* across the diagonal. The **text** is the signed
-row-minus-column difference in TV similarity, and it is *antisymmetric*. Direction therefore lives
+`palette.heatmap_levels` on `palette.SIGNIFICANCE_CMAP`, darkest rung most significant, and it is
+*symmetric* across the diagonal. The **text** is the signed row-minus-column difference in TV
+similarity, and it is *antisymmetric*. Direction therefore lives
 in the annotation, per the one-ramp rule above; the sign convention itself is oriented upstream, in
 `builder._method_panel`, so the renderer reads cell `(i, j)` and negates nothing. The `with_counts`
 variant adds each pair's paired-block count, which is the diagnostic reading, not the published one.
@@ -314,7 +341,7 @@ one:
 
 | State | Fill | Text |
 |-------|------|------|
-| tested, significant at some tier | the tier's level on the house ramp | the signed difference and the tier's symbol |
+| tested, significant at some tier | the tier's level on the single-hue significance ramp | the signed difference and the tier's symbol |
 | tested, not significant | the palest **painted** level | the signed difference and the `ns` symbol |
 | never tested — a degenerate panel, or too few paired blocks | **unpainted** (`set_bad`) | the policy's `absent_text` mark |
 | the diagonal — a method against itself | unpainted (`set_bad`) | nothing at all |

@@ -10,13 +10,14 @@ path: the seven-hue series below was copy-pasted verbatim into five chart module
 renamed into a sixth, and roughly twenty-five greys were written as bare hex literals at
 the call site that used them.
 
-**The ramp is sequential, and every heatmap in the layer now uses it** -- including the
-two whose quantity is genuinely two-sided (``realism_ranking``'s typicality statistic,
-read against the real population's own value, and ``method_significance``'s trend slope,
-read against zero). Those two previously used diverging ramps, and unifying them has a
-real cost that their renderers must pay back explicitly: a sequential ramp orders cells
-by **magnitude alone**, so two values equally far above and below the reference are drawn
-differently and neither drawing says which side it was on.
+**The ramp is sequential, and every heatmap that plots a magnitude now uses it** --
+including the two whose quantity is genuinely two-sided (``realism_ranking``'s
+typicality statistic, read against the real population's own value, and
+``method_significance``'s trend slope, read against zero). Those two previously used
+diverging ramps, and unifying them has a real cost that their renderers must pay back
+explicitly: a sequential ramp orders cells by **magnitude alone**, so two values equally
+far above and below the reference are drawn differently and neither drawing says which
+side it was on.
 
 Both renderers therefore carry the side in the annotations instead of in the hue -- a
 signed number in every cell plus a rule across the colourbar at the reference -- and say
@@ -24,6 +25,10 @@ so in a printed caption. A future two-sided heatmap must do the same or keep its
 diverging ramp; what it must not do is adopt this ramp and leave the sign implicit,
 because the resulting figure looks complete while having silently dropped half its
 content.
+
+One family departs from the house ramp on purpose: the significance grids paint an
+*ordinal grade* rather than a magnitude, and take the single-hue
+:data:`SIGNIFICANCE_CMAP` for the reason given at that entry.
 
 Annotation colour is *derived*, never chosen: :func:`text_color_on` asks the
 mappable what colour it actually painted the cell and picks white or black by that
@@ -77,6 +82,7 @@ __all__ = [
     "RESIDUAL_GREY",
     "SECONDARY_GREY",
     "SEVERITY_SERIES",
+    "SIGNIFICANCE_CMAP",
     "STAGE_SERIES",
     "SURFACE",
     "WARNING_FILL",
@@ -100,6 +106,26 @@ __all__ = [
 #: perceptually uniform and monotone in lightness, so the annotated numbers stay
 #: legible at both ends once :func:`text_color_on` picks their colour.
 HEATMAP_CMAP = "inferno"
+
+#: The ramp for a **significance tier**, and the layer's one sanctioned departure from
+#: :data:`HEATMAP_CMAP`. ``Blues_r``: a single hue, so brightness alone carries the
+#: ordering and no step can be told from its neighbour by anything but how dark it is;
+#: reversed, so the *darkest* step is the *most* significant rung and the palest is the
+#: one reported not significant.
+#:
+#: Deliberately not the house ramp, and the reason is what the quantity is rather than a
+#: preference. A tier is an ordinal grade read off a ladder a config file declares, not a
+#: magnitude: the distance between two rungs is not a number. Inferno moves through
+#: black, purple, red, orange and yellow, and a hue change of that size across adjacent
+#: steps invites reading the ladder as a set of *kinds* -- the red tier and the yellow
+#: tier -- when the only relation between them is more and less. One hue removes the
+#: invitation.
+#:
+#: The palest step must also stay distinguishable from :data:`MISSING_COLOR`, because
+#: "never tested" and "tested, not significant" are different findings that the
+#: significance grids paint differently on purpose. ``Blues_r`` ends near white, well
+#: clear of that grey; ``Greys_r`` was rejected for landing a painted step on top of it.
+SIGNIFICANCE_CMAP = "Blues_r"
 
 #: Fill for a cell with no value at all. Deliberately off-ramp: rendering an
 #: unmeasured cell at the ramp's low end would present "never measured" as "measured
@@ -324,8 +350,8 @@ def heatmap_cmap(name: str = HEATMAP_CMAP, *, missing: str = MISSING_COLOR):
     cells of every other figure drawn in the same process.
 
     *name* is a parameter rather than a constant read so a chart that must depart from
-    the house ramp still routes through one ``set_bad`` policy; callers wanting the
-    house ramp pass nothing, which is all of them today.
+    the house ramp -- the significance grids do, on :data:`SIGNIFICANCE_CMAP` -- still
+    routes through one ``set_bad`` policy; callers wanting the house ramp pass nothing.
     """
     import matplotlib.pyplot as plt
 
@@ -344,8 +370,8 @@ def heatmap_levels(n: int, *, name: str = HEATMAP_CMAP, missing: str = MISSING_C
     colour, which invites reading the pair as near-identical when the figure's own claim
     is that they fall on opposite sides of a threshold.
 
-    **Ordered quantities only.** This is a bin of the sequential house ramp, so its steps
-    inherit that ramp's meaning: step *k+1* reads as *more* than step *k*. It is
+    **Ordered quantities only.** This is a bin of a sequential ramp, so its steps inherit
+    that ramp's meaning: step *k+1* reads as *more* than step *k*. It is
     therefore not a source of categorical hues -- a set of unordered categories drawn on
     it acquires a magnitude ordering it does not have. :data:`CATEGORICAL_SERIES` and its
     siblings above exist for that case.
@@ -361,7 +387,8 @@ def heatmap_levels(n: int, *, name: str = HEATMAP_CMAP, missing: str = MISSING_C
     Args:
         n: Number of discrete steps. The caller pairs it with its own norm -- typically a
             ``BoundaryNorm`` over *n* bins whose cutoffs come from that figure's config.
-        name: Colormap to bin. Defaults to the house ramp, which is every caller today.
+        name: Colormap to bin. Defaults to the house ramp; the significance grids pass
+            :data:`SIGNIFICANCE_CMAP` instead.
         missing: Fill for a cell the ramp did not paint.
 
     Returns:

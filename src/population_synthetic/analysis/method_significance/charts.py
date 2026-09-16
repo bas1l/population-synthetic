@@ -84,6 +84,7 @@ from population_synthetic.analysis.utils.palette import (
     MUTED_GREY,
     PALE_FILL,
     RESIDUAL_GREY,
+    SIGNIFICANCE_CMAP,
     SURFACE,
     WARNING_FILL,
     WARNING_TEXT,
@@ -1045,11 +1046,15 @@ def plot_method_pair_significance(
 
     Two channels, deliberately different: the **fill** is the pair's significance tier,
     which is symmetric across the diagonal, and the **text** is the signed difference,
-    which is antisymmetric. Direction therefore travels in the annotation, on the house
-    sequential ramp binned to the config's own star ladder
+    which is antisymmetric. Direction therefore travels in the annotation, on the
+    single-hue significance ramp
+    (:data:`~population_synthetic.analysis.utils.palette.SIGNIFICANCE_CMAP`) binned to
+    the config's own star ladder
     (:func:`~population_synthetic.analysis.utils.palette.heatmap_levels`), rather than
-    in a diverging hue -- the mechanism the 2026-08-12 ADR chose. Because p ascends
-    while the ramp brightens, the most significant tier is darkest and ``ns`` palest.
+    in a diverging hue -- the mechanism the 2026-08-12 ADR chose. A tier is an ordinal
+    grade rather than a magnitude, so brightness alone carries the ladder: because p
+    ascends while the ramp lightens, the most significant tier is darkest and ``ns``
+    palest, and no step differs from its neighbour in hue.
 
     A panel flagged ``insufficient_n`` renders a labelled placeholder carrying the
     panel's own note, and is logged (never a silent blank or a missing file).
@@ -1122,7 +1127,7 @@ def plot_method_pair_significance(
     # One discrete level per rung of the config's ladder, and a norm whose bins are those
     # rungs. Neither the level count nor the tier a cell lands in is a literal here: both
     # follow the config's thresholds.
-    cmap = heatmap_levels(len(ladder))
+    cmap = heatmap_levels(len(ladder), name=SIGNIFICANCE_CMAP)
     norm = mcolors.BoundaryNorm(np.arange(len(ladder) + 1) - 0.5, len(ladder))
 
     written: list[Path] = []
@@ -1502,7 +1507,7 @@ def plot_reference_method_gap(
     # One discrete level per rung of the config's ladder, and a norm whose bins are those
     # rungs -- the same construction the per-category squares paint on, so one cell reads
     # the same in both figures.
-    cmap = heatmap_levels(len(ladder))
+    cmap = heatmap_levels(len(ladder), name=SIGNIFICANCE_CMAP)
     norm = mcolors.BoundaryNorm(np.arange(len(ladder) + 1) - 0.5, len(ladder))
 
     def _draw(variant: GridVariant):
