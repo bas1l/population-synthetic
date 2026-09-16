@@ -31,6 +31,15 @@ memory, the budgets are checked against those bytes, and only then is anything
 written. A figure that breaks a budget raises :class:`FigureBudgetExceeded` with
 nothing written at all, rather than publishing an unusable file or -- worse --
 silently shrinking a canvas the author sized deliberately.
+
+**Two extents: tight (the default) and fixed.** By default a figure is written at the
+tight bounding box of its artists. That box is built from text *layout* boxes, which for
+rotated multi-line text are wider than the glyphs they hold, so a figure whose ink sits
+wholly inside its canvas can still be written larger than the canvas it was drawn on. A
+figure laid out in absolute points to an exact size opts into ``fixed_canvas=True``
+instead: it is written at the ``Figure``'s own size with no crop, and because nothing can
+then grow to absorb an overflow, ink reaching the canvas edge is rejected as clipped. The
+canvas and file-size budgets apply to both modes unchanged.
 """
 
 from __future__ import annotations
@@ -177,14 +186,20 @@ def _output_paths(png_path: Path) -> dict[str, Path]:
     return paths
 
 
-def _render(fig, suffix: str, *, dpi: int) -> bytes:
-    """Render *fig* to one format in memory, returning its bytes."""
+def _render(fig, suffix: str, *, dpi: int, extent: Any = "tight") -> bytes:
+    """Render *fig* to one format in memory, returning its bytes.
+
+    *extent* is handed to ``bbox_inches``: ``"tight"`` (the default) crops to the tight
+    bounding box, ``None`` writes the figure's own size (a fixed canvas), and a ``Bbox``
+    in inches writes exactly that region -- which is how the fixed-canvas ink check sees
+    past the canvas edge without a second ``savefig`` call site.
+    """
     buffer = io.BytesIO()
     fig.savefig(
         buffer,
         format=suffix.lstrip("."),
         dpi=dpi,
-        bbox_inches="tight",
+        bbox_inches=extent,
         pad_inches=PAD_INCHES,
     )
     return buffer.getvalue()
@@ -236,6 +251,81 @@ def _check_canvas(width_in: float, height_in: float, png_path: Path) -> None:
     )
 
 
+def _inked(fig, png_bytes: bytes):
+    """Boolean ``rows x columns`` mask of the pixels differing from the figure's ground.
+
+    The ground is the figure's own face colour, read from the figure and never named
+    here. Any difference counts, including a glyph's antialiased fringe.
+    """
+    import matplotlib.colors as mcolors
+    import matplotlib.image as mimage
+    import numpy as np
+
+    pixels = mimage.imread(io.BytesIO(png_bytes), format="png")
+    rgb = np.round(pixels[..., :3] * 255.0).astype(int)
+    ground = np.round(np.array(mcolors.to_rgb(fig.get_facecolor())) * 255.0).astype(int)
+    return (rgb != ground).any(axis=2)
+
+
+def _check_ink_inside_canvas(fig, png_bytes: bytes, png_path: Path, *, dpi: int) -> None:
+    """Raise when any drawn ink falls outside, or is cut by, a fixed canvas.
+
+    Only meaningful for a fixed canvas: the tight crop grows to hold an overflowing
+    artist, while a fixed canvas cuts it off without a trace in the written file. Two
+    readings, because neither alone is enough:
+
+    * **Ink on an outermost row or column** of the written raster (*png_bytes*) -- the
+      visible fringe of an artist the edge cuts through.
+    * **Ink beyond the canvas** in a second raster rendered over the union of the canvas
+      and the figure's tight bounding box, which bounds every artist's layout extent.
+      This catches what the edge scan cannot: an artist lying wholly outside, or a clip
+      landing in the gap between two glyphs. One pixel of slack absorbs the rounding of
+      the canvas position inside that raster; anything finer is the first reading's job.
+    """
+    import math
+
+    from matplotlib.transforms import Bbox
+
+    inked = _inked(fig, png_bytes)
+    touched = [
+        edge
+        for edge, hit in (
+            ("top", inked[0, :].any()),
+            ("bottom", inked[-1, :].any()),
+            ("left", inked[:, 0].any()),
+            ("right", inked[:, -1].any()),
+        )
+        if hit
+    ]
+
+    width_in, height_in = (float(v) for v in fig.get_size_inches())
+    tight = fig.get_tightbbox(fig.canvas.get_renderer())
+    region = Bbox.union([tight, Bbox.from_bounds(0.0, 0.0, width_in, height_in)])
+    if (region.x0, region.y0, region.x1, region.y1) != (0.0, 0.0, width_in, height_in):
+        around = _inked(fig, _render(fig, RASTER_SUFFIX, dpi=dpi, extent=region))
+        rows, cols = around.shape
+        left = math.floor((0.0 - region.x0) * dpi) - 1
+        right = math.ceil((width_in - region.x0) * dpi) + 1
+        top = math.floor((region.y1 - height_in) * dpi) - 1
+        bottom = math.ceil((region.y1 - 0.0) * dpi) + 1
+        for edge, band in (
+            ("left", around[:, : max(left, 0)]),
+            ("right", around[:, min(right, cols):]),
+            ("top", around[: max(top, 0), :]),
+            ("bottom", around[min(bottom, rows):, :]),
+        ):
+            if band.size and band.any() and edge not in touched:
+                touched.append(edge)
+    if not touched:
+        return
+    raise FigureBudgetExceeded(
+        f"{png_path.name}: drawn ink reaches past the {', '.join(touched)} edge of the "
+        "fixed canvas, so something is clipped. A fixed canvas is written at the "
+        "figure's own size and cannot grow to hold an overflowing artist the way the "
+        "tight crop does; move the artist inside the canvas. Nothing was written."
+    )
+
+
 def _check_file_size(payload: bytes, path: Path) -> None:
     """Raise unless one rendered format fits the file-size ceiling."""
     if len(payload) <= MAX_FILE_BYTES:
@@ -248,11 +338,14 @@ def _check_file_size(payload: bytes, path: Path) -> None:
     )
 
 
-def save_figure(fig, png_path: Path, *, dpi: int = RASTER_DPI) -> Path:
+def save_figure(
+    fig, png_path: Path, *, dpi: int = RASTER_DPI, fixed_canvas: bool = False,
+) -> Path:
     """Write *fig* as a PNG, SVG and EPS trio (same stem/dir) and close it.
 
     Renders all three formats to memory with ``bbox_inches="tight"`` and
-    :data:`PAD_INCHES` of margin, checks both
+    :data:`PAD_INCHES` of margin -- or, with *fixed_canvas*, at the figure's own size
+    with no crop -- checks both
     budgets against the rendered bytes, then writes ``png_path`` and its ``.svg``
     and ``.eps`` siblings, creating the parent directory if needed. *dpi* applies to
     the PNG and to any rasterised artist inside the two vector formats; it defaults
@@ -262,9 +355,16 @@ def save_figure(fig, png_path: Path, *, dpi: int = RASTER_DPI) -> Path:
     Closes *fig* on every path, including the failing one, and returns the PNG path
     -- the pre-existing caller contract of every chart function that routes here.
 
+    *fixed_canvas* is for a figure laid out in absolute units to an exact size. The
+    tight crop measures rotated multi-line text by its layout box, which is wider than
+    its ink, and so writes such a figure larger than it was drawn; fixed mode writes the
+    canvas as drawn, and in exchange rejects ink touching the canvas edge (see
+    :func:`_check_ink_inside_canvas`). Off by default, so every other figure is written
+    exactly as before.
+
     Raises :class:`FigureBudgetExceeded` if the rendered canvas exceeds the
-    printable page area or any rendered format exceeds :data:`MAX_FILE_BYTES`, in
-    which case **no file is written**.
+    printable page area, any rendered format exceeds :data:`MAX_FILE_BYTES`, or -- in
+    fixed mode -- ink reaches the canvas edge, in which case **no file is written**.
     """
     import matplotlib.pyplot as plt
 
@@ -273,10 +373,13 @@ def save_figure(fig, png_path: Path, *, dpi: int = RASTER_DPI) -> Path:
     try:
         with plt.rc_context(_export_rc_params()):
             rendered = {
-                suffix: _render(fig, suffix, dpi=dpi) for suffix in OUTPUT_SUFFIXES
+                suffix: _render(fig, suffix, dpi=dpi, extent=None if fixed_canvas else "tight")
+                for suffix in OUTPUT_SUFFIXES
             }
         width_in, height_in = _canvas_inches(rendered[".eps"])
         _check_canvas(width_in, height_in, png_path)
+        if fixed_canvas:
+            _check_ink_inside_canvas(fig, rendered[RASTER_SUFFIX], png_path, dpi=dpi)
         for suffix, payload in rendered.items():
             _check_file_size(payload, paths[suffix])
         png_path.parent.mkdir(parents=True, exist_ok=True)

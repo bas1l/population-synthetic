@@ -54,6 +54,14 @@ Outputs, per country, under the analysis-stage method_significance folder:
                                             above, stated in the figure's own key.
                                             {country}_reference_method_gap_with_counts.*
                                             is the diagnostic sibling
+    {country}_reference_method_gain_forest.png/.svg/.eps  the same reference contrasts as a
+                                            456 x 150 pt strip: per category, the reference
+                                            minus each simpler method with its confidence
+                                            interval and Holm significance symbol, plus an
+                                            omnibus track. No title, key or caveat in the
+                                            graphic -- those go in the manuscript caption;
+                                            the identical-method caveat is printed to the
+                                            console for that caption
     {country}_slope_heatmap.png             attribute x model descriptive TV(method) slope
     {country}_cd_diagram.png                model critical-difference diagram (Nemenyi)
     {country}_factor_dominance.png          eta^2 variance shares (model/method/category)
@@ -99,6 +107,7 @@ from population_synthetic.analysis.method_significance.charts import (
     plot_method_comparison,
     plot_method_pair_significance,
     plot_method_trends,
+    plot_reference_method_gain_forest,
     plot_reference_method_gap,
     plot_slope_heatmap,
 )
@@ -112,6 +121,7 @@ from population_synthetic.analysis.model_ranking.loader import (
     scheme_category_values,
 )
 from population_synthetic.analysis.utils.country_config import mappings_for_country
+from population_synthetic.analysis.utils.labels import attribute_label, method_letters
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
@@ -172,6 +182,25 @@ def _split_csv(values: list[str] | None) -> list[str] | None:
     if values is None:
         return None
     return [v.strip() for item in values for v in item.split(",") if v.strip()] or None
+
+
+def _identical_method_lines(result: dict) -> list[str]:
+    """One line per category panel whose methods produced identical TV-similarity.
+
+    Reads the builder's ``identical_method_groups`` and its ``identical_methods_note``
+    clause; authors no statement of its own. The lines exist for whoever writes a figure
+    caption, since the gain forest carries no caveat in the graphic.
+    """
+    block = result.get("method_comparison") or {}
+    panels = block.get("panels") or {}
+    note = block.get("identical_methods_note")
+    letters = method_letters(result["metadata"]["method_order"])
+    lines = []
+    for attr in result["metadata"]["attributes"]:
+        for group in (panels.get(attr) or {}).get("identical_method_groups") or []:
+            methods = ", ".join(letters[method] for method in group)
+            lines.append(f"  {attribute_label(attr)}: methods {methods} {note}.")
+    return lines
 
 
 def _fmt_p(value: float | None) -> str:
@@ -427,6 +456,11 @@ def main() -> None:
             result, significance_dir / f"{country}_method_comparison.csv"
         )
         print(f"Method-comparison CSV written to {mc_csv}")
+        identical = _identical_method_lines(result)
+        if identical:
+            print("Identical-method caveat (for the gain-forest caption):")
+            for line in identical:
+                print(line)
 
         if not args.no_charts:
             heatmap = plot_slope_heatmap(result, significance_dir / f"{country}_slope_heatmap.png")
@@ -486,6 +520,17 @@ def main() -> None:
                 print(
                     "Reference-method gap grid skipped (no method-comparison panels / "
                     "fewer than two methods on the axis)."
+                )
+
+            gain_forest = plot_reference_method_gain_forest(
+                result, significance_dir / f"{country}_reference_method_gain_forest.png"
+            )
+            if gain_forest is not None:
+                print(f"Reference-method gain forest written to {gain_forest} (+ .svg, .eps)")
+            else:
+                print(
+                    "Reference-method gain forest skipped (no category panels / fewer than "
+                    "two methods / more comparators than the strip can separate)."
                 )
 
             # Descriptive per-method marginal-progression charts (additive side-output).

@@ -110,6 +110,12 @@ python scripts/analyze/rank_models.py --country swedish --per-attribute-charts
 # simpler methods, columns = every analysed category + Overall, cell = the most complex method
 # (derived from the method axis, never named in code) against that row's method. Same fill, but the
 # text is REFERENCE minus row -- the opposite orientation, stated in that figure's own key.
+# {country}_reference_method_gain_forest.png/.svg/.eps draws those same reference contrasts as a
+# 456 × 150 pt strip: per analysed category (no Overall), the reference minus each simpler method
+# with its confidence interval and Holm significance symbol, under an omnibus track. It has no
+# title, key or caveat in the graphic; the run prints the identical-method caveat lines for its
+# caption. JSON written before the confidence intervals existed lacks the keys it reads -- rerun
+# with --force.
 python scripts/analyze/analyze_method_significance.py --country swedish
 
 # Extract demographic profiles from a pipeline output tree into a single population file

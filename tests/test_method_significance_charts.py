@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import colorsys
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -23,10 +24,12 @@ matplotlib = pytest.importorskip("matplotlib")
 matplotlib.use("Agg")
 
 import matplotlib.colors as mcolors  # noqa: E402
+import numpy as np  # noqa: E402
 
 import population_synthetic.analysis.method_significance.charts as charts_module  # noqa: E402
 from population_synthetic.analysis.method_significance.builder import (  # noqa: E402
     build_method_significance,
+    significance_cutoff,
 )
 from population_synthetic.analysis.method_significance.charts import (  # noqa: E402
     plot_cd_diagram,
@@ -36,7 +39,9 @@ from population_synthetic.analysis.method_significance.charts import (  # noqa: 
     plot_reference_method_gap,
     plot_slope_heatmap,
 )
+from population_synthetic.analysis.utils import style  # noqa: E402
 from population_synthetic.analysis.utils.axes import strategy_complexity_order  # noqa: E402
+from population_synthetic.analysis.utils.figures import RASTER_DPI  # noqa: E402
 from population_synthetic.analysis.utils.grid_variants import variant_suffixes  # noqa: E402
 from population_synthetic.analysis.utils.labels import (  # noqa: E402
     attribute_label,
@@ -46,7 +51,9 @@ from population_synthetic.analysis.utils.labels import (  # noqa: E402
 from population_synthetic.analysis.utils.palette import (  # noqa: E402
     HEATMAP_CMAP,
     MISSING_COLOR,
+    ORDERED_QUALITATIVE_SERIES,
     SIGNIFICANCE_CMAP,
+    SURFACE,
     heatmap_levels,
     relative_luminance,
 )
@@ -730,3 +737,343 @@ def test_the_cell_text_stays_legible_at_both_ends_of_the_ramp(tmp_path, draw):
             assert color == "black"
             seen.add("pale")
     assert seen == {"dark", "pale"}
+
+
+# --------------------------------------------------------------------------- #
+# the reference-method gain forest                                             #
+# --------------------------------------------------------------------------- #
+#
+# Driven from the serialised block, like the grids above. The geometry tests read the
+# RENDERED pixels rather than the placement code's own boxes: a label's ink is the set of
+# pixels that change when that one label is hidden, which is independent of how the
+# renderer measured it.
+
+_FOREST_STEM = "swedish_02_reference_method_gain_forest.png"
+_FOREST = charts_module._draw_reference_method_gain_forest
+
+
+def _forest_marker_lines(ax):
+    """The data marks: the marker lines and the CI bars, told apart by their line style."""
+    hues = {mcolors.to_hex(h) for h in ORDERED_QUALITATIVE_SERIES}
+    markers = [
+        line for line in ax.lines
+        if line.get_marker() not in (None, "None", "")
+        and mcolors.to_hex(line.get_markeredgecolor()) in hues
+    ]
+    bars = [
+        line for line in ax.lines
+        if line not in markers and mcolors.to_hex(line.get_color()) in hues
+    ]
+    assert markers, "no marker was found on the plot"
+    return markers, bars
+
+
+def _rgb(fig):
+    fig.canvas.draw()
+    return np.asarray(fig.canvas.buffer_rgba())[:, :, :3].astype(int).copy()
+
+
+def _diff_box(before, after):
+    """Bounding box ``(col0, row0, col1, row1)`` of the pixels differing between two renders."""
+    changed = (np.abs(before - after) > 0).any(axis=2)
+    rows = np.where(changed.any(axis=1))[0]
+    cols = np.where(changed.any(axis=0))[0]
+    assert rows.size and cols.size, "hiding the artist changed nothing on the canvas"
+    return int(cols.min()), int(rows.min()), int(cols.max()), int(rows.max()), changed
+
+
+@pytest.fixture(scope="module")
+def live_forest():
+    """The live-shape strip, drawn once, with each label's rendered ink measured."""
+    fig = _FOREST(ms_fixtures.live_shape_forest_result())
+    track, ax = fig.axes
+    full = _rgb(fig)
+    labels = []
+    for text in ax.texts:
+        text.set_visible(False)
+        without = _rgb(fig)
+        text.set_visible(True)
+        col0, row0, col1, row1, mask = _diff_box(full, without)
+        labels.append({"text": text, "box": (col0, row0, col1, row1), "mask": mask})
+    markers, bars = _forest_marker_lines(ax)
+    for line in markers + bars:
+        line.set_visible(False)
+    without_marks = _rgb(fig)
+    for line in markers + bars:
+        line.set_visible(True)
+    marks_mask = (np.abs(full - without_marks) > 0).any(axis=2)
+    yield {"fig": fig, "ax": ax, "track": track, "labels": labels, "marks_mask": marks_mask,
+           "markers": markers, "bars": bars}
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+
+
+def _visible_texts(fig):
+    from matplotlib.text import Text
+
+    return [
+        text for text in fig.findobj(Text)
+        if text.get_visible() and text.get_text().strip()
+    ]
+
+
+def test_the_forest_writes_all_three_formats(tmp_path):
+    result = ms_fixtures.live_shape_forest_result()
+    path = charts_module.plot_reference_method_gain_forest(result, tmp_path / _FOREST_STEM)
+    assert path == tmp_path / _FOREST_STEM
+    assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
+        f"{Path(_FOREST_STEM).stem}{suffix}" for suffix in (".eps", ".png", ".svg")
+    )
+
+
+def test_the_forest_is_not_drawn_without_panels_or_without_a_comparator(tmp_path):
+    methods = ms_fixtures.FIVE_METHODS
+    empty = ms_fixtures.forest_result(methods, {})
+    assert charts_module.plot_reference_method_gain_forest(empty, tmp_path / "a.png") is None
+    single = ms_fixtures.forest_result(
+        methods[:1], {"education_level": ms_fixtures.forest_panel(methods[:1], {})},
+    )
+    assert charts_module.plot_reference_method_gain_forest(single, tmp_path / "b.png") is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_the_forest_has_no_overall_column(live_forest):
+    ax = live_forest["ax"]
+    names = [text.get_text().replace("\n", " ") for text in ax.get_xticklabels()]
+    assert names == [attribute_label(attr) for attr in ms_fixtures.LIVE_ATTRIBUTES]
+    assert "Overall" not in names
+    assert len(live_forest["track"].texts) == 3 * len(ms_fixtures.LIVE_ATTRIBUTES)
+
+
+def test_every_text_of_the_forest_is_set_at_the_floor(live_forest):
+    sizes = {text.get_fontsize() for text in _visible_texts(live_forest["fig"])}
+    assert sizes == {style.FONT_FLOOR_PT}
+
+
+def test_the_forest_canvas_is_the_strip_in_every_format(tmp_path):
+    import struct
+
+    result = ms_fixtures.live_shape_forest_result()
+    png = charts_module.plot_reference_method_gain_forest(result, tmp_path / _FOREST_STEM)
+    width_px, height_px = struct.unpack(">II", png.read_bytes()[16:24])
+    svg = png.with_suffix(".svg").read_text(encoding="utf-8")
+    svg_size = re.search(r'<svg[^>]*width="([\d.]+)pt"[^>]*height="([\d.]+)pt"', svg)
+    eps = re.search(
+        rb"%%HiResBoundingBox:\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)", png.with_suffix(".eps").read_bytes()
+    )
+    x0, y0, x1, y1 = (float(v) for v in eps.groups())
+    canvases = {
+        ".png": (width_px / RASTER_DPI * 72.0, height_px / RASTER_DPI * 72.0),
+        ".svg": (float(svg_size.group(1)), float(svg_size.group(2))),
+        ".eps": (x1 - x0, y1 - y0),
+    }
+    for suffix, canvas in canvases.items():
+        assert canvas == pytest.approx((456.0, 150.0), abs=1.0), suffix
+
+
+def test_the_forest_carries_no_title_caption_or_key(live_forest):
+    fig, ax, track = live_forest["fig"], live_forest["ax"], live_forest["track"]
+    assert fig.texts == []
+    assert fig._suptitle is None
+    assert ax.get_title() == "" and track.get_title() == ""
+
+    legend = fig.legends[0]
+    legend_texts = [text.get_text() for text in legend.get_texts()]
+    methods = ms_fixtures.FIVE_METHODS
+    letters = method_letters(methods)
+    assert legend_texts == [f"{letters[methods[-1]]} minus {letters[m]}" for m in methods[:-1]]
+    assert legend._ncols == len(methods) - 1
+
+    allowed = set(legend_texts)
+    allowed |= {text.get_text() for text in track.texts}
+    allowed |= {text.get_text() for text in track.get_yticklabels()}
+    allowed |= {text.get_text() for text in ax.texts}
+    allowed |= {text.get_text() for text in ax.get_xticklabels() + ax.get_yticklabels()}
+    allowed.add(ax.get_ylabel())
+    drawn = {text.get_text() for text in _visible_texts(fig)}
+    assert drawn <= allowed
+    for text in drawn:
+        assert "Method" not in text and "Significance" not in text and "p≤" not in text
+
+
+def test_the_forest_tick_labels_are_two_vertical_lines(live_forest):
+    for text in live_forest["ax"].get_xticklabels():
+        assert text.get_rotation() == 90
+        assert text.get_text().count("\n") == (1 if " " in text.get_text().replace("\n", " ") else 0)
+
+
+def test_every_label_is_ink_centred_on_its_marker(live_forest):
+    ax, fig = live_forest["ax"], live_forest["fig"]
+    tolerance_px = 0.5 * fig.dpi / 72.0
+    marker_x = {round(float(line.get_xdata()[0]), 9) for line in live_forest["markers"]}
+    for label in live_forest["labels"]:
+        x = round(float(label["text"].get_position()[0]), 9)
+        assert x in marker_x, "a label sits at no marker's x"
+        hue = np.round(np.array(mcolors.to_rgb(label["text"].get_color())) * 255.0).astype(int)
+        col0, row0, col1, row1 = label["box"]
+        full = _rgb(fig)[row0: row1 + 1, col0: col1 + 1]
+        cols = np.where((np.abs(full - hue).sum(axis=2) < 120).any(axis=0))[0]
+        assert cols.size
+        centre = col0 + (cols.min() + cols.max() + 1) / 2.0
+        assert abs(centre - ax.transData.transform((x, 0.0))[0]) <= tolerance_px
+
+
+def test_no_label_overlaps_another_label_a_bar_or_a_marker_and_all_sit_in_the_frame(live_forest):
+    ax, fig, labels = live_forest["ax"], live_forest["fig"], live_forest["labels"]
+    height = fig.canvas.get_width_height()[1]
+    frame = ax.get_window_extent(fig.canvas.get_renderer())
+    frame_rows = (height - frame.y1, height - frame.y0)
+    for i, label in enumerate(labels):
+        col0, row0, col1, row1 = label["box"]
+        assert frame_rows[0] < row0 and row1 < frame_rows[1], label["text"].get_text()
+        assert not live_forest["marks_mask"][row0: row1 + 1, col0: col1 + 1].any()
+        for other in labels[i + 1:]:
+            o0, p0, o1, p1 = other["box"]
+            assert col1 < o0 or o1 < col0 or row1 < p0 or p1 < row0
+
+
+def test_the_tallest_bars_with_the_longest_labels_still_fit(tmp_path):
+    methods = ms_fixtures.FIVE_METHODS
+    panels = {
+        attr: ms_fixtures.forest_panel(
+            methods, {c: (1e-9, 0.85 - 0.01 * c, 10, 0.12) for c in range(4)},
+        )
+        for attr in ms_fixtures.LIVE_ATTRIBUTES
+    }
+    result = ms_fixtures.forest_result(methods, panels)
+    assert charts_module.plot_reference_method_gain_forest(result, tmp_path / _FOREST_STEM).is_file()
+
+
+def _marker_states(ax):
+    markers, bars = _forest_marker_lines(ax)
+    surface = mcolors.to_hex(SURFACE)
+    return (
+        {round(float(line.get_xdata()[0]), 6): mcolors.to_hex(line.get_markerfacecolor()) != surface
+         for line in markers},
+        {round(float(line.get_xdata()[0]), 6) for line in bars},
+    )
+
+
+def test_filled_and_open_markers_follow_the_config_cutoff():
+    methods = ms_fixtures.FIVE_METHODS
+    cutoff = significance_cutoff(ms_fixtures.star_thresholds())
+    contrasts = {
+        0: (cutoff, 0.3, 10, 0.1),          # exactly on the cutoff: significant
+        1: (cutoff * 1.0001, 0.3, 10, 0.1),  # just above it: not
+        2: (1e-8, 0.3, 10, 0.1),
+        3: (None, 0.3, 10, None),           # undefined test
+    }
+    attr = ms_fixtures.ATTRIBUTES[0]
+    fig = _FOREST(ms_fixtures.forest_result(methods, {attr: ms_fixtures.forest_panel(methods, contrasts)}))
+    ax = fig.axes[1]
+    filled, barred = _marker_states(ax)
+    xs = sorted(filled)
+    assert [filled[x] for x in xs] == [True, False, True, False]
+    assert barred == set(xs[:3])
+    texts = sorted(ax.texts, key=lambda t: t.get_position()[0])
+    ns = ms_fixtures.ns_symbol()
+    assert [t.get_text() for t in texts] == [
+        charts_module._p_to_stars(cutoff, ms_fixtures.star_thresholds(), ns),
+        ns,
+        charts_module._p_to_stars(1e-8, ms_fixtures.star_thresholds(), ns),
+    ]
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+
+
+def test_an_undefined_test_draws_no_label_even_among_identical_method_groups():
+    methods = ms_fixtures.FIVE_METHODS
+    attr = ms_fixtures.ATTRIBUTES[0]
+    panel = ms_fixtures.forest_panel(
+        methods, {c: (None, 0.2, 10, None) for c in range(4)},
+        identical_method_groups=[list(methods[:4])],
+    )
+    fig = _FOREST(ms_fixtures.forest_result(methods, {attr: panel}))
+    ax = fig.axes[1]
+    assert len(ax.texts) == 0
+    drawn = " ".join(text.get_text() for text in _visible_texts(fig))
+    assert ms_fixtures.ns_symbol() not in drawn.split()
+    assert "identical" not in drawn
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("methods", [
+    pytest.param(ms_fixtures.FIVE_METHODS, id="five"),
+    pytest.param(ms_fixtures.FIVE_METHODS[:3], id="three"),
+])
+def test_the_forest_reference_is_read_off_the_method_order(methods):
+    attr = ms_fixtures.ATTRIBUTES[0]
+    contrasts = {c: (1e-4, 0.2, 10, 0.05) for c in range(len(methods) - 1)}
+    fig = _FOREST(ms_fixtures.forest_result(methods, {attr: ms_fixtures.forest_panel(methods, contrasts)}))
+    letters = method_letters(methods)
+    reference = letters[methods[-1]]
+    assert fig.axes[1].get_ylabel() == f"{reference} − method"
+    assert [t.get_text() for t in fig.legends[0].get_texts()] == [
+        f"{reference} minus {letters[m]}" for m in methods[:-1]
+    ]
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+
+
+def test_more_comparators_than_the_ladders_is_not_drawn(tmp_path, caplog):
+    methods = ms_fixtures.TEN_METHODS
+    attr = ms_fixtures.ATTRIBUTES[0]
+    contrasts = {c: (1e-4, 0.2, 10, 0.05) for c in range(len(methods) - 1)}
+    result = ms_fixtures.forest_result(methods, {attr: ms_fixtures.forest_panel(methods, contrasts)})
+    with caplog.at_level(logging.WARNING):
+        assert charts_module.plot_reference_method_gain_forest(result, tmp_path / _FOREST_STEM) is None
+    assert any("comparators" in record.getMessage() for record in caplog.records)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_insufficient_n_column_is_kept_marked_and_logged(caplog):
+    methods = ms_fixtures.FIVE_METHODS
+    degenerate, healthy = ms_fixtures.ATTRIBUTES
+    note = "2 complete model(s) < 3; recorded but not charted"
+    contrasts = {c: (1e-4, 0.2, 10, 0.05) for c in range(4)}
+    result = ms_fixtures.forest_result(methods, {
+        degenerate: ms_fixtures.forest_panel(methods, contrasts, insufficient_n=True, note=note),
+        healthy: ms_fixtures.forest_panel(methods, contrasts),
+    })
+    with caplog.at_level(logging.WARNING):
+        fig = _FOREST(result)
+    track, ax = fig.axes
+    absent = charts_module.REFERENCE_GRID_VARIANT_CLEAN.policy.absent_text
+    column_zero = [t.get_text() for t in track.texts if t.get_position()[0] == 0.0]
+    assert column_zero == [absent] * 3
+    assert all(float(line.get_xdata()[0]) > 0.5 for line in _forest_marker_lines(ax)[0])
+    assert [t.get_text().replace("\n", " ") for t in ax.get_xticklabels()][0] == attribute_label(degenerate)
+    assert any(note in record.getMessage() for record in caplog.records)
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+
+
+def test_a_tested_pair_without_an_interval_raises():
+    methods = ms_fixtures.FIVE_METHODS
+    attr = ms_fixtures.ATTRIBUTES[0]
+    panel = ms_fixtures.forest_panel(methods, {c: (1e-4, 0.2, 10, 0.05) for c in range(4)})
+    panel["pair_matrix"]["ci_low"][4][0] = None
+    with pytest.raises(ValueError, match="no confidence interval"):
+        _FOREST(ms_fixtures.forest_result(methods, {attr: panel}))
+
+
+def test_a_pair_matrix_written_before_intervals_existed_names_force():
+    methods = ms_fixtures.FIVE_METHODS
+    attr = ms_fixtures.ATTRIBUTES[0]
+    panel = ms_fixtures.forest_panel(methods, {c: (1e-4, 0.2, 10, 0.05) for c in range(4)})
+    del panel["pair_matrix"]["ci_low"]
+    with pytest.raises(ValueError, match="--force"):
+        _FOREST(ms_fixtures.forest_result(methods, {attr: panel}))
+
+
+def test_the_forest_draws_from_a_built_result(tmp_path):
+    records = _grid()
+    result = build_method_significance(records, ATTRS, category_values=CATEGORY_VALUES)
+    path = charts_module.plot_reference_method_gain_forest(result, tmp_path / _FOREST_STEM)
+    assert path is not None and path.is_file()

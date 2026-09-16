@@ -183,10 +183,20 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
   every analysed category plus Overall, each cell the **reference** method (the last of the
   complexity-ordered `method_order`, derived rather than named) against that row's method. It reads
   the *other* index pair of the same oriented block, so its text is reference-minus-row and its key
-  says so. `builder.py` (`build_method_significance`
+  says so. `charts.py::plot_reference_method_gain_forest` draws the same reference contrasts as a
+  forest at `{country}_reference_method_gain_forest`: one column per analysed category (no Overall),
+  one marker per simpler method at the reference-minus-method gain with its confidence interval as a
+  bar, filled when the Holm-corrected pair is significant, and an omnibus track (statistic, partial
+  η², BH p) above. The interval is not computed in the chart: `utils/stats_tests.py::paired_t_pairwise`
+  emits `sd_diff`, `ci_low` and `ci_high` per pair at the config's `confidence_level`, and
+  `_pair_matrices` orients them like `mean_diff`. Each panel also carries `identical_method_groups`
+  (methods whose per-model TV-similarity columns are bit-identical, detected generically) and
+  `correction.family_size` (the pairs that entered Holm), and the block carries the
+  `identical_methods_note` clause the driver prints for the caption, since that strip carries no
+  caveat in the graphic. `builder.py` (`build_method_significance`
   + JSON/CSV writers), `charts.py` (per-attribute trend facets, slope heatmap, CD diagram,
   factor-dominance bar, method-comparison figure, pair-significance squares, reference-method gap
-  grid). Needs the optional `[analysis]` extra
+  grid, reference-method gain forest). Needs the optional `[analysis]` extra
   (statsmodels + scikit-posthocs).
 - **`real_population_stats/`** -- Standalone real-only reference statistics (sits after the cap
   stage; driven by `analyze_real_population_stats.py`, depends on `population_cap`, reading the capped
