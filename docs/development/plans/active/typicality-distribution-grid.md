@@ -706,25 +706,47 @@ verbatim prototype copies).
 **Dependencies:** Phases 1 (withdrawn slugs) and 3 (including 3.5).
 
 ### Phase 5: Presentation module `glyph_grid.py`
+**Started:** 2026-09-21 17:40
+**Completed:** 2026-09-21 18:30
 **Goal:** The reusable drawing pieces, behind the presentation boundary.
 
-- [ ] 5.1 — `PointCanvas`: a figure of exactly `width_pt × height_pt` (the width must not exceed
+- [x] 5.1 — `PointCanvas`: a figure of exactly `width_pt × height_pt` (the width must not exceed
       `style.FULL`, else raise), with axes and text placed in points.
-- [ ] 5.2 — `draw_mini_histogram`: bars of width 1 at 0..n−1, colours passed in, y scale √ (via
+- [x] 5.2 — `draw_mini_histogram`: bars of width 1 at 0..n−1, colours passed in, y scale √ (via
       `set_yscale("function", ...)`), limits [0, 1]; an optional reference outline drawn as a
       post-step line (0.7 pt, `BASELINE_DARK`); spines `GRID_RULE` at `GRID_LINEWIDTH`, no ticks.
       It validates that the heights are finite, in [0, 1] and sum to 1 within 1e-9; it does not
       normalise them.
-- [ ] 5.3 — `draw_withdrawn_cell` (two `MUTED_GREY` diagonals at 0.5 pt) and `draw_empty_cell`
+- [x] 5.3 — `draw_withdrawn_cell` (two `MUTED_GREY` diagonals at 0.5 pt) and `draw_empty_cell`
       (a fill and an optional centred mark).
-- [ ] 5.4 — `draw_ternary`: triangle outline, the 8–10 half-mass guide, host-tinted points (2.2 pt,
+- [x] 5.4 — `draw_ternary`: triangle outline, the 8–10 half-mass guide, host-tinted points (2.2 pt,
       `SURFACE` edge 0.25 pt), a reference star (5 pt), optional corner labels. It validates each
       share triple (non-negative, sums to 1 within 1e-9) and maps it to barycentric coordinates.
-- [ ] 5.5 — `stepped_colorbar` over `palette.heatmap_levels(n)` with a `BoundaryNorm`.
-- [ ] 5.6 — `tests/test_glyph_grid.py` plus the membership test in `tests/test_figure_compliance.py`.
+- [x] 5.5 — `stepped_colorbar` over `palette.heatmap_levels(n)` with a `BoundaryNorm`.
+- [x] 5.6 — `tests/test_glyph_grid.py` plus the membership test in `tests/test_figure_compliance.py`.
 
 **Files Modified:** `src/population_synthetic/analysis/utils/glyph_grid.py` (new),
 `tests/test_glyph_grid.py` (new), `tests/test_figure_compliance.py`.
+
+**Implementation notes (Phase 5).**
+- API as in the contract, plus small additions a composing chart needs so it restates no
+  glyph size: `PointCanvas.points_box(ax)` (read an axes' point box back, for the geometry
+  test), `PointCanvas.legend(handles, *, x, y_top, ncol)`, `ternary_position(shares)` (the
+  barycentric map, public so it is testable), `step_colors(levels)` (bar colours equal to the
+  colourbar steps), and legend-handle builders `outline_handle`, `withdrawn_handle`,
+  `point_handle`, `reference_star_handle`, `swatch_handle`. `draw_ternary` takes
+  `point_colors` and `apex_guides` (the caller passes `(0.5,)`), `apex_label` and
+  `base_labels`; it raises when its axes box is not `side × side·√3/2`.
+- **Deviation: marker halo 0.3 pt, not 0.25 pt.** The publisher requires strokes *above*
+  0.25 pt (`MIN_STROKE_PT`), so P20's `mew=0.25` is below the rule; `MARKER_EDGE_WIDTH = 0.3`.
+- Every displayed string passed in (canvas text, legend labels, corner labels, colourbar
+  title, empty-cell mark) is rejected with `ValueError` when it contains an underscore (an
+  unresolved id); `PointCanvas.text` requires `fontsize` on the house scale and rejects `alpha=`.
+- matplotlib sets `alpha=1.0` (opaque) on the legend frame and some tick marks, so the
+  "no non-None alpha" test asserts `alpha in (None, 1.0)`; source-level absence of `alpha=`
+  stays asserted by `tests/test_palette.py`.
+- The membership test (`tests/test_figure_compliance.py::PRESENTATION_MODULES`, eight
+  modules) had no predecessor that enumerated seven; it was added here.
 
 **Dependencies:** None (it can run in parallel with Phases 1–4).
 

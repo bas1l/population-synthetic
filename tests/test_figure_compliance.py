@@ -346,6 +346,63 @@ def test_the_compliance_check_catches_what_it_claims_to():
     plt.close(fig)
 
 
+#: The presentation layer: the modules every ``charts.py`` draws through. Named here, not
+#: discovered, because membership is a claim about what a module *may* do -- receive finished
+#: numbers and draw them -- and the test below checks the half of that claim a syntax tree
+#: can check. Eight modules since ``glyph_grid`` joined for the point-laid-out glyph grids.
+PRESENTATION_MODULES = (
+    "palette",
+    "style",
+    "labels",
+    "figures",
+    "grids",
+    "grid_annotations",
+    "table_style",
+    "glyph_grid",
+)
+
+
+def _imported_modules(path) -> set[str]:
+    import ast
+
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            names.add(node.module)
+            if node.module == "population_synthetic.analysis":
+                names.update(f"{node.module}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+    return names
+
+
+@pytest.mark.parametrize("module", PRESENTATION_MODULES)
+def test_a_presentation_module_imports_no_analysis_subpackage(module):
+    """The membership test for the layer: nothing from any analysis subpackage.
+
+    ``analysis/utils`` is shared infrastructure, not a process, so an import from it is
+    allowed; an import from ``analysis/<process>/`` would let a statistic or a process's
+    vocabulary leak behind the boundary.
+    """
+    from pathlib import Path
+
+    import population_synthetic.analysis.utils as utils
+
+    path = Path(utils.__file__).resolve().parent / f"{module}.py"
+    assert path.exists(), f"presentation module {module} is missing"
+    prefix = "population_synthetic.analysis."
+    offenders = sorted(
+        name for name in _imported_modules(path)
+        if name.startswith(prefix) and name[len(prefix):].split(".")[0] != "utils"
+    )
+    assert offenders == [], f"{module} imports {offenders}"
+
+
+def test_the_presentation_layer_has_eight_modules():
+    assert len(set(PRESENTATION_MODULES)) == 8
+
+
 def test_every_written_figure_appears_in_all_three_formats(tmp_path):
     """PNG to read a draft in, SVG to edit for the deck, EPS to submit.
 
