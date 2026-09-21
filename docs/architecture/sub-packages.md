@@ -223,7 +223,8 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
   is byte-reproducible in isolation and independent of processing order — the property that makes
   `03_Analysis/persona_realism/{country}/` contain combination directories and nothing else.
 - **`realism_ranking/`** -- The cross-combination half (driven by `rank_persona_realism.py`,
-  `slugs` dispatch, `depends_on: [persona_realism]`). `loader.py` discovers the consumption set
+  `slugs` dispatch, `depends_on: [persona_realism, model_ranking]` -- the second edge only because
+  one figure orders its columns by `model_ranking`'s published order). `loader.py` discovers the consumption set
   through the registry and enforces two gates before any statistic: **completeness** (report +
   per-persona CSV + a row count matching `n_personas`) and **homogeneity** (one `judge_model` /
   `prompt_template_sha256` / `n_rounds` across the set — ranking units judged by different judges
@@ -241,6 +242,23 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
   printed in every cell (the house ramp is sequential and orders by magnitude only, so the *side*
   is in the annotations, never in the hue); the axis does **not** replace
   `axis_b.dispersion_contrast`, which stays the tested contrast.
+  Three further typicality blocks sit beside it: `typicality_distribution` (each competitor's
+  **round-weighted** score distribution and band shares on the grid, with withdrawn -- read from
+  the cap index -- unjudged and no-typicality cells kept distinct), `typicality_effects` (ε² for
+  the two Kruskal-Wallis factors, Cliff's δ with a bootstrap interval beside every Dunn model pair,
+  and every combination and pooled model against the reference by Mann-Whitney with Holm) and
+  `typicality_closeness` (one closeness-to-the-reference value per combination -- TV similarity
+  primary, Cliff's δ and the Cramér distance as sensitivity -- with a reference self-resampling
+  noise baseline, the additive model + strategy decomposition, permutation / Friedman + Kendall's W
+  / paired t / Conover tests, and every interval from one joint individual-level bootstrap). The
+  closeness computation is its own pure module, `typicality_closeness.py`, which reads no record,
+  path or config; its resampling settings come from
+  `config/analysis/realism_ranking/typicality_closeness.yaml` via the CLI. `charts.py` draws them as
+  `typicality_distribution_by_model_strategy` through `utils/glyph_grid.py`, on a fixed 456 pt
+  canvas, with the columns in the order `utils/model_order.py` derives from
+  `{country}_performance.json` -- which the CLI reads before writing anything when charts are on
+  (a missing file raises naming `rank_models.py`; `--no-charts` skips it). The JSON and CSVs keep
+  the process's own order, so they still depend on `persona_realism` output alone.
   It performs **no LLM work** — re-running it is free and touches no verdict cache.
 - **`cost_efficiency/`** -- The accuracy-vs-cost join (driven by `analyze_cost_efficiency.py`,
   `slugs` dispatch, `depends_on: [model_ranking, generation_metadata, validation_attrition]`) -- the
@@ -338,9 +356,38 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
     opposite directions. Degenerate input **raises** rather than returning a sentinel -- unlike
     `stats_tests.py`, which reports skipped-with-a-reason: this is the arithmetic underneath, and the
     "unmeasurable" decision belongs to the caller that knows what an absent measurement means
-  - **The presentation layer** -- seven of the modules in this package form a
+  - `cap_index.py` -- the reader of the validation gate's `population_cap/_index.json`:
+    `load_cap_index(output_base)` returns a `CapIndex` carrying each combination's `requested_n`
+    and its required `excluded` flag (absent or non-boolean raises), with `is_full_n(slug, n)` / `is_thin(slug, n)`,
+    `is_withdrawn(slug)` and `withdrawn_slugs()`. The one place a consumer learns which
+    combinations the full-N rule withdrew
+  - `model_order.py` -- `model_ranking`'s published model order as a reusable ranking, so sibling
+    figures agree on which model comes first. The tier rule (a model with a full-n cell is tier 1,
+    ranked by `(-max, -mean, id)` over its full-n cells; otherwise tier 2, by `(-max, id)`) lives
+    here and `model_ranking/charts.py` draws through it. `ranked_model_order(result, cap_index)`
+    takes the loaded `{country}_performance.json` dict; `align_to_ranking(present, ranked)` raises
+    on a ranked model the caller lacks and appends unknown ones; `ranked_grid_columns(present,
+    ranked)` is the opposite contract a grid needs -- it narrows the ranking to the grid's models
+    and raises on any grid model the ranking does not know. It computes a ranking, so it is **not**
+    a presentation module; it reads no file and imports no matplotlib
+  - `distribution_distance.py` -- `total_variation_distance`, `total_variation_similarity` and
+    `cramer_distance` over probability vectors: the one definition of TV shared by `fidelity`
+    (`evaluator.py`, `multivariate.py`) and `realism_ranking`'s closeness block
+  - `histogram_resampling.py` -- the individual-level bootstrap of populations held as per-unit
+    weight rows: `joint_bootstrap_histograms` (each replicate resamples every group within itself
+    and the reference once) and `reference_self_resampling` (the reference against an independent
+    redraw of itself at a given n -- the sampling-noise baseline). Knows no outcome; the caller
+    computes whatever it publishes from the returned histograms
+  - `two_way_decomposition.py` -- the additive two-way decomposition of one value per cell
+    (`additive_two_way_anova`: type II SS, F, shares, partial η², partial ω², ω², `share_overlap`),
+    its vectorised form over bootstrap replicates (`additive_two_way_effect_sizes`, which raises on
+    a degenerate replicate), `additive_two_way_residuals`, and `within_block_permutation_test` of a
+    factor's type II F. Knows nothing of what the factors or the value mean
+  - **The presentation layer** -- eight of the modules in this package form a
     *presentation boundary*: `palette.py`, `style.py`, `labels.py`, `figures.py`, `grids.py`,
-    `grid_annotations.py`, `grid_variants.py` and `table_style.py`. A module belongs to it if and only if it can
+    `grid_annotations.py`, `table_style.py` and `glyph_grid.py` (the set
+    `tests/test_figure_compliance.py::PRESENTATION_MODULES` asserts; `grid_variants.py` is the
+    naming record the varianted grids share and imports no matplotlib). A module belongs to it if and only if it can
     draw or format without importing any analysis subpackage, and together they hold every
     decision about how a figure *looks* -- colour, type, canvas, export format, what a tick
     label says, and what a heatmap cell prints. Every `charts.py` in the layer draws through
@@ -411,6 +458,10 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
     population*, either `real_{country}` or a run slug -- decomposing the slug against the declared
     axis ids rather than splitting on `_`, because both strategy and model ids carry underscores of
     their own and a naive split yields a plausible wrong pair in silence.
+    `figure_term(key)` reads the manuscript-controlled words a figure prints ("individuals",
+    "Strategies", "Reference") from `config/analysis/figure_terms.yaml`, and
+    `reference_source(country_id)` the agency short name (`SCB`, `ISTAT`) from the country YAML's
+    `display.reference_source` -- provenance only, never a figure label; both raise on absence.
     `model_provenance_rows()` carries what the labelling convention drops: the serving provider,
     the exact model string it was asked for, the endpoint and the host, emitted as a CSV by
     `scripts/analyze/export_model_provenance.py` into an unregistered
@@ -467,10 +518,23 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
     shrinking: the canvas the caller chose from the size vocabulary is preserved exactly, and an
     overhanging tick label or annotation is deliberately left alone, because that is a per-figure
     decision its author has to see
+  - `glyph_grid.py` -- the eighth presentation module, for a figure whose cells are not colours:
+    `PointCanvas` (a figure of an exact size in points, no wider than `style.FULL`, with axes, text
+    and a legend placed by point coordinates), `draw_mini_histogram` (bars on a √ height scale with
+    an optional reference step outline), `draw_withdrawn_cell` / `draw_empty_cell`, `draw_ternary`
+    (share triples at their barycentric positions plus a reference star), `stepped_colorbar` over
+    `palette.heatmap_levels`, and the legend-handle builders. Each cell is its own small axes, so it
+    is the sibling of `grids.py`, not a second `imshow`. Heights and share triples must already sum
+    to 1 and are validated, never normalised; every displayed string arrives resolved and one
+    containing an underscore raises. Imports only `palette` and `style`
   - `stats_tests.py` -- Kruskal-Wallis H + inline Dunn post-hoc (Holm-corrected) for generation_metadata /
     model_ranking, plus the repeated-measures family for `method_significance` (Friedman +
     Iman-Davenport + Kendall's W, Page's L trend, Nemenyi post-hoc + CD, Benjamini-Hochberg FDR,
-    Cliff's δ, and the logit-linked `MixedLM` interaction fit); carries the scipy/numpy surface and
+    Cliff's δ, and the logit-linked `MixedLM` interaction fit), and the effect sizes and complete-block
+    helpers `realism_ranking`'s typicality blocks use (`epsilon_squared`, `mann_whitney_test`,
+    `bootstrap_cliffs_delta_ci` through the Mann-Whitney identity, `cliffs_delta_from_histograms`,
+    `percentile_interval`, `complete_block_matrix` -- moved here from `method_significance` --,
+    `conover_friedman_pairwise`, `shapiro_wilk_test`); carries the scipy/numpy surface and
     lazily imports statsmodels + scikit-posthocs (the `[analysis]` extra) for the library-backed ones
 - **`generation_metadata/`** -- the single LLM-metrics task; detailed below.
 

@@ -95,7 +95,8 @@ worth failing on.
 
 **The fixed-canvas mode.** `save_figure(fig, path, fixed_canvas=True)` writes the figure at its own
 size instead of the tight box (`bbox_inches=None`). It exists for a figure laid out in absolute
-points to an exact size — today the reference-method gain forest at `TEXT_WIDTH` × `STRIP_HEIGHT`.
+points to an exact size — today the reference-method gain forest at `TEXT_WIDTH` × `STRIP_HEIGHT`
+and the typicality distribution grid at `TEXT_WIDTH` wide.
 The tight box is built from text *layout* boxes, and a rotated multi-line tick label's layout box
 is wider than its ink, so the tight crop wrote that 150 pt strip 156 pt tall although nothing was
 drawn past its edge. Nothing can grow in fixed mode to hold an overflowing artist, so the mode adds
@@ -218,6 +219,23 @@ into its label fails there rather than on a published axis. A **scanned populati
 the slug against the *declared* axis ids rather than splitting on `_`, because both strategy and
 model ids contain underscores of their own and a naive split produces a plausible wrong pair in
 silence.
+
+### Manuscript-controlled words come from config
+
+Some words a figure prints are neither an axis id nor an attribute, and the manuscript still decides
+them: its `TERMINOLOGY-RULES.md` (rule T1) names the members of a population *individuals* and the
+generation methods *strategies* in published artwork, and calls the real population *the reference*
+rather than by its agency. The repository's own dialect is the opposite — code identifiers, CSV
+columns and JSON keys say `persona` and `method`, and T1 does not cover them — so a word typed into a
+chart module would be the repository's word. These words therefore live in
+`config/analysis/figure_terms.yaml` under `terms:` and are read at render time by
+`labels.figure_term(key)`, which raises on a missing file, an unknown key, an empty value or an
+underscored one. Changing a word is a one-line edit to that file.
+
+The agency's short name (`SCB`, `ISTAT`) is still held per country, as `display.reference_source` in
+the country axis YAML, and read by `labels.reference_source(country_id)`, which raises when it is
+absent. It is provenance, never the figure-facing label. Today only the typicality distribution grid
+reads `figure_term`; the existing method keys still print "Methods:".
 
 ### Sentence case, proper nouns preserved
 
@@ -445,6 +463,67 @@ bit-identical on that category, detected generically — and the block carries t
 `identical_methods_note` clause. `analyze_method_significance.py` prints one line per affected
 category for whoever writes the caption. The builder states the fact it can see, never its cause:
 why two methods coincide needs the mapped populations, which the builder does not read.
+
+### The typicality distribution grid: glyphs, not tiles
+
+`realism_ranking`'s `typicality_distribution_by_model_strategy` shows every combination's whole
+typicality distribution, eleven score levels, and a cell that has to carry a distribution cannot be
+one colour. So it is not a heatmap: each cell is its own small axes holding a mini histogram, drawn
+through the presentation layer's eighth module, `analysis/utils/glyph_grid.py`. That module is the
+sibling of `grids.py`, not its replacement — it paints no raster image, so `grids.py` stays the one
+`imshow` call site — and like the rest of the layer it computes nothing: it validates that every set
+of bar heights and every share triple sums to 1 within 1e-9 and raises otherwise, and never
+normalises.
+
+**Orientation.** Strategies run down the rows in complexity order and models across the columns in
+`model_ranking`'s published order, resolved at the CLI edge through
+`utils/model_order.ranked_grid_columns` so that this figure and the `model_ranking` figures agree on
+which model comes first. The model names are set vertically (90°) in a fixed top block above the
+grid and tinted by hosting class (`palette.HOST_COLORS`, legend words from
+`table_style.HOST_LABELS`); a label longer than that block raises rather than being clipped.
+
+**The canvas is fixed, in points.** `glyph_grid.PointCanvas` builds a figure of an exact size and
+places axes and text by point coordinates; this one is always 456 pt wide and is written in
+fixed-canvas mode. The cell side is 26.5 pt when twelve models fit, shrinks to fit the width when
+more do, and raises below 18 pt, where the 8 pt labels no longer fit. The height follows from the
+rows, the cell side and the bottom block — 280.5 pt on the live 12 × 5 grid, one legend row taller
+when "not judged" or "no typicality" entries push the legend past six.
+
+**What each cell draws.**
+
+| Cell state | Drawing |
+|---|---|
+| `ok` | a mini histogram, bars coloured by score level, the reference's distribution as a step outline over it |
+| `withdrawn` (the validation gate excluded the combination) | crossed out with two grey diagonals — never dropped |
+| `unjudged` (not yet judged) | a grey cell, the "not judged" state of every other grid in the process |
+| `no_typicality` (judged, no survivor) | an empty frame with a centred en dash |
+
+The legend lists "not judged" and "no typicality" only when such a cell is drawn.
+
+**Bar heights are √-scaled, and the figure says so.** A distribution concentrated on two levels
+would otherwise flatten every other bar to nothing. The scale is a coordinate transform, like a log
+axis, and changes no value; the note under the grid states it. The bar colours are the steps of a
+stepped colourbar over `palette.heatmap_levels`, so a level is read off one ordered ramp and the
+colourbar is the key to it.
+
+**The reference is drawn three ways**: as the outline in every cell, as its own detached column to
+the right of the grid, and as a star in each ternary. Its label is `figure_term("reference")`.
+
+**One ternary per strategy row.** Each triangle places every combination of that strategy at its
+three band shares (from `--typicality-bands`, 0–4 / 5–7 / 8–10 by default), host-tinted, with the
+reference's star and a guide at half the mass in the top band. Each corner is labelled once, not on
+every triangle: the top corner on the first row, the two base corners on the last. Overlapping dots
+are not jittered, because jitter moves data; the exact shares are in `typicality_bands.csv`.
+
+**Marker halo at 0.3 pt.** The points carry a 0.3 pt `SURFACE` edge (`glyph_grid.MARKER_EDGE_WIDTH`),
+not the 0.25 pt of the approved prototype: the publisher requires strokes above 0.25 pt
+(`MIN_STROKE_PT`).
+
+**Words.** The strategy key prints `figure_term("strategy_key_title")` ("Strategies:") with the
+lines from `labels.method_key_lines`, em dash kept, continuation lines hung under the first by the
+measured width of the title. The triangle note is assembled from `figure_term("individuals")` and
+the band labels in the data block. `glyph_grid` rejects any displayed string containing an
+underscore.
 
 ---
 

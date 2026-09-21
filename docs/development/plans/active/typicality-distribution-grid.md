@@ -117,25 +117,28 @@ terminology rules forbid in published artwork.
 
 ## Success Criteria
 
-- [ ] `rank_persona_realism.py` writes `typicality_distribution_by_model_strategy.png/.svg/.eps`
+- [x] `rank_persona_realism.py` writes `typicality_distribution_by_model_strategy.png/.svg/.eps`
       per country, through `figures.save_figure(..., fixed_canvas=True)`.
-- [ ] **Every written SVG is 456 pt wide**: the root `<svg>` `width` attribute is `456pt` (checked
+- [x] **Every written SVG is 456 pt wide**: the root `<svg>` `width` attribute is `456pt` (checked
       by a test on the written file, not on the figure object).
-- [ ] **The figure reproduces the approved P20 layout**: the geometry constants in the Definitions
+- [x] **The figure reproduces the approved P20 layout**: the geometry constants in the Definitions
       are met exactly (a test asserts every cell's axes box in points), and a side-by-side review
       against `compact/P20_square_grid_top_labels.png` shows no difference except the listed
       intentional ones (key separator, "Strategies", "individuals").
-- [ ] Run with `--rounds 1` on the 2026-09-21 swedish_02 data, every competitor's distribution
+- [x] Run with `--rounds 1` on the 2026-09-21 swedish_02 data, every competitor's distribution
       equals the prototype's `golden/distribution_first_round_by_combo.csv` /
       `distribution_first_round_by_model.csv` row to within 1e-12, and the two withdrawn cells
       (DeepSeek-R1 14B × E, Gemma4 E4B × E) are crossed out.
-- [ ] Run with the published rounds (`n_rounds_source: report`), ε² is 0.0980 (model) and 0.1668
+      *(Met by the Phase 4 and Phase 6 live checks for every combination and the reference; the
+      pooled per-model rows of `distribution_first_round_by_model.csv` have no counterpart, since the
+      block publishes no per-model marginal — see the Phase 4 notes.)*
+- [x] Run with the published rounds (`n_rounds_source: report`), ε² is 0.0980 (model) and 0.1668
       (strategy) to 4 d.p.; 45/66 model pairs are Holm-significant; 58/58 combinations vs the
       reference have δ > 0 and p_Holm < 0.05; every point δ matches `golden/combo_vs_scb.csv` and
       `golden/pairwise_models_cliffs_delta.csv` to 1e-9. With `--rounds 1`: 0.0984 / 0.1608.
-- [ ] No string on the canvas is a literal for a manuscript-controlled word, a model name or the
+- [x] No string on the canvas is a literal for a manuscript-controlled word, a model name or the
       reference name. Each comes from `labels.py` over config, and a missing entry raises.
-- [ ] `glyph_grid.py` passes the presentation-layer membership test: it imports nothing from an
+- [x] `glyph_grid.py` passes the presentation-layer membership test: it imports nothing from an
       analysis subpackage, and a grep finds no `alpha=`, `savefig` or `imshow` in it.
 - [ ] `realism_ranking.json`, every new CSV and the PNG are byte-identical across two runs and
       across a shuffled competitor order.
@@ -829,9 +832,37 @@ were left alone; the edge is pinned in `tests/test_workflow_state.py`.
 **Dependencies:** Phases 1, 2, 4, 5.
 
 ### Phase 7: Documentation
+**Started:** 2026-09-21 19:12
+**Completed:** 2026-09-21 20:00
+
 **Goal:** The docs describe what shipped.
 
-- [ ] 7.1 — See the Documentation Plan.
+- [x] 7.1 — See the Documentation Plan.
+
+**Files Modified:** `docs/development/persona-realism-judge.md`,
+`docs/development/figure-conventions.md`, `docs/architecture/sub-packages.md`,
+`docs/architecture/configuration.md`, `docs/architecture/commands.md`, `CLAUDE.md`.
+
+*Implementation notes (Phase 7).*
+- The script, builder and chart module docstrings (the last three Documentation Plan items) were
+  already updated in Phases 4 and 6; this phase checked them against the code and left them.
+- `persona-realism-judge.md`: new subsection "The typicality distribution, effect sizes and
+  closeness to the reference" (round-weighted basis, bands, the four cell states, the
+  `model_ranking` dependency and `bypass`, the three effect tables, the closeness block and why TV
+  similarity, the noise baseline, the joint bootstrap, the reference-n and judge-family caveats);
+  the manuscript basis `--rounds 1` stated under `--rounds`; the output table gains the nine CSVs
+  and the figure. The gates and honesty paragraphs, which sat under "The typicality axis", now have
+  their own heading. A stale sentence claiming the typicality heatmap keeps its own ramp was
+  corrected (it is on the house ramp since the 2026-08-12 ADR).
+- `figure-conventions.md`: "Manuscript-controlled words come from config" (labelling) and "The
+  typicality distribution grid: glyphs, not tiles" (orientation, fixed point canvas, cell states,
+  √ scale, reference drawn three ways, ternary corners labelled once, 0.3 pt halo); the fixed-canvas
+  paragraph names the second fixed-canvas figure. The canvas height is documented as derived
+  (280.5 pt on the live grid), not fixed, since the legend can wrap.
+- `sub-packages.md` previously said "seven" while listing eight names including `grid_variants.py`;
+  it now lists the eight `PRESENTATION_MODULES` the compliance test asserts, with `grid_variants.py`
+  described as the naming record. `cap_index.py` gained an entry (it had none).
+- The existing "Methods:" keys are documented as unchanged (open question 1).
 
 **Dependencies:** Phase 6.
 
@@ -859,23 +890,23 @@ were left alone; the edge is pinned in `tests/test_workflow_state.py`.
       `holm_adjust` over exactly that family.
 - [x] **Withdrawn vs unjudged vs no-typicality**: a fixture with one of each produces three
       distinct cell states in the block; a withdrawn slug that is also consumed raises.
-- [ ] **Missing reference**: vs-reference rows are empty, with a `skipped_tests` reason; the chart
+- [x] **Missing reference**: vs-reference rows are empty, with a `skipped_tests` reason; the chart
       raises `ValueError`.
-- [ ] **Labels**: raise on a missing `figure_terms.yaml` key and on a missing
+- [x] **Labels**: raise on a missing `figure_terms.yaml` key and on a missing
       `display.reference_source`.
-- [ ] **`glyph_grid`**: `PointCanvas(456, 280.5)` saved through `save_figure(fixed_canvas=True)`
+- [x] **`glyph_grid`**: `PointCanvas(456, 280.5)` saved through `save_figure(fixed_canvas=True)`
       writes an SVG whose root width is `456pt`; heights that do not sum to 1 raise; a share triple
       that does not sum to 1 raises; no artist has a non-None alpha; the module imports no
       `population_synthetic.analysis.<subpackage>`.
-- [ ] **Model order**: `ranked_model_order` reproduces `meta.json`'s `model_order` on a fixture
+- [x] **Model order**: `ranked_model_order` reproduces `meta.json`'s `model_order` on a fixture
       mirroring the live tiers; a grid model unknown to the ranking raises.
 
 ### Integration Tests
-- [ ] **e2e** (`test_realism_ranking_e2e.py`): the fixture with a cap index and a
+- [x] **e2e** (`test_realism_ranking_e2e.py`): the fixture with a cap index and a
       `performance.json` writes all five CSVs and the three figure files; the SVG is 456 pt wide;
       without `performance.json` and with charts on, the run raises before writing
       `realism_ranking.json`; with `--no-charts` it succeeds.
-- [ ] **Geometry**: every histogram axes of the returned figure sits at the P20 box (±1e-6 pt) for
+- [x] **Geometry**: every histogram axes of the returned figure sits at the P20 box (±1e-6 pt) for
       a 12 × 5 fixture.
 - [ ] **Determinism**: two runs, and a run on a shuffled record list, give byte-identical JSON, CSVs
       and PNG.
@@ -883,46 +914,46 @@ were left alone; the edge is pinned in `tests/test_workflow_state.py`.
       `model_ranking` figures are byte-identical before and after the Phase 1 lift.
 
 ### Manual Verification
-- [ ] `python scripts/analyze/rank_persona_realism.py --slug ... --rounds 1 --force` on the live
+- [x] `python scripts/analyze/rank_persona_realism.py --slug ... --rounds 1 --force` on the live
       base: the distribution CSV matches `golden/distribution_first_round_by_*.csv` (script check),
       and the figure matches `compact/P20_square_grid_top_labels.png` except for the em-dash key,
       "Strategies" and "individuals".
-- [ ] The same without `--rounds`: the omnibus, model-pair and vs-reference point estimates match
+- [x] The same without `--rounds`: the omnibus, model-pair and vs-reference point estimates match
       the `golden/` CSVs (`typicality_mean` basis). The CIs agree only within Monte-Carlo tolerance
       (|Δ| < 0.02), because the resampling scheme differs from the prototype's.
 - [ ] Open the EPS: the SCB outline and host tints look the same as in the PNG (no transparency).
 
 ### Edge Cases
-- [ ] A competitor whose survivors all score one level (a single bar; the √ scale at 1.0).
-- [ ] A survivor with an impossible round among its rounds (r_i < rounds consumed).
-- [ ] A model withdrawn in every strategy (it is absent from both the ranking and the grid; not a
+- [x] A competitor whose survivors all score one level (a single bar; the √ scale at 1.0).
+- [x] A survivor with an impossible round among its rounds (r_i < rounds consumed).
+- [x] A model withdrawn in every strategy (it is absent from both the ranking and the grid; not a
       column).
-- [ ] 13 models: the cell side shrinks below 26.5 and the canvas stays 456 pt; with a very large
+- [x] 13 models: the cell side shrinks below 26.5 and the canvas stays 456 pt; with a very large
       count it raises below 18 pt.
 
 ---
 
 ## Documentation Plan
 
-- [ ] `docs/development/persona-realism-judge.md`: a new subsection after "The typicality axis",
+- [x] `docs/development/persona-realism-judge.md`: a new subsection after "The typicality axis",
       covering the distribution grid (round-weighted basis and its reduction to one round, bands,
       withdrawn and unjudged cells, the dependency on `model_ranking` output), the effect-size
       tables (families, orientation, seeds) and the judge/generator overlap caveat.
-- [ ] `docs/development/figure-conventions.md`: add a section for glyph grids and ternaries (cells
+- [x] `docs/development/figure-conventions.md`: add a section for glyph grids and ternaries (cells
       are small axes, not `imshow`; bar heights √-scaled and said so on the figure; ternary corners
       labelled once; the reference as outline + star + detached column), a rule for vertical 90°
       model labels above a grid on a fixed canvas, and a statement that published artwork takes
       manuscript-controlled words from `figure_terms.yaml`. Update the presentation-layer module
       count from seven to eight.
-- [ ] `CLAUDE.md`: the realism_ranking paragraph gains the distribution grid and effect tables; the
+- [x] `CLAUDE.md`: the realism_ranking paragraph gains the distribution grid and effect tables; the
       "seven modules" of the presentation layer become eight (add `glyph_grid`); the analysis
       registry paragraph notes the new `realism_ranking → model_ranking` edge. Also list
       `model_order.py` among the shared `utils/`, unless the transposed plan already did.
-- [ ] `docs/architecture/sub-packages.md`: `model_order.py` and `glyph_grid.py`; fix the module count.
-- [ ] `docs/architecture/configuration.md`: `figure_terms.yaml` and `display.reference_source`.
-- [ ] `scripts/analyze/rank_persona_realism.py` module docstring: the new outputs and
+- [x] `docs/architecture/sub-packages.md`: `model_order.py` and `glyph_grid.py`; fix the module count.
+- [x] `docs/architecture/configuration.md`: `figure_terms.yaml` and `display.reference_source`.
+- [x] `scripts/analyze/rank_persona_realism.py` module docstring: the new outputs and
       `--typicality-bands`.
-- [ ] `realism_ranking/builder.py` and `charts.py` module docstrings: the new blocks and figure.
+- [x] `realism_ranking/builder.py` and `charts.py` module docstrings: the new blocks and figure.
 
 ---
 
