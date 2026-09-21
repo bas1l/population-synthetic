@@ -1,0 +1,323 @@
+{
+ "delta": {
+  "n_blocks_models": 10,
+  "dropped_models": [
+   "ollama_deepseek_r1_14b",
+   "ollama_gemma4_e4b"
+  ],
+  "friedman_strategy": {
+   "chi2": 27.200000000000017,
+   "p": 1.811122816736785e-05,
+   "k": 5,
+   "n": 10,
+   "kendalls_w": 0.6800000000000004,
+   "iman_davenport_f": 19.12500000000004,
+   "df1": 4,
+   "df2": 36,
+   "p_f": 1.6390326120138033e-08
+  },
+  "friedman_model": {
+   "chi2": 23.00727272727275,
+   "p": 0.0061800045438897494,
+   "k": 10,
+   "n": 5,
+   "kendalls_w": 0.5112727272727278,
+   "iman_davenport_f": 4.184523809523817,
+   "df1": 9,
+   "df2": 36,
+   "p_f": 0.0009273797360747817
+  },
+  "page_strategy_simplest_first": {
+   "L": 401.0,
+   "z": -3.0990321069650117,
+   "p": 0.9990292301074798,
+   "k": 5,
+   "n": 10,
+   "order": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "p_two_sided": 0.0019415397850404137
+  },
+  "linear_contrast": {
+   "estimate": -0.627116069168926,
+   "t": -7.389797109190159,
+   "p": 4.148044943297982e-05,
+   "slope_sign": "negative"
+  },
+  "quadratic_contrast": {
+   "estimate": -0.8844815237143809,
+   "t": -8.090918250522225,
+   "p": 2.0221644956624906e-05,
+   "slope_sign": "negative"
+  },
+  "rm_anova_strategy": {
+   "test": "rm_anova",
+   "F": 32.90629776514379,
+   "p": 1.429875656345206e-11,
+   "df1": 4,
+   "df2": 36,
+   "k": 5,
+   "n": 10,
+   "partial_eta_sq": 0.7852351441198919
+  },
+  "rm_anova_model": {
+   "test": "rm_anova",
+   "F": 4.269878897667299,
+   "p": 0.0007933521857182476,
+   "df1": 9,
+   "df2": 36,
+   "k": 10,
+   "n": 5,
+   "partial_eta_sq": 0.5163169800311963
+  },
+  "nemenyi_cd_strategy": 1.9288277551893114,
+  "nemenyi_cd_model": 6.057992834068865,
+  "avg_rank_strategy": {
+   "A": 2.7,
+   "B": 4.5,
+   "C": 3.9,
+   "D": 2.8,
+   "E": 1.1
+  },
+  "avg_rank_model": {
+   "openrouter_kimi_k3": 2.6,
+   "claude_haiku": 6.6,
+   "claude_sonnet": 8.0,
+   "openrouter_opus_5": 3.8,
+   "openrouter_gpt56_sol": 7.0,
+   "openrouter_glm_52": 5.4,
+   "openrouter_qwen35_flash": 9.0,
+   "openrouter_gpt_oss_120b": 5.8,
+   "openrouter_mistral_medium": 3.4,
+   "ollama_mistral_nemo_12b": 3.4
+  },
+  "kendall_w_strategy_ci": [
+   0.5840000000000003,
+   0.7560000000000002
+  ],
+  "kendall_w_model_ci": [
+   0.3910303030303036,
+   0.6063030303030309
+  ],
+  "kendall_w_strategy_point_check": 0.6800000000000004,
+  "kendall_w_model_point_check": 0.5112727272727278
+ },
+ "le4": {
+  "n_blocks_models": 10,
+  "dropped_models": [
+   "ollama_deepseek_r1_14b",
+   "ollama_gemma4_e4b"
+  ],
+  "friedman_strategy": {
+   "chi2": 28.494382022471925,
+   "p": 9.90178294946759e-06,
+   "k": 5,
+   "n": 10,
+   "kendalls_w": 0.7123595505617981,
+   "iman_davenport_f": 22.28906250000004,
+   "df1": 4,
+   "df2": 36,
+   "p_f": 2.511221217227712e-09
+  },
+  "friedman_model": {
+   "chi2": 28.69721115537851,
+   "p": 0.00072878946330523,
+   "k": 10,
+   "n": 5,
+   "kendalls_w": 0.6377158034528558,
+   "iman_davenport_f": 7.04105571847509,
+   "df1": 9,
+   "df2": 36,
+   "p_f": 8.520053573669369e-06
+  },
+  "page_strategy_simplest_first": {
+   "L": 382.0,
+   "z": -4.300697617828996,
+   "p": 0.9999914869370864,
+   "k": 5,
+   "n": 10,
+   "order": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "p_two_sided": 1.702612582721308e-05
+  },
+  "linear_contrast": {
+   "estimate": -0.4694059591202448,
+   "t": -11.878287325986635,
+   "p": 8.398037507215805e-07,
+   "slope_sign": "negative"
+  },
+  "quadratic_contrast": {
+   "estimate": -0.4830423227566084,
+   "t": -9.347463478405889,
+   "p": 6.256430428830106e-06,
+   "slope_sign": "negative"
+  },
+  "rm_anova_strategy": {
+   "test": "rm_anova",
+   "F": 41.3903098135681,
+   "p": 5.399653461372046e-13,
+   "df1": 4,
+   "df2": 36,
+   "k": 5,
+   "n": 10,
+   "partial_eta_sq": 0.8213942316826824
+  },
+  "rm_anova_model": {
+   "test": "rm_anova",
+   "F": 3.017893503434046,
+   "p": 0.00866567232878245,
+   "df1": 9,
+   "df2": 36,
+   "k": 10,
+   "n": 5,
+   "partial_eta_sq": 0.4300283984015016
+  },
+  "nemenyi_cd_strategy": 1.9288277551893114,
+  "nemenyi_cd_model": 6.057992834068865,
+  "avg_rank_strategy": {
+   "A": 3.55,
+   "B": 4.35,
+   "C": 3.55,
+   "D": 2.45,
+   "E": 1.1
+  },
+  "avg_rank_model": {
+   "openrouter_kimi_k3": 2.7,
+   "claude_haiku": 8.2,
+   "claude_sonnet": 7.4,
+   "openrouter_opus_5": 6.7,
+   "openrouter_gpt56_sol": 6.6,
+   "openrouter_glm_52": 4.4,
+   "openrouter_qwen35_flash": 8.9,
+   "openrouter_gpt_oss_120b": 3.5,
+   "openrouter_mistral_medium": 3.0,
+   "ollama_mistral_nemo_12b": 3.6
+  },
+  "kendall_w_strategy_ci": [
+   0.5820769243329745,
+   0.7642096013097074
+  ],
+  "kendall_w_model_ci": [
+   0.3761072017916079,
+   0.6784901145843999
+  ],
+  "kendall_w_strategy_point_check": 0.7123595505617981,
+  "kendall_w_model_point_check": 0.6377158034528558
+ },
+ "cdf": {
+  "n_blocks_models": 10,
+  "dropped_models": [
+   "ollama_deepseek_r1_14b",
+   "ollama_gemma4_e4b"
+  ],
+  "friedman_strategy": {
+   "chi2": 25.959595959595976,
+   "p": 3.224380282170578e-05,
+   "k": 5,
+   "n": 10,
+   "kendalls_w": 0.6489898989898994,
+   "iman_davenport_f": 16.640287769784205,
+   "df1": 4,
+   "df2": 36,
+   "p_f": 8.297257729607204e-08
+  },
+  "friedman_model": {
+   "chi2": 21.05825242718449,
+   "p": 0.012394268791403434,
+   "k": 10,
+   "n": 5,
+   "kendalls_w": 0.46796116504854424,
+   "iman_davenport_f": 3.5182481751824897,
+   "df1": 9,
+   "df2": 36,
+   "p_f": 0.003249566513103151
+  },
+  "page_strategy_simplest_first": {
+   "L": 401.5,
+   "z": -3.067409330363328,
+   "p": 0.9989203852254002,
+   "k": 5,
+   "n": 10,
+   "order": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "p_two_sided": 0.0021592295491996705
+  },
+  "linear_contrast": {
+   "estimate": -0.38442974485831616,
+   "t": -7.966309989013696,
+   "p": 2.289348281582256e-05,
+   "slope_sign": "negative"
+  },
+  "quadratic_contrast": {
+   "estimate": -0.5319024721310435,
+   "t": -7.819925267578025,
+   "p": 2.65379786239858e-05,
+   "slope_sign": "negative"
+  },
+  "rm_anova_strategy": {
+   "test": "rm_anova",
+   "F": 31.79763352099922,
+   "p": 2.3007582808132656e-11,
+   "df1": 4,
+   "df2": 36,
+   "k": 5,
+   "n": 10,
+   "partial_eta_sq": 0.7793989694189603
+  },
+  "rm_anova_model": {
+   "test": "rm_anova",
+   "F": 4.3148254304064375,
+   "p": 0.0007310544214552471,
+   "df1": 9,
+   "df2": 36,
+   "k": 10,
+   "n": 5,
+   "partial_eta_sq": 0.518931571867712
+  },
+  "nemenyi_cd_strategy": 1.9288277551893114,
+  "nemenyi_cd_model": 6.057992834068865,
+  "avg_rank_strategy": {
+   "A": 2.75,
+   "B": 4.45,
+   "C": 3.8,
+   "D": 2.9,
+   "E": 1.1
+  },
+  "avg_rank_model": {
+   "openrouter_kimi_k3": 2.6,
+   "claude_haiku": 6.8,
+   "claude_sonnet": 8.0,
+   "openrouter_opus_5": 3.8,
+   "openrouter_gpt56_sol": 6.7,
+   "openrouter_glm_52": 5.6,
+   "openrouter_qwen35_flash": 8.8,
+   "openrouter_gpt_oss_120b": 5.4,
+   "openrouter_mistral_medium": 3.9,
+   "ollama_mistral_nemo_12b": 3.4
+  },
+  "kendall_w_strategy_ci": [
+   0.5881859296482411,
+   0.7623115577889448
+  ],
+  "kendall_w_model_ci": [
+   0.3726060606060609,
+   0.5937089143865841
+  ],
+  "kendall_w_strategy_point_check": 0.6489898989898994,
+  "kendall_w_model_point_check": 0.46796116504854424
+ }
+}

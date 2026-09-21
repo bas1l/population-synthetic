@@ -20,6 +20,15 @@ repeated-measures / "classifiers over multiple datasets" shape (Demšar 2006).
 Those that need ``scikit-posthocs`` or ``statsmodels`` import them lazily inside
 the function and raise a clear ``install with: pip install -e .[analysis]`` error
 when the optional extra is absent, matching the C2ST multivariate-fidelity pattern.
+The same family carries :func:`complete_block_matrix` (the complete-case layout
+every blocked test needs) and :func:`conover_friedman_pairwise`, a less conservative
+post-hoc than Nemenyi for the Friedman design, Holm-corrected here.
+
+A last family gives two independent samples a location effect size with an interval:
+:func:`epsilon_squared` for a Kruskal-Wallis result, :func:`mann_whitney_test`,
+:func:`cliffs_delta_from_histograms` (Cliff's delta through the Mann-Whitney identity,
+vectorised over histograms) and :func:`bootstrap_cliffs_delta_ci`.
+
 Every re-implemented statistic (Page's L, Kendall's W, Cliff's delta) is validated
 against a hand-computed value in ``tests/test_stats_tests_significance.py``; the
 library-backed ones are pinned to the library's own output on fixtures.
@@ -28,7 +37,7 @@ library-backed ones are pinned to the library's own output on fixtures.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -388,6 +397,91 @@ def nemenyi_pairwise(
     p_df = sp.posthoc_nemenyi_friedman(arr)
     p_matrix = p_df.to_numpy(dtype=float).tolist()
     return {"labels": resolved, "p_matrix": p_matrix, "k": k, "n": n}
+
+
+def complete_block_matrix(
+    cells: Mapping[str, Mapping[str, float | None]],
+    blocks: Sequence[str],
+    treatments: Sequence[str],
+) -> tuple[np.ndarray, list[str], list[str]]:
+    """Build the complete-case ``blocks x treatments`` matrix for a blocked rank test.
+
+    *cells* maps ``block -> {treatment -> value | None}``. A block is *complete* iff it
+    has a non-``None`` value under **every** treatment in *treatments* (Friedman and its
+    post-hocs require complete blocks); an incomplete block is dropped and returned
+    separately, never imputed. A treatment key absent from a block's mapping counts as
+    ``None`` -- an absent cell (e.g. a withdrawn combination) is the same fact as an
+    explicit ``None``. Every name in *blocks* must be a key of *cells*.
+
+    Returns ``(matrix, complete_blocks, dropped_blocks)`` with *matrix* shaped
+    ``len(complete_blocks) x len(treatments)``, rows in *blocks* order and columns in
+    *treatments* order.
+    """
+    complete = [b for b in blocks if all(cells[b].get(t) is not None for t in treatments)]
+    dropped = [b for b in blocks if b not in complete]
+    matrix = np.array(
+        [[float(cells[b][t]) for t in treatments] for b in complete],
+        dtype=float,
+    ) if complete else np.empty((0, len(treatments)))
+    return matrix, complete, dropped
+
+
+def conover_friedman_pairwise(
+    matrix: Sequence[Sequence[float]],
+    *,
+    labels: Sequence[str],
+) -> dict[str, Any]:
+    """Conover's post-hoc for the Friedman design, Holm-corrected across every pair.
+
+    Input matches :func:`friedman_test` (row = block, column = treatment); *labels*
+    names the columns and must match the column count. The raw two-sided p-values come
+    from :func:`scikit_posthocs.posthoc_conover_friedman` (lazily imported; raises a
+    clear install error without the ``[analysis]`` extra), which uses the
+    t-distribution on the rank-sum differences (Conover 1999) and is therefore less
+    conservative than Nemenyi with few blocks.
+
+    The Holm step-down correction is this module's own :func:`holm_adjust`, applied to
+    the ``k(k-1)/2`` unordered pairs -- the same implementation every other Holm family
+    in the codebase uses, not the library's.
+
+    Returns ``{"test","k","n","correction","pairs"}`` where ``pairs`` maps ``"a|b"``
+    (``a`` listed before ``b`` in *labels*) to ``{"p_raw","p_holm"}``. Degenerate input
+    (``<2`` treatments or blocks) returns an empty ``pairs`` map plus a ``"note"``. A
+    pair whose raw p is not finite (every block perfectly concordant, so the statistic's
+    residual variance is zero) gets ``p_raw``/``p_holm`` ``None`` with its own ``note``
+    and is left out of the Holm family.
+
+    Raises ``ValueError`` when *labels* does not match the treatment count.
+    """
+    arr = _as_block_matrix(matrix)
+    n, k = arr.shape
+    if len(labels) != k:
+        raise ValueError(f"labels has {len(labels)} entries but the matrix has {k} columns")
+    out: dict[str, Any] = {"test": "conover_friedman", "k": k, "n": n, "correction": "holm", "pairs": {}}
+    if k < 2 or n < 2:
+        out["note"] = f"need >=2 treatments and >=2 blocks, got {k} treatments / {n} blocks"
+        return out
+    sp = _import_scikit_posthocs()
+    with np.errstate(divide="ignore", invalid="ignore"):
+        raw = sp.posthoc_conover_friedman(arr).to_numpy(dtype=float)
+    records: dict[str, dict[str, Any]] = {}
+    keys: list[str] = []
+    raw_ps: list[float] = []
+    for i in range(k):
+        for j in range(i + 1, k):
+            key = f"{labels[i]}|{labels[j]}"
+            p = float(raw[i, j])
+            if math.isfinite(p):
+                records[key] = {"p_raw": p, "p_holm": None}
+                keys.append(key)
+                raw_ps.append(p)
+            else:
+                records[key] = {"p_raw": None, "p_holm": None,
+                                "note": "Conover statistic undefined (zero residual rank variance)"}
+    for key, p_adj in zip(keys, _holm(raw_ps)):
+        records[key]["p_holm"] = p_adj
+    out["pairs"] = records
+    return out
 
 
 def benjamini_hochberg(pvals: list[float]) -> list[float]:
@@ -1130,3 +1224,201 @@ def _holm_adjust(p_values: Sequence[float]) -> list[float]:
         running = max(running, min(1.0, (m - rank) * p_values[idx]))
         adjusted[idx] = running
     return adjusted
+
+
+# =========================================================================== #
+# Location effect sizes for two independent samples                           #
+# (epsilon^2 for Kruskal-Wallis, Mann-Whitney U, bootstrap CIs for Cliff's    #
+#  delta).  Added for the realism ranking's typicality effects: every p-value  #
+#  it publishes carries an effect size, and every effect size an interval.     #
+# =========================================================================== #
+
+
+def epsilon_squared(h: float, n: int) -> float:
+    """Epsilon-squared effect size of a Kruskal-Wallis test, ``H / (n - 1)``.
+
+    Algebraically equal to ``H (n + 1) / (n^2 - 1)`` (Tomczak & Tomczak 2014). It is
+    computed from the ``H`` and ``n`` a :func:`kruskal_test` result already carries, so
+    the effect size and the test can never describe different samples.
+
+    Raises ``ValueError`` for ``n < 2`` (undefined), or a negative or non-finite ``H``.
+    """
+    if isinstance(n, bool) or int(n) != n or n < 2:
+        raise ValueError(f"epsilon_squared needs an integer n >= 2, got {n!r}")
+    h = float(h)
+    if not math.isfinite(h) or h < 0.0:
+        raise ValueError(f"epsilon_squared needs a finite H >= 0, got {h!r}")
+    return h / (int(n) - 1)
+
+
+def _finite_sample(values: Sequence[float], name: str) -> np.ndarray:
+    """A non-empty 1-D float sample with no NaN/inf, or ``ValueError``."""
+    arr = np.asarray(values, dtype=float)
+    if arr.ndim != 1:
+        raise ValueError(f"{name} must be 1-D, got shape {arr.shape}")
+    if arr.size == 0:
+        raise ValueError(f"{name} is empty")
+    if not np.isfinite(arr).all():
+        raise ValueError(f"{name} contains NaN or inf")
+    return arr
+
+
+def mann_whitney_test(a: Sequence[float], b: Sequence[float]) -> dict[str, Any]:
+    """Two-sided Mann-Whitney U test of ``a`` against ``b``.
+
+    Wraps :func:`scipy.stats.mannwhitneyu` with ``method="asymptotic"`` (normal
+    approximation with the tie and continuity corrections): ties are pervasive on an
+    integer rating scale, where the exact null distribution does not apply. ``U`` is the
+    statistic of *a*, so ``U / (n_a n_b)`` is ``P(a > b) + P(a = b) / 2`` and
+    ``2U / (n_a n_b) - 1`` is :func:`cliffs_delta` of ``(a, b)``.
+
+    Returns ``{"U","p","n_a","n_b","alternative","method"}``. When every value in both
+    samples is identical, scipy reports ``p = 1.0`` (no evidence of a difference), which
+    is passed through.
+
+    Raises ``ValueError`` when either sample is empty or holds a NaN/inf, as
+    :func:`cliffs_delta` does for an empty sample.
+    """
+    x = _finite_sample(a, "a")
+    y = _finite_sample(b, "b")
+    res = stats.mannwhitneyu(x, y, alternative="two-sided", method="asymptotic")
+    return {"U": float(res.statistic), "p": float(res.pvalue), "n_a": int(x.size), "n_b": int(y.size),
+            "alternative": "two-sided", "method": "asymptotic"}
+
+
+def cliffs_delta_from_histograms(hist_a: np.ndarray, hist_b: np.ndarray) -> np.ndarray:
+    """Cliff's delta of two samples given as histograms over one shared ordered level set.
+
+    ``hist_a``/``hist_b`` have shape ``(..., K)`` (broadcastable): the non-negative
+    weight of each of ``K`` levels, **ascending**, in sample *a* / *b*. Through the
+    Mann-Whitney identity, ``U_a = sum_i h_a[i] * (weight of b below level i + weight
+    of b at level i / 2)`` (mid-rank counting of ties) and
+    ``delta = 2 U_a / (W_a W_b) - 1`` with ``W`` the total weights. For integer counts
+    this is exactly :func:`cliffs_delta` of the underlying samples; for fractional
+    weights (an individual spreading weight 1 over several scored rounds) it is
+    ``P(X > Y) - P(X < Y)`` for ``X``, ``Y`` drawn from the two weighted distributions.
+    It costs ``O(K)`` per pair of histograms instead of the ``O(n_a n_b)`` sign matrix,
+    and is vectorised over the leading axes (bootstrap replicates, groups).
+
+    The caller guarantees non-negative weights with a positive total on both sides
+    (checked once where the histograms are built, not in this hot path).
+    """
+    hist_a = np.asarray(hist_a, dtype=float)
+    hist_b = np.asarray(hist_b, dtype=float)
+    w_a = hist_a.sum(axis=-1)
+    w_b = hist_b.sum(axis=-1)
+    below_b = np.cumsum(hist_b, axis=-1) - hist_b
+    u_a = (hist_a * (below_b + 0.5 * hist_b)).sum(axis=-1)
+    return 2.0 * u_a / (w_a * w_b) - 1.0
+
+
+def _support_counts(sample: np.ndarray, support: np.ndarray) -> np.ndarray:
+    """Occurrences of each *support* value (ascending, containing every sample value)."""
+    return np.bincount(np.searchsorted(support, sample), minlength=support.size).astype(float)
+
+
+def _resampled_counts(counts: np.ndarray, iterations: int, rng: np.random.Generator) -> np.ndarray:
+    """``(iterations, K)`` counts of a with-replacement resample at the sample's own size.
+
+    Drawing ``n`` elements with replacement from a sample is the multinomial
+    ``Mult(n, counts / n)`` over its support values, so the count vector is drawn
+    directly; Cliff's delta depends on a resample only through these counts.
+    """
+    n = int(counts.sum())
+    return rng.multinomial(n, counts / n, size=iterations).astype(float)
+
+
+def _check_bootstrap_request(iterations: int, ci_level: float | None) -> None:
+    """Raise on a malformed resampling request (``ci_level`` ``None`` = not applicable)."""
+    if isinstance(iterations, bool) or int(iterations) != iterations or iterations < 1:
+        raise ValueError(f"bootstrap iterations must be an integer >= 1, got {iterations!r}")
+    if ci_level is not None and not 0.0 < float(ci_level) < 1.0:
+        raise ValueError(f"ci_level must be in (0, 1), got {ci_level}")
+
+
+def percentile_interval(replicates: Any, *, ci_level: float) -> tuple[Any, Any]:
+    """Central percentile interval of bootstrap *replicates* along axis 0.
+
+    ``ci_level`` is the central mass (``0.95`` -> the 2.5th/97.5th percentiles), with
+    numpy's default linear interpolation -- the convention of :func:`bootstrap_ci` and
+    :func:`bootstrap_difference_ci`. A 1-D input gives two floats; an
+    ``(iterations, m)`` input gives two length-``m`` arrays, one interval per column.
+
+    Raises ``ValueError`` on an empty input, a NaN/inf replicate (a degenerate replicate
+    must be resolved by the caller, never folded into a bound), or a ``ci_level``
+    outside ``(0, 1)``.
+    """
+    _check_bootstrap_request(1, ci_level)
+    arr = np.asarray(replicates, dtype=float)
+    if arr.ndim == 0 or arr.shape[0] == 0:
+        raise ValueError("percentile_interval needs at least one replicate")
+    if not np.isfinite(arr).all():
+        raise ValueError("percentile_interval: replicates contain NaN or inf")
+    tail = (1.0 - float(ci_level)) / 2.0
+    lo = np.quantile(arr, tail, axis=0)
+    hi = np.quantile(arr, 1.0 - tail, axis=0)
+    if arr.ndim == 1:
+        return float(lo), float(hi)
+    return lo, hi
+
+
+def _draws_first(x: np.ndarray, y: np.ndarray) -> bool:
+    """Whether *x* draws before *y*: the sample whose sorted values compare lower first.
+
+    Lexicographic on the sorted values, then on the size; identical samples keep the
+    argument order (their draws are exchangeable).
+    """
+    sx, sy = np.sort(x), np.sort(y)
+    for vx, vy in zip(sx, sy):
+        if vx != vy:
+            return bool(vx < vy)
+    return bool(sx.size <= sy.size)
+
+
+def bootstrap_cliffs_delta_ci(
+    a: Sequence[float],
+    b: Sequence[float],
+    *,
+    iterations: int,
+    ci_level: float,
+    seed: int,
+) -> dict[str, Any]:
+    """Percentile bootstrap CI for Cliff's delta of two independent samples.
+
+    Each sample is resampled with replacement at its own size, and each replicate's
+    delta is computed through the Mann-Whitney identity (:func:`cliffs_delta_from_histograms`)
+    rather than the sign matrix. ``point`` is :func:`cliffs_delta` on the observed
+    samples; the identity gives the same value, which the tests assert.
+
+    Randomness is one local :func:`numpy.random.default_rng` seeded with *seed*, so the
+    interval depends only on ``(a, b, seed, iterations)`` and never on which other
+    comparisons a caller runs, or in what order. The two samples draw in a canonical
+    order (the one whose sorted values compare lower draws first), so swapping the
+    arguments gives exactly the negated point and the mirrored interval.
+
+    Returns ``{"point","lo","hi","ci_level","iterations","n_a","n_b","method"}``, the
+    key set of :func:`bootstrap_difference_ci`.
+
+    Raises ``ValueError`` when either sample is empty or holds a NaN/inf, when
+    ``iterations < 1``, or when ``ci_level`` is outside ``(0, 1)``.
+    """
+    _check_bootstrap_request(iterations, ci_level)
+    x = _finite_sample(a, "a")
+    y = _finite_sample(b, "b")
+    point = cliffs_delta(x, y)["delta"]
+
+    support = np.unique(np.concatenate([x, y]))
+    counts_x = _support_counts(x, support)
+    counts_y = _support_counts(y, support)
+    rng = np.random.default_rng(seed)
+    if _draws_first(x, y):
+        rep_x = _resampled_counts(counts_x, iterations, rng)
+        rep_y = _resampled_counts(counts_y, iterations, rng)
+    else:
+        rep_y = _resampled_counts(counts_y, iterations, rng)
+        rep_x = _resampled_counts(counts_x, iterations, rng)
+    lo, hi = percentile_interval(cliffs_delta_from_histograms(rep_x, rep_y), ci_level=ci_level)
+    return {"point": point, "lo": lo, "hi": hi, "ci_level": float(ci_level),
+            "iterations": int(iterations), "n_a": int(x.size), "n_b": int(y.size),
+            "method": "percentile"}
+

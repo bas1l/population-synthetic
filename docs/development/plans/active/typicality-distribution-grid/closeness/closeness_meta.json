@@ -1,0 +1,38 @@
+{
+ "scb_share_le4": 0.5700000000000001,
+ "n_boot": 5000,
+ "n_perm": 10000,
+ "seed": 20260921,
+ "complete_models": [
+  "openrouter_kimi_k3",
+  "claude_haiku",
+  "claude_sonnet",
+  "openrouter_opus_5",
+  "openrouter_gpt56_sol",
+  "openrouter_glm_52",
+  "openrouter_qwen35_flash",
+  "openrouter_gpt_oss_120b",
+  "openrouter_mistral_medium",
+  "ollama_mistral_nemo_12b"
+ ],
+ "withdrawn": [
+  [
+   "ollama_deepseek_r1_14b",
+   "all_generate_evaluate_random_pick_v2"
+  ],
+  [
+   "ollama_gemma4_e4b",
+   "all_generate_evaluate_random_pick_v2"
+  ]
+ ],
+ "df": {
+  "model": 11.0,
+  "strategy": 4.0,
+  "resid": 42.0
+ },
+ "outcome_corr_spearman": {
+  "delta~le4": 0.7780892493547096,
+  "delta~cdf": 0.9975389934898266,
+  "le4~cdf": 0.7677681888808275
+ }
+}

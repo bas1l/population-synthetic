@@ -40,6 +40,7 @@ from scipy.stats import rankdata
 
 from population_synthetic.analysis.fidelity.evaluator import attr_value
 from population_synthetic.analysis.fidelity.scheme import ComparisonScheme
+from population_synthetic.analysis.utils.distribution_distance import total_variation_distance
 
 # ------------------------------------------------------------------
 # One-hot encoding
@@ -203,7 +204,7 @@ def joint_tv(
         return float("nan")
     p_a = table_a / total_a
     p_b = table_b / total_b
-    return float(0.5 * np.abs(p_a - p_b).sum())
+    return float(total_variation_distance(p_a.ravel(), p_b.ravel()))
 
 
 # ------------------------------------------------------------------

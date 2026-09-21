@@ -308,3 +308,275 @@ def test_paired_t_confidence_level_outside_the_open_unit_interval_raises(level):
 
     with pytest.raises(ValueError, match="confidence_level"):
         paired_t_pairwise(_paired_matrix(), labels=["a", "b", "c", "d"], confidence_level=level)
+
+
+# =========================================================================== #
+# Typicality effect sizes and the closeness complete-block tests              #
+# (epsilon^2, Mann-Whitney, Cliff's delta via histograms + its bootstrap CI,   #
+#  complete_block_matrix, Conover-Friedman).  Golden values come from the      #
+#  prototype under docs/development/plans/active/typicality-distribution-grid/ #
+# =========================================================================== #
+
+from tests._closeness_fixtures import LETTERS, STRATEGIES, combination_outcomes  # noqa: E402
+
+
+def test_epsilon_squared_golden_and_identity():
+    from population_synthetic.analysis.utils.stats_tests import epsilon_squared
+
+    # golden/omnibus_kruskal_epsilon2.csv: model factor H = 564.14, N = 5760 -> 0.0980.
+    assert round(epsilon_squared(564.14, 5760), 4) == 0.0980
+    h, n = 12.5, 40
+    assert epsilon_squared(h, n) == pytest.approx(h * (n + 1) / (n**2 - 1), rel=1e-12)
+
+
+@pytest.mark.parametrize("h,n", [(1.0, 1), (1.0, 0), (-0.1, 10), (float("nan"), 10), (1.0, 2.5), (1.0, True)])
+def test_epsilon_squared_rejects_undefined_input(h, n):
+    from population_synthetic.analysis.utils.stats_tests import epsilon_squared
+
+    with pytest.raises(ValueError):
+        epsilon_squared(h, n)
+
+
+def test_mann_whitney_matches_scipy_and_the_delta_identity():
+    from population_synthetic.analysis.utils.stats_tests import cliffs_delta, mann_whitney_test
+
+    a = [3, 4, 2, 6, 2, 5]
+    b = [9, 7, 5, 10, 6, 8]
+    res = mann_whitney_test(a, b)
+    ref = stats.mannwhitneyu(a, b, alternative="two-sided", method="asymptotic")
+    assert res["U"] == pytest.approx(float(ref.statistic))
+    assert res["p"] == pytest.approx(float(ref.pvalue))
+    assert (res["n_a"], res["n_b"], res["alternative"], res["method"]) == (6, 6, "two-sided", "asymptotic")
+    # Hand count: U_a = pairs a > b + ties / 2 = 1 (6 > 5) + 0.5 (5 = 5) + 0.5 (6 = 6) = 2.
+    assert res["U"] == pytest.approx(2.0)
+    assert 2 * res["U"] / 36 - 1 == pytest.approx(cliffs_delta(a, b)["delta"])
+
+
+@pytest.mark.parametrize("a,b", [([], [1.0]), ([1.0], []), ([1.0, float("nan")], [2.0])])
+def test_mann_whitney_rejects_empty_or_nan(a, b):
+    from population_synthetic.analysis.utils.stats_tests import mann_whitney_test
+
+    with pytest.raises(ValueError):
+        mann_whitney_test(a, b)
+
+
+def test_cliffs_delta_from_histograms_equals_the_sign_matrix():
+    from population_synthetic.analysis.utils.stats_tests import cliffs_delta, cliffs_delta_from_histograms
+
+    rng = np.random.default_rng(3)
+    for _ in range(25):
+        a = rng.integers(0, 11, size=rng.integers(1, 60))
+        b = rng.integers(0, 11, size=rng.integers(1, 60))
+        h_a = np.bincount(a, minlength=11)
+        h_b = np.bincount(b, minlength=11)
+        assert cliffs_delta_from_histograms(h_a, h_b) == pytest.approx(cliffs_delta(a, b)["delta"], abs=1e-12)
+
+
+def test_cliffs_delta_from_histograms_fractional_weights_hand_worked():
+    from population_synthetic.analysis.utils.stats_tests import cliffs_delta_from_histograms
+
+    # a: survivors with rounds (8, 9), (9), (10, 10) -> weights 8: 0.5, 9: 1.5, 10: 1.0.
+    # b: one individual at 9. P(X > Y) = 1/3, P(X < Y) = 0.5/3 -> delta = 1/6.
+    h_a = np.zeros(11)
+    h_a[[8, 9, 10]] = [0.5, 1.5, 1.0]
+    h_b = np.zeros(11)
+    h_b[9] = 1.0
+    assert cliffs_delta_from_histograms(h_a, h_b) == pytest.approx(1.0 / 6.0)
+
+
+def test_cliffs_delta_from_histograms_golden_prototype_values():
+    from population_synthetic.analysis.utils.stats_tests import cliffs_delta_from_histograms
+    from tests._closeness_fixtures import first_round_histograms
+
+    keys, counts, reference = first_round_histograms()
+    expected = {(r["model"], r["strategy"]): r["delta"] for r in combination_outcomes()}
+    got = cliffs_delta_from_histograms(counts, reference[None, :])
+    assert got.shape == (58,)
+    for key, value in zip(keys, got):
+        assert value == pytest.approx(expected[key], abs=1e-12)
+
+
+def test_bootstrap_cliffs_delta_point_is_cliffs_delta_on_tied_samples():
+    from population_synthetic.analysis.utils.stats_tests import bootstrap_cliffs_delta_ci, cliffs_delta
+
+    rng = np.random.default_rng(11)
+    a = rng.integers(0, 11, size=80) / 2.0
+    b = rng.integers(0, 11, size=60) / 2.0
+    res = bootstrap_cliffs_delta_ci(a, b, iterations=500, ci_level=0.95, seed=1)
+    assert res["point"] == pytest.approx(cliffs_delta(a, b)["delta"], abs=1e-15)
+    assert res["lo"] <= res["point"] <= res["hi"]
+    assert set(res) == {"point", "lo", "hi", "ci_level", "iterations", "n_a", "n_b", "method"}
+    assert (res["n_a"], res["n_b"], res["method"]) == (80, 60, "percentile")
+
+
+def test_bootstrap_cliffs_delta_key_set_matches_the_difference_ci():
+    from population_synthetic.analysis.utils.stats_tests import bootstrap_cliffs_delta_ci, bootstrap_difference_ci
+
+    a, b = [1.0, 2.0, 3.0], [2.0, 3.0, 4.0]
+    got = bootstrap_cliffs_delta_ci(a, b, iterations=10, ci_level=0.9, seed=0)
+    assert set(got) == set(bootstrap_difference_ci(a, b, iterations=10, ci_level=0.9, seed=0))
+
+
+def test_bootstrap_cliffs_delta_identical_and_separated_samples():
+    from population_synthetic.analysis.utils.stats_tests import bootstrap_cliffs_delta_ci
+
+    same = bootstrap_cliffs_delta_ci([1, 2, 3], [1, 2, 3], iterations=200, ci_level=0.95, seed=4)
+    assert same["point"] == 0.0
+    separated = bootstrap_cliffs_delta_ci([5, 6, 7], [1, 2, 3], iterations=200, ci_level=0.95, seed=4)
+    assert (separated["point"], separated["lo"], separated["hi"]) == (1.0, 1.0, 1.0)
+
+
+def test_bootstrap_cliffs_delta_is_seeded_and_mirrors_exactly_on_swap():
+    from population_synthetic.analysis.utils.stats_tests import bootstrap_cliffs_delta_ci
+
+    rng = np.random.default_rng(5)
+    a = rng.integers(0, 11, size=70)
+    b = rng.integers(0, 11, size=90)
+    first = bootstrap_cliffs_delta_ci(a, b, iterations=400, ci_level=0.95, seed=9)
+    again = bootstrap_cliffs_delta_ci(a, b, iterations=400, ci_level=0.95, seed=9)
+    swapped = bootstrap_cliffs_delta_ci(b, a, iterations=400, ci_level=0.95, seed=9)
+    assert first == again
+    assert swapped["point"] == pytest.approx(-first["point"], abs=1e-15)
+    assert swapped["lo"] == pytest.approx(-first["hi"], abs=1e-12)
+    assert swapped["hi"] == pytest.approx(-first["lo"], abs=1e-12)
+
+
+def test_bootstrap_cliffs_delta_agrees_with_a_naive_element_bootstrap():
+    from population_synthetic.analysis.utils.stats_tests import bootstrap_cliffs_delta_ci, cliffs_delta
+
+    # The counts-based resampling must be distributionally the same as resampling elements.
+    rng = np.random.default_rng(21)
+    a = rng.integers(0, 11, size=60)
+    b = rng.integers(2, 11, size=50)
+    res = bootstrap_cliffs_delta_ci(a, b, iterations=4000, ci_level=0.9, seed=2)
+    naive_rng = np.random.default_rng(99)
+    naive = [cliffs_delta(naive_rng.choice(a, a.size), naive_rng.choice(b, b.size))["delta"] for _ in range(4000)]
+    lo, hi = np.quantile(naive, [0.05, 0.95])
+    assert res["lo"] == pytest.approx(lo, abs=0.03)
+    assert res["hi"] == pytest.approx(hi, abs=0.03)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [dict(iterations=0, ci_level=0.95), dict(iterations=10, ci_level=1.0), dict(iterations=10, ci_level=0.0)],
+)
+def test_bootstrap_cliffs_delta_rejects_a_malformed_request(kwargs):
+    from population_synthetic.analysis.utils.stats_tests import bootstrap_cliffs_delta_ci
+
+    with pytest.raises(ValueError):
+        bootstrap_cliffs_delta_ci([1, 2], [2, 3], seed=0, **kwargs)
+
+
+def test_bootstrap_cliffs_delta_empty_sample_raises():
+    from population_synthetic.analysis.utils.stats_tests import bootstrap_cliffs_delta_ci
+
+    with pytest.raises(ValueError):
+        bootstrap_cliffs_delta_ci([], [1.0], iterations=10, ci_level=0.95, seed=0)
+
+
+def test_percentile_interval_one_and_two_dimensional():
+    from population_synthetic.analysis.utils.stats_tests import percentile_interval
+
+    lo, hi = percentile_interval(np.arange(101, dtype=float), ci_level=0.9)
+    assert isinstance(lo, float) and (lo, hi) == pytest.approx((5.0, 95.0), abs=1e-12)
+    lo2, hi2 = percentile_interval(np.stack([np.arange(101.0), -np.arange(101.0)], axis=1), ci_level=0.9)
+    assert lo2.tolist() == pytest.approx([5.0, -95.0], abs=1e-12)
+    assert hi2.tolist() == pytest.approx([95.0, -5.0], abs=1e-12)
+    with pytest.raises(ValueError):
+        percentile_interval([1.0, float("nan")], ci_level=0.9)
+    with pytest.raises(ValueError):
+        percentile_interval([], ci_level=0.9)
+
+
+def test_complete_block_matrix_drops_absent_and_none_cells():
+    from population_synthetic.analysis.utils.stats_tests import complete_block_matrix
+
+    cells = {"m1": {"A": 1.0, "B": 2.0}, "m2": {"A": 3.0}, "m3": {"A": None, "B": 4.0}, "m4": {"B": 6.0, "A": 5.0}}
+    matrix, complete, dropped = complete_block_matrix(cells, ["m1", "m2", "m3", "m4"], ["A", "B"])
+    assert matrix.tolist() == [[1.0, 2.0], [5.0, 6.0]]
+    assert complete == ["m1", "m4"] and dropped == ["m2", "m3"]
+    empty, none_kept, _ = complete_block_matrix({"m2": {"A": 1.0}}, ["m2"], ["A", "B"])
+    assert empty.shape == (0, 2) and none_kept == []
+
+
+def _golden_grid(outcome: str) -> tuple[np.ndarray, list[str], list[str]]:
+    from population_synthetic.analysis.utils.stats_tests import complete_block_matrix
+
+    cells: dict[str, dict[str, float]] = {}
+    for r in combination_outcomes():
+        cells.setdefault(r["model"], {})[r["strategy"]] = r[outcome]
+    return complete_block_matrix(cells, list(cells), STRATEGIES)
+
+
+def test_friedman_on_complete_blocks_golden():
+    grid, complete, dropped = _golden_grid("delta")
+    assert grid.shape == (10, 5)
+    assert dropped == ["ollama_deepseek_r1_14b", "ollama_gemma4_e4b"]
+    # closeness/complete_block_tests.json (delta) and closeness_shape/complete_block_tests.json (tv).
+    by_strategy = friedman_test(grid)
+    assert by_strategy["chi2"] == pytest.approx(27.2, abs=1e-9)
+    assert by_strategy["kendalls_w"] == pytest.approx(0.68, abs=1e-12)
+    assert by_strategy["p"] == pytest.approx(1.811122816736785e-05, rel=1e-9)
+    by_model = friedman_test(grid.T)
+    assert by_model["chi2"] == pytest.approx(23.00727272727275, rel=1e-12)
+    assert by_model["kendalls_w"] == pytest.approx(0.5112727272727278, rel=1e-12)
+    tv_grid, _, _ = _golden_grid("tv")
+    assert friedman_test(tv_grid)["kendalls_w"] == pytest.approx(0.5611111111111111, rel=1e-12)
+    assert friedman_test(tv_grid.T)["chi2"] == pytest.approx(16.895504252733918, rel=1e-12)
+
+
+def test_paired_t_on_complete_blocks_golden():
+    from population_synthetic.analysis.utils.stats_tests import paired_t_pairwise
+
+    grid, _, _ = _golden_grid("delta")
+    pairs = paired_t_pairwise(grid, labels=LETTERS, confidence_level=0.95)["pairs"]
+    # closeness/posthoc_pairs.csv, factor = strategy, outcome = delta.
+    assert pairs["A|B"]["mean_diff"] == pytest.approx(0.13782636363636355, rel=1e-12)
+    assert pairs["A|B"]["dz"] == pytest.approx(1.7107564108743898, rel=1e-12)
+    assert pairs["A|B"]["p_holm"] == pytest.approx(0.0029921234051506376, rel=1e-9)
+    assert pairs["B|E"]["p_holm"] == pytest.approx(2.0846413076970975e-05, rel=1e-9)
+    assert pairs["D|E"]["dz"] == pytest.approx(-1.6878679114017523, rel=1e-12)
+
+
+def test_conover_friedman_golden_raw_and_holm():
+    pytest.importorskip("scikit_posthocs")
+    from population_synthetic.analysis.utils.stats_tests import conover_friedman_pairwise
+
+    grid, _, _ = _golden_grid("delta")
+    out = conover_friedman_pairwise(grid, labels=LETTERS)
+    assert (out["test"], out["k"], out["n"], out["correction"]) == ("conover_friedman", 5, 10, "holm")
+    # closeness/posthoc_pairs.csv (p_conover_raw, p_conover_holm).
+    golden = {
+        "A|B": (0.00013648598294864578, 0.0010918878635891663),
+        "A|D": (0.8138687871519491, 0.8138687871519491),
+        "B|E": (1.3933156669813111e-09, 1.393315666981311e-08),
+        "C|D": (0.013146994320221097, 0.03944098296066329),
+        "D|E": (0.0002746489394360092, 0.0019225425760520643),
+    }
+    for key, (raw, holm) in golden.items():
+        assert out["pairs"][key]["p_raw"] == pytest.approx(raw, rel=1e-9)
+        assert out["pairs"][key]["p_holm"] == pytest.approx(holm, rel=1e-9)
+    assert len(out["pairs"]) == 10
+
+
+def test_conover_friedman_holm_matches_the_library_adjustment():
+    sp = pytest.importorskip("scikit_posthocs")
+    from population_synthetic.analysis.utils.stats_tests import conover_friedman_pairwise
+
+    rng = np.random.default_rng(8)
+    matrix = rng.normal(size=(12, 4)) + np.array([0.0, 0.4, 0.8, 1.2])
+    labels = ["a", "b", "c", "d"]
+    out = conover_friedman_pairwise(matrix, labels=labels)
+    lib = sp.posthoc_conover_friedman(matrix, p_adjust="holm").to_numpy()
+    for i in range(4):
+        for j in range(i + 1, 4):
+            assert out["pairs"][f"{labels[i]}|{labels[j]}"]["p_holm"] == pytest.approx(lib[i, j], rel=1e-9)
+
+
+def test_conover_friedman_degenerate_and_label_mismatch():
+    from population_synthetic.analysis.utils.stats_tests import conover_friedman_pairwise
+
+    out = conover_friedman_pairwise([[1.0, 2.0]], labels=["a", "b"])
+    assert out["pairs"] == {} and "note" in out
+    with pytest.raises(ValueError, match="labels"):
+        conover_friedman_pairwise([[1.0, 2.0], [2.0, 3.0]], labels=["a"])

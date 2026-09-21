@@ -49,6 +49,7 @@ from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.stats_tests import (
     benjamini_hochberg,
+    complete_block_matrix,
     friedman_test,
     mixed_logit_interaction,
     nemenyi_pairwise,
@@ -586,28 +587,6 @@ def _overall_tv_sim(record: ComboPerformance | None) -> float | None:
     return float(np.mean(values))
 
 
-def _complete_case_matrix(
-    per_model: dict[str, dict[str, float | None]],
-    models: list[str],
-    methods: list[str],
-) -> tuple[np.ndarray, list[str], list[str]]:
-    """Build the complete-case ``models x methods`` TV-similarity matrix.
-
-    *per_model* maps ``model -> {method -> tv_similarity | None}``. A model is
-    *complete* iff it has a non-``None`` value under **every** compared method
-    (Friedman requires complete blocks); incomplete models are dropped and
-    returned separately (no imputation). Returns ``(matrix, complete_models,
-    dropped_models)`` with *matrix* shaped ``len(complete_models) x len(methods)``.
-    """
-    complete = [m for m in models if all(per_model[m].get(s) is not None for s in methods)]
-    dropped = [m for m in models if m not in complete]
-    matrix = np.array(
-        [[float(per_model[m][s]) for s in methods] for m in complete],
-        dtype=float,
-    ) if complete else np.empty((0, len(methods)))
-    return matrix, complete, dropped
-
-
 def _negated(value: float | None) -> float | None:
     """Sign-flip *value*, mapping the resulting ``-0.0`` back to ``0.0``.
 
@@ -900,7 +879,7 @@ def _method_comparison(
         per_model = {
             m: {s: _tv_sim(by_ms.get((m, s)), attr) for s in methods} for m in models
         }
-        matrix, complete, dropped = _complete_case_matrix(per_model, models, methods)
+        matrix, complete, dropped = complete_block_matrix(per_model, models, methods)
         panel = _method_panel(
             matrix, methods, complete, dropped, confidence_level=confidence_level
         )
@@ -918,7 +897,7 @@ def _method_comparison(
     per_model_overall = {
         m: {s: _overall_tv_sim(by_ms.get((m, s))) for s in methods} for m in models
     }
-    o_matrix, o_complete, o_dropped = _complete_case_matrix(per_model_overall, models, methods)
+    o_matrix, o_complete, o_dropped = complete_block_matrix(per_model_overall, models, methods)
     panels["overall"] = _method_panel(
         o_matrix, methods, o_complete, o_dropped, confidence_level=confidence_level
     )

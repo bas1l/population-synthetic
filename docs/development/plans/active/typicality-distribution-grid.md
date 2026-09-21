@@ -24,6 +24,13 @@
 > used as reproduction fixtures in the Testing Plan). The scripts are reference material, not
 > runnable in place: they read their CSVs from the parent directory and the live data base.
 > There was no `kw.py` in the scratchpad; the Kruskal-Wallis work lives in `effects.py`.
+>
+> *Added 2026-09-21 (scope addition, see Phase 3.5 and the Phase 4 note):* the folder also holds
+> `closeness/` (the combination-level "closeness to the reference" prototype: `closeness.py`,
+> `clm.py`, `ci_attribution.py`, `fig_closeness.py`, `results.md` and its CSV/JSON outputs) and
+> `closeness_shape/` (`shape.py`: the same analysis with TV, Jensen-Shannon and Cramér distances
+> as the outcome, plus the sampling-noise floor, `shape_meta.json`). Both are verbatim copies of
+> the scratchpad originals and serve as golden values.
 
 ---
 
@@ -80,6 +87,10 @@ terminology rules forbid in published artwork.
    "Strategies") and a config-held short name for each country's reference source ("SCB").
 6. One new presentation-layer module, `analysis/utils/glyph_grid.py`, which draws the grid cells,
    the triangles and the stepped colourbar and computes nothing.
+7. *(Added 2026-09-21.)* A combination-level **closeness to the reference** block: TV similarity
+   (primary), Cliff's δ and Cramér distance (sensitivity) per combination with a sampling-noise
+   baseline, the additive model + strategy decomposition, its permutation and complete-block tests,
+   and CIs from one joint individual-level bootstrap (Phase 3.5 primitives, Phase 4 task 4.7).
 
 ### Out of Scope
 - **Renaming "Methods:" to "Strategies:" in the method keys of existing figures** (nine call sites
@@ -92,6 +103,10 @@ terminology rules forbid in published artwork.
 - Pairwise Cliff's δ for strategy pairs. The same code covers it with one extra call, but it was
   not requested. The omnibus ε² for the strategy factor is in scope.
 - The severity-to-typicality link analysis in `severity_link/`. It is kept only as context.
+- **The individual-level cumulative-link cross-check** of the closeness analysis
+  (`closeness/clm.py`: a proportional-odds model of typicality on the synthetic individuals,
+  LR tests per term). Future work. It treats individuals as independent, which the
+  one-run-per-combination design does not support, so it is a description, not the test.
 - Moving `model_ranking/hosting.py` into `analysis/utils/`. The driver imports it, as
   `analyze_validation_attrition.py` already does.
 - A caveat about the judge sharing a model family with a generator (the judge is
@@ -160,6 +175,27 @@ terminology rules forbid in published artwork.
   60 (legend, triangle note, strategy key). Top block 76 (vertical model labels, baseline 2 above
   the top row). Triangle side = (26.5 − 2·1.5)/(√3/2). With 12 models and 5 strategies this gives
   a grid of 334.5 × 144.5.
+- **Closeness to the reference** *(added 2026-09-21; decision by Basil)*: one value per synthetic
+  combination saying how close its typicality distribution is to the reference's, computed over
+  the 11 score levels 0–10.
+  - **Primary outcome: TV similarity** = 1 − ½ Σ_k |p(k) − q(k)|, p the combination's
+    distribution and q the reference's. It is the same measure as the attribute-level fidelity
+    score (`fidelity` reports `tv_distance`; every consumer reads 1 − TV), and it now has one
+    shared definition, `utils/distribution_distance.py` (`fidelity/evaluator.py` and
+    `fidelity/multivariate.py` call it; their numbers are bit-identical to the inline formula).
+  - **Sensitivity outcomes**: Cliff's δ (combination vs reference; P(X > Y) − P(X < Y), through
+    the Mann-Whitney identity on the two histograms) and the **Cramér distance**
+    √(Σ_{c=0..9} (F_p(c) − F_q(c))²) over the 10 cut points, which is order-aware where TV is not.
+  - **Sampling-noise baseline**: the value the outcome takes when a sample of the combination's
+    own size n is drawn from the reference itself and compared with an independent redraw of the
+    reference (n_ref). It is reported beside every observed outcome, so a combination is read
+    against the distance that noise alone produces at its n (prototype: mean TV 0.172 at
+    100 vs 100).
+  - **Additive decomposition**: outcome ~ model + strategy over the present combinations (one per
+    cell; withdrawn cells absent, never zero). The residual holds the model × strategy
+    interaction and the sampling noise together. Type II SS (equal to type III with no
+    interaction term), share of the total SS, partial η², partial ω² (and ω²); the unbalanced
+    remainder is published as `share_overlap`.
 - **Manuscript-controlled word**: a word governed by the manuscript's `TERMINOLOGY-RULES.md` T1
   (individual, not persona; strategy, not method). The rule covers published artwork. It does
   **not** cover code identifiers, CSV columns or JSON keys, which keep the repository's dialect
@@ -334,7 +370,10 @@ presentation module: it computes a ranking, so it sits beside `cap_index.py`.
 | `utils/model_order.py` (new; shared with the transposed plan) | Publish `model_ranking`'s tier order | `result` (performance JSON dict), `CapIndex` → `list[str]`; `align_to_ranking(present, ranked)` | matplotlib, labels, realism, file paths (the caller loads the JSON) |
 | `utils/cap_index.py` (extended) | Also expose which slugs the gate withdrew | `_index.json` → `CapIndex.is_withdrawn(slug)`, `withdrawn_slugs()` | figures, which process asks |
 | `utils/labels.py` (extended) | `reference_source(country)` (provenance), `figure_term(key)` (incl. `reference`) | country YAML, `figure_terms.yaml` → display strings; raise on absence | renderers, statistics |
-| `utils/stats_tests.py` (extended) | `mann_whitney_test`, `bootstrap_cliffs_delta_ci`, `epsilon_squared` | samples/H,N → dicts | realism, figures |
+| `utils/stats_tests.py` (extended) | `mann_whitney_test`, `bootstrap_cliffs_delta_ci`, `epsilon_squared`; *added 2026-09-21:* `cliffs_delta_from_histograms`, `percentile_interval`, `complete_block_matrix` (moved from `method_significance`), `conover_friedman_pairwise` | samples/H,N/histograms/blocks → dicts/arrays | realism, figures |
+| `utils/two_way_decomposition.py` (new, added 2026-09-21) | Additive two-way decomposition of one value per cell; within-block permutation test of a factor's type II F | values + two factor-label lists → dicts (arrays for replicate stacks) | what the factors or the value mean, realism, figures |
+| `utils/histogram_resampling.py` (new, added 2026-09-21) | Individual-level bootstrap of populations held as per-unit weight rows: the joint resample (every group + the reference once), and the reference-vs-itself noise baseline | `(n, K)` unit rows, seed → `(B, G, K)` / `(B, K)` histograms | outcomes, realism, figures |
+| `utils/distribution_distance.py` (new, added 2026-09-21) | TV distance / TV similarity / Cramér distance, the one definition shared with `fidelity` | probability vectors (last axis) → float / array | where the distributions came from |
 | `realism_ranking/loader.py` (extended) | `CompetitorRecord.typicality_round_scores`: per-survivor tuples of scored rounds, the same filter as `typicality_means` | persona rows → `tuple[tuple[int, ...], ...]` | bands, figures |
 | `realism_ranking/builder.py` (extended) | `_typicality_distribution(...)`, `_typicality_effects(...)`, `typicality_distribution_rows`, `typicality_band_rows`, `typicality_effect_*_rows` | records, bands, `withdrawn`, bootstrap → blocks/rows | paths, config files, model order, colours, labels |
 | `utils/glyph_grid.py` (new, presentation) | Draw a point-laid-out grid of mini histograms, crossed and empty cells, ternaries, a stepped colourbar | finished pmfs / share triples / colours / text → artists on a figure | any statistic, analysis subpackages, ids, config |
@@ -441,18 +480,95 @@ YAML: `manifest_loader.discover_axis_values` / `compose_manifest` and the GUI ax
 **Dependencies:** None.
 
 ### Phase 3: Statistical primitives
+**Started:** 2026-09-21 15:55
+**Completed:** 2026-09-21 16:35
+
 **Goal:** The three missing primitives, each tested against known values.
 
-- [ ] 3.1 — `stats_tests.epsilon_squared(H, n)` = H/(n−1); raises for n < 2 or H < 0.
-- [ ] 3.2 — `stats_tests.mann_whitney_test(a, b)` (two-sided, asymptotic); an empty sample raises,
+- [x] 3.1 — `stats_tests.epsilon_squared(H, n)` = H/(n−1); raises for n < 2 or H < 0.
+- [x] 3.2 — `stats_tests.mann_whitney_test(a, b)` (two-sided, asymptotic); an empty sample raises,
       as `cliffs_delta` does.
-- [ ] 3.3 — `stats_tests.bootstrap_cliffs_delta_ci(a, b, *, iterations, ci_level, seed)`, via the
+- [x] 3.3 — `stats_tests.bootstrap_cliffs_delta_ci(a, b, *, iterations, ci_level, seed)`, via the
       U identity, returning the same key set as `bootstrap_difference_ci`
       (`point, lo, hi, ci_level, iterations, n_a, n_b, method`).
-- [ ] 3.4 — Tests in `tests/test_stats_tests_significance.py` (see the Testing Plan).
+- [x] 3.4 — Tests in `tests/test_stats_tests_significance.py` (see the Testing Plan).
+
+#### 3.5 — Closeness primitives *(added 2026-09-21, scope addition approved by the orchestrator)*
+
+The manuscript now relies on a combination-level "closeness to the reference" analysis
+(prototype: `closeness/` and `closeness_shape/` in the reference folder; outcome definitions in
+**Closeness to the reference** under Definitions). This phase adds only the pure primitives it
+needs; Phase 4 assembles the block. Every primitive is outcome-agnostic: the decomposition and
+tests take one value per cell, and the resampling returns histograms from which the caller
+computes whichever outcome it publishes. Existing helpers are reused, not duplicated:
+`friedman_test` (Friedman + Kendall's W) and `paired_t_pairwise` (mean difference, 95% CI,
+Cohen's d_z, Holm) already existed and are pinned to the prototype here.
+
+- [x] 3.5.1 — `utils/two_way_decomposition.py` (new): `additive_two_way_anova(values, factors)`
+      (type II SS for unbalanced/missing cells, df, F with its parametric p, partial η², partial
+      ω², ω², share of the total SS, type-I-first SS, `share_residual`, `share_overlap`);
+      `additive_two_way_effect_sizes(replicates, factors)` (the same, vectorised over bootstrap
+      replicates; raises on a degenerate replicate rather than folding it into an interval);
+      `within_block_permutation_test(values, factors, *, factor, iterations, seed)` (values
+      permuted within the levels of the other factor, statistic = type II F,
+      p = (1 + #{F* ≥ F}) / (B + 1)).
+- [x] 3.5.2 — Friedman + Kendall's W on complete blocks: `stats_tests.complete_block_matrix`
+      (moved from the private `method_significance.builder._complete_case_matrix`, which now
+      imports it; behaviour unchanged) feeding the existing `friedman_test`.
+- [x] 3.5.3 — Paired t-tests, Holm, mean difference, 95% CI, d_z: the existing
+      `paired_t_pairwise`, pinned to the prototype's `posthoc_pairs.csv`.
+- [x] 3.5.4 — `stats_tests.conover_friedman_pairwise(matrix, *, labels)`: Conover's post hoc for
+      the Friedman design (scikit-posthocs raw p), Holm through the module's own `holm_adjust`.
+- [x] 3.5.5 — Joint individual-level bootstrap: `utils/histogram_resampling.py` (new),
+      `joint_bootstrap_histograms(groups, reference, *, iterations, seed)` (each replicate
+      resamples every combination within itself and the reference **once**) and
+      `reference_self_resampling(reference, *, n_sample, iterations, seed)` (the sampling-noise
+      baseline). Individuals are `(n, 11)` unit-weight rows, so both a one-hot first-round basis and
+      the round-weighted basis (1/r_i per scored round) are covered.
+      `stats_tests.cliffs_delta_from_histograms` (δ on histograms via the U identity, vectorised)
+      and `stats_tests.percentile_interval`.
+- [x] 3.5.6 — `utils/distribution_distance.py` (new): `total_variation_distance`,
+      `total_variation_similarity`, `cramer_distance`. The two inline TV formulas in `fidelity`
+      (`evaluator.py:145`, `multivariate.py:206`) now call it (checked bit-identical).
+- [x] 3.5.7 — Tests: hand-worked small examples for every primitive, `statsmodels`
+      `anova_lm(typ=2)` for the unbalanced decomposition, and the prototype's golden values
+      (decomposition of δ, share-≤4, CDF gap, TV and Cramér; Friedman/W; paired t; Conover raw and
+      Holm; permutation p; per-combination δ, TV and Cramér from the first-round histograms; the
+      100-vs-100 noise floor). Fixtures in `tests/data/closeness/`, loaders in
+      `tests/_closeness_fixtures.py`.
 
 **Files Modified:** `src/population_synthetic/analysis/utils/stats_tests.py`,
-`tests/test_stats_tests_significance.py`.
+`src/population_synthetic/analysis/utils/two_way_decomposition.py` (new),
+`src/population_synthetic/analysis/utils/histogram_resampling.py` (new),
+`src/population_synthetic/analysis/utils/distribution_distance.py` (new),
+`src/population_synthetic/analysis/method_significance/builder.py` (imports
+`complete_block_matrix`),
+`src/population_synthetic/analysis/fidelity/evaluator.py`,
+`src/population_synthetic/analysis/fidelity/multivariate.py` (call the shared TV),
+`tests/test_stats_tests_significance.py`, `tests/test_two_way_decomposition.py` (new),
+`tests/test_histogram_resampling.py` (new), `tests/test_distribution_distance.py` (new),
+`tests/_closeness_fixtures.py` (new), `tests/data/closeness/{combination_outcomes,first_round_histograms}.csv`
+(new), `docs/development/plans/active/typicality-distribution-grid/{closeness,closeness_shape}/` (new,
+verbatim prototype copies).
+
+*Implementation notes.*
+- **Resampling via counts.** `bootstrap_cliffs_delta_ci` and `histogram_resampling` draw a
+  with-replacement resample as a multinomial over the sample's distinct values (or distinct unit
+  rows), which is the same distribution as drawing elements and costs O(distinct values) per
+  replicate. A test checks it against a naive element-by-element bootstrap. This is not the
+  prototype's 0.5-grid trick the plan rejected: the support is whatever values occur.
+- **Exact mirroring.** `bootstrap_cliffs_delta_ci` lets the sample whose sorted values compare
+  lower draw first, so swapping the arguments gives exactly −point and the mirrored interval (the
+  Testing Plan item), not merely within Monte-Carlo error.
+- **Three new modules instead of growing `stats_tests.py`.** It was already 1,130 lines; the
+  linear-model decomposition, the histogram resampling and the distances are separate concerns.
+  The contracts table lists them.
+- **Order dependence is part of the input**: `joint_bootstrap_histograms` draws the reference,
+  then the groups in the given order; `within_block_permutation_test` visits blocks in order of
+  first appearance. Unit order *within* a population does not matter (`np.unique` on rows).
+- Permutation p counts a permuted F as extreme when F* ≥ F·(1 − 1e-9); the prototype used an
+  absolute 1e-12. Golden p-values reproduce (0 of 2,000 for δ; 0.0030 ± MC for model under
+  share-≤4).
 
 **Dependencies:** None.
 
@@ -479,12 +595,40 @@ YAML: `manifest_loader.discover_axis_values` / `compose_manifest` and the GUI ax
 - [ ] 4.6 — Tests in `tests/test_realism_ranking_builder.py`, and the e2e fixture gains a
       `population_cap/_index.json`.
 
+- [ ] 4.7 — *(Added 2026-09-21, scope addition.)* **Closeness block.** The builder emits a
+      `typicality_closeness` block (key name Phase 4's to fix and record), built from the Phase 3.5
+      primitives only:
+      - per synthetic combination (the reference held out, withdrawn cells absent): the primary
+        outcome **TV similarity** to the reference, and the sensitivity outcomes **Cliff's δ** vs
+        the reference and the **Cramér distance**, each with a bootstrap 95% CI and with its
+        **sampling-noise baseline** at the combination's own n (`reference_self_resampling`,
+        the same outcome function, summarised as mean and 95th percentile);
+      - per outcome, the additive decomposition (`additive_two_way_anova`: shares, partial η²,
+        partial ω², ω², F, `share_overlap`) with bootstrap CIs from
+        `additive_two_way_effect_sizes`, and the strategy − model partial ω² difference and the
+        SS ratio per replicate;
+      - the tests: `within_block_permutation_test` for both factors; Friedman + Kendall's W on the
+        complete blocks (`complete_block_matrix` + `friedman_test`, dropped models listed), both
+        directions; the strategy post hocs `paired_t_pairwise` (Holm, mean difference, CI, d_z)
+        and `conover_friedman_pairwise` (Holm);
+      - **every CI from one joint bootstrap** (`joint_bootstrap_histograms`): each replicate
+        resamples individuals within every combination **and** the reference together, the
+        reference once, so its n = 100 sampling error reaches every statistic computed across
+        combinations. Groups are passed sorted by `_competitor_position` so the output does not
+        depend on processing order. Seeds and iteration counts come from config, as `bootstrap`
+        does, never from a literal.
+      Open for Phase 4 to decide and record: the histogram basis. The primitives accept any
+      per-individual unit rows; using the block's round-weighted rows makes closeness and the grid
+      share one distribution and reduces to the prototype's first-round basis under `--rounds 1`
+      (which is how the golden values in `closeness_shape/` are reproduced). Note that Cliff's δ on
+      round-weighted histograms is not the δ on per-persona means that `typicality_effects` reports.
+
 **Files Modified:** `src/population_synthetic/analysis/realism_ranking/loader.py`,
 `src/population_synthetic/analysis/realism_ranking/builder.py`,
 `scripts/analyze/rank_persona_realism.py`, `tests/test_realism_ranking_builder.py`,
 `tests/test_realism_ranking_loader.py`, `tests/test_realism_ranking_e2e.py`.
 
-**Dependencies:** Phases 1 (withdrawn slugs) and 3.
+**Dependencies:** Phases 1 (withdrawn slugs) and 3 (including 3.5).
 
 ### Phase 5: Presentation module `glyph_grid.py`
 **Goal:** The reusable drawing pieces, behind the presentation boundary.
@@ -560,11 +704,11 @@ YAML: `manifest_loader.discover_axis_values` / `compose_manifest` and the GUI ax
       to the existing `typicality_histogram` counts for the same record.
 - [ ] **Band shares**: edges (4, 7) on a known distribution; they sum to 1; `--typicality-bands 7,4`,
       `-1,4` and `4,10` raise.
-- [ ] **ε²**: H = 564.14, N = 5760 → 0.09796 (golden omnibus row, 0.0980 to 4 d.p.); n < 2 raises.
-- [ ] **Cliff's δ bootstrap**: point equals `cliffs_delta` on ties-heavy integer samples (U
+- [x] **ε²**: H = 564.14, N = 5760 → 0.09796 (golden omnibus row, 0.0980 to 4 d.p.); n < 2 raises.
+- [x] **Cliff's δ bootstrap**: point equals `cliffs_delta` on ties-heavy integer samples (U
       identity); a = [1, 2, 3], b = [1, 2, 3] → δ = 0; fully separated samples → δ = 1 and CI
       [1, 1]; same seed → identical CI; argument order swapped → negated point and mirrored CI.
-- [ ] **Mann-Whitney**: agrees with `scipy.stats.mannwhitneyu` on a textbook example; empty sample
+- [x] **Mann-Whitney**: agrees with `scipy.stats.mannwhitneyu` on a textbook example; empty sample
       raises.
 - [ ] **Dunn orientation**: for every model pair, sign(δ) == sign(Dunn z) whenever both are nonzero.
 - [ ] **Holm families**: the combination family has one entry per synthetic competitor with ≥ 1
