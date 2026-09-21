@@ -279,6 +279,30 @@ processes:
       under-powered: it is flagged, hatched on the heatmap, drawn hollow on the method
       figure and counted in the block's excluded map, never dropped and never confused with
       an unjudged pair.
+      The WHOLE typicality distribution beside that statistic: a typicality_distribution
+      block (one round-weighted 0-10 distribution per competitor -- each can_exist survivor
+      spreads weight 1 over its scored rounds, so --rounds 1 gives the first-round
+      histogram -- with the three --typicality-bands shares and the grid's four cell
+      states ok / no_typicality / withdrawn / unjudged, a withdrawn cell read from
+      population_cap/_index.json, never inferred), a typicality_effects block (epsilon^2 of
+      the model and strategy Kruskal-Wallis tests, Cliff's delta with a bootstrap CI beside
+      every Dunn model pair, and every combination and pooled model against the real
+      population: medians, delta + CI, Mann-Whitney U, Holm per family) and a
+      typicality_closeness block (per combination the TV similarity of its distribution to
+      the real population's, with Cliff's delta and the Cramer distance as sensitivity
+      outcomes, each with a joint-bootstrap CI and the reference-vs-itself noise baseline;
+      the additive model + strategy decomposition with its permutation and complete-block
+      tests). Nine CSVs carry them (typicality_distribution, typicality_bands, three
+      typicality_effect_* and four typicality_closeness* tables). The figure
+      typicality_distribution_by_model_strategy draws one mini histogram per model x
+      strategy cell with the real population's distribution as an outline and as its own
+      column, a ternary of the band shares per strategy, on a fixed 456 pt canvas. Its
+      columns follow model_ranking's published order, read from
+      model_ranking/{country}_performance.json -- the only input this process takes from
+      another analysis process, read only when charts are on (a missing file fails the run
+      before anything is written; --no-charts skips the read). The JSON and the CSVs never
+      use that order, so they stay reproducible from the persona_realism outputs and the
+      gate's index alone.
     folder: "realism_ranking"
     script: "scripts/analyze/rank_persona_realism.py"
     dispatch: "slugs"

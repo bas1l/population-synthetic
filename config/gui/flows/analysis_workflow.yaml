@@ -179,7 +179,12 @@ tasks:
                                   # re-reduces every competitor over its first N cached rounds)
       no-charts: false            # --no-charts (flag when true; charts default ON)
       output-base:                # --output-base (blank = script default)
-    depends_on: [persona_realism]
+    # persona_realism supplies every competitor. model_ranking supplies the column order of
+    # the typicality distribution grid ({country}_performance.json, read whenever charts are
+    # on; the run fails before writing if it is missing). So a sweep also waits for fidelity
+    # and model_ranking. When model_ranking's output is already on disk, tick bypass on the
+    # model_ranking node rather than disabling it (a disabled task parks this one).
+    depends_on: [persona_realism, model_ranking]
 
   validation_attrition:           # slugs dispatch -- re-reads the gate's own records, no LLM work
     enabled: true

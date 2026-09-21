@@ -751,9 +751,12 @@ verbatim prototype copies).
 **Dependencies:** None (it can run in parallel with Phases 1–4).
 
 ### Phase 6: The figure and its wiring
+**Started:** 2026-09-21 18:30
+**Completed:** 2026-09-21 19:12
+
 **Goal:** `typicality_distribution_by_model_strategy` is produced by the CLI and the GUI sweep.
 
-- [ ] 6.1 — `charts.plot_typicality_distribution_grid(ranking, *, country, model_order, hosting)`.
+- [x] 6.1 — `charts.plot_typicality_distribution_grid(ranking, *, country, model_order, hosting)`.
       Layout from the P20 geometry. The cell side is `min(26.5, fit)`, where `fit` is derived from
       the canvas width and the column count; it raises below 18 pt, because with more models the
       8 pt labels no longer fit. A missing reference raises `ValueError` ("no real population in
@@ -763,22 +766,65 @@ verbatim prototype copies).
       exists. Below it, the triangle note and the strategy key (prefix `figure_term("strategy_key_title")`,
       lines from `method_key_lines`, second line hung under the first using
       `style.text_width_inches` of the prefix rather than P20's literal 38.5 pt).
-- [ ] 6.2 — CLI: when charts are on, load `{country}_performance.json` (raise if missing, naming
+- [x] 6.2 — CLI: when charts are on, load `{country}_performance.json` (raise if missing, naming
       `rank_models.py`) and compute `ranked_model_order` before writing anything; compute the
       hosting dict; save this chart with `fixed_canvas=True` (the loop grows a per-chart
       `fixed_canvas` flag).
-- [ ] 6.3 — `config/gui/flows/analysis_workflow.yaml`: `realism_ranking.depends_on:
+- [x] 6.3 — `config/gui/flows/analysis_workflow.yaml`: `realism_ranking.depends_on:
       [persona_realism, model_ranking]`, with a comment giving the reason.
       `config/analysis/analysis_registry.yaml`: the `realism_ranking` description names the new
       figure and blocks and its read of `model_ranking` output.
-- [ ] 6.4 — Tests: the chart and e2e tests (below); workflow graph/state tests if they pin edges.
-- [ ] 6.5 — Manual: run against the live base with `--rounds 1` and compare with
+- [x] 6.4 — Tests: the chart and e2e tests (below); workflow graph/state tests if they pin edges.
+- [x] 6.5 — Manual: run against the live base with `--rounds 1` and compare with
       `compact/P20_square_grid_top_labels.png`.
 
 **Files Modified:** `src/population_synthetic/analysis/realism_ranking/charts.py`,
+`src/population_synthetic/analysis/utils/model_order.py` (`ranked_grid_columns`),
 `scripts/analyze/rank_persona_realism.py`, `config/gui/flows/analysis_workflow.yaml`,
-`config/analysis/analysis_registry.yaml`, `tests/test_realism_ranking_e2e.py`,
-`tests/test_realism_artifacts.py`, `tests/test_workflow_graph_items.py` (if it pins edges).
+`config/analysis/analysis_registry.yaml`, `tests/test_realism_distribution_grid.py` (new),
+`tests/test_realism_ranking_e2e.py`, `tests/test_model_order.py`,
+`tests/test_figure_compliance.py`, `tests/test_workflow_state.py`.
+`tests/test_realism_artifacts.py` (persona_realism's own artifacts) and
+`tests/test_workflow_graph_items.py` (status overlay only) pin nothing this phase changes and
+were left alone; the edge is pinned in `tests/test_workflow_state.py`.
+
+*Implementation notes (Phase 6).*
+- **Model-order contract conflict, resolved without touching `align_to_ranking`.** Phase 1
+  built `align_to_ranking` to the transposed plan's contract (a ranked model missing from the
+  grid raises; unknown grid models are appended). This figure needs the opposite on both
+  counts, so a new `model_order.ranked_grid_columns(present, ranked)` narrows *ranked* to the
+  grid's models, calls `align_to_ranking`, and raises when any grid model comes back unranked
+  (returned index < length). Tested in `tests/test_model_order.py`. Live effect:
+  `ollama_llama31_8b` (withdrawn in all five strategies) is not in the grid and so is not a
+  column; it stays listed in `typicality_distribution.withdrawn`.
+- **Signature deviation: no `country` argument.** The contract's
+  `plot_typicality_distribution_grid(ranking, *, country, model_order, hosting)` needed the
+  country only for the dropped `reference_column_label(country)` (Phase 2 terminology change);
+  the column and legend now print `figure_term("reference")`, so the argument would be unused
+  and was left out.
+- **Edge resolution.** The CLI resolves the columns for every country the run will write
+  *before* the country loop, from the consumed synthetic records' models (exactly the grid's
+  models) and `ranked_model_order(performance, cap_index)`; a missing
+  `{country}_performance.json` (naming `rank_models.py`) or an unranked grid model exits 1 with
+  nothing on disk. Hosting is classified at the edge (`classify_hosting` over
+  `provider_hosting.json`), only when charts are on. The chart loop's entries are now
+  `(name, build, fixed_canvas)`; only this figure is `True`.
+- **Layout generalisation beyond P20.** The cell side is `min(26.5, fit)` with `fit` solved
+  from the canvas width, the column count and a colourbar-label reserve measured from the
+  widest tick label (18 pt floor raises). The bottom block is stacked from constants that give
+  exactly P20's 60 pt with a one-row legend and a two-line key; the strategy key is set in the
+  fewest balanced lines that fit (five entries → 3 + 2, as P20), continuation lines hung by the
+  measured width of the title; the legend wraps to two rows (and the block grows by one row
+  pitch) only when "not judged" / "no typicality" entries push it past six. A column label
+  longer than the 76 pt top block raises.
+- **Live check (2026-09-21, swedish_02, `--rounds 1`, scratch copy of the inputs, live
+  `03_Analysis` untouched).** SVG root `width="456pt" height="280.5pt"`, EPS HiResBoundingBox
+  456 × 280.5; twelve columns in the published order, DeepSeek-R1 14B × E and Gemma4 E4B × E
+  crossed out; side by side with `compact/P20_square_grid_top_labels.png` the only differences
+  are the intended ones ("Reference" for "SCB (real)" / "SCB outline" / "SCB", "individuals",
+  "Strategies:", the em-dash key).
+- `tests/test_workflow_state.py`'s comment calling `cost_efficiency` "the only analysis node
+  that depends on more than one" became false with this edge and was reworded.
 
 **Dependencies:** Phases 1, 2, 4, 5.
 

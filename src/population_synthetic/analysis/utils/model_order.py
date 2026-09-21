@@ -227,3 +227,32 @@ def align_to_ranking(present: list[str], ranked: list[str]) -> tuple[list[str], 
     known = set(ranked)
     unranked = [m for m in present if m not in known]
     return list(ranked) + unranked, len(ranked)
+
+
+def ranked_grid_columns(present: list[str], ranked: list[str]) -> list[str]:
+    """The models a fixed-width grid draws as columns, in the published order.
+
+    A stricter reading of the same ranking than :func:`align_to_ranking`, for a figure
+    with no room for a labelled "unranked" group:
+
+    * a ranked model the grid does not hold is **not a column** -- it has nothing to draw
+      (a model whose every combination was withdrawn by the gate is the live case), so
+      *ranked* is first narrowed to the models of *present*;
+    * a grid model the ranking does not know **raises** -- appending it after the ranked
+      ones would publish a column order no sibling figure shares.
+
+    It composes :func:`align_to_ranking` rather than changing its contract.
+
+    Raises:
+        ValueError: If either list repeats an id, or a model of *present* is absent
+            from *ranked*.
+    """
+    held = set(present)
+    ordered, first_unranked = align_to_ranking(present, [m for m in ranked if m in held])
+    if first_unranked < len(ordered):
+        raise ValueError(
+            f"Model(s) {ordered[first_unranked:]} are on the grid but not in the model "
+            "ranking, so they have no published column position. Re-run "
+            "scripts/analyze/rank_models.py over the same models."
+        )
+    return ordered

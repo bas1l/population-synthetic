@@ -290,6 +290,29 @@ def _generation_metadata_figures():
         yield f"generation_metadata::{Path(path).stem}", fig
 
 
+def _realism_ranking_figures():
+    """The typicality distribution grid: a point-laid-out glyph grid on real axis ids.
+
+    The fixture holds the live twelve models and five strategies, with one cell in each
+    non-histogram state, so every label, legend entry and mark the figure can print is on
+    the canvas under test.
+    """
+    from population_synthetic.analysis.realism_ranking.charts import (
+        plot_typicality_distribution_grid,
+    )
+    from tests.test_realism_distribution_grid import HOSTING, MODELS, STRATEGIES, _ranking
+
+    ranking = _ranking(states={
+        ("ollama_gemma4_e4b", STRATEGIES[-1]): "withdrawn",
+        ("claude_haiku", STRATEGIES[0]): "unjudged",
+        ("claude_sonnet", STRATEGIES[1]): "no_typicality",
+    })
+    yield (
+        "realism_ranking::plot_typicality_distribution_grid",
+        plot_typicality_distribution_grid(ranking, model_order=list(MODELS), hosting=HOSTING),
+    )
+
+
 def _figures():
     """Every figure this module inspects, as ``(label, Figure)``.
 
@@ -302,6 +325,8 @@ def _figures():
         for label, fig in _model_ranking_figures():
             yield label, fig
         for label, fig in _generation_metadata_figures():
+            yield label, fig
+        for label, fig in _realism_ranking_figures():
             yield label, fig
 
 

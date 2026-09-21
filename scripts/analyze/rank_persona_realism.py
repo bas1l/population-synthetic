@@ -92,6 +92,16 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
                                           horizontal reference line (the only figure here that
                                           draws it as a reference rather than a series -- this
                                           axis ranks nothing).
+    {country}/typicality_distribution_by_model_strategy.png/.svg/.eps  every combination's
+                                          round-weighted distribution as a mini histogram on the
+                                          strategy x model grid, the reference as an outline and
+                                          as its own column, one ternary of band shares per
+                                          strategy; a fixed 456 pt canvas. Its columns follow
+                                          model_ranking's published order, read from
+                                          {country}_performance.json -- so with charts on, a
+                                          missing model_ranking output fails the run before
+                                          anything is written (run scripts/analyze/rank_models.py
+                                          first, or pass --no-charts).
     {country}/typicality_distribution.csv one row per (competitor, level): the ROUND-WEIGHTED
                                           score distribution (each survivor spreads weight 1
                                           over its scored rounds; at --rounds 1 the integer
@@ -140,7 +150,9 @@ Usage:
 --strategy      Strategy axis ID filter. May be repeated. Default: all strategies.
 --slug          Exact slug filter ({country}_{strategy}_{model}). May be repeated.
 --output-base   Base output directory (the analysis-stage parent). Default: experiment_defaults.yaml.
---no-charts     Skip chart generation (the JSON and CSVs are still written).
+--no-charts     Skip chart generation (the JSON and CSVs are still written). Also skips the
+                read of model_ranking's {country}_performance.json, which only the
+                distribution-grid figure needs.
 --strict        Fail when any selected combination is not consumable (default: skip it with
                 a recorded reason).
 --force         Recompute a country even if its realism_ranking.json already exists
@@ -176,6 +188,7 @@ from pathlib import Path
 import yaml
 
 from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.model_ranking.hosting import classify_hosting, load_hosting_config
 from population_synthetic.analysis.persona_realism.config import JudgeConfig
 from population_synthetic.analysis.realism_ranking.builder import (
     TYPICALITY_STATISTICS,
@@ -207,6 +220,7 @@ from population_synthetic.analysis.realism_ranking.charts import (
     plot_severity_heatmap,
     plot_severity_pair_summary,
     plot_typicality_by_method,
+    plot_typicality_distribution_grid,
     plot_typicality_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors
@@ -215,6 +229,7 @@ from population_synthetic.analysis.utils.axes import decompose_slug
 from population_synthetic.analysis.utils.cap_index import load_cap_index
 from population_synthetic.analysis.utils.figures import RASTER_DPI, save_figure
 from population_synthetic.analysis.utils.grid_variants import variant_suffixes
+from population_synthetic.analysis.utils.model_order import ranked_grid_columns, ranked_model_order
 from population_synthetic.analysis.utils.realism_csv import SEVERITY_LEVELS
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
@@ -227,6 +242,13 @@ _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
 #: The resampling settings of the typicality_closeness block (seeds, iteration counts,
 #: interval level, noise quantile). Read fail-fast here and passed verbatim.
 _CLOSENESS_CONFIG = PROJECT_ROOT / "config" / "analysis" / "realism_ranking" / "typicality_closeness.yaml"
+
+#: The provider -> hosting-class map that tints the distribution grid's column labels and
+#: ternary points (the same file rank_models.py classifies with).
+_HOSTING_PATH = PROJECT_ROOT / "config" / "analysis" / "model_ranking" / "provider_hosting.json"
+
+#: The one figure laid out on a fixed canvas; it is written at its own size, uncropped.
+_DISTRIBUTION_GRID = "typicality_distribution_by_model_strategy"
 
 #: The judge's typicality scale: levels 0..10, so k = 11. A **prompt-schema constant**,
 #: not a tunable -- it is fixed by config/analysis/persona_realism/judge_prompt.md and
@@ -415,6 +437,27 @@ def _country_withdrawn(
     return selected
 
 
+def _distribution_grid_columns(records: list, performance_path: Path, cap_index) -> list[str]:
+    """The distribution grid's models in ``model_ranking``'s published order.
+
+    Read at the edge, before any output is written: a figure that fell back to another
+    order would disagree with its sibling figures without saying so. The grid's models
+    are the consumed synthetic competitors' models (exactly what the builder puts on the
+    grid); a ranked model with none is not a column, and a grid model the ranking does
+    not know raises (``model_order.ranked_grid_columns``).
+    """
+    if not performance_path.is_file():
+        raise FileNotFoundError(
+            f"model_ranking output not found: {performance_path}. The typicality distribution "
+            "grid orders its columns by the published model ranking; run "
+            "scripts/analyze/rank_models.py first, or pass --no-charts."
+        )
+    with open(performance_path, "r", encoding="utf-8") as fh:
+        performance = json.load(fh)
+    grid_models = sorted({record.model for record in records if not record.is_real_reference})
+    return ranked_grid_columns(grid_models, ranked_model_order(performance, cap_index))
+
+
 def _write_json(payload: dict, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
@@ -541,7 +584,8 @@ def main() -> None:
     slug_filter = _split_csv(args.slugs)
 
     all_country_ids = {c["id"] for c in discover_axis_values("countries")}
-    all_model_ids = {m["id"] for m in discover_axis_values("models")}
+    all_models = discover_axis_values("models")
+    all_model_ids = {m["id"] for m in all_models}
     all_strategy_ids = {s["id"] for s in discover_axis_values("strategies")}
 
     try:
@@ -560,6 +604,12 @@ def main() -> None:
         variance_center = str(cfg.reliability_value("variance_center"))
         typicality_bands = _parse_bands(args.typicality_bands)
         closeness = _load_closeness_options(_CLOSENESS_CONFIG)
+        # Column-label and point tints of the distribution grid, classified from config
+        # here so the chart module never imports model_ranking.
+        hosting = (
+            None if args.no_charts
+            else classify_hosting(all_models, load_hosting_config(_HOSTING_PATH))
+        )
     except (ValueError, KeyError, FileNotFoundError, yaml.YAMLError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -584,7 +634,8 @@ def main() -> None:
     try:
         # The gate's own record, read always: it is a hard upstream of this process, and
         # the distribution grid needs it to tell a withdrawn cell from an unjudged one.
-        withdrawn_all = load_cap_index(output_base).withdrawn_slugs()
+        cap_index = load_cap_index(output_base)
+        withdrawn_all = cap_index.withdrawn_slugs()
         records, skipped = load_competitors(
             output_base,
             countries=country_filter, models=model_filter,
@@ -615,6 +666,22 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
+
+    # The distribution grid's column order, resolved for every country this run will
+    # write before any of them is written: a missing model_ranking output (or a grid
+    # model it does not rank) then fails the run with nothing on disk.
+    grid_columns: dict[str, list[str]] = {}
+    if not args.no_charts:
+        performance_dir = analysis_output_dir("model_ranking", output_base)
+        try:
+            for country in sorted(by_country):
+                if args.force or not (ranking_dir / country / "realism_ranking.json").exists():
+                    grid_columns[country] = _distribution_grid_columns(
+                        by_country[country], performance_dir / f"{country}_performance.json", cap_index,
+                    )
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     processed = 0
     skipped_existing = 0
@@ -737,13 +804,20 @@ def main() -> None:
                 print(f"No {name}: the table is empty (see skipped_tests).")
 
         if not args.no_charts:
+            # (name, build, fixed_canvas): a fixed-canvas figure is laid out in points to
+            # an exact size and written at that size, uncropped.
             charts = [
-                ("headline_map", lambda: plot_headline_map(ranking)),
-                ("impossibility_forest", lambda: plot_impossibility_forest(ranking)),
+                ("headline_map", lambda: plot_headline_map(ranking), False),
+                ("impossibility_forest", lambda: plot_impossibility_forest(ranking), False),
                 # The typicality axis, on the same grid as the impossibility one and then
                 # on the method axis. Both render the block verbatim -- the reference is
                 # the real population's own value read from the document, never a literal.
-                ("typicality_by_method", lambda: plot_typicality_by_method(ranking)),
+                ("typicality_by_method", lambda: plot_typicality_by_method(ranking), False),
+                # The whole distribution behind that statistic, per cell, columns in the
+                # published model_ranking order resolved above.
+                (_DISTRIBUTION_GRID, lambda: plot_typicality_distribution_grid(
+                    ranking, model_order=grid_columns[country], hosting=hosting,
+                ), True),
             ]
             # Every model x method grid is published once per variant, enumerated from the
             # chart module rather than named here: the canonical (unsuffixed) file is the
@@ -752,19 +826,19 @@ def main() -> None:
             # time; a bare closure would render the last one under every filename.
             charts += [
                 (f"impossibility_heatmap{suffix}",
-                 lambda variant=variant: plot_impossibility_heatmap(ranking, variant=variant))
+                 lambda variant=variant: plot_impossibility_heatmap(ranking, variant=variant), False)
                 for suffix, variant in variant_suffixes(RATE_GRID_VARIANTS)
             ]
             charts += [
                 (f"typicality_heatmap{suffix}",
-                 lambda variant=variant: plot_typicality_heatmap(ranking, variant=variant))
+                 lambda variant=variant: plot_typicality_heatmap(ranking, variant=variant), False)
                 for suffix, variant in variant_suffixes(TYPICALITY_GRID_VARIANTS)
             ]
             charts += [
                 (f"severity_heatmap_{level.lower()}{suffix}",
                  lambda level=level, variant=variant: plot_severity_heatmap(
                      ranking, level, variant=variant,
-                 ))
+                 ), False)
                 for level in SEVERITY_LEVELS
                 for suffix, variant in variant_suffixes(RATE_GRID_VARIANTS)
             ]
@@ -778,12 +852,14 @@ def main() -> None:
                 (f"severity_pair_summary_{level.lower()}",
                  lambda level=level: plot_severity_pair_summary(severity_pair_summary(
                      country_records, level, top_n=args.pair_summary_top_n,
-                 )))
+                 )), False)
                 for level in SEVERITY_LEVELS
             ]
-            for name, build in charts:
+            for name, build, fixed_canvas in charts:
                 try:
-                    saved = save_figure(build(), country_dir / f"{name}.png", dpi=args.dpi)
+                    saved = save_figure(
+                        build(), country_dir / f"{name}.png", dpi=args.dpi, fixed_canvas=fixed_canvas,
+                    )
                 except ValueError as exc:
                     print(f"WARNING: {name} not rendered: {exc}", file=sys.stderr)
                     continue

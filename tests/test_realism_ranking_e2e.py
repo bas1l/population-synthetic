@@ -19,6 +19,7 @@ from __future__ import annotations
 import csv
 import dataclasses
 import json
+import re
 import subprocess
 import sys
 from typing import Any
@@ -51,6 +52,7 @@ from population_synthetic.analysis.realism_ranking.charts import (  # noqa: E402
     plot_severity_heatmap,
     plot_severity_pair_summary,
     plot_typicality_by_method,
+    plot_typicality_distribution_grid,
     plot_typicality_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors  # noqa: E402
@@ -184,11 +186,43 @@ def _write_index(base, slugs, *, withdrawn=()):
     )
 
 
+#: model_ranking's overall TV similarity per fixture combination. Sonnet outranks Haiku,
+#: so the published column order is NOT the alphabetical one the grid block carries.
+_SIMILARITY = {"claude_sonnet": 0.9, "claude_haiku": 0.8}
+#: The distribution grid's columns under that ranking, and the fixture's hosting classes.
+_RANKED_COLUMNS = ["claude_sonnet", "claude_haiku"]
+_HOSTING = {"claude_sonnet": "hosted", "claude_haiku": "hosted"}
+_DISTRIBUTION_GRID = "typicality_distribution_by_model_strategy"
+
+
+def _performance_path(base):
+    return analysis_output_dir("model_ranking", base) / f"{_COUNTRY}_performance.json"
+
+
+def _write_performance(base):
+    """The slice of model_ranking's ``{country}_performance.json`` the model order reads."""
+    path = _performance_path(base)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "metadata": {"models": sorted(_SIMILARITY), "strategies": list(_AXIS_IDS[1])},
+        "combos": {
+            slug: {"model": model, "strategy": strategy, "n": 7,
+                   "overall": {"tv_similarity_mean": _SIMILARITY[model]}}
+            for slug, model, strategy, _ in _COMBOS
+        },
+    }), encoding="utf-8")
+
+
 @pytest.fixture
 def judged_base(tmp_path):
-    """An output base with three synthetic combinations and the real competitor judged."""
+    """An output base with three synthetic combinations and the real competitor judged.
+
+    It also carries model_ranking's performance JSON, which the distribution-grid figure
+    reads for its column order whenever charts are on.
+    """
     base = tmp_path / "base"
     _write_index(base, [slug for slug, *_ in _COMBOS], withdrawn=[_WITHDRAWN])
+    _write_performance(base)
     for offset, (slug, model, strategy, n_impossible) in enumerate(_COMBOS):
         _judge(base, slug, model=model, strategy=strategy,
                n_impossible=n_impossible, offset=offset)
@@ -227,6 +261,10 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
     save_figure(plot_impossibility_heatmap(ranking), out_dir / "impossibility_heatmap.png", dpi=80)
     save_figure(plot_typicality_heatmap(ranking), out_dir / "typicality_heatmap.png", dpi=80)
     save_figure(plot_typicality_by_method(ranking), out_dir / "typicality_by_method.png", dpi=80)
+    save_figure(
+        plot_typicality_distribution_grid(ranking, model_order=_RANKED_COLUMNS, hosting=_HOSTING),
+        out_dir / f"{_DISTRIBUTION_GRID}.png", dpi=80, fixed_canvas=True,
+    )
     for level in ("S1", "S2", "S3"):
         save_figure(plot_severity_heatmap(ranking, level),
                     out_dir / f"severity_heatmap_{level.lower()}.png", dpi=80)
@@ -242,6 +280,7 @@ def test_ranking_produces_every_declared_output(judged_base, tmp_path):
                  "impossibility_heatmap.png", "impossibility_heatmap.svg",
                  "typicality_heatmap.png", "typicality_heatmap.svg",
                  "typicality_by_method.png", "typicality_by_method.svg",
+                 f"{_DISTRIBUTION_GRID}.png", f"{_DISTRIBUTION_GRID}.svg", f"{_DISTRIBUTION_GRID}.eps",
                  "severity_heatmap_s1.png", "severity_heatmap_s1.svg",
                  "severity_heatmap_s2.png", "severity_heatmap_s2.svg",
                  "severity_heatmap_s3.png", "severity_heatmap_s3.svg",
@@ -515,6 +554,10 @@ def test_the_typicality_axis_degrades_without_the_real_competitor(judged_base):
         "publish a midpoint nobody measured"
     )
     assert plot_typicality_by_method(_rank(synthetic)).axes[0].lines is not None
+    # The distribution grid has no fallback: the outline, the column and the star are the
+    # comparison, so without a reference the figure is not drawn at all.
+    with pytest.raises(ValueError, match="no real population in the consumption set"):
+        plot_typicality_distribution_grid(_rank(synthetic), model_order=_RANKED_COLUMNS, hosting=_HOSTING)
 
 
 def test_typicality_competitor_order_changes_no_emitted_byte(judged_base, tmp_path):
@@ -533,6 +576,15 @@ def test_typicality_competitor_order_changes_no_emitted_byte(judged_base, tmp_pa
         first = save_figure(plot(forward), out_dir / f"{name}_a.png", dpi=80).read_bytes()
         second = save_figure(plot(reverse), out_dir / f"{name}_b.png", dpi=80).read_bytes()
         assert first == second, name
+    assert forward["typicality_distribution"] == reverse["typicality_distribution"]
+    grids = [
+        save_figure(
+            plot_typicality_distribution_grid(ranking, model_order=_RANKED_COLUMNS, hosting=_HOSTING),
+            out_dir / f"{_DISTRIBUTION_GRID}_{tag}.png", dpi=80, fixed_canvas=True,
+        ).read_bytes()
+        for tag, ranking in (("a", forward), ("b", reverse))
+    ]
+    assert grids[0] == grids[1], _DISTRIBUTION_GRID
 
     # The method axis is the complexity order of the ids present, taken from the grid
     # verbatim rather than re-sorted at render time. The ticks carry the resolver's
@@ -615,3 +667,47 @@ def test_the_driver_script_rejects_malformed_typicality_bands(judged_base, bands
     assert result.returncode != 0
     assert "bands" in result.stdout + result.stderr
     assert not (analysis_output_dir("realism_ranking", judged_base) / _COUNTRY / "realism_ranking.json").exists()
+
+
+# ------------------------------------------------------------------
+# The distribution grid through the CLI: model_ranking's order is a hard input
+# ------------------------------------------------------------------
+
+def test_the_driver_script_writes_the_distribution_grid_at_456_pt(judged_base):
+    out_dir = _run_ranking_script(judged_base, "--typicality-min-n", "1")
+    for suffix in (".png", ".svg", ".eps"):
+        assert (out_dir / f"{_DISTRIBUTION_GRID}{suffix}").is_file(), suffix
+    svg = (out_dir / f"{_DISTRIBUTION_GRID}.svg").read_text(encoding="utf-8")
+    assert re.search(r'<svg[^>]*\swidth="456pt"', svg)
+    for name in _TYPICALITY_BLOCK_CSVS:
+        assert (out_dir / name).is_file(), name
+
+
+def test_a_missing_model_ranking_output_fails_before_anything_is_written(judged_base):
+    _performance_path(judged_base).unlink()
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--country", _COUNTRY, "--output-base", str(judged_base), "--force"],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+    )
+    assert result.returncode != 0
+    assert "rank_models.py" in result.stdout + result.stderr
+    assert not (analysis_output_dir("realism_ranking", judged_base) / _COUNTRY).exists()
+
+    out_dir = _run_ranking_script(judged_base, "--no-charts")
+    assert (out_dir / "realism_ranking.json").is_file()
+    assert not list(out_dir.glob("*.png"))
+
+
+def test_a_grid_model_the_ranking_does_not_know_fails_before_anything_is_written(judged_base):
+    path = _performance_path(judged_base)
+    performance = json.loads(path.read_text(encoding="utf-8"))
+    performance["metadata"]["models"] = ["claude_haiku"]
+    performance["combos"] = {s: c for s, c in performance["combos"].items() if c["model"] == "claude_haiku"}
+    path.write_text(json.dumps(performance), encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--country", _COUNTRY, "--output-base", str(judged_base), "--force"],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+    )
+    assert result.returncode != 0
+    assert "claude_sonnet" in result.stdout + result.stderr
+    assert not (analysis_output_dir("realism_ranking", judged_base) / _COUNTRY).exists()

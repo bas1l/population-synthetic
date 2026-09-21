@@ -28,6 +28,7 @@ from population_synthetic.analysis.utils.model_order import (
     _tier1_sort_key,
     _tier2_sort_key,
     align_to_ranking,
+    ranked_grid_columns,
     ranked_model_order,
 )
 from tests.test_model_ranking_charts import (
@@ -228,6 +229,25 @@ def test_align_raises_on_a_ranked_model_the_grid_does_not_hold():
 def test_align_raises_on_a_repeated_id(present, ranked):
     with pytest.raises(ValueError):
         align_to_ranking(present, ranked)
+
+
+# ------------------------------------------------------------------
+# ranked_grid_columns: the fixed-width grid's stricter reading
+# ------------------------------------------------------------------
+
+def test_grid_columns_drop_a_ranked_model_the_grid_does_not_hold():
+    """A model withdrawn in every strategy is ranked nowhere useful: it is not a column."""
+    assert ranked_grid_columns(["c", "a"], ["b", "a", "withdrawn_model", "c"]) == ["a", "c"]
+
+
+def test_grid_columns_raise_on_a_grid_model_the_ranking_does_not_know():
+    with pytest.raises(ValueError, match="unranked_model"):
+        ranked_grid_columns(["a", "unranked_model"], ["a", "b"])
+
+
+def test_grid_columns_raise_on_a_repeated_grid_model():
+    with pytest.raises(ValueError):
+        ranked_grid_columns(["a", "a"], ["a"])
 
 
 # ------------------------------------------------------------------
