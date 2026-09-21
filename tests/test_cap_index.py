@@ -44,7 +44,7 @@ def _write_index(output_base: Path, entries) -> Path:
     return path
 
 
-def _entry(slug: str, requested_n: int = REQUESTED_N) -> dict:
+def _entry(slug: str, requested_n: int = REQUESTED_N, *, excluded: bool = False) -> dict:
     """A cap-index record shaped like the ``CapSummary`` the gate writes."""
     return {
         "slug": slug,
@@ -60,6 +60,8 @@ def _entry(slug: str, requested_n: int = REQUESTED_N) -> dict:
         "synthetic_file": f"{slug}.json",
         "real_file": "real_swedish.json",
         "mapped_n": requested_n,
+        "excluded": excluded,
+        "exclusion_reason": "fewer than requested_n clean personas" if excluded else None,
     }
 
 
@@ -141,6 +143,16 @@ def test_unknown_slug_raises_from_the_predicate_too(tmp_path):
         pytest.param([{"slug": SLUG_A, "requested_n": True}], id="bool-requested-n"),
         pytest.param([{"slug": SLUG_A, "requested_n": 0}], id="zero-requested-n"),
         pytest.param([_entry(SLUG_A), _entry(SLUG_A)], id="duplicate-slug"),
+        pytest.param([{"slug": SLUG_A, "requested_n": REQUESTED_N}], id="no-excluded"),
+        pytest.param(
+            [{"slug": SLUG_A, "requested_n": REQUESTED_N, "excluded": None}], id="null-excluded"
+        ),
+        pytest.param(
+            [{"slug": SLUG_A, "requested_n": REQUESTED_N, "excluded": 0}], id="int-excluded"
+        ),
+        pytest.param(
+            [{"slug": SLUG_A, "requested_n": REQUESTED_N, "excluded": "false"}], id="string-excluded"
+        ),
     ],
 )
 def test_malformed_index_raises(tmp_path, entries):
@@ -185,8 +197,61 @@ def test_predicate_is_monotone_around_the_slugs_own_cap(tmp_path):
 
 def test_cap_index_is_constructible_without_a_filesystem():
     """The predicate is usable on an in-memory map (the figure tests rely on this)."""
-    index = CapIndex({SLUG_A: REQUESTED_N}, source=Path("fixture") / INDEX_FILENAME)
+    index = CapIndex({SLUG_A: REQUESTED_N}, source=Path("fixture") / INDEX_FILENAME, withdrawn=())
 
     assert index[SLUG_A] == REQUESTED_N
     assert index.is_full_n(SLUG_A, REQUESTED_N)
     assert not index.is_full_n(SLUG_A, REQUESTED_N - 1)
+    assert index.withdrawn_slugs() == frozenset()
+
+
+# ------------------------------------------------------------------
+# Withdrawn combinations -- the gate's full-N exclusion verdict
+# ------------------------------------------------------------------
+
+def test_withdrawn_slugs_are_exactly_the_excluded_records(tmp_path):
+    _write_index(tmp_path, [_entry(SLUG_A), _entry(SLUG_B, excluded=True)])
+    index = load_cap_index(tmp_path)
+
+    assert index.withdrawn_slugs() == frozenset({SLUG_B})
+    assert index.is_withdrawn(SLUG_B) is True
+    assert index.is_withdrawn(SLUG_A) is False
+
+
+def test_a_withdrawn_slug_still_carries_its_requested_cap(tmp_path):
+    """The gate records the cap an excluded combination fell short of; it stays readable."""
+    _write_index(tmp_path, [_entry(SLUG_B, excluded=True)])
+    index = load_cap_index(tmp_path)
+
+    assert index[SLUG_B] == REQUESTED_N
+    assert SLUG_B in index
+
+
+def test_no_withdrawal_reads_as_an_empty_set(tmp_path):
+    _write_index(tmp_path, [_entry(SLUG_A), _entry(SLUG_B)])
+
+    assert load_cap_index(tmp_path).withdrawn_slugs() == frozenset()
+
+
+def test_is_withdrawn_on_an_unknown_slug_raises_naming_the_index(tmp_path):
+    """A combination the gate never saw is not 'kept' by omission."""
+    path = _write_index(tmp_path, [_entry(SLUG_A)])
+    index = load_cap_index(tmp_path)
+
+    with pytest.raises(KeyError) as exc:
+        index.is_withdrawn(SLUG_B)
+
+    assert str(path) in exc.value.args[0]
+
+
+def test_in_memory_withdrawn_slug_without_a_cap_raises():
+    with pytest.raises(ValueError) as exc:
+        CapIndex({SLUG_A: REQUESTED_N}, source=Path("fixture") / INDEX_FILENAME, withdrawn=[SLUG_B])
+
+    assert SLUG_B in str(exc.value)
+
+
+def test_withdrawn_is_a_required_argument():
+    """Never defaulted: an index that does not say what was withdrawn would answer 'none'."""
+    with pytest.raises(TypeError):
+        CapIndex({SLUG_A: REQUESTED_N}, source=Path("fixture") / INDEX_FILENAME)
