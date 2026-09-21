@@ -131,6 +131,9 @@ terminology rules forbid in published artwork.
 - **Survivor**: a persona with `can_exist_majority == True` and a non-null `typicality_mean`. This
   is exactly the set behind `CompetitorRecord.typicality_means`, and it is the denominator of every
   number below. It is never `n_personas`.
+- **Reference term**: what published artwork calls the real population: `figure_term("reference")`
+  (`"Reference"` in `config/analysis/figure_terms.yaml`). The agency name (`SCB`, `ISTAT`, from
+  `display.reference_source`) is provenance and never the figure-facing label.
 - **Scored rounds of a survivor**: the non-`None` entries of its `typicality_rounds` (a round judged
   impossible carries no score). There are r_i ≥ 1 of them. Under `--rounds N` they are the scored
   rounds among the first N, because the capped loader rebuilds the rows from the trimmed cache.
@@ -247,6 +250,11 @@ presentation module: it computes a ranking, so it sits beside `cap_index.py`.
   new `config/analysis/figure_terms.yaml` (`"{source} (real)"` → `"SCB (real)"`). The template must
   contain exactly one `{source}` placeholder, or loading raises. Legend entries use
   `reference_source` ("SCB outline", "SCB").
+  *Superseded during Phase 2 (terminology update from Basil, 2026-09-21):* manuscript-facing
+  artwork calls the real population "the reference", never by its agency. The column label and
+  the legend entry therefore print `labels.figure_term("reference")` (`"Reference"`), and the
+  `reference_column` template and `labels.reference_column_label` were dropped. `reference_source`
+  stays, as provenance only.
 - Manuscript-controlled words: `config/analysis/figure_terms.yaml` holds `individuals: "individuals"`
   and `strategy_key_title: "Strategies"`. They are read by `labels.figure_term(key)`, which raises
   on an unknown key, a missing file or an empty value. The triangle note is assembled in
@@ -325,7 +333,7 @@ presentation module: it computes a ranking, so it sits beside `cap_index.py`.
 |----------------|----------------|------------------|---------------------|
 | `utils/model_order.py` (new; shared with the transposed plan) | Publish `model_ranking`'s tier order | `result` (performance JSON dict), `CapIndex` → `list[str]`; `align_to_ranking(present, ranked)` | matplotlib, labels, realism, file paths (the caller loads the JSON) |
 | `utils/cap_index.py` (extended) | Also expose which slugs the gate withdrew | `_index.json` → `CapIndex.is_withdrawn(slug)`, `withdrawn_slugs()` | figures, which process asks |
-| `utils/labels.py` (extended) | `reference_source(country)`, `reference_column_label(country)`, `figure_term(key)` | country YAML, `figure_terms.yaml` → display strings; raise on absence | renderers, statistics |
+| `utils/labels.py` (extended) | `reference_source(country)` (provenance), `figure_term(key)` (incl. `reference`) | country YAML, `figure_terms.yaml` → display strings; raise on absence | renderers, statistics |
 | `utils/stats_tests.py` (extended) | `mann_whitney_test`, `bootstrap_cliffs_delta_ci`, `epsilon_squared` | samples/H,N → dicts | realism, figures |
 | `realism_ranking/loader.py` (extended) | `CompetitorRecord.typicality_round_scores`: per-survivor tuples of scored rounds, the same filter as `typicality_means` | persona rows → `tuple[tuple[int, ...], ...]` | bands, figures |
 | `realism_ranking/builder.py` (extended) | `_typicality_distribution(...)`, `_typicality_effects(...)`, `typicality_distribution_rows`, `typicality_band_rows`, `typicality_effect_*_rows` | records, bands, `withdrawn`, bootstrap → blocks/rows | paths, config files, model order, colours, labels |
@@ -345,7 +353,7 @@ src/population_synthetic/analysis/
                                           stepped_colorbar(canvas, box, levels, n, title)
   realism_ranking/builder.py              + typicality_distribution / typicality_effects blocks
   realism_ranking/charts.py               + plot_typicality_distribution_grid
-config/analysis/figure_terms.yaml (new)   individuals, strategy_key_title, reference_column
+config/analysis/figure_terms.yaml (new)   terms: individuals, strategy_key_title, reference
 config/synthetic/axes/countries/*.yaml    + display.reference_source
 ```
 
@@ -394,26 +402,41 @@ fixtures pass the now-required `withdrawn=()`, and its CLI fixture index carries
 **Dependencies:** None.
 
 ### Phase 2: Config-held vocabulary
+**Started:** 2026-09-21 15:01
+**Completed:** 2026-09-21 15:53
+
 **Goal:** Every word the figure prints that the manuscript controls, and the reference name, resolve
 from config and raise when absent.
 
-- [ ] 2.1 — Add `config/analysis/figure_terms.yaml` (`individuals`, `strategy_key_title`,
-      `reference_column: "{source} (real)"`), with a header comment citing the manuscript's
+- [x] 2.1 — Add `config/analysis/figure_terms.yaml` (`individuals`, `strategy_key_title`,
+      ~~`reference_column: "{source} (real)"`~~ → `reference: "Reference"`, see notes), with a header comment citing the manuscript's
       TERMINOLOGY-RULES T1 as the reason these words live in config.
-- [ ] 2.2 — Add `display: {reference_source: ...}` to `swedish_02.yaml` ("SCB"), `swedish.yaml`
+- [x] 2.2 — Add `display: {reference_source: ...}` to `swedish_02.yaml` ("SCB"), `swedish.yaml`
       ("SCB") and `italian.yaml` ("ISTAT"). Verify nothing that loads country YAMLs rejects unknown
       keys (the manifest loader and the GUI axis readers); fix any that does, and say so in the
       commit.
-- [ ] 2.3 — `labels.py`: `figure_term(key)`, `reference_source(country_id)`,
-      `reference_column_label(country_id)`. No fallback to the id, following `model_label`'s
+- [x] 2.3 — `labels.py`: `figure_term(key)`, `reference_source(country_id)`,
+      ~~`reference_column_label(country_id)`~~ (dropped, see notes). No fallback to the id, following `model_label`'s
       pattern.
-- [ ] 2.4 — Tests in `tests/test_labels.py`: resolution; the raise on a missing file, key, empty
-      value or template without exactly one `{source}`; the raise when a country lacks
+- [x] 2.4 — Tests in `tests/test_labels.py`: resolution; the raise on a missing file, key, empty
+      value ~~or template without exactly one `{source}`~~; the raise when a country lacks
       `display.reference_source`.
 
 **Files Modified:** `config/analysis/figure_terms.yaml` (new),
 `config/synthetic/axes/countries/{swedish_02,swedish,italian}.yaml`,
 `src/population_synthetic/analysis/utils/labels.py`, `tests/test_labels.py`.
+
+*Implementation notes.* **Terminology change (Basil, 2026-09-21):** in manuscript-facing text the
+real population is "the reference", not "SCB". So the figure's detached column label and its legend
+entry resolve from `figure_term("reference")` (`terms.reference: "Reference"`), not from a
+`"{source} (real)"` template; the template and `reference_column_label` were removed rather than
+kept unused. `display.reference_source` (SCB / ISTAT) and `labels.reference_source` stay as
+per-country provenance; a test asserts the reference term is not any country's agency name.
+Phases 5–6 must therefore label the reference column and legend with `figure_term("reference")`,
+and the success criterion's "SCB (real)" / "SCB outline" wording reads as "Reference". All three
+words sit under a `terms:` mapping. Task 2.2's check found nothing that rejects an unknown key in a country
+YAML: `manifest_loader.discover_axis_values` / `compose_manifest` and the GUI axis readers
+(`axis_selector.py`, `population_summary.py`) read fixed keys by name, so no loader was changed.
 
 **Dependencies:** None.
 

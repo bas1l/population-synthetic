@@ -19,8 +19,10 @@ therefore usable by -- and dependent on -- no chart module.
 
 **Config is the only table.** There is no id-to-string dictionary in this file. The
 model name comes from that model's own ``display.name``, the strategy phrase from its
-``label:``, the method letter from the *rank* of its family in ``_families.yaml``, and
-the attribute phrase from ``config/analysis/attribute_labels.yaml``. A hand-maintained
+``label:``, the method letter from the *rank* of its family in ``_families.yaml``, the
+attribute phrase from ``config/analysis/attribute_labels.yaml``, the reference source
+from each country's ``display.reference_source``, and the manuscript-controlled words
+("individuals", "Strategies") from ``config/analysis/figure_terms.yaml``. A hand-maintained
 Python map, or a second YAML restating what the axis files already say, would be a
 copy free to drift from the thing it copies.
 
@@ -71,6 +73,11 @@ COUNTRIES_DIR = AXES_DIR / "countries"
 #: field of their own -- the names are mapped-schema keys shared by every mapping tier
 #: -- so this file supplies it once, country-agnostically. See the file's own header.
 ATTRIBUTE_LABELS_PATH = PROJECT_ROOT / "config" / "analysis" / "attribute_labels.yaml"
+
+#: The manuscript-controlled words a figure prints (``individuals``, the strategy-key
+#: heading, the name of the real population). See the file's own header for why a word
+#: is config rather than a literal in a chart module.
+FIGURE_TERMS_PATH = PROJECT_ROOT / "config" / "analysis" / "figure_terms.yaml"
 
 #: The Ollama endpoint registry, read for the provenance table only. Read directly for
 #: the same circular-import reason as the axis files.
@@ -257,6 +264,66 @@ def attribute_label(attribute: str, *, labels_path: str | Path | None = None) ->
     if attribute not in labels:
         raise UnknownAxisValue("attribute", attribute, [path])
     return _display_string(labels[attribute], field=f"labels.{attribute}", value=attribute, path=path)
+
+
+# ------------------------------------------------------------------
+# The manuscript-controlled words and the reference name
+# ------------------------------------------------------------------
+
+
+def figure_term(key: str, *, terms_path: str | Path | None = None) -> str:
+    """Return the manuscript-controlled word stored under *key* (``individuals`` -> ``individuals``).
+
+    Read from the ``terms:`` mapping of ``config/analysis/figure_terms.yaml``. These are
+    the words the manuscript's terminology rules decide for published artwork
+    ("individual", not persona; "strategy", not method), so a chart module never types
+    one: a literal would carry the repository's dialect onto the canvas.
+
+    Raises:
+        FileNotFoundError: If the terms file is absent.
+        UnknownAxisValue: If *key* is not declared.
+        ValueError: If the file has no non-empty ``terms`` mapping, or the value is not a
+            non-empty display string (or contains an underscore).
+    """
+    path = Path(terms_path) if terms_path is not None else FIGURE_TERMS_PATH
+    raw = _load_mapping(path, "Figure terms config")
+    terms = raw.get("terms")
+    if not isinstance(terms, dict) or not terms:
+        raise ValueError(f"{path} must declare a non-empty 'terms' mapping, got {terms!r}.")
+    if key not in terms:
+        raise UnknownAxisValue("figure term", key, [path])
+    return _display_string(terms[key], field=f"terms.{key}", value=key, path=path)
+
+
+def reference_source(country_id: str, *, countries_dir: str | Path | None = None) -> str:
+    """Return the short name of *country_id*'s reference source (``swedish_02`` -> ``SCB``).
+
+    Read from that country axis YAML's ``display.reference_source``: the statistical
+    agency the real population is drawn from. It is **provenance**, not a figure term:
+    manuscript-facing artwork calls the real population ``figure_term("reference")``,
+    never by its agency. Held per country because a literal ``"SCB"`` would be wrong
+    for Italy.
+
+    Raises:
+        UnknownAxisValue: If no axis file declares *country_id*.
+        ValueError: If the file has no ``display`` mapping, or ``display.reference_source``
+            is not a non-empty display string. There is no fallback to the country label.
+    """
+    directory = Path(countries_dir) if countries_dir is not None else COUNTRIES_DIR
+    data, path = _axis_document("country", country_id, directory)
+    display = data.get("display")
+    if not isinstance(display, dict):
+        raise ValueError(
+            f"{path}: country {country_id!r} must declare a 'display' mapping with a "
+            f"'reference_source', got {display!r}. It names the source of the real population "
+            f"on a figure (e.g. 'SCB')."
+        )
+    return _display_string(
+        display.get("reference_source"),
+        field="display.reference_source",
+        value=country_id,
+        path=path,
+    )
 
 
 # ------------------------------------------------------------------

@@ -1,0 +1,31 @@
+# Figure terms -- the single source of truth for the manuscript-controlled words a
+# published figure prints that are neither an axis id nor an attribute.
+#
+# Why these words live in config. The manuscript's TERMINOLOGY-RULES.md, rule T1, decides
+# which word names each object in published artwork: an "individual", never a persona,
+# record or person (2026-08-31); a "strategy", never a method or methodology
+# (2026-08-28). The repository's own dialect is the opposite -- code identifiers, CSV
+# columns and JSON keys say `persona` and `method`, and T1 does not cover them -- so a
+# word typed into a chart module would be the repository's word, and a later decision
+# in the manuscript would have to be chased through every call site. Held here, the
+# word is read at render time by `analysis/utils/labels.py::figure_term`, and changing
+# it is a one-line edit to this file.
+#
+# Conventions:
+#   - Every value is a non-empty display string with no underscore. The resolver RAISES
+#     on a missing file, an unknown key, an empty value or an underscored one; there is
+#     no fallback to the key.
+#   - A word is stored in the form it is printed in: lower case where it runs inside a
+#     sentence ("share of individuals ..."), capitalised where it opens a heading.
+#   - The real population is called "the reference" in manuscript-facing text, never
+#     by its agency ("SCB", "ISTAT"). The agency's short name is still held per country
+#     (`display.reference_source` in config/synthetic/axes/countries/) for provenance,
+#     but a figure's reference column and legend entry print `reference` below.
+
+terms:
+  # The members of a population, reference or generated (T1, "individual").
+  individuals: "individuals"
+  # The heading of the in-figure A-E key (T1, "strategy").
+  strategy_key_title: "Strategies"
+  # The real population, as its column heading and legend entry print it.
+  reference: "Reference"
