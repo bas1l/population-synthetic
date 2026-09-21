@@ -59,6 +59,16 @@ _PROVENANCE = {"judge_model": "claude-sonnet-5", "prompt_template_sha256": "abc"
 #: personas, so the shipped floor would flag every cell and the gate's own tests would be
 #: the only ones exercising an ordinary cell.
 _TYPICALITY = {"statistic": "iov", "n_levels": 11, "min_n": 1, "tail_threshold": 5}
+#: The typicality_closeness resampling bundle, required and never defaulted by the
+#: builder. Iterations are small: these tests pin shapes and degenerate handling, not
+#: Monte-Carlo precision.
+_CLOSENESS = {
+    "ci_level": 0.95, "bootstrap_iterations": 200, "bootstrap_seed": 20260921,
+    "permutation_iterations": 199, "permutation_seed": 20260928,
+    "noise_iterations": 200, "noise_seed": 20261020, "noise_quantile": 0.95,
+}
+#: The band edges and the gate's withdrawn slugs, both required by build_ranking.
+_BANDS = (4, 7)
 
 
 def _row(pid, slug, *, impossible, typicality, model, strategy, is_real=False):
@@ -101,6 +111,9 @@ def _build(records, **kwargs):
     kwargs.setdefault("driver_top_n", 3)
     kwargs.setdefault("driver_min_count", 1)
     kwargs.setdefault("typicality", dict(_TYPICALITY))
+    kwargs.setdefault("typicality_bands", _BANDS)
+    kwargs.setdefault("withdrawn", ())
+    kwargs.setdefault("closeness", dict(_CLOSENESS))
     return build_ranking(records, _COUNTRY, bootstrap=_BOOT, variance_center="median", **kwargs)
 
 
@@ -1506,6 +1519,7 @@ def test_omitting_the_options_leaves_a_null_block_a_recorded_reason_and_no_table
     ranking = build_ranking(
         _typicality_fixture(), _COUNTRY, bootstrap=_BOOT, variance_center="median",
         driver_top_n=3, driver_min_count=1,
+        typicality_bands=_BANDS, withdrawn=(), closeness=dict(_CLOSENESS),
     )
     assert ranking["typicality"] is None
     assert "typicality_axis" in {skip["test"] for skip in ranking["skipped_tests"]}
@@ -1770,6 +1784,7 @@ def test_typicality_figures_raise_rather_than_emitting_an_empty_one():
     without = build_ranking(
         _typicality_fixture(), _COUNTRY, bootstrap=_BOOT, variance_center="median",
         driver_top_n=3, driver_min_count=1,
+        typicality_bands=_BANDS, withdrawn=(), closeness=dict(_CLOSENESS),
     )
     for plot in (plot_typicality_heatmap, plot_typicality_by_method):
         with pytest.raises(ValueError, match="typicality: null"):

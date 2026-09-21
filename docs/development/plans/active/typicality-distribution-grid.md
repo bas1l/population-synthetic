@@ -573,29 +573,32 @@ verbatim prototype copies).
 **Dependencies:** None.
 
 ### Phase 4: Builder blocks, CSVs and CLI tables
+**Started:** 2026-09-21 16:40
+**Completed:** 2026-09-21 19:10
+
 **Goal:** `realism_ranking.json` gains both blocks, and the five CSVs are written. No figure yet.
 
-- [ ] 4.1 — `CompetitorRecord.typicality_round_scores` (the same survivor filter as
+- [x] 4.1 — `CompetitorRecord.typicality_round_scores` (the same survivor filter as
       `typicality_means`; a test asserts that the per-persona means of the round scores equal
       `typicality_means` element-wise).
-- [ ] 4.2 — `_typicality_distribution(records, *, n_levels, bands, withdrawn, skips)`: weights,
+- [x] 4.2 — `_typicality_distribution(records, *, n_levels, bands, withdrawn, skips)`: weights,
       distribution, band shares, `mean`, `n_multi_round`; `withdrawn`/`unjudged` lists; it reuses
       `_grid` for the shape. A score outside 0..k−1 raises (as `_typicality_levels` does); a
       withdrawn slug that is also consumed raises.
-- [ ] 4.3 — `_typicality_effects(synthetic, real, factor_significance, *, bootstrap, skips)`:
+- [x] 4.3 — `_typicality_effects(synthetic, real, factor_significance, *, bootstrap, skips)`:
       omnibus ε² read from the `by_model`/`by_method` Kruskal results; model pairs joined to the
       Dunn rows by `(a, b)`; the vs-reference rows for both families with Holm via `holm_adjust`.
-- [ ] 4.4 — `build_ranking(..., typicality_bands=..., withdrawn=...)`, both required and never
+- [x] 4.4 — `build_ranking(..., typicality_bands=..., withdrawn=...)`, both required and never
       defaulted in the builder. Flatteners for the five CSVs, sorted by `_competitor_position`
       (distribution: then level).
-- [ ] 4.5 — CLI: `--typicality-bands` (default `4,7`, parsed and validated as
+- [x] 4.5 — CLI: `--typicality-bands` (default `4,7`, parsed and validated as
       0 ≤ b1 < b2 < k−1), `load_cap_index(output_base)` always (it is the gate's own output and a
       hard upstream), withdrawn slugs filtered to the country, the five CSVs written, and the
       bands recorded in `provenance`.
-- [ ] 4.6 — Tests in `tests/test_realism_ranking_builder.py`, and the e2e fixture gains a
+- [x] 4.6 — Tests in `tests/test_realism_ranking_builder.py`, and the e2e fixture gains a
       `population_cap/_index.json`.
 
-- [ ] 4.7 — *(Added 2026-09-21, scope addition.)* **Closeness block.** The builder emits a
+- [x] 4.7 — *(Added 2026-09-21, scope addition.)* **Closeness block.** The builder emits a
       `typicality_closeness` block (key name Phase 4's to fix and record), built from the Phase 3.5
       primitives only:
       - per synthetic combination (the reference held out, withdrawn cells absent): the primary
@@ -625,8 +628,80 @@ verbatim prototype copies).
 
 **Files Modified:** `src/population_synthetic/analysis/realism_ranking/loader.py`,
 `src/population_synthetic/analysis/realism_ranking/builder.py`,
+`src/population_synthetic/analysis/realism_ranking/typicality_closeness.py` (new),
+`src/population_synthetic/analysis/utils/stats_tests.py` (`shapiro_wilk_test`),
+`src/population_synthetic/analysis/utils/two_way_decomposition.py` (`additive_two_way_residuals`),
+`config/analysis/realism_ranking/typicality_closeness.yaml` (new),
 `scripts/analyze/rank_persona_realism.py`, `tests/test_realism_ranking_builder.py`,
-`tests/test_realism_ranking_loader.py`, `tests/test_realism_ranking_e2e.py`.
+`tests/test_realism_ranking_loader.py`, `tests/test_realism_ranking_e2e.py`,
+`tests/test_realism_ranking_typicality_blocks.py` (new).
+
+*Implementation notes.*
+- **Closeness decisions (Basil, 2026-09-21).** Primary outcome TV similarity (1 − TV, the
+  attribute-fidelity measure); sensitivity outcomes Cliff's δ and the Cramér distance; the
+  reference self-resampling noise baseline reported as the mean and the bound at
+  `noise_quantile` (for TV similarity the 5th percentile, since noise pulls similarity down;
+  for Cramér the 95th; for δ the 95th of |δ| beside the mean |δ|), per distinct combination
+  n, with the headline at n = the reference's own n (100). The analysis is at combination
+  level (n = 58); individuals are never test units and enter only through the bootstrap.
+- **Block key: `typicality_closeness`.** Its computation lives in a new
+  `realism_ranking/typicality_closeness.py` (pure: unit rows + options in, block + skips out);
+  `builder._typicality_closeness` adapts the records. Split out because `builder.py` was
+  already 2,200 lines; it imports nothing from the builder, so there is no cycle. The block
+  carries per combination the three outcomes with joint-bootstrap CIs and noise baselines;
+  per outcome the additive decomposition (`additive_two_way_anova` + CIs from
+  `additive_two_way_effect_sizes`, the strategy − model partial ω² difference and the SS
+  ratio per replicate, residual Shapiro–Wilk), the within-block permutation test for both
+  factors, Friedman + Kendall's W (bootstrap CI, W recomputed per replicate) on complete
+  blocks in both directions with the dropped models listed, the strategy pairs (paired t /
+  Holm with per-strategy mean/SD, mean difference, CI, d_z and Shapiro–Wilk of the
+  differences; Conover / Holm) and the model pairs (Conover / Holm).
+- **Histogram basis for closeness: round-weighted** — the same unit rows as
+  `typicality_distribution` (`builder._round_weighted_units`), so the grid and the closeness
+  numbers describe one distribution. Under `--rounds 1` it is the prototype's first-round
+  basis; the manuscript uses that run. Tested by `test_golden_*` in
+  `tests/test_realism_ranking_typicality_blocks.py` (per-combination TV/δ/Cramér to 1e-12,
+  decomposition, Friedman/W, paired t, Conover to 1e-9, noise floor within MC error).
+- **Seeds and iterations** come from the new `config/analysis/realism_ranking/typicality_closeness.yaml`
+  (`ci_level`, bootstrap 5,000 / permutation 10,000 / noise 20,000 iterations, three seeds,
+  `noise_quantile`), read fail-fast at the CLI and stamped in `provenance.closeness_resampling`.
+  `typicality_effects` uses the judge config's `bootstrap` block, as decision 6 says.
+- **Two small primitives added** beyond Phase 3: `stats_tests.shapiro_wilk_test` and
+  `two_way_decomposition.additive_two_way_residuals` (both needed for the requested
+  normality checks).
+- **`build_ranking` gains three required arguments**: `typicality_bands`, `withdrawn`,
+  `closeness`. `typicality_distribution` and `typicality_closeness` take the level count
+  from `typicality.n_levels`, so without the typicality options both are null with a
+  recorded skip; `typicality_effects` is always built.
+- **Cell states** are published as `typicality_distribution.grid.states`
+  (`ok | no_typicality | withdrawn | unjudged`) beside the null cells of `_grid`, plus the
+  `withdrawn` / `unjudged` slug lists. A withdrawn slug is placed by matching
+  `{country}_{strategy}_{model}` against the grid; one whose model has no consumed
+  competitor at all (live: `ollama_llama31_8b`, withdrawn in all five strategies) is listed
+  but is not a column. The CLI filters the gate's withdrawn slugs to the country with
+  `decompose_slug` (not a prefix match: `swedish` is a prefix of `swedish_02`) and the same
+  model / strategy / slug filters as the records.
+- **vs-reference families** include every synthetic combination with ≥ 1 survivor (a
+  combination with none is left out with a recorded skip); the model family has one row per
+  pooled model. Medians use `summarize` (the project's nearest-rank convention).
+- **CSVs.** The five planned ones plus four for closeness: `typicality_closeness.csv`
+  (per combination), `typicality_closeness_decomposition.csv`, `typicality_closeness_tests.csv`,
+  `typicality_closeness_pairs.csv`. The pairs table is empty (not written) when fewer than
+  two models are complete blocks.
+- **Live check (2026-09-21 swedish_02, written to a scratch directory, the live
+  `03_Analysis` untouched).** `--rounds 1`: every distribution equals
+  `golden/distribution_first_round_by_combo.csv` exactly, both withdrawn cells are
+  `withdrawn`; closeness TV similarity / δ / Cramér equal the prototype to 4e-16;
+  decomposition points to 7e-15 (TV similarity shares: strategy 0.638, model 0.238,
+  residual 0.180); Friedman χ² and W equal the prototype; permutation p = 1/10,001; noise at
+  100 vs 100: TV similarity mean 0.829, 5th percentile 0.760; ε² 0.0984 / 0.1608.
+  Published rounds: ε² 0.0980 / 0.1668, 45/66 model pairs Holm-significant, 58/58
+  combinations δ > 0 with p_Holm < 0.05 (δ 0.296–0.912), every point δ equal to the golden
+  CSVs to 5e-16. Bootstrap CI endpoints differ from the prototype's by at most 0.013 (a
+  different resampling stream), inside the Testing Plan's 0.02 tolerance.
+- **Not published: pooled per-model distributions** (`golden/distribution_first_round_by_model.csv`).
+  The block's cells are per combination plus the reference, as the block shape specifies;
+  if Phase 6's figure needs a per-model marginal it must be added to the block there.
 
 **Dependencies:** Phases 1 (withdrawn slugs) and 3 (including 3.5).
 
@@ -697,12 +772,12 @@ verbatim prototype copies).
 ## Testing Plan
 
 ### Unit Tests
-- [ ] **Round-weighted distribution, hand-computed**: survivors with rounds (8, 9), (9), (10, None,
+- [x] **Round-weighted distribution, hand-computed**: survivors with rounds (8, 9), (9), (10, None,
       10) and a non-survivor. Expected weights: 8 → 0.5, 9 → 1.5, 10 → 1.0; sum 3; mean equals the
       mean of the per-persona means (8.5, 9, 10) exactly.
-- [ ] **Reduction**: every r_i = 1 → integer weights equal to `np.bincount` of the scores, and equal
+- [x] **Reduction**: every r_i = 1 → integer weights equal to `np.bincount` of the scores, and equal
       to the existing `typicality_histogram` counts for the same record.
-- [ ] **Band shares**: edges (4, 7) on a known distribution; they sum to 1; `--typicality-bands 7,4`,
+- [x] **Band shares**: edges (4, 7) on a known distribution; they sum to 1; `--typicality-bands 7,4`,
       `-1,4` and `4,10` raise.
 - [x] **ε²**: H = 564.14, N = 5760 → 0.09796 (golden omnibus row, 0.0980 to 4 d.p.); n < 2 raises.
 - [x] **Cliff's δ bootstrap**: point equals `cliffs_delta` on ties-heavy integer samples (U
@@ -710,11 +785,11 @@ verbatim prototype copies).
       [1, 1]; same seed → identical CI; argument order swapped → negated point and mirrored CI.
 - [x] **Mann-Whitney**: agrees with `scipy.stats.mannwhitneyu` on a textbook example; empty sample
       raises.
-- [ ] **Dunn orientation**: for every model pair, sign(δ) == sign(Dunn z) whenever both are nonzero.
-- [ ] **Holm families**: the combination family has one entry per synthetic competitor with ≥ 1
+- [x] **Dunn orientation**: for every model pair, sign(δ) == sign(Dunn z) whenever both are nonzero.
+- [x] **Holm families**: the combination family has one entry per synthetic competitor with ≥ 1
       survivor; the model family has one per model; the p_Holm values equal
       `holm_adjust` over exactly that family.
-- [ ] **Withdrawn vs unjudged vs no-typicality**: a fixture with one of each produces three
+- [x] **Withdrawn vs unjudged vs no-typicality**: a fixture with one of each produces three
       distinct cell states in the block; a withdrawn slug that is also consumed raises.
 - [ ] **Missing reference**: vs-reference rows are empty, with a `skipped_tests` reason; the chart
       raises `ValueError`.

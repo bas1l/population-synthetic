@@ -180,6 +180,34 @@ class CompetitorRecord:
             if row.can_exist_majority and row.typicality_mean is not None
         )
 
+    @property
+    def typicality_round_scores(self) -> tuple[tuple[int, ...], ...]:
+        """Per-persona scored rounds, over exactly the personas of :attr:`typicality_means`.
+
+        One tuple per survivor (a majority-possible persona with a non-null mean), in the
+        same order, holding the non-``None`` entries of its ``typicality_rounds`` -- a round
+        judged impossible carries no score. Under a round cap these are the scored rounds
+        among the first N, because the capped loader rebuilds the rows from the trimmed
+        cache. The mean of each tuple is that persona's ``typicality_mean``.
+
+        Raises ``ValueError`` when a survivor carries a mean but no scored round: the two
+        columns would then describe different judgements of one persona.
+        """
+        scores: list[tuple[int, ...]] = []
+        for row in self.personas:
+            if not (row.can_exist_majority and row.typicality_mean is not None):
+                continue
+            scored = tuple(t for t in row.typicality_rounds if t is not None)
+            if not scored:
+                raise ValueError(
+                    f"Persona {row.persona_id!r} of {self.slug!r} carries typicality_mean="
+                    f"{row.typicality_mean} but no scored round in typicality_rounds; the "
+                    "per-persona CSV is internally inconsistent -- re-run "
+                    "scripts/analyze/analyze_persona_realism.py --rewrite-artifacts."
+                )
+            scores.append(scored)
+        return tuple(scores)
+
 
 def _judge_identity(provenance: dict[str, Any], keys: tuple[str, ...] = JUDGE_IDENTITY_KEYS) -> tuple[Any, ...]:
     return tuple(provenance.get(key) for key in keys)

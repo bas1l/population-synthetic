@@ -78,6 +78,9 @@ _COMBOS = [
     ("swedish_all_pick_dag_claude_haiku", "claude_haiku", "all_pick_dag", 2),
 ]
 _AXIS_IDS = ([_COUNTRY], ["all_pick", "all_pick_dag"], ["claude_haiku", "claude_sonnet"])
+#: The fourth cell of the 2 x 2 grid, withdrawn by the population gate: it has no
+#: individuals, so it is never judged and must be drawn crossed out, not as unjudged.
+_WITHDRAWN = "swedish_all_pick_dag_claude_sonnet"
 
 
 def _cfg() -> JudgeConfig:
@@ -133,6 +136,12 @@ def _judge(base, label, *, model, strategy, n_impossible, is_real=False, offset=
 #: the shipped 30 because these combinations hold five personas each, and the production
 #: floor would flag every one of them as under-powered.
 _TYPICALITY = {"statistic": "iov", "n_levels": 11, "min_n": 1, "tail_threshold": 5}
+#: The typicality_closeness resampling bundle (small iterations: shape, not precision).
+_CLOSENESS = {
+    "ci_level": 0.95, "bootstrap_iterations": 200, "bootstrap_seed": 20260921,
+    "permutation_iterations": 199, "permutation_seed": 20260928,
+    "noise_iterations": 200, "noise_seed": 20261020, "noise_quantile": 0.95,
+}
 
 
 def _rank(records, **kwargs):
@@ -145,16 +154,32 @@ def _rank(records, **kwargs):
     kwargs.setdefault("driver_top_n", 5)
     kwargs.setdefault("driver_min_count", 1)
     kwargs.setdefault("typicality", dict(_TYPICALITY))
+    kwargs.setdefault("typicality_bands", (4, 7))
+    kwargs.setdefault("withdrawn", ())
+    kwargs.setdefault("closeness", dict(_CLOSENESS))
     return build_ranking(
         records, _COUNTRY, bootstrap=_cfg().bootstrap, variance_center="median", **kwargs
     )
 
 
-def _write_index(base, slugs):
-    mapped = analysis_output_dir("population_cap", base) / MAPPED_SUBDIR
+def _write_index(base, slugs, *, withdrawn=()):
+    """The capped mapped index, and the gate's own ``population_cap/_index.json``.
+
+    *withdrawn* slugs are recorded as excluded by the gate (no mapped file), which is how
+    the distribution grid tells a withdrawn cell from an unjudged one.
+    """
+    stage = analysis_output_dir("population_cap", base)
+    mapped = stage / MAPPED_SUBDIR
     mapped.mkdir(parents=True, exist_ok=True)
     (mapped / "_index.json").write_text(
-        json.dumps([{"slug": slug, "synthetic_file": f"{slug}.json"} for slug in slugs]),
+        json.dumps([{"slug": slug, "synthetic_file": f"{slug}.json"} for slug in slugs]
+                   + [{"slug": slug, "synthetic_file": None, "skipped": True,
+                       "skip_reason": "withdrawn under the full-N rule"} for slug in withdrawn]),
+        encoding="utf-8",
+    )
+    (stage / "_index.json").write_text(
+        json.dumps([{"slug": slug, "requested_n": 7, "excluded": False} for slug in slugs]
+                   + [{"slug": slug, "requested_n": 7, "excluded": True} for slug in withdrawn]),
         encoding="utf-8",
     )
 
@@ -163,7 +188,7 @@ def _write_index(base, slugs):
 def judged_base(tmp_path):
     """An output base with three synthetic combinations and the real competitor judged."""
     base = tmp_path / "base"
-    _write_index(base, [slug for slug, *_ in _COMBOS])
+    _write_index(base, [slug for slug, *_ in _COMBOS], withdrawn=[_WITHDRAWN])
     for offset, (slug, model, strategy, n_impossible) in enumerate(_COMBOS):
         _judge(base, slug, model=model, strategy=strategy,
                n_impossible=n_impossible, offset=offset)
@@ -536,3 +561,57 @@ def test_a_single_slug_judged_alone_produces_its_complete_artifact_set(tmp_path)
     assert [p.name for p in country_root.iterdir()] == [slug]   # no real_* directory
     report = json.loads((combo_dir / f"{slug}.json").read_text(encoding="utf-8"))
     assert "distance_to_scb" not in report["dispersion"]
+
+
+#: The typicality tables the driver writes beside the summary and the histogram: the
+#: round-weighted distribution at two grains, the effect sizes at three, and the
+#: closeness block at four.
+_TYPICALITY_BLOCK_CSVS = (
+    "typicality_distribution.csv", "typicality_bands.csv",
+    "typicality_effect_omnibus.csv", "typicality_effect_model_pairs.csv",
+    "typicality_effect_vs_reference.csv",
+    "typicality_closeness.csv", "typicality_closeness_decomposition.csv",
+    "typicality_closeness_tests.csv",
+)
+#: Not written on this fixture, by design: with one withdrawn cell only one model holds
+#: every strategy, so there is no complete-block pair test to tabulate (a recorded skip).
+_EMPTY_ON_THIS_FIXTURE = "typicality_closeness_pairs.csv"
+
+
+def test_the_driver_script_writes_the_typicality_blocks_byte_stably(judged_base):
+    """The new blocks and their tables, through the real CLI and the gate's own index.
+
+    The fixture's fourth grid cell is withdrawn in ``population_cap/_index.json``, so the
+    distribution grid must mark it ``withdrawn`` -- read from the gate, not inferred from
+    the absence of a judged directory, which would call it ``unjudged``.
+    """
+    out_dir = _run_ranking_script(judged_base, "--typicality-min-n", "1", "--no-charts")
+    before = {name: (out_dir / name).read_bytes() for name in _TYPICALITY_BLOCK_CSVS}
+    assert not (out_dir / _EMPTY_ON_THIS_FIXTURE).exists()
+    ranking = json.loads((out_dir / "realism_ranking.json").read_text(encoding="utf-8"))
+
+    distribution = ranking["typicality_distribution"]
+    assert distribution["withdrawn"] == [_WITHDRAWN]
+    assert distribution["grid"]["states"]["claude_sonnet"]["all_pick_dag"] == "withdrawn"
+    assert distribution["bands"]["edges"] == [4, 7]
+    assert ranking["provenance"]["typicality_bands"] == [4, 7]
+    # The closeness settings are the config's, stamped verbatim.
+    assert ranking["provenance"]["closeness_resampling"]["bootstrap_iterations"] > 0
+    assert ranking["typicality_closeness"]["n_combinations"] == len(_COMBOS)
+    assert any(skip["test"].endswith(".complete_blocks") for skip in ranking["skipped_tests"])
+
+    _run_ranking_script(judged_base, "--typicality-min-n", "1", "--no-charts")
+    for name, payload in before.items():
+        assert (out_dir / name).read_bytes() == payload, f"{name} is not byte-stable"
+
+
+@pytest.mark.parametrize("bands", ["7,4", "-1,4", "4,10", "4"])
+def test_the_driver_script_rejects_malformed_typicality_bands(judged_base, bands):
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--country", _COUNTRY, "--output-base", str(judged_base),
+         "--force", "--no-charts", f"--typicality-bands={bands}"],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+    )
+    assert result.returncode != 0
+    assert "bands" in result.stdout + result.stderr
+    assert not (analysis_output_dir("realism_ranking", judged_base) / _COUNTRY / "realism_ranking.json").exists()

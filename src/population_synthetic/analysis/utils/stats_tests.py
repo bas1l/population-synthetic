@@ -27,7 +27,8 @@ post-hoc than Nemenyi for the Friedman design, Holm-corrected here.
 A last family gives two independent samples a location effect size with an interval:
 :func:`epsilon_squared` for a Kruskal-Wallis result, :func:`mann_whitney_test`,
 :func:`cliffs_delta_from_histograms` (Cliff's delta through the Mann-Whitney identity,
-vectorised over histograms) and :func:`bootstrap_cliffs_delta_ci`.
+vectorised over histograms) and :func:`bootstrap_cliffs_delta_ci`, plus
+:func:`shapiro_wilk_test` as the normality check reported beside a parametric result.
 
 Every re-implemented statistic (Page's L, Kendall's W, Cliff's delta) is validated
 against a hand-computed value in ``tests/test_stats_tests_significance.py``; the
@@ -1249,6 +1250,32 @@ def epsilon_squared(h: float, n: int) -> float:
     if not math.isfinite(h) or h < 0.0:
         raise ValueError(f"epsilon_squared needs a finite H >= 0, got {h!r}")
     return h / (int(n) - 1)
+
+
+def shapiro_wilk_test(values: Sequence[float]) -> dict[str, Any]:
+    """Shapiro-Wilk test of normality, wrapping :func:`scipy.stats.shapiro`.
+
+    Reported beside a parametric result (an F test, a paired t-test) as the check of the
+    normality it assumes, never as a gate that switches tests.
+
+    Returns ``{"W","p","n"}``. With fewer than 3 values, or when every value is identical
+    (the statistic is undefined on zero variance), ``W``/``p`` are ``None`` with a
+    ``"note"``.
+
+    Raises ``ValueError`` when *values* is not 1-D or holds a NaN/inf.
+    """
+    arr = np.asarray(values, dtype=float)
+    if arr.ndim != 1:
+        raise ValueError(f"shapiro_wilk_test needs a 1-D sample, got shape {arr.shape}")
+    if not np.isfinite(arr).all():
+        raise ValueError("shapiro_wilk_test: the sample contains NaN or inf")
+    if arr.size < 3:
+        return {"W": None, "p": None, "n": int(arr.size), "note": "Shapiro-Wilk needs >= 3 values"}
+    if np.ptp(arr) == 0.0:
+        return {"W": None, "p": None, "n": int(arr.size),
+                "note": "every value is identical; Shapiro-Wilk is undefined on zero variance"}
+    res = stats.shapiro(arr)
+    return {"W": float(res.statistic), "p": float(res.pvalue), "n": int(arr.size)}
 
 
 def _finite_sample(values: Sequence[float], name: str) -> np.ndarray:

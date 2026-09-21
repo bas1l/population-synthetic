@@ -23,6 +23,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+from pathlib import Path
 
 import matplotlib
 import pytest
@@ -35,7 +36,10 @@ from population_synthetic.analysis.persona_realism.artifacts import (  # noqa: E
     write_combo_artifacts,
 )
 from population_synthetic.analysis.persona_realism.config import JudgeConfig  # noqa: E402
-from population_synthetic.analysis.realism_ranking.loader import load_competitors  # noqa: E402
+from population_synthetic.analysis.realism_ranking.loader import (  # noqa: E402
+    CompetitorRecord,
+    load_competitors,
+)
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
 from population_synthetic.analysis.utils.realism_clash_csv import (  # noqa: E402
     RealismClashRow,
@@ -562,3 +566,39 @@ def test_auto_derivation_does_not_mask_a_differing_judge_model(tmp_path):
 
     with pytest.raises(ValueError, match="judge_model"):
         load_competitors(base, axis_ids=_AXIS_IDS, judge_cfg=_judge_cfg())
+
+
+# --------------------------------------------------------------------------- #
+# typicality_round_scores: the per-persona scored rounds                       #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("rounds_cap", [None, 1, 2])
+def test_round_scores_average_to_the_typicality_means(tmp_path, rounds_cap):
+    """Same survivors, same order: each tuple's mean is that persona's typicality_mean.
+
+    Through the published path and through the round cap, which rebuilds the rows from
+    the trimmed cache -- under ``--rounds 1`` every survivor then holds one scored round.
+    """
+    base = _base(tmp_path, [_SLUG_A])
+    _write_cached_combo(base, _SLUG_A, depth=3)
+    records, _ = load_competitors(base, axis_ids=_AXIS_IDS, rounds_cap=rounds_cap, judge_cfg=_judge_cfg())
+    (record,) = records
+    scores = record.typicality_round_scores
+    assert len(scores) == len(record.typicality_means) > 0
+    for rounds, mean in zip(scores, record.typicality_means):
+        assert sum(rounds) / len(rounds) == pytest.approx(mean, abs=1e-12)
+        assert len(rounds) == (rounds_cap or 3)
+
+
+def test_round_scores_raise_on_a_mean_without_a_scored_round():
+    row = _persona_row("persona_00000", _SLUG_A, impossible=False, typicality=7.0)
+    broken = dataclasses.replace(row, typicality_rounds=(None, None))
+    record = CompetitorRecord(
+        slug=_SLUG_A, country=_COUNTRY, model="claude_haiku", strategy="all_pick",
+        is_real_reference=False, n_personas=1, n_failed=0, personas=(broken,),
+        impossibility={}, dispersion={}, reliability={}, provenance={},
+        report_path=Path("/fake/report.json"), personas_csv_path=Path("/fake/personas.csv"),
+    )
+    with pytest.raises(ValueError, match="no scored round"):
+        record.typicality_round_scores

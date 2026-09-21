@@ -14,6 +14,8 @@ test each factor; they know nothing about what the factors or the value are.
   total SS. Because the design may be unbalanced, the two type II SS plus the residual
   need not add up to the total; the remainder is reported as ``share_overlap``, never
   hidden.
+* :func:`additive_two_way_residuals` -- the per-value residuals of that fit, for the
+  normality check reported beside its F test.
 * :func:`additive_two_way_effect_sizes` -- the same quantities, vectorised over a
   stack of replicate value vectors (bootstrap replicates), for interval estimates.
 * :func:`within_block_permutation_test` -- a permutation test of one factor's type II
@@ -224,6 +226,24 @@ def additive_two_way_anova(values: Sequence[float], factors: Mapping[str, Sequen
     if notes:
         out["note"] = "; ".join(notes)
     return out
+
+
+def additive_two_way_residuals(values: Sequence[float], factors: Mapping[str, Sequence[Hashable]]) -> np.ndarray:
+    """Least-squares residuals of one value vector under ``y ~ A + B`` (no interaction).
+
+    The same design :func:`additive_two_way_anova` fits, returned per value (in input
+    order) so a caller can check the normality its F test assumes. With one value per
+    cell the residual holds the interaction and the sampling noise together.
+
+    Raises ``ValueError`` on the malformed inputs :func:`additive_two_way_anova` rejects.
+    """
+    y, names = _validated(values, factors)
+    if y.ndim != 1:
+        raise ValueError(f"additive_two_way_residuals takes one value vector, got shape {y.shape}")
+    codes, _ = _codes(factors, y.size)
+    one = np.ones((y.size, 1))
+    design = np.hstack([one] + [np.eye(int(codes[f].max()) + 1)[codes[f]][:, 1:] for f in names])
+    return _residual_projector(design) @ y
 
 
 def additive_two_way_effect_sizes(
