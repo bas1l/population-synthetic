@@ -273,6 +273,9 @@ def _swedish_identity(**overrides) -> dict:
     ("employment_status", "Heltidsanställd", "Employed"),
     # longest beats axis order; it-konsult
     ("industry_sector", "IT-konsulting", "Information & Communication"),
+    # negation: a cue before the token discards it; a cue-initial token still hits
+    ("civil_status", "Inte gift", "__UNMAPPED__"),
+    ("civil_status", "Never married", "Single/Never Married"),
 ])
 def test_swedish_scb_native_matching_rules(attr, raw, expected):
     mapper = get_synthetic_mapper("swedish")

@@ -3,7 +3,7 @@
   "deprecated_attributes": ["birth_location"],
   "matching": {
     "real": {"token_mode": "substring", "negation": null, "tie_break": ["priority"]},
-    "synthetic": {"token_mode": "prefix", "negation": null, "tie_break": ["longest", "priority"]}
+    "synthetic": {"token_mode": "prefix", "negation": {"cues": ["not", "no", "inte", "ej", "icke", "utan", "without", "never", "aldrig", "non", "ingen", "inga", "inget"], "window": 2, "clause_breaks": [",", ";", ":", "(", ")", "[", "]", "/", ".", "!", "?", " - ", "but", "men", "och", "and"]}, "tie_break": ["longest", "priority"]}
   },
   "attributes": {
     "age_group": "age.json",

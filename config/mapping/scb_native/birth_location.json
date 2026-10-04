@@ -50,6 +50,7 @@
     }
   },
   "synthetic": {
+    "negation": null,
     "Sweden": {
       "equals": [
         "Sweden",

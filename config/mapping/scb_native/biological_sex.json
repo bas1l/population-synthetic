@@ -26,6 +26,7 @@
     }
   },
   "synthetic": {
+    "negation": null,
     "Male": {
       "equals": [
         "Male",
