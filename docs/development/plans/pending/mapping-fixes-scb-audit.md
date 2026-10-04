@@ -842,6 +842,18 @@ Lowest included margin: `…all_generate_pick_v2_openrouter_kimi_k3` 101. Larges
 `tests/test_axis_facet_defaults.py::test_flow_default_selects_exactly_the_highest_version_strategies`
 fails on the committed `generate_parallel.yaml` (one strategy selected); unrelated, pre-existing.
 
+### Judge prompt v5 — 2026-10-04
+
+The first post-fix `persona_realism` run (isolated calls, old prompt) left Axis A degenerate: the
+production prompt caught 1 of 19 labelled contradictions. After prompt tuning (v1–v5, scratch) the
+chosen v5 is installed as `judge_prompt.md`, with education values shown to the judge as plain
+wording + ISCED 1997 level through the new `judge.yaml` `persona_rendering` block (prompt only;
+stored values unchanged). Both the template hash and the rendering hash are stamped into every
+verdict cache and report and are judge-identity keys, so the pre-v5 caches are refused on resume
+and by `realism_ranking`. `hard_rules.yaml`: the research-degree-at-18-24 rule is removed (rare, not
+impossible) and `retired_before_minimum_pension_age` added. Step 6 is re-run with `--force`, one
+round (later rounds are a top-up: same command with `--rounds 2` / `--rounds 3`, no `--force`).
+
 ## Verification
 
 - `ruff check src/` and `pytest` pass; the golden test shows `scb`, `istat`, `ssb` unchanged.

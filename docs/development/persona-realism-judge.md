@@ -203,8 +203,8 @@ python scripts/analyze/rank_persona_realism.py --country swedish_02 --rounds 2
   re-runs the judge's own statistics function -- zero LLM calls, and nothing is written under
   `persona_realism/`. The two tidy CSVs are bypassed rather than filtered: their row grain has
   already summed each persona's votes over *all* its cached rounds, so it cannot express a cap.
-* **The judge identity is not relaxed.** `judge_model` and `prompt_template_sha256` are still
-  compared exactly; no round cap repairs a different judge or a different prompt.
+* **The judge identity is not relaxed.** `judge_model`, `prompt_template_sha256` and
+  `persona_rendering_sha256` are still compared exactly; no round cap repairs a different judge or a different prompt.
 * **The round count becomes a capacity requirement.** A persona holding fewer than N cached rounds
   fails the run, naming the combination, the persona and both counts. It is never ranked short --
   consuming the 3 rounds a persona happens to hold against a cap of 5 is exactly the mixed-depth
@@ -552,7 +552,7 @@ numbers:
   no report -- several exist on any real output base) is skipped with a machine-readable reason, or
   raises under `--strict`.
 - **Homogeneity.** Every consumed combination must share one `judge_model`, `prompt_template_sha256`,
-  `context_isolation` and `n_rounds`, read from the stamped provenance rather than from current config. A mismatch
+  `persona_rendering_sha256`, `context_isolation` and `n_rounds`, read from the stamped provenance rather than from current config. A mismatch
   **raises**, naming the offending combination: ranking units judged by different judges measures the
   judges, not the units.
 
@@ -587,12 +587,26 @@ the emitted artifacts disagree with the config that describes them.
 | `workers` | Parallel judge-call fan-out (ThreadPool `max_workers`). |
 | `timeout_seconds` | Per-call subprocess wall-clock timeout (default 600). Threaded into the `ClaudeCodeClient` the judge factory builds; 600 s is a generous ceiling that also covers the slowest *selectable* judge (a Fable/Opus single turn can run for minutes) if you select it — Sonnet, the default, finishes in seconds. The client's own 120 s default is too tight for the slow tiers and is raised only for the judge. |
 | `prompt_template` | Path (relative to the config dir) to the system+user template. |
+| `persona_rendering` | Judge-facing labels for canonical category values: `mapping_tier` (relative to the config dir) + `labels: {attribute: {canonical value: label}}`. Applied **only** to the persona lines of the prompt; mapped data, verdict caches, CSVs and hard rules keep canonical values. The loader raises unless each attribute is declared in the tier's `_index.json` and its keys are **exactly** that category file's `values` (total coverage -- a partial map would leave some values coded, and a value falling through unrendered is a fallback; `Unknown / Not reported` is therefore listed, mapped to itself), with non-empty, distinct labels. A persona value outside the map raises at render time, so judging a population from another mapping tier needs its own map first. Today: `education_level` (scb_native) as plain Swedish-statistics wording + ISCED 1997 level. |
 
-`judge_prompt.md` — the constraint-scaffolded system + user template (biological/legal/temporal
-categories, anchored typicality exemplars, strict JSON output schema, explicit "unusual ≠ impossible"
-guardrail).
+`judge_prompt.md` — the constraint-scaffolded system + user template, **v5 since 2026-10-04**:
+schema definitions (education = highest *completed* level; `Retired` = old-age pensioner, disability
+pension is `Sick Leave`), four constraint categories (biological / legal-institutional / temporal /
+definitional), a no-rescue rule (no invented circumstances, no re-reading a label), the explicit
+"unusual ≠ impossible" guardrail, `can_exist` false iff at least one S3 issue, and the rule that
+typical study lengths and career timing are not legal minimums (an unusually early qualification is
+S2) while statutory age rules stay hard. Anchored typicality exemplars and the JSON schema are
+unchanged. Chosen over v1-v4 on a labelled 40-persona set plus 14 education edge cases and 40
+held-out personas: the earlier production prompt caught 1 of 19 known contradictions, v5 catches
+16 of 19 by majority, flags none of the 20 held-out real SCB personas, and calls a research degree at
+18-24 possible (S2) in 20 of 21 calls (v4 called it impossible in 12 of 21).
 
-`hard_rules.yaml` — config-driven deterministic `incompatible_pair` checks (see below).
+`hard_rules.yaml` — config-driven deterministic `incompatible_pair` checks (see below). A rule is
+reserved for a **logical, legal or definitional** contradiction; rare-but-attainable is possible and
+never a rule. On that ruling (2026-10-04) the former research-degree-at-18-24 rule was removed (no
+statutory minimum; SCB UF0506 2025 shows 0 holders aged 18-24 but 11 at 25, a frequency boundary)
+and replaced by `retired_before_minimum_pension_age` (`Retired` x 18-24 ... 45-54: no Swedish old-age
+pension, public or occupational, can be drawn before 55; the real reference has no such person).
 
 ## Call independence and the context-isolation tag
 
@@ -627,6 +641,17 @@ The regimes cannot be mixed silently:
   regimes raises.
 
 Re-judge everything after the fix with `--force` (see the plan for the run estimate).
+
+## Prompt identity: template and category rendering
+
+The same gate covers what the judge read. Every persona cache records `prompt_template_sha256`
+(the template file) and `persona_rendering_sha256` (the canonicalised `persona_rendering` map, key
+order irrelevant). On resume a cache whose stamps differ from the current config's -- or that has
+none, i.e. predates v5 -- raises and points at `--force`; a cache with matching stamps is topped up
+as usual (round 1 kept, the missing rounds added), so raising `n_rounds` or passing `--rounds N`
+later extends a run without discarding it. Each report's provenance takes both stamps from its
+caches (mixed stamps in one combination raise; a pre-stamp combination reads `null`), and
+`realism_ranking` compares both as judge-identity keys.
 
 ## Reliability is self-consistency, not validity
 
