@@ -274,6 +274,20 @@ INCOME_DECISIONS = [
     ("housing allowance for pensioners", _HA),
 ]
 
+# Pipeline run 2026-10-04 (mapping gate): unflagged pool strings the `longest` tie-break sent to
+# the wrong category, fixed with longer, definition-consistent tokens.
+PIPELINE_RUN_FIXED = [
+    ("civil_status", "Divorced and remarried", _MA),  # remarried = currently married
+    ("civil_status", "divorced_and_remarried", _MA),
+    ("civil_status", "Gemensamt boende", _SG),  # living together = sambo -> Single
+    ("education_level", "Lower Secondary School", "Pre-Secondary 9-10 yrs (ISCED 2)"),
+    ("education_level", "lower_secondary_school", "Pre-Secondary 9-10 yrs (ISCED 2)"),
+    ("education_level", "Secondary school (grundskola)", "Pre-Secondary 9-10 yrs (ISCED 2)"),
+    ("housing_tenure", "Bostadsrätt i seniorboende", _TO),  # explicit BRF in senior housing
+    ("housing_tenure", "Seniorboende (ägda lägenheter)", _TO),
+    ("housing_tenure", "Seniorboende (äldreboende med egen lägenhet)", UNMAPPED),  # false alarm kept
+]
+
 CASES = (
     _cases("civil_status", CIVIL_FIXED, CIVIL_FALSE_ALARMS, CIVIL_DECISIONS)
     + _cases("education_level", EDUCATION_FIXED, EDUCATION_FALSE_ALARMS, EDUCATION_DECISIONS)
@@ -281,6 +295,7 @@ CASES = (
     + _cases("employment_type", EMPLOYMENT_TYPE_FIXED, EMPLOYMENT_TYPE_FALSE_ALARMS, EMPLOYMENT_TYPE_DECISIONS)
     + _cases("housing_tenure", HOUSING_FIXED, HOUSING_FALSE_ALARMS, HOUSING_DECISIONS)
     + _cases("income_source", INCOME_FIXED, INCOME_FALSE_ALARMS, INCOME_DECISIONS)
+    + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in PIPELINE_RUN_FIXED]
 )
 
 

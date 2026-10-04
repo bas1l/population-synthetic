@@ -405,6 +405,8 @@
         "it/",
         "it och",
         "it and",
+        "it och konsult",
+        "programming consult",
         "it service",
         "it-tjänst",
         "it support",
@@ -520,6 +522,7 @@
         "affärstjänst",
         "real estate",
         "fastighet",
+        "fastighetsförvalt",
         "law firm",
         "advokat",
         {
@@ -738,6 +741,7 @@
         "universit",
         "högskola",
         "lärosäte",
+        "förskol",
         {
           "token": "skola",
           "mode": "substring"

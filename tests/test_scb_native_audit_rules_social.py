@@ -111,6 +111,11 @@ INDUSTRY_DECISIONS = [
     ("Pensionär (tidigare hemtjänst)", "Not Applicable"),
     # prefix mode: "ikt" no longer matches inside "inriktade".
     ("Näringslivets serviceinriktade", UNMAPPED),
+    # Pipeline run 2026-10-04: SNI by activity, where `longest` had picked the shorter-head sector.
+    ("Fastighetsförvaltning", _FB),  # SNI L 68.32, not public administration
+    ("IT och konsulttjänster", _IC),  # IT consultancy -> I&C
+    ("IT and programming consultancy", _IC),
+    ("Förskola och barnomsorg", "Education"),  # förskola is SNI P 85.1
 ]
 
 
@@ -326,7 +331,8 @@ def test_birth_location(resolve, raw, refine, expected):
 def test_birth_location_real_labels():
     block = load_mappings(_TIER)["birth_location"]
     real = mapping_engine.compile_matching(load_mappings(_TIER)["_index"]["matching"]["real"])
-    for raw, expected in [("born in Sweden", "Sweden"), ("born in another EU Member State", "Born in another EU country"),
+    for raw, expected in [("born in Sweden", "Sweden"),
+                          ("born in another EU Member State", "Born in another EU country"),
                           ("born outside the EU", "Born outside the EU")]:
         assert mapping_engine.resolve(raw, block["real"], block["values"], matching=real,
                                       priority=block["priority"]) == expected

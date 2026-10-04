@@ -80,6 +80,7 @@
         "Umarrietad"
       ],
       "contains": [
+        "gemensamt boende",
         "singel",
         {
           "token": "ogift",
@@ -166,6 +167,8 @@
         "Separerad under process"
       ],
       "contains": [
+        "remarried",
+        "omgift",
         {
           "token": "gift",
           "mode": "substring"
