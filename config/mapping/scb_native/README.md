@@ -62,7 +62,9 @@ hours (or a percentage of a 40 h week) stated in the text re-band the walked att
 AKU agreed-hours bands 1–19 / 20–34 / 35+. A range spanning two bands or a number behind a
 comparator ("över 30") keeps the walked value and is logged as `facet_ambiguous` in the ties
 sidecar; `0 timmar` is in no band and never overrides. The attachment rules therefore carry no
-hour tokens; `heltid` / `deltid` remain the fallback when no hours are stated.
+hour tokens; `heltid` / `deltid` remain the fallback when no hours are stated. Zero stated hours
+are handled in config instead: every employed value vetoes `0 timmar` / `0 h/v` / `0 hours` (prefix
+mode keeps them off "40 timmar") and `Not Applicable` lists them.
 
 `education_level` routes post-secondary text by stated length in its `all_of` tier: 4+5B needs a
 higher-education word and a short-length marker (`kortare än 3`, `2-årig`, `120 hp`, …, vetoed by
@@ -70,6 +72,40 @@ higher-education word and a short-length marker (`kortare än 3`, `2-årig`, `12
 degree marker (`3 år eller`, `kandidat`, `master`, …). Without it, "Eftergymnasial utbildning,
 3 år eller längre" — which reached 3A only through the `gymnasial` substring bug — would fall
 to `__UNMAPPED__` under `prefix`.
+
+## Per-attribute rules from the SCB-checked audit
+
+Each rule follows SCB's own definition of the category; the regression cases live in
+`tests/test_scb_native_audit_rules_core.py`.
+
+- **`civil_status`** is the legal register status. A sambo / cohabiting / partner text is
+  `Single/Never Married` (a sambo is not married); a separated spouse stays `Married` (Sweden has
+  no legal separation); registered partnership is `Married`. Negated forms ("ej gift",
+  "utan sambo") carry positive Single tokens, because the engine discards the negated `gift` hit
+  rather than inverting it. A stated prior status beats "ensamstående" (Single vetoes divorce and
+  widowhood words), and "previously married" with the current status unstated is `Divorced`.
+- **`education_level`** codes the highest *completed* SUN level. A bare `högskoleexamen` is
+  `Post-Secondary < 3 yrs (4+5B)` (SCB codes an 80 p examen as under 3 years); a 3-year or degree
+  marker routes it to 5A. Upper secondary with no stated length is 3A, and 3C needs an explicit
+  ≤ 2-year length. Folkhögskola has no general SUN level and is unmapped; folkskola is ISCED 1;
+  incomplete or ongoing gymnasium is ISCED 2. Post-secondary text vetoes both upper-secondary
+  values, so "post-secondary education" with no length is unmapped.
+- **`employment_status`** follows the BAS hierarchy (`tie_break: ["priority"]`): a working student
+  or pensioner is `Employed`; job-seeking and past-tense text leave `Employed`; förtidspension /
+  sjukersättning is `Sick Leave`, not `Retired`; homemakers and carers are `Other`.
+- **`employment_type`**: fixed-term, project, probation and doctoral posts are Temporary; an own
+  company, sole trader or näringsidkare is Self-Employed; negated employment and zero stated hours
+  are `Not Applicable`.
+- **`housing_tenure`** is a property of the building: `Owner-occupied` is SMAG only, so any
+  apartment, BRF or rental word vetoes it and an owned flat is a bostadsrätt. Ägarlägenhet (OB)
+  is not fetched and is unmapped; bostadsbolag is a landlord (`Rental`). A house-or-flat
+  disjunction ("Eget hus eller lägenhet") names no tenure and is unmapped.
+- **`income_source`** is wage first (`tie_break: ["priority"]`, Wage first in `values`): any stated
+  paid work, including an occupation or employer named as the source, is `Wage / Business`.
+  CSN / studielån / barnbidrag are `General Allowances` (component 325) and bostadsbidrag /
+  bostadstillägg `Housing Allowance` (330); since `priority` is shared with the real side and
+  stays the `values` order, the generic `Insurance / Allowance` (which precedes them) vetoes their
+  tokens. Parental or family support is not an SCB income component and is unmapped.
 
 ## Deprecated attributes
 
