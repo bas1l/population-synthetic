@@ -117,3 +117,75 @@ INDUSTRY_DECISIONS = [
 @pytest.mark.parametrize("raw, expected", INDUSTRY_FIXED + INDUSTRY_FALSE_ALARMS + INDUSTRY_DECISIONS)
 def test_industry_sector(resolve, raw, expected):
     assert resolve("industry_sector", raw) == expected
+
+
+# ---------------------------------------------------------------------------
+# parental_structure -- LE0102 familjetyp: legal ("ursprunglig") parents + folkbokföring residence
+# ---------------------------------------------------------------------------
+
+_NP = "Natural Parents"
+_MS = "Mother and Stepparent"
+_SM = "Single Mother"
+_SF = "Single Father"
+
+PARENTAL_FIXED = [
+    ("Borgerlig familj med föräldrar", _NP),
+    ("Sambofamilj", _NP),  # a cohabiting couple's child has two ursprungliga föräldrar
+    ("Cohabiting couple without marriage", _NP),
+    ("Ett föräldrapar", _NP),
+    ("Föräldrar tillsammans", _NP),
+    ("parents present", _NP),
+    ("mother and father (divorced, lived with mother)", _SM),  # residence decides after divorce
+    ("mother and father (divorced, lived with father)", _SF),
+    ("mother and father (separated, lived with father)", _SF),
+    ("boende med mamma", _SM),
+    ("Mamma", _SM),
+    ("Father", _SF),
+    ("Änkling", _SF),
+    ("Both parents deceased", "Other Than Parents"),
+    ("Mor och sambo", _MS),  # styvförälder = co-resident adult who is not a legal parent
+    ("mother and same-sex partner", _MS),
+    ("mother and foster father", _MS),
+    ("both parents divorced", UNMAPPED),  # residence not stated
+    ("Separated biological parents", UNMAPPED),
+    ("two parents (mother and father, one deceased)", UNMAPPED),
+]
+
+PARENTAL_FALSE_ALARMS = [
+    ("mother and grandmother", _SM),
+    ("adoptive parents (mother and father)", _NP),
+    ("two mothers", _NP),
+    ("Same-sex couple (two fathers)", _NP),
+    ("Two fathers (same-sex couple)", _NP),
+    ("divorced parents (lived primarily with mother)", _SM),
+    ("father and grandfather", _SF),
+]
+
+PARENTAL_DECISIONS = [
+    # Two-phase texts: the earlier phase wins (decision); `mother remarried` is no longer a token.
+    ("Both biological parents until divorce in adolescence, then mother-headed single-parent household", _NP),
+    ("Both biological parents until divorce in adolescence, then lived mainly with mother", _NP),
+    ("Ensamstående mamma som senare gifte sig", _SM),
+    ("Single mother remarried", _SM),
+    # Joint custody / alternating residence: undeterminable without the registered parent
+    # (open question 14 default).
+    ("mother and father (divorced, joint custody)", UNMAPPED),
+    ("shared custody (mother and father)", UNMAPPED),
+    # Same-sex couple with parenthood unstated keeps the register-modal default (open question 15).
+    ("Same-sex couple", _NP),
+    ("Two same-sex partners", _NP),
+    # Adoptive parents are ursprungliga föräldrar.
+    ("Adoptive parents", _NP),
+    ("Adoptivföräldrar", _NP),
+    ("Single adoptive mother", _SM),
+    # prefix mode: "father only" no longer matches inside "grandfather only".
+    ("Grandfather only", "Other Than Parents"),
+    # Open question 21 defaults: no child relation stated / bare family label.
+    ("Ensamstående kvinna", UNMAPPED),
+    ("Borgerlig familj", UNMAPPED),
+]
+
+
+@pytest.mark.parametrize("raw, expected", PARENTAL_FIXED + PARENTAL_FALSE_ALARMS + PARENTAL_DECISIONS)
+def test_parental_structure(resolve, raw, expected):
+    assert resolve("parental_structure", raw) == expected
