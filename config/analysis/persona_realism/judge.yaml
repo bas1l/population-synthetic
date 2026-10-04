@@ -123,3 +123,45 @@ timeout_seconds: 600
 
 # Prompt template, resolved relative to this config file's directory.
 prompt_template: "judge_prompt.md"
+
+# Judge-facing rendering of canonical category values. Applied ONLY to the persona
+# lines the judge reads (prompt.render_persona_block); the stored values -- mapped
+# populations, verdict caches' `attributes`, the per-persona and per-clash CSVs, the
+# hard rules -- keep the canonical labels untouched. Prompt tuning (2026-10-04, judge
+# prompt v5) showed the coded schema labels misled the judge: "Post-Graduate (ISCED
+# 6)" was read as any postgraduate study, and "Post-Secondary 3+ yrs (ISCED 5A)" as
+# a fixed course length. Plain Swedish-statistics wording plus the ISCED 1997 level
+# removed both misreadings without a glossary in the system prompt.
+#
+# `mapping_tier` (relative to this file's directory) is the mapping tier whose
+# `_index.json` names each attribute's category file; `labels` maps attribute ->
+# {canonical value -> rendered label}. The loader RAISES unless, per attribute:
+#   - the attribute is declared in the tier's `_index.json`;
+#   - the label keys are EXACTLY that file's canonical `values` -- every canonical
+#     category has an entry and no key is foreign. Total coverage is required (not
+#     merely "known keys") because a partial map would show the judge a mix of
+#     rendered and coded labels for one attribute, and a category falling through
+#     unrendered is an in-code fallback. A category that should read as-is
+#     (`Unknown / Not reported`) is therefore listed explicitly, mapped to itself;
+#   - every rendered label is a non-empty string, and no two categories share one
+#     (rendering must not merge categories).
+# At render time a persona value that is neither a key nor the UNMAPPED sentinel
+# raises: judging a population mapped through another tier (e.g. Italy) requires
+# declaring its own rendering here first.
+#
+# Provenance: the map's SHA-256 (`persona_rendering_sha256`) is stamped into every
+# verdict cache and report beside `prompt_template_sha256`, and both are judge-
+# identity keys -- editing a label invalidates the caches exactly as editing the
+# template does (resume refuses them; realism_ranking refuses to mix them).
+persona_rendering:
+  mapping_tier: "../../mapping/scb_native"
+  labels:
+    education_level:
+      "Pre-Secondary < 9 yrs (ISCED 1)": "Compulsory school not completed (under 9 years) (ISCED 1997 level 1)"
+      "Pre-Secondary 9-10 yrs (ISCED 2)": "Compulsory school (9-10 years) (ISCED 1997 level 2)"
+      "Upper Secondary ≤ 2 yrs (ISCED 3C)": "Upper secondary school, at most 2 years (ISCED 1997 level 3C)"
+      "Upper Secondary 3 yrs (ISCED 3A)": "Upper secondary school, 3 years (ISCED 1997 level 3A)"
+      "Post-Secondary < 3 yrs (ISCED 4+5B)": "Post-secondary education under 3 years (ISCED 1997 level 4+5B)"
+      "Post-Secondary 3+ yrs (ISCED 5A)": "Higher education of 3 years or more (bachelor's or master's level) (ISCED 1997 level 5A)"
+      "Post-Graduate (ISCED 6)": "Research degree (licentiate or doctorate) (ISCED 1997 level 6)"
+      "Unknown / Not reported": "Unknown / Not reported"

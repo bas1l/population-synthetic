@@ -2362,6 +2362,7 @@ def build_ranking(
             "library_versions": _library_versions(),
             "judge_model": provenance.get("judge_model"),
             "prompt_template_sha256": provenance.get("prompt_template_sha256"),
+            "persona_rendering_sha256": provenance.get("persona_rendering_sha256"),
             "n_rounds": provenance.get("n_rounds"),
             # Where that count came from: "report" (read from the published artifacts),
             # "cap" (pinned with --rounds) or "auto" (the shallowest cached depth of a

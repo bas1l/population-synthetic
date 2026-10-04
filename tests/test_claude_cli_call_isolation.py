@@ -290,6 +290,12 @@ def test_runner_refuses_a_client_that_does_not_vouch_for_isolation(tmp_path):
 def test_judge_config_refuses_a_temperature_the_cli_cannot_apply(tmp_path):
     for name in ("judge.yaml", "judge_prompt.md"):
         (tmp_path / name).write_text((_CONFIG_DIR / name).read_text(encoding="utf-8"), encoding="utf-8")
+    # The rendering's mapping tier is relative to the config dir; re-anchor it on the repo.
+    judge = tmp_path / "judge.yaml"
+    tier = (_CONFIG_DIR / "../../mapping/scb_native").resolve().as_posix()
+    judge.write_text(
+        judge.read_text(encoding="utf-8").replace('"../../mapping/scb_native"', f'"{tier}"'), encoding="utf-8"
+    )
     JudgeConfig.load(tmp_path)  # the shipped config declares none
     with (tmp_path / "judge.yaml").open("a", encoding="utf-8") as fh:
         fh.write("\ntemperature: 0.0\n")

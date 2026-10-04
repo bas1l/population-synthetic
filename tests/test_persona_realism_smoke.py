@@ -131,10 +131,16 @@ def _stub_factory(*, fail: bool = False):
 
 
 def _cfg() -> JudgeConfig:
-    """The real judge config, trimmed for a fast headless run."""
+    """The real judge config, trimmed for a fast headless run.
+
+    ``persona_rendering`` is emptied: these fixtures carry placeholder values
+    (``val_0`` ...) that are no canonical category, which the rendering refuses by
+    design. The rendering itself is covered in ``test_realism_persona_rendering.py``.
+    """
     base = JudgeConfig.load(_CONFIG_DIR)
     return dataclasses.replace(
         base,
+        persona_rendering={},
         n_rounds=2,
         workers=2,
         bootstrap={"iterations": 200, "seed": 20260723, "ci_level": 0.95},

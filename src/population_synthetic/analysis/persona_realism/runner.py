@@ -35,6 +35,11 @@ resume, a cache carrying any other tag (or none: the pre-fix shared-conversation
 regime) is neither skipped nor topped up -- it raises, pointing at ``--force``,
 because reusing it would mix verdicts from two regimes, possibly inside one persona.
 
+The same gate covers the prompt: every cache records the
+:data:`~population_synthetic.analysis.persona_realism.config.PROMPT_IDENTITY_KEYS`
+stamps (template hash + judge-facing category-rendering hash), and a cache whose
+stamps differ from the current config's -- or that has none -- raises on resume.
+
 Resume is *round-count-aware* (not binary-exists): a persona is skipped only when
 its cached file already holds ``>= n_rounds`` successful rounds. A file left by an
 earlier, smaller ``--rounds`` (or by earlier permanently-failed rounds) is
@@ -74,7 +79,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from population_synthetic.analysis.persona_realism.config import JudgeConfig
+from population_synthetic.analysis.persona_realism.config import PROMPT_IDENTITY_KEYS, JudgeConfig
 from population_synthetic.analysis.persona_realism.judge import RoundVerdict, parse_round_verdict
 from population_synthetic.analysis.persona_realism.prompt import build_prompts, load_prompt_template
 from population_synthetic.clients.claude_code_client import CONTEXT_ISOLATION as JUDGE_CONTEXT_ISOLATION
@@ -350,7 +355,11 @@ def _judge_one_round(
 
 
 def _read_cached_rounds(
-    path: Path, *, expected_id: str, check_isolation: bool = True
+    path: Path,
+    *,
+    expected_id: str,
+    check_isolation: bool = True,
+    prompt_identity: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Return the successful round dicts already cached for a persona (fail-fast).
 
@@ -390,6 +399,20 @@ def _read_cached_rounds(
             "shared one conversation with other rounds and personas). It can be neither "
             "reused nor topped up without mixing regimes -- re-run with --force to re-judge."
         )
+    # The same rule for the prompt the judge read: a cache judged under another
+    # template or category rendering (or before the stamps existed) is a different
+    # measurement, so topping it up would mix two prompts inside one persona.
+    if check_isolation and prompt_identity is not None:
+        stale = {
+            key: payload.get(key) for key in PROMPT_IDENTITY_KEYS if payload.get(key) != prompt_identity[key]
+        }
+        if stale:
+            raise ValueError(
+                f"persona cache {path} was judged under a different prompt ({stale} != the current "
+                f"{ {key: prompt_identity[key] for key in stale} }; a missing stamp predates "
+                "persona_rendering). It can be neither reused nor topped up without mixing "
+                "prompts -- re-run with --force to re-judge."
+            )
     return rounds
 
 
@@ -430,6 +453,7 @@ def _write_persona_file(
         "combo": combo_label,
         "judge_model": cfg.judge_model,
         "context_isolation": JUDGE_CONTEXT_ISOLATION,
+        **cfg.prompt_identity(),
         "n_rounds": cfg.n_rounds,
         "successful_rounds": successful,
         "failed_rounds": max(cfg.n_rounds - successful, 0),
@@ -523,6 +547,7 @@ def run_combo_judgements(
             return _default_client_factory(cfg)
 
     system_str, user_template = load_prompt_template(cfg.prompt_template)
+    prompt_identity = cfg.prompt_identity()
 
     # The real-reference cap (sample_size_override) uses a deterministic first-N prefix;
     # synthetic combos use the seeded random draw governed by cfg.sample_size.
@@ -543,7 +568,8 @@ def run_combo_judgements(
         persona_file = out_dir / f"{keys[idx]}.json"
         if persona_file.exists() and not force:
             cached = _read_cached_rounds(
-                persona_file, expected_id=keys[idx], check_isolation=not plan_only
+                persona_file, expected_id=keys[idx], check_isolation=not plan_only,
+                prompt_identity=prompt_identity,
             )
             if len(cached) >= cfg.n_rounds:
                 skipped += 1  # already at/above the target round count
@@ -579,8 +605,11 @@ def run_combo_judgements(
     prompts: dict[int, tuple[str, str]] = {}
     for idx in to_judge:
         try:
-            prompts[idx] = build_prompts(population[idx], analyzed_attrs, system_str, user_template)
-        except KeyError as exc:
+            prompts[idx] = build_prompts(
+                population[idx], analyzed_attrs, system_str, user_template,
+                rendering=cfg.persona_rendering,
+            )
+        except (KeyError, ValueError) as exc:
             raise RuntimeError(
                 f"combo {combo_label!r} {keys[idx]}: {exc}"
             ) from exc

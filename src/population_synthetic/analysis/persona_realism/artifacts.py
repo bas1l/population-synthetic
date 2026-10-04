@@ -38,7 +38,6 @@ the pure ``reduce``/``stats`` layers; the cost chain reuses the
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -58,7 +57,7 @@ from population_synthetic.analysis.persona_realism.clash_explanations_csv import
     ClashExplanationRow,
     write_clash_explanations_csv,
 )
-from population_synthetic.analysis.persona_realism.config import JudgeConfig
+from population_synthetic.analysis.persona_realism.config import PROMPT_IDENTITY_KEYS, JudgeConfig
 from population_synthetic.analysis.persona_realism.csv_writer import RealismRow, write_realism_csv
 from population_synthetic.analysis.persona_realism.reduce import (
     ClashKey,
@@ -131,10 +130,6 @@ class ComboArtifacts:
 # --------------------------------------------------------------------------- #
 
 
-def _prompt_template_hash(path: Path) -> str:
-    """SHA-256 of the prompt template file (provenance stamp)."""
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
 
 #: Stamped beside the severity config so a reader can never mistake a declared-but-
 #: unwired knob for an active one (the honest alternative to deleting the keys).
@@ -170,6 +165,28 @@ def _cache_context_isolation(present: list[LoadedPersona], combo_label: str) -> 
     return next(iter(tags)) if tags else None
 
 
+def _cache_prompt_identity(present: list[LoadedPersona], combo_label: str) -> dict[str, str | None]:
+    """The single prompt identity of a combination's verdict caches (fail-fast).
+
+    Read from the caches for the reason :func:`_cache_context_isolation` is: a
+    ``--rewrite-artifacts`` over old caches must stamp the prompt that judged them,
+    not the one configured now. A cache predating the stamps contributes ``None``
+    (never equal to a real hash, so ``realism_ranking`` refuses to mix it with a
+    stamped one). Mixed stamps inside one combination raise.
+    """
+    identity: dict[str, str | None] = {}
+    for key in PROMPT_IDENTITY_KEYS:
+        values = {getattr(lp, key) for lp in present}
+        if len(values) > 1:
+            raise ValueError(
+                f"combo {combo_label!r}: its verdict caches were judged under mixed {key} "
+                f"values {sorted(values, key=str)}; re-judge the combination with --force so "
+                "every persona comes from one prompt."
+            )
+        identity[key] = next(iter(values)) if values else None
+    return identity
+
+
 def _provenance_meta(cfg: JudgeConfig) -> dict[str, Any]:
     """Build the combo provenance meta from the judge config (verbatim snapshot).
 
@@ -194,7 +211,9 @@ def _provenance_meta(cfg: JudgeConfig) -> dict[str, Any]:
         "impossibility_severities": list(cfg.impossibility_severities),
         "severity_config_status": _SEVERITY_CONFIG_STATUS,
         "prompt_template": str(cfg.prompt_template),
-        "prompt_template_sha256": _prompt_template_hash(cfg.prompt_template),
+        # Both prompt-identity stamps (template + judge-facing category rendering);
+        # overwritten from the verdict caches at write time, like context_isolation.
+        **cfg.prompt_identity(),
         "persona_csv_schema_version": PERSONA_CSV_SCHEMA_VERSION,
         # A separate key, not a bump of the one above: the two tidy CSVs are
         # independently versioned contracts, and folding them into one number would
@@ -578,7 +597,11 @@ def write_combo_artifacts(
     combo, present = load_combo_realism(out_dir, combo_label, expected_ids=expected_ids)
     # The judge regime is a property of the caches, so it is stamped from them (and a
     # combination mixing regimes is refused) -- whatever provenance the caller passed.
-    provenance = {**provenance, "context_isolation": _cache_context_isolation(present, combo_label)}
+    provenance = {
+        **provenance,
+        "context_isolation": _cache_context_isolation(present, combo_label),
+        **_cache_prompt_identity(present, combo_label),
+    }
     stats = compute_realism_stats(
         combo,
         bootstrap=cfg.bootstrap,

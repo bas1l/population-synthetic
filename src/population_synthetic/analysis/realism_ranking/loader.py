@@ -29,7 +29,8 @@ silently ranked, because a combination missing half its personas would simply ap
 to have an unusually clean impossibility rate.
 
 **Homogeneity.** Every consumed combination must share the same ``judge_model``,
-``prompt_template_sha256``, ``context_isolation`` (the judge-call regime) and
+``prompt_template_sha256``, ``persona_rendering_sha256`` (the judge-facing category
+rendering), ``context_isolation`` (the judge-call regime) and
 ``n_rounds``. Ranking units judged by different judges, prompts, call-isolation regimes
 or round counts measures the judges, not the units. The identity is read from
 each report's stamped ``provenance`` block -- what was actually used -- and never from
@@ -103,8 +104,13 @@ ROUND_COUNT_KEY = "n_rounds"
 #: report judged under the old shared-conversation regime (``untagged_shared_conversation``,
 #: or no key at all on a report written before the field existed) can never be ranked
 #: beside one whose every call was an independent conversation.
+#: ``persona_rendering_sha256`` is the hash of the judge-facing category rendering
+#: (``judge.yaml`` ``persona_rendering``): the same template shown different category
+#: labels is a different prompt. A report predating the stamp carries none (``None``),
+#: which never equals a real hash.
 JUDGE_IDENTITY_KEYS: tuple[str, ...] = (
-    "judge_model", "prompt_template_sha256", "context_isolation", ROUND_COUNT_KEY,
+    "judge_model", "prompt_template_sha256", "persona_rendering_sha256", "context_isolation",
+    ROUND_COUNT_KEY,
 )
 
 #: The subset compared when a round cap is active -- derived from the full tuple rather

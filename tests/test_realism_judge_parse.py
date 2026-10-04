@@ -330,7 +330,7 @@ def test_parse_template_duplicate_placeholder_raises():
 
 def test_render_persona_block_orders_by_analyzed_attrs():
     persona = {"age_group": "25-34", "sex": "female", "birth_location": "SE"}
-    block = prompt.render_persona_block(persona, ["sex", "age_group"])
+    block = prompt.render_persona_block(persona, ["sex", "age_group"], rendering={})
     assert block == "sex: female\nage_group: 25-34"
     # birth_location (deprecated / not in analyzed list) is excluded
     assert "birth_location" not in block
@@ -339,17 +339,17 @@ def test_render_persona_block_orders_by_analyzed_attrs():
 def test_render_persona_block_unmapped_axis_renders_token():
     # An analyzed axis genuinely absent from the persona (or an explicit UNMAPPED
     # sentinel) is TOLERATED and rendered as the token line, not raised.
-    block = prompt.render_persona_block({"age_group": "25-34"}, ["age_group", "income"])
+    block = prompt.render_persona_block({"age_group": "25-34"}, ["age_group", "income"], rendering={})
     assert block == f"age_group: 25-34\nincome: {UNMAPPED}"
     # An explicit sentinel value renders identically.
-    block2 = prompt.render_persona_block({"sex": UNMAPPED}, ["sex"])
+    block2 = prompt.render_persona_block({"sex": UNMAPPED}, ["sex"], rendering={})
     assert block2 == f"sex: {UNMAPPED}"
 
 
 def test_build_prompts_substitutes_only_persona_block():
     persona = {"sex": "male"}
     system_str, user_str = prompt.build_prompts(
-        persona, ["sex"], "SYSTEM {keep}", "before {persona_block} after"
+        persona, ["sex"], "SYSTEM {keep}", "before {persona_block} after", rendering={}
     )
     # system passed through verbatim (literal braces preserved)
     assert system_str == "SYSTEM {keep}"
@@ -407,7 +407,7 @@ def test_render_persona_block_derives_age_group_from_raw_age():
     persona = _real_shaped_sweden_persona()
     assert "age_group" not in persona  # precondition: real record has no bin
 
-    block = prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS)
+    block = prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS, rendering={})
 
     # No KeyError, and the age_group line carries a derived bracket string
     # (a bin label such as "65-74"/"65+"), never the raw integer 65.
@@ -424,7 +424,7 @@ def test_render_persona_block_derives_age_group_from_raw_age():
 def test_build_prompts_real_shaped_persona_no_keyerror():
     persona = _real_shaped_sweden_persona()
     system_str, user_str = prompt.build_prompts(
-        persona, _SWEDEN_ANALYZED_ATTRS, "SYS", "P: {persona_block}"
+        persona, _SWEDEN_ANALYZED_ATTRS, "SYS", "P: {persona_block}", rendering={}
     )
     assert system_str == "SYS"
     assert "age_group:" in user_str
@@ -435,5 +435,5 @@ def test_render_persona_block_missing_age_renders_unmapped_token():
     persona = _real_shaped_sweden_persona()
     del persona["age"]  # no raw age and no age_group -> genuinely absent
     # Tolerated: the age_group axis renders the UNMAPPED token instead of raising.
-    block = prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS)
+    block = prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS, rendering={})
     assert f"age_group: {UNMAPPED}" in block

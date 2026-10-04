@@ -287,7 +287,10 @@ def test_malformed_report_raises_naming_the_upstream_script(tmp_path):
 
 @pytest.mark.parametrize(
     "key, value",
-    [("judge_model", "claude-haiku-4-5"), ("prompt_template_sha256", "deadbeef"), ("n_rounds", 5)],
+    [
+        ("judge_model", "claude-haiku-4-5"), ("prompt_template_sha256", "deadbeef"),
+        ("persona_rendering_sha256", "deadbeef"), ("n_rounds", 5),
+    ],
 )
 def test_heterogeneous_judge_raises_naming_the_offender(tmp_path, key, value):
     base = _base(tmp_path, [_SLUG_A, _SLUG_B])
@@ -388,6 +391,9 @@ def _write_cached_combo(
             json.dumps({
                 "persona_id": persona_id, "attributes": dict(_ATTRIBUTES),
                 "rounds": rounds, "failed_rounds": 0,
+                # The prompt stamps the runner writes: the report reads them back
+                # from the caches, so a fixture without them would stamp None.
+                **cfg.prompt_identity(),
             }),
             encoding="utf-8",
         )

@@ -177,7 +177,9 @@ class LoadedPersona:
     the runner recorded -- distinct from a persona-level failure, which leaves no
     file at all). ``context_isolation`` is the judge-regime tag the runner stamped
     (``None`` for a cache written before the tag existed, i.e. under the old
-    shared-conversation regime).
+    shared-conversation regime). ``prompt_template_sha256`` /
+    ``persona_rendering_sha256`` identify the prompt the judge read (``None`` for a
+    cache written before the stamps existed).
     """
 
     persona_id: str
@@ -185,6 +187,8 @@ class LoadedPersona:
     rounds: tuple[RoundVerdict, ...]
     failed_rounds: int
     context_isolation: str | None = None
+    prompt_template_sha256: str | None = None
+    persona_rendering_sha256: str | None = None
 
 
 def _round_clashes(verdict: RoundVerdict) -> dict[ClashKey, str]:
@@ -458,6 +462,8 @@ def load_persona_verdicts(path: str | Path) -> LoadedPersona:
         rounds=rounds,
         failed_rounds=int(payload.get("failed_rounds", 0)),
         context_isolation=payload.get("context_isolation"),
+        prompt_template_sha256=payload.get("prompt_template_sha256"),
+        persona_rendering_sha256=payload.get("persona_rendering_sha256"),
     )
 
 

@@ -86,8 +86,12 @@ _WITHDRAWN = "swedish_all_pick_dag_claude_sonnet"
 
 
 def _cfg() -> JudgeConfig:
+    # persona_rendering emptied: the fixtures carry placeholder values (val_0 ...) that
+    # are no canonical category, which the rendering refuses by design (covered in
+    # test_realism_persona_rendering.py).
     return dataclasses.replace(
         JudgeConfig.load(_CONFIG_DIR),
+        persona_rendering={},
         n_rounds=2, workers=2,
         bootstrap={"iterations": 200, "seed": 20260723, "ci_level": 0.95},
     )
