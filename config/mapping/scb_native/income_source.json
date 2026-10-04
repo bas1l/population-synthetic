@@ -375,6 +375,16 @@
         "sjukersättning",
         "aktivitetsersättning"
       ]
+    },
+    "General Allowances": {
+      "equals": [
+        "General Allowances"
+      ]
+    },
+    "Housing Allowance": {
+      "equals": [
+        "Housing Allowance"
+      ]
     }
   }
 }
