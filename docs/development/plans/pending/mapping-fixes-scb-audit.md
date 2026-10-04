@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 **Author:** Basil
-**Status:** In progress — Phase 1 done 2026-10-04; Phase 2A done 2026-10-04; Phase 2B, Phase 4 (option B, sign-off pending) and Phase 5 done 2026-10-04; Phase 3 done 2026-10-04 (re-sampled); combined re-run steps 1–4 (mapping gate) done 2026-10-04, see "Pipeline run 2026-10-04 — mapping gate"
+**Status:** Implemented and re-run 2026-10-04 — all phases done; Phase 4 option B reverted (698bfed, occupation tokens kept for socioeconomic_class); full pipeline, persona_realism (fixed judge, 1 round) and manuscript figures 2, 4, 5, 6, 7 rebuilt (02_Data/04_Figures/swedish_02/manuscript_2026-10-04). figure_selection not run: its manuscript set is stale. Not merged.
 **Base Branch:** `dev` (note: `feature/household-size-persons-unit` is unmerged; implementation may
 stack on it, since Phase 3 shares its re-sample)
 **Branch:** `feature/mapping-fixes-scb-audit`
