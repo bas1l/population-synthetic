@@ -258,3 +258,23 @@ def _swedish_identity(**overrides) -> dict:
     }
     base.update(overrides)
     return base
+
+
+# --- real-config integration: scb_native matching rules (SCB-checked audit) ---
+
+@pytest.mark.parametrize("attr, raw, expected", [
+    # prefix boundary: no left-embedded hit
+    ("education_level", "Eftergymnasial utbildning, 3 år eller längre", "Post-Secondary 3+ yrs (ISCED 5A)"),
+    ("education_level", "Eftergymnasial utbildning, kortare än 3 år", "Post-Secondary < 3 yrs (ISCED 4+5B)"),
+    ("education_level", "Masterexamen (2-årig på högskola)", "Post-Secondary 3+ yrs (ISCED 5A)"),
+    ("biological_sex", "Female (kvinna)", "Female"),
+    # substring overrides for compound heads
+    ("income_source", "Månadslön", "Wage / Business"),
+    ("employment_status", "Heltidsanställd", "Employed"),
+    # longest beats axis order; it-konsult
+    ("industry_sector", "IT-konsulting", "Information & Communication"),
+])
+def test_swedish_scb_native_matching_rules(attr, raw, expected):
+    mapper = get_synthetic_mapper("swedish")
+    out = mapper.map_individual(_swedish_identity(**{attr: raw}), "p")
+    assert out[attr] == expected

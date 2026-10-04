@@ -183,7 +183,10 @@
         "STH"
       ],
       "contains": [
-        "stockholm",
+        {
+          "token": "stockholm",
+          "mode": "substring"
+        },
         "sthlm",
         "solna",
         "nacka",
@@ -211,7 +214,10 @@
         "Bohuslän County"
       ],
       "contains": [
-        "västra götaland",
+        {
+          "token": "västra götaland",
+          "mode": "substring"
+        },
         "göteborg",
         "gothenburg",
         "borås",
@@ -230,7 +236,10 @@
         "Lund"
       ],
       "contains": [
-        "skåne",
+        {
+          "token": "skåne",
+          "mode": "substring"
+        },
         "skåns",
         "scania",
         "malmö",

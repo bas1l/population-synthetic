@@ -95,12 +95,24 @@
         "villa",
         "radhus",
         "friköpt",
-        "äganderätt",
-        "owner",
+        {
+          "token": "äganderätt",
+          "mode": "substring"
+        },
+        {
+          "token": "owner",
+          "mode": "substring"
+        },
         "house",
         "detached",
-        "egendom",
-        "eget h",
+        {
+          "token": "egendom",
+          "mode": "substring"
+        },
+        {
+          "token": "eget h",
+          "mode": "substring"
+        },
         "egen bostad",
         "egna bostad",
         "egen hemma",
@@ -110,12 +122,24 @@
         "owned",
         "mortgage",
         "freehold",
-        "äger",
-        "ägd",
-        "ägt",
+        {
+          "token": "äger",
+          "mode": "substring"
+        },
+        {
+          "token": "ägd",
+          "mode": "substring"
+        },
+        {
+          "token": "ägt",
+          "mode": "substring"
+        },
         "ägar",
         "owns",
-        "eigen",
+        {
+          "token": "eigen",
+          "mode": "substring"
+        },
         "eigendom",
         "eigenbolig"
       ]
@@ -133,7 +157,10 @@
         "ägs lägenhet"
       ],
       "contains": [
-        "bostadsrätt",
+        {
+          "token": "bostadsrätt",
+          "mode": "substring"
+        },
         "bostadsratt",
         "cooperative",
         "co-op",
@@ -205,10 +232,22 @@
         "ej-äger",
         "icke ägd",
         "inte ägd",
-        "hyresrätt",
-        "hyres",
-        "hyra",
-        "uthyr",
+        {
+          "token": "hyresrätt",
+          "mode": "substring"
+        },
+        {
+          "token": "hyres",
+          "mode": "substring"
+        },
+        {
+          "token": "hyra",
+          "mode": "substring"
+        },
+        {
+          "token": "uthyr",
+          "mode": "substring"
+        },
         "studentbostad",
         "student",
         "shared apartment",

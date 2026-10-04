@@ -208,7 +208,10 @@
         "tvåförälder",
         "tvåföräldra",
         "båda föräldra",
-        "kärnfamilj",
+        {
+          "token": "kärnfamilj",
+          "mode": "substring"
+        },
         "gift par med barn",
         "sambopar med barn",
         "married couple with children",
@@ -406,7 +409,10 @@
         "mormor",
         "morföräldrar",
         "farföräldrar",
-        "other relative",
+        {
+          "token": "other relative",
+          "mode": "substring"
+        },
         "släkting",
         "extended family",
         "residential care",

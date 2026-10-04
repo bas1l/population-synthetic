@@ -112,9 +112,15 @@
         "lower class",
         "blue collar",
         "blue-collar",
-        "arbetarklass",
+        {
+          "token": "arbetarklass",
+          "mode": "substring"
+        },
         "arbetsklass",
-        "arbetar",
+        {
+          "token": "arbetar",
+          "mode": "substring"
+        },
         "lägre medelklass",
         "nedre mellanklass",
         "skilled worker",
@@ -133,7 +139,10 @@
         "ceto medio-bass",
         "ceto medio bass",
         "classe subaltern",
-        "student",
+        {
+          "token": "student",
+          "mode": "substring"
+        },
         "studerande"
       ]
     },
@@ -227,14 +236,23 @@
       "contains": [
         "middle class",
         "middle-class",
-        "medelklass",
-        "mellanklass",
+        {
+          "token": "medelklass",
+          "mode": "substring"
+        },
+        {
+          "token": "mellanklass",
+          "mode": "substring"
+        },
         "övre medelklass",
         "högre medelklass",
         "akademiker",
         "akademi",
         "god ekonomi",
-        "pensionär",
+        {
+          "token": "pensionär",
+          "mode": "substring"
+        },
         "mellanstora tjänstemän",
         "mellan-tjänstemän",
         "kvalificerad tjänsteman",
@@ -262,8 +280,14 @@
         "classe media elevat",
         "classe dirigent",
         "classe dirigenz",
-        "mellanskikt",
-        "medelinkomst",
+        {
+          "token": "mellanskikt",
+          "mode": "substring"
+        },
+        {
+          "token": "medelinkomst",
+          "mode": "substring"
+        },
         "mellaninkomst",
         "mittelstand",
         "giovane professionista",
@@ -271,20 +295,35 @@
         "mediano",
         "mediocre",
         "högskoleutbildad",
-        "tjänsteman",
-        "tjänstemän",
+        {
+          "token": "tjänsteman",
+          "mode": "substring"
+        },
+        {
+          "token": "tjänstemän",
+          "mode": "substring"
+        },
         "it-",
         "konsult",
-        "företagare",
+        {
+          "token": "företagare",
+          "mode": "substring"
+        },
         "egenföretagare",
-        "professionell",
+        {
+          "token": "professionell",
+          "mode": "substring"
+        },
         "urban",
         "mittenklass",
         "mittelsocial",
         "middelklass",
         "mellanposition",
         "mellanliggande",
-        "intellektuell"
+        {
+          "token": "intellektuell",
+          "mode": "substring"
+        }
       ]
     },
     "Wealthy": {
@@ -308,7 +347,10 @@
         "affluent",
         "upper class",
         "välbärgad",
-        "överklass",
+        {
+          "token": "överklass",
+          "mode": "substring"
+        },
         "högre tjänstemän",
         "high income",
         "high-income",
@@ -316,7 +358,10 @@
         "higher-income",
         "high socioeconomic",
         "corporate class",
-        "elite",
+        {
+          "token": "elite",
+          "mode": "substring"
+        },
         "alta borghesia",
         "alta buona",
         "classe elevat",

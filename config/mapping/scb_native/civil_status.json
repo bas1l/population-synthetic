@@ -58,7 +58,10 @@
       ],
       "contains": [
         "singel",
-        "ogift",
+        {
+          "token": "ogift",
+          "mode": "substring"
+        },
         "single",
         "never married",
         "ensamstående",
@@ -96,15 +99,24 @@
         "Co-habiter"
       ],
       "contains": [
-        "gift",
+        {
+          "token": "gift",
+          "mode": "substring"
+        },
         "cohabiting",
         "cohabit",
         "habiting",
         "habitant",
-        "sambo",
+        {
+          "token": "sambo",
+          "mode": "substring"
+        },
         "samboende",
         "särbo",
-        "married",
+        {
+          "token": "married",
+          "mode": "substring"
+        },
         "partner",
         "relation",
         "förhållande",

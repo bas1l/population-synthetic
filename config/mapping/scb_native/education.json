@@ -128,7 +128,10 @@
         "pre-secondary 9",
         "isced 2",
         "isced97 2",
-        "grundskola",
+        {
+          "token": "grundskola",
+          "mode": "substring"
+        },
         "compulsory",
         "elementary",
         "primary school",
@@ -176,10 +179,16 @@
         "upper-secondary",
         "isced 3a",
         "isced97 3a",
-        "gymnasium",
+        {
+          "token": "gymnasium",
+          "mode": "substring"
+        },
         "high school",
         "gymnasieskola",
-        "gymnasie",
+        {
+          "token": "gymnasie",
+          "mode": "substring"
+        },
         "gymnasial",
         "secondary education",
         "secondary school",
@@ -192,6 +201,43 @@
       ]
     },
     "Post-Secondary < 3 yrs (ISCED 4+5B)": {
+      "all_of": [
+        [
+          "eftergymnasial",
+          "post-secondary",
+          "post secondary",
+          "högskol",
+          "hogskol",
+          "universit",
+          "university",
+          "higher education",
+          "college",
+          "tertiary"
+        ],
+        [
+          "kortare än 3",
+          "mindre än 3",
+          "less than 3",
+          "shorter than 3",
+          "under 3",
+          "< 3",
+          "(2 år)",
+          "2 år)",
+          ", 2 år",
+          "2-årig",
+          "(2 years)",
+          "2 years)",
+          "1-2 år",
+          "1–2 år",
+          "1-2 years",
+          "80-120",
+          "120 hp",
+          "kort",
+          "short",
+          "första året",
+          "2-3 years"
+        ]
+      ],
       "equals": [
         "Post-Secondary < 3 yrs (ISCED 4+5B)",
         "Yrkeshögskola",
@@ -214,9 +260,46 @@
         "yrkes",
         "higher vocational",
         "yh-"
+      ],
+      "none_of": [
+        "master",
+        "magister",
+        "kandidat",
+        "bachelor"
       ]
     },
     "Post-Secondary 3+ yrs (ISCED 5A)": {
+      "all_of": [
+        [
+          "eftergymnasial",
+          "post-secondary",
+          "post secondary",
+          "högskol",
+          "hogskol",
+          "universit",
+          "university",
+          "higher education",
+          "college",
+          "tertiary"
+        ],
+        [
+          "3 år eller",
+          "3 years or",
+          "(3 år)",
+          ", 3 år",
+          "3-årig",
+          "3+",
+          "≥3",
+          "kandidat",
+          "bachelor",
+          "master",
+          "magister",
+          "lång",
+          "tre år",
+          "minst 3",
+          "3-4"
+        ]
+      ],
       "equals": [
         "Post-Secondary 3+ yrs (ISCED 5A)",
         "Yrkesexamen på grundnivå",
@@ -289,7 +372,10 @@
         "degree",
         "bachelor",
         "master",
-        "kandidat",
+        {
+          "token": "kandidat",
+          "mode": "substring"
+        },
         "magister",
         "högskolex",
         "högskole",

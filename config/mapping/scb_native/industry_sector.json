@@ -151,15 +151,24 @@
         "Life science och läkemedel"
       ],
       "contains": [
-        "tillverkning",
-        "industri",
+        {
+          "token": "tillverkning",
+          "mode": "substring"
+        },
+        {
+          "token": "industri",
+          "mode": "substring"
+        },
         "manufactur",
         "heavy industry",
         "industrial",
         "factory",
         "fabrik",
         "automotive",
-        "fordon",
+        {
+          "token": "fordon",
+          "mode": "substring"
+        },
         "gruv",
         "mining",
         "verkstad",
@@ -183,11 +192,20 @@
         "Byggindustri"
       ],
       "contains": [
-        "bygg",
+        {
+          "token": "bygg",
+          "mode": "substring"
+        },
         "construction",
-        "anläggning",
+        {
+          "token": "anläggning",
+          "mode": "substring"
+        },
         "contractor",
-        "installation",
+        {
+          "token": "installation",
+          "mode": "substring"
+        },
         "el, vvs",
         "vvs",
         "rörmokare",
@@ -207,13 +225,19 @@
       ],
       "contains": [
         "detaljhandel",
-        "handel",
+        {
+          "token": "handel",
+          "mode": "substring"
+        },
         "partihandel",
         "retail",
         "wholesale",
         "trade",
         "sales",
-        "butik",
+        {
+          "token": "butik",
+          "mode": "substring"
+        },
         "shop",
         "store",
         "merchandis"
@@ -227,7 +251,10 @@
         "Kurir- och budverksamhet (matleverans)"
       ],
       "contains": [
-        "transport",
+        {
+          "token": "transport",
+          "mode": "substring"
+        },
         "logistic",
         "logistik",
         "freight",
@@ -274,7 +301,10 @@
         "Data och IT"
       ],
       "contains": [
-        "teknik",
+        {
+          "token": "teknik",
+          "mode": "substring"
+        },
         "information",
         "it-",
         "it-konsult",
@@ -287,12 +317,21 @@
         "ict",
         "technolog",
         "teknolog",
-        "tech",
+        {
+          "token": "tech",
+          "mode": "substring"
+        },
         "software",
         "mjukvar",
         "programvar",
-        "systemutveckl",
-        "digital",
+        {
+          "token": "systemutveckl",
+          "mode": "substring"
+        },
+        {
+          "token": "digital",
+          "mode": "substring"
+        },
         "telekom",
         "telecom",
         "kommunikation",
@@ -333,13 +372,22 @@
       ],
       "contains": [
         "finansiell",
-        "bank",
+        {
+          "token": "bank",
+          "mode": "substring"
+        },
         "finans",
         "financ",
         "insurance",
-        "försäkring",
+        {
+          "token": "försäkring",
+          "mode": "substring"
+        },
         "consult",
-        "konsult",
+        {
+          "token": "konsult",
+          "mode": "substring"
+        },
         "business service",
         "professional service",
         "affärstjänst",
@@ -347,7 +395,10 @@
         "fastighet",
         "law firm",
         "advokat",
-        "juridik",
+        {
+          "token": "juridik",
+          "mode": "substring"
+        },
         "marknadsföring",
         "reklam",
         "marketing",
@@ -363,7 +414,10 @@
         "callcenter",
         "kundtjänst",
         "städbransch",
-        "städning",
+        {
+          "token": "städning",
+          "mode": "substring"
+        },
         "cleaning service",
         "bevakning",
         "kontorsservice",
@@ -392,10 +446,16 @@
         "kommunal",
         "kommun",
         "landsting",
-        "myndighet",
+        {
+          "token": "myndighet",
+          "mode": "substring"
+        },
         "statlig",
         "staten",
-        "förvaltning",
+        {
+          "token": "förvaltning",
+          "mode": "substring"
+        },
         "civil service",
         "defence",
         "defense",
@@ -412,7 +472,10 @@
         "Skolväsende"
       ],
       "contains": [
-        "utbildning",
+        {
+          "token": "utbildning",
+          "mode": "substring"
+        },
         "forskning",
         "undervisning",
         "education",
@@ -420,12 +483,21 @@
         "universit",
         "högskola",
         "lärosäte",
-        "skola",
-        "school",
+        {
+          "token": "skola",
+          "mode": "substring"
+        },
+        {
+          "token": "school",
+          "mode": "substring"
+        },
         "teaching",
         "training",
         "edtech",
-        "pedagog",
+        {
+          "token": "pedagog",
+          "mode": "substring"
+        },
         "research",
         "tuition"
       ]
@@ -445,9 +517,18 @@
         "Personlig assistans"
       ],
       "contains": [
-        "vård",
-        "sjukvård",
-        "omsorg",
+        {
+          "token": "vård",
+          "mode": "substring"
+        },
+        {
+          "token": "sjukvård",
+          "mode": "substring"
+        },
+        {
+          "token": "omsorg",
+          "mode": "substring"
+        },
         "healthcare",
         "health",
         " care",
@@ -455,8 +536,14 @@
         "social work",
         "social services",
         "socialtjänst",
-        "hälsa",
-        "hälso",
+        {
+          "token": "hälsa",
+          "mode": "substring"
+        },
+        {
+          "token": "hälso",
+          "mode": "substring"
+        },
         "sjukhus",
         "hospital",
         "nursing",
@@ -513,14 +600,23 @@
         "no current sector",
         "inte i arbete",
         "retired",
-        "pensionär",
+        {
+          "token": "pensionär",
+          "mode": "substring"
+        },
         "unemployed",
         "arbetslös",
         "arbetssökande",
         "student",
-        "studerande",
+        {
+          "token": "studerande",
+          "mode": "substring"
+        },
         "studerar",
-        "studier",
+        {
+          "token": "studier",
+          "mode": "substring"
+        },
         "Ej i arbete",
         "Ej anställd",
         "pensionerad"

@@ -147,15 +147,30 @@
         "1-19",
         "20-34",
         "kort deltid",
-        "visstid",
-        "vikariat",
-        "vikarie",
+        {
+          "token": "visstid",
+          "mode": "substring"
+        },
+        {
+          "token": "vikariat",
+          "mode": "substring"
+        },
+        {
+          "token": "vikarie",
+          "mode": "substring"
+        },
         "projektanställ",
         "provanställ",
-        "säsong",
+        {
+          "token": "säsong",
+          "mode": "substring"
+        },
         "timanställ",
         "behovsanställ",
-        "temporary",
+        {
+          "token": "temporary",
+          "mode": "substring"
+        },
         "fixed-term",
         "seasonal",
         "tidsbegränsad",
@@ -171,20 +186,35 @@
         "egenföretag",
         "egen företag",
         "enskild firma",
-        "frilans",
+        {
+          "token": "frilans",
+          "mode": "substring"
+        },
         "freelan",
         "näringsverksamhet",
         "aktiebolag",
-        "pension",
-        "student",
+        {
+          "token": "pension",
+          "mode": "substring"
+        },
+        {
+          "token": "student",
+          "mode": "substring"
+        },
         "arbetslös",
         "retired",
         "unemployed"
       ],
       "all_of": [
         [
-          "permanent",
-          "tillsvidare",
+          {
+            "token": "permanent",
+            "mode": "substring"
+          },
+          {
+            "token": "tillsvidare",
+            "mode": "substring"
+          },
           "fast anställ"
         ],
         [
@@ -208,11 +238,20 @@
         "Sysselsatt"
       ],
       "contains": [
-        "tillsvidareanställning",
+        {
+          "token": "tillsvidareanställning",
+          "mode": "substring"
+        },
         "heltidsanställning",
         "heltidsanställd",
-        "permanent",
-        "tillsvidare",
+        {
+          "token": "permanent",
+          "mode": "substring"
+        },
+        {
+          "token": "tillsvidare",
+          "mode": "substring"
+        },
         "fast anställ",
         "open-ended",
         "salaried",
@@ -225,8 +264,14 @@
         "fulltid",
         "volltid",
         "tillvidare",
-        "anstellning",
-        "anställning",
+        {
+          "token": "anstellning",
+          "mode": "substring"
+        },
+        {
+          "token": "anställning",
+          "mode": "substring"
+        },
         "obestämd",
         "indefinite",
         "indeterminate",
@@ -241,31 +286,58 @@
     },
     "Permanent Part-time": {
       "none_of": [
-        "visstid",
-        "vikariat",
+        {
+          "token": "visstid",
+          "mode": "substring"
+        },
+        {
+          "token": "vikariat",
+          "mode": "substring"
+        },
         "projektanställ",
         "provanställ",
-        "säsong",
+        {
+          "token": "säsong",
+          "mode": "substring"
+        },
         "timanställ",
         "behovsanställ",
-        "temporary",
+        {
+          "token": "temporary",
+          "mode": "substring"
+        },
         "self-employ",
         "egenföretag",
         "enskild firma",
-        "frilans",
+        {
+          "token": "frilans",
+          "mode": "substring"
+        },
         "freelan",
         "näringsverksamhet",
         "aktiebolag",
-        "pension",
-        "student",
+        {
+          "token": "pension",
+          "mode": "substring"
+        },
+        {
+          "token": "student",
+          "mode": "substring"
+        },
         "arbetslös",
         "retired",
         "unemployed"
       ],
       "all_of": [
         [
-          "permanent",
-          "tillsvidare",
+          {
+            "token": "permanent",
+            "mode": "substring"
+          },
+          {
+            "token": "tillsvidare",
+            "mode": "substring"
+          },
           "fast anställ"
         ],
         [
@@ -291,8 +363,14 @@
     "Permanent Short Part-time": {
       "all_of": [
         [
-          "permanent",
-          "tillsvidare",
+          {
+            "token": "permanent",
+            "mode": "substring"
+          },
+          {
+            "token": "tillsvidare",
+            "mode": "substring"
+          },
           "fast anställ"
         ],
         [
@@ -307,13 +385,28 @@
     "Temporary Full-time": {
       "all_of": [
         [
-          "temporary",
-          "visstid",
-          "vikariat",
-          "vikarie",
+          {
+            "token": "temporary",
+            "mode": "substring"
+          },
+          {
+            "token": "visstid",
+            "mode": "substring"
+          },
+          {
+            "token": "vikariat",
+            "mode": "substring"
+          },
+          {
+            "token": "vikarie",
+            "mode": "substring"
+          },
           "projektanställ",
           "provanställ",
-          "säsong",
+          {
+            "token": "säsong",
+            "mode": "substring"
+          },
           "tidsbegränsad",
           "villkorlig",
           "villkorad",
@@ -336,13 +429,28 @@
         "visstidsanställning",
         "projektanställning",
         "provanställning",
-        "vikariat",
-        "vikarie",
-        "temporary",
-        "visstid",
+        {
+          "token": "vikariat",
+          "mode": "substring"
+        },
+        {
+          "token": "vikarie",
+          "mode": "substring"
+        },
+        {
+          "token": "temporary",
+          "mode": "substring"
+        },
+        {
+          "token": "visstid",
+          "mode": "substring"
+        },
         "fixed-term",
         "seasonal",
-        "säsong",
+        {
+          "token": "säsong",
+          "mode": "substring"
+        },
         "tillfällig",
         "påkallad",
         "tidsbegränsad",
@@ -357,13 +465,28 @@
     "Temporary Part-time": {
       "all_of": [
         [
-          "temporary",
-          "visstid",
-          "vikariat",
-          "vikarie",
+          {
+            "token": "temporary",
+            "mode": "substring"
+          },
+          {
+            "token": "visstid",
+            "mode": "substring"
+          },
+          {
+            "token": "vikariat",
+            "mode": "substring"
+          },
+          {
+            "token": "vikarie",
+            "mode": "substring"
+          },
           "projektanställ",
           "provanställ",
-          "säsong",
+          {
+            "token": "säsong",
+            "mode": "substring"
+          },
           "timanställ",
           "tidsbegränsad",
           "villkorlig",
@@ -406,10 +529,22 @@
     "Temporary Short Part-time": {
       "all_of": [
         [
-          "temporary",
-          "visstid",
-          "vikariat",
-          "vikarie",
+          {
+            "token": "temporary",
+            "mode": "substring"
+          },
+          {
+            "token": "visstid",
+            "mode": "substring"
+          },
+          {
+            "token": "vikariat",
+            "mode": "substring"
+          },
+          {
+            "token": "vikarie",
+            "mode": "substring"
+          },
           "projektanställ",
           "provanställ",
           "timanställ",
@@ -435,7 +570,10 @@
           "egenföretagare",
           "egen företag",
           "enskild firma",
-          "frilans",
+          {
+            "token": "frilans",
+            "mode": "substring"
+          },
           "freelan",
           "näringsverksamhet",
           "aktiebolag"
@@ -464,7 +602,10 @@
         "aktiebolag",
         "freelance",
         "freelan",
-        "frilans",
+        {
+          "token": "frilans",
+          "mode": "substring"
+        },
         "konsultanställning"
       ]
     },
@@ -476,7 +617,10 @@
           "egenföretagare",
           "egen företag",
           "enskild firma",
-          "frilans",
+          {
+            "token": "frilans",
+            "mode": "substring"
+          },
           "freelan",
           "näringsverksamhet",
           "aktiebolag"
@@ -497,7 +641,10 @@
           "egenföretagare",
           "egen företag",
           "enskild firma",
-          "frilans",
+          {
+            "token": "frilans",
+            "mode": "substring"
+          },
           "freelan",
           "näringsverksamhet",
           "aktiebolag"
@@ -513,11 +660,23 @@
     },
     "Not Applicable": {
       "none_of": [
-        "jobb",
-        "job",
-        "assistant",
+        {
+          "token": "jobb",
+          "mode": "substring"
+        },
+        {
+          "token": "job",
+          "mode": "substring"
+        },
+        {
+          "token": "assistant",
+          "mode": "substring"
+        },
         "worker",
-        "intern"
+        {
+          "token": "intern",
+          "mode": "substring"
+        }
       ],
       "equals": [
         "not applicable",
@@ -552,14 +711,35 @@
       "contains": [
         "ej tillämpligt",
         "ej relevant",
-        "volontär",
+        {
+          "token": "volontär",
+          "mode": "substring"
+        },
         "arbetsträning",
-        "student",
-        "studer",
-        "studie",
-        "pension",
-        "pensionär",
-        "pensioner",
+        {
+          "token": "student",
+          "mode": "substring"
+        },
+        {
+          "token": "studer",
+          "mode": "substring"
+        },
+        {
+          "token": "studie",
+          "mode": "substring"
+        },
+        {
+          "token": "pension",
+          "mode": "substring"
+        },
+        {
+          "token": "pensionär",
+          "mode": "substring"
+        },
+        {
+          "token": "pensioner",
+          "mode": "substring"
+        },
         "arbetslös",
         "unemploy",
         "retired",

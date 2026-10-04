@@ -143,22 +143,34 @@
         "employ",
         "working",
         "worker",
-        "job",
-        "anställd",
+        {
+          "token": "job",
+          "mode": "substring"
+        },
+        {
+          "token": "anställd",
+          "mode": "substring"
+        },
         "heltid",
         "deltid",
         "tillsvidare",
         "sysselsatt",
         "förvärvsarbetande",
         "yrkesverksam",
-        "arbetar",
+        {
+          "token": "arbetar",
+          "mode": "substring"
+        },
         "full time",
         "part time",
         "selvständig",
         "self-employ",
         "freelanc",
         "egenföretag",
-        "företagare",
+        {
+          "token": "företagare",
+          "mode": "substring"
+        },
         "frilans",
         "eget företag",
         "näringsidkare",
@@ -174,7 +186,10 @@
     },
     "Unemployed": {
       "none_of": [
-        "sjukskriv",
+        {
+          "token": "sjukskriv",
+          "mode": "substring"
+        },
         "sjukpenning",
         "sjuklön",
         "sjukfrånvaro",
@@ -218,7 +233,10 @@
         "seeking",
         "arbetssökande",
         "arbetslos",
-        "arbetslös",
+        {
+          "token": "arbetslös",
+          "mode": "substring"
+        },
         "arbetsträning",
         "arbetstränade",
         "a-kassa",
@@ -240,10 +258,19 @@
         "Gymnasieelev"
       ],
       "contains": [
-        "student",
-        "studerande",
+        {
+          "token": "student",
+          "mode": "substring"
+        },
+        {
+          "token": "studerande",
+          "mode": "substring"
+        },
         "studerar",
-        "studier",
+        {
+          "token": "studier",
+          "mode": "substring"
+        },
         "studying",
         "studies",
         "pupil"
@@ -259,7 +286,10 @@
       ],
       "contains": [
         "retired",
-        "pension",
+        {
+          "token": "pension",
+          "mode": "substring"
+        },
         "retire"
       ]
     },
@@ -280,7 +310,10 @@
         "on sick",
         "long-term sick",
         "long term sick",
-        "sjukskriv",
+        {
+          "token": "sjukskriv",
+          "mode": "substring"
+        },
         "sjukpenning",
         "sjuklön",
         "sjukfrånvaro",
@@ -290,7 +323,10 @@
     "Other": {
       "contains": [
         "frivillig",
-        "volontär",
+        {
+          "token": "volontär",
+          "mode": "substring"
+        },
         "volunteer",
         "ideell",
         "föreningsverksamhet"

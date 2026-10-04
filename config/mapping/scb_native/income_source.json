@@ -82,8 +82,14 @@
         "jobseeker",
         "job-seeker",
         "jobbsök",
-        "bidrag",
-        "pension",
+        {
+          "token": "bidrag",
+          "mode": "substring"
+        },
+        {
+          "token": "pension",
+          "mode": "substring"
+        },
         "parental support",
         "parental financial support",
         "parents financial support",
@@ -130,30 +136,66 @@
         "business",
         "employment",
         "self-employ",
-        "lön",
-        "företag",
+        {
+          "token": "lön",
+          "mode": "substring"
+        },
+        {
+          "token": "företag",
+          "mode": "substring"
+        },
         "egenföretagare",
         "freelan",
         "frilans",
-        "work",
+        {
+          "token": "work",
+          "mode": "substring"
+        },
         "salary",
         "salär",
         "salaried",
         "salaries",
-        "anställ",
-        "arbetsgivare",
-        "arbetsinkomst",
-        "förvärvsinkomst",
-        "job",
-        "jobb",
+        {
+          "token": "anställ",
+          "mode": "substring"
+        },
+        {
+          "token": "arbetsgivare",
+          "mode": "substring"
+        },
+        {
+          "token": "arbetsinkomst",
+          "mode": "substring"
+        },
+        {
+          "token": "förvärvsinkomst",
+          "mode": "substring"
+        },
+        {
+          "token": "job",
+          "mode": "substring"
+        },
+        {
+          "token": "jobb",
+          "mode": "substring"
+        },
         "employee",
         "employed",
-        "arbete",
+        {
+          "token": "arbete",
+          "mode": "substring"
+        },
         "sysselsättning",
         "deltidsarbete",
         "konsultverksamhet",
-        "firma",
-        "arvode",
+        {
+          "token": "firma",
+          "mode": "substring"
+        },
+        {
+          "token": "arvode",
+          "mode": "substring"
+        },
         "subcontracting"
       ]
     },
@@ -167,10 +209,16 @@
       ],
       "contains": [
         "capital",
-        "kapital",
+        {
+          "token": "kapital",
+          "mode": "substring"
+        },
         "dividend",
         "interest",
-        "ränta",
+        {
+          "token": "ränta",
+          "mode": "substring"
+        },
         "räntor",
         "ränte",
         "rente",
@@ -178,7 +226,10 @@
         "utdelning",
         "investment",
         "stocks",
-        "avkastning",
+        {
+          "token": "avkastning",
+          "mode": "substring"
+        },
         "real estate",
         "property income",
         "rental income",
@@ -197,7 +248,10 @@
         "Ålderspension"
       ],
       "contains": [
-        "pension"
+        {
+          "token": "pension",
+          "mode": "substring"
+        }
       ]
     },
     "Insurance / Allowance": {
@@ -236,10 +290,16 @@
         "insurance",
         "allowance",
         "a-kassa",
-        "sjukpenning",
+        {
+          "token": "sjukpenning",
+          "mode": "substring"
+        },
         "föräldrapenning",
         "allowan",
-        "ersättning",
+        {
+          "token": "ersättning",
+          "mode": "substring"
+        },
         "transfer",
         "benefit",
         "student loan",
@@ -252,13 +312,19 @@
         "studiebidrag",
         "study grant",
         "scholarship",
-        "stipend",
+        {
+          "token": "stipend",
+          "mode": "substring"
+        },
         "csn",
         "grant from",
         "grants from",
         "försäkringskassa",
         "dagpenning",
-        "bidrag",
+        {
+          "token": "bidrag",
+          "mode": "substring"
+        },
         "unemploy",
         "arbetslöshet",
         "arbetslös",
@@ -289,7 +355,10 @@
       ],
       "contains": [
         "social assistance",
-        "försörjningsstöd",
+        {
+          "token": "försörjningsstöd",
+          "mode": "substring"
+        },
         "socialbidrag"
       ]
     },
