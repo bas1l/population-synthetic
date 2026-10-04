@@ -35,7 +35,7 @@ def _cells(dist: dict[str, float]) -> dict[tuple[str, str], dict[str, float]]:
 def make_distributions() -> PopulationDistributions:
     """Every (age_group, sex) cell populated with a multi-category distribution."""
     age_sex = {(age, s): 1.0 for age in range(18, 86) for s in _SEXES}
-    status_ages = {"20-29 years", "30-49 years", "50-64 years", "65-79 years", "80- years"}
+    status_ages = {"20-29", "30-49", "50-64", "65-79", "80-"}
     income = {
         (emp, age): {"wage and business income": 0.7, "pensions": 0.2, "capital income": 0.1}
         for emp in ("gainfully employed", "unemployed", "students", "retired", "non gainfully employed")
@@ -116,7 +116,7 @@ def test_missing_cell_raises_instead_of_falling_back(table: str, empty: bool):
 
 def test_missing_income_source_age_cell_raises():
     base = make_distributions()
-    income = {k: v for k, v in base.income_source_by_employment_age.items() if k[1] != "30-49 years"}
+    income = {k: v for k, v in base.income_source_by_employment_age.items() if k[1] != "30-49"}
     dist = dataclasses.replace(base, income_source_by_employment_age=income, age_sex={(40, "men"): 1.0})
     with pytest.raises(ValueError, match="age_group='35-44'"):
         SampleService.sample_one(dist, np.random.default_rng(0), 0)

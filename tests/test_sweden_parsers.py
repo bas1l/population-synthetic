@@ -514,3 +514,89 @@ def test_employment_type_proxy_source_must_exist():
     raw_a, raw_h = _aku_fixtures()
     with pytest.raises(ValueError, match="source cell"):
         P.parse_employment_type_combined(raw_a, raw_h, {}, {"75-85": "18-24"})
+
+
+# --- income_source: TabVX13InkStruktN components incl. 325 / 330 ---------------
+
+_INC_COMPONENTS = [
+    ("300", "wage and business income"), ("305", "capital income"), ("310", "pensions"),
+    ("315", "sickness and activity compensation"),
+    ("320", "sickness compensation, parental allowance, labour market assistance etc."),
+    ("325", "general allowance"), ("330", "housing allowance"), ("335", "social assistance"),
+]
+_INC_AGES = [("20-29", "20–29 years"), ("80-", "80– years")]
+_INC_EMP = [("1000", "gainfully employed"), ("1800", "students")]
+
+
+def _income_cell(sel: dict) -> float:
+    comp = [c for c, _ in _INC_COMPONENTS].index(sel["Inkomstkomponenter"]) + 1
+    age = [c for c, _ in _INC_AGES].index(sel["Alder"]) + 1
+    emp = [c for c, _ in _INC_EMP].index(sel["Sysselsattning"]) + 1
+    if sel["Sysselsattning"] == "1800" and sel["Alder"] == "80-":
+        return 0.0  # no students aged 80+: the cell is dropped, not invented
+    return float(comp * 10 + age * 3 + emp)
+
+
+def _income_payload(id_order: list[str]) -> dict:
+    cats = {
+        "Region": [("00", "Sweden")],
+        "Inkomstkomponenter": _INC_COMPONENTS,
+        "Alder": _INC_AGES,
+        "Sysselsattning": _INC_EMP,
+        "ContentsCode": [("000006SV", "Percent")],
+        "Tid": [("2024", "2024")],
+    }
+    return _jsonstat(id_order, cats, _income_cell)
+
+
+def test_income_source_parses_all_eight_components_keyed_by_age_code():
+    raw = _income_payload(["Region", "Inkomstkomponenter", "Alder", "Sysselsattning", "ContentsCode", "Tid"])
+    result = P.parse_income_source(raw)
+    # Age is keyed by its code, so the en-dash labels never reach the sampler.
+    assert set(result) == {("gainfully employed", "20-29"), ("gainfully employed", "80-"), ("students", "20-29")}
+    dist = result[("students", "20-29")]
+    assert set(dist) == {label for _, label in _INC_COMPONENTS}
+    assert _sums_to_one(dist)
+    total = sum(_income_cell({"Inkomstkomponenter": c, "Alder": "20-29", "Sysselsattning": "1800"})
+                for c, _ in _INC_COMPONENTS)
+    assert dist["general allowance"] == pytest.approx(
+        _income_cell({"Inkomstkomponenter": "325", "Alder": "20-29", "Sysselsattning": "1800"}) / total
+    )
+
+
+def test_income_source_is_independent_of_dimension_order():
+    canonical = P.parse_income_source(
+        _income_payload(["Region", "Inkomstkomponenter", "Alder", "Sysselsattning", "ContentsCode", "Tid"])
+    )
+    permuted = P.parse_income_source(
+        _income_payload(["Sysselsattning", "Tid", "Alder", "Region", "Inkomstkomponenter", "ContentsCode"])
+    )
+    assert permuted == canonical
+
+
+def test_income_source_rejects_an_unselected_extra_dimension():
+    raw = _income_payload(["Region", "Inkomstkomponenter", "Alder", "Sysselsattning", "ContentsCode", "Tid"])
+    raw = _jsonstat(
+        raw["id"],
+        {
+            "Region": [("00", "Sweden"), ("01", "Stockholm county")],
+            "Inkomstkomponenter": _INC_COMPONENTS,
+            "Alder": _INC_AGES,
+            "Sysselsattning": _INC_EMP,
+            "ContentsCode": [("000006SV", "Percent")],
+            "Tid": [("2024", "2024")],
+        },
+        _income_cell,
+    )
+    with pytest.raises(ValueError, match="Region"):
+        P.parse_income_source(raw)
+
+
+def test_scb_native_mapping_resolves_every_income_component(sweden_mapper):
+    for _, label in _INC_COMPONENTS:
+        out = sweden_mapper.normalize_individual({"id": "t", "income_source": {"label": label}})
+        assert out["income_source"] is not None, f"income_source: raw label {label!r} did not resolve"
+    out = sweden_mapper.normalize_individual({"id": "t", "income_source": {"label": "general allowance"}})
+    assert out["income_source"] == "General Allowances"
+    out = sweden_mapper.normalize_individual({"id": "t", "income_source": {"label": "housing allowance"}})
+    assert out["income_source"] == "Housing Allowance"

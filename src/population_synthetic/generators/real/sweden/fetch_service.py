@@ -28,6 +28,7 @@ from .constants import (
     HOUSEHOLD_SIZE_TABLE,
     HOUSING_TENURE_TABLE,
     INCOME_BRACKET_TABLE,
+    INCOME_SOURCE_COMPONENTS,
     INCOME_SOURCE_TABLE,
     INDUSTRY_SECTOR_TABLE,
     SCB_INCOME_BRACKETS,
@@ -407,9 +408,13 @@ class FetchService:
         query = {
             "query": [
                 {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
-                {"code": "Inkomstkomponenter", "selection": {"filter": "item", "values": [
-                    "300", "305", "310", "315", "320", "335",
-                ]}},
+                # 325 general allowance (child allowance, maintenance support,
+                # study grants and loans) and 330 housing allowance complete the
+                # positive transfers; 340/350 (taxes, other negative transfers)
+                # and 220 (disposable income, a total) are not sources.
+                {"code": "Inkomstkomponenter", "selection": {
+                    "filter": "item", "values": list(INCOME_SOURCE_COMPONENTS),
+                }},
                 {"code": "Alder", "selection": {"filter": "item", "values": [
                     "20-29", "30-49", "50-64", "65-79", "80-",
                 ]}},

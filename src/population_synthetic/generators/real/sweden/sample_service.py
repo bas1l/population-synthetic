@@ -38,14 +38,17 @@ _STATUS_TO_INC_EMP: dict[str, str] = {
     "Other": "non gainfully employed",
 }
 
+# Pipeline age group -> TabVX13InkStruktN age-band *code* (the parser keys on
+# codes; SCB's labels changed typography between fetches). A list for the
+# explorer embed script, which resolves the first candidate present.
 _AGE_GROUP_TO_INC_AGE: dict[str, list[str]] = {
-    "18-24": ["20-29", "20-29 years", "20-29 år"],
-    "25-34": ["20-29", "20-29 years", "20-29 år"],
-    "35-44": ["30-49", "30-49 years", "30-49 år"],
-    "45-54": ["30-49", "30-49 years", "30-49 år"],
-    "55-64": ["50-64", "50-64 years", "50-64 år"],
-    "65-74": ["65-79", "65-79 years", "65-79 år"],
-    "75-85": ["80-", "80- years", "80- år"],
+    "18-24": ["20-29"],
+    "25-34": ["20-29"],
+    "35-44": ["30-49"],
+    "45-54": ["30-49"],
+    "55-64": ["50-64"],
+    "65-74": ["65-79"],
+    "75-85": ["80-"],
 }
 
 # Only the register "Employed" status gates industry_sector (Step 6) and

@@ -1214,19 +1214,45 @@ def parse_income_source(
             f"Could not identify income/age/employment dimensions; dims={list(dims.keys())}"
         )
 
-    inc_labels = list(dims[inc_key]["category"]["label"].values())
-    age_labels = list(dims[age_key]["category"]["label"].values())
-    emp_labels = list(dims[emp_key]["category"]["label"].values())
+    def _labels_in_index_order(key: str) -> list[str]:
+        cat = dims[key]["category"]
+        index = cat["index"]
+        return [cat["label"][code] for code in sorted(index, key=index.__getitem__)]
 
-    n_age = len(age_labels)
-    n_emp = len(emp_labels)
+    inc_labels = _labels_in_index_order(inc_key)
+    # Age is keyed by its API *code* ("20-29", "80-"), not its label: SCB's labels
+    # changed typography ("20-29 years" -> "20–29 years", an en dash) between
+    # fetches, which no label lookup should have to track.
+    age_index = dims[age_key]["category"]["index"]
+    age_labels = sorted(age_index, key=age_index.__getitem__)
+    emp_labels = _labels_in_index_order(emp_key)
+
+    # Row-major strides derived from the response's own ``id`` / ``size`` (the
+    # json-stat2 contract), so the parse does not depend on the dimension order
+    # of the query. Every other dimension (Region, ContentsCode, Tid) must be a
+    # single selected category, else its values would be summed silently.
+    id_list = raw.get("id")
+    size_list = raw.get("size")
+    if not id_list or not size_list or len(id_list) != len(size_list):
+        raise ValueError("income_source response lacks a consistent json-stat2 'id'/'size'")
+    sizes = dict(zip(id_list, size_list))
+    for dim_id, n in sizes.items():
+        if dim_id not in (inc_key, age_key, emp_key) and n != 1:
+            raise ValueError(f"income_source response: dimension {dim_id!r} has {n} categories, expected 1")
+    strides: dict[str, int] = {}
+    acc = 1
+    for dim_id in reversed(id_list):
+        strides[dim_id] = acc
+        acc *= sizes[dim_id]
+    if len(values) != acc:
+        raise ValueError(f"income_source response has {len(values)} values, expected {acc}")
 
     counts: dict[tuple[str, str], dict[str, float]] = {}
     for inc_i, inc_raw in enumerate(inc_labels):
         for age_i, age_raw in enumerate(age_labels):
             for emp_i, emp_raw in enumerate(emp_labels):
-                val_idx = inc_i * n_age * n_emp + age_i * n_emp + emp_i
-                v = values[val_idx] if val_idx < len(values) else None
+                val_idx = inc_i * strides[inc_key] + age_i * strides[age_key] + emp_i * strides[emp_key]
+                v = values[val_idx]
                 if v is None:
                     continue
                 v = float(v)

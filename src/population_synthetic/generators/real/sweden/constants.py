@@ -33,6 +33,12 @@ EMPLOYMENT_BY_EDUCATION_TABLE = "AM/AM0210/AM0210D/ArRegArbStatus"
 EMPLOYMENT_STATUS_EDU_TABLE = "AM/AM0210/AM0210A/ArbStatusUtbM"
 INCOME_TABLE = "HE/HE0110/HE0110F/TabVX10InkStrukt"
 INCOME_SOURCE_TABLE = "HE/HE0110/HE0110F/TabVX13InkStruktN"
+# Positive income components (Inkomstkomponenter) of TabVX13InkStruktN, the share
+# of equivalised disposable household income. 325 "general allowance" (child
+# allowance, maintenance support, study grants and study loans) and 330 "housing
+# allowance" (housing allowance and pensioners' housing supplement) were left out
+# until 2026-10; omitting them inflated the other components' shares.
+INCOME_SOURCE_COMPONENTS: tuple[str, ...] = ("300", "305", "310", "315", "320", "325", "330", "335")
 FAMILY_TABLE = "LE/LE0102/LE0102B/LE0102T17"
 URBANIZATION_TABLE = "MI/MI0810/MI0810A/BefLandInvKvmTO"
 CIVIL_STATUS_TABLE = "BE/BE0101/BE0101A/BefolkningNy"

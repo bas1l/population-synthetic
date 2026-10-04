@@ -5,7 +5,9 @@
     "Pension",
     "Insurance / Allowance",
     "Social Assistance",
-    "Sickness / Activity Compensation"
+    "Sickness / Activity Compensation",
+    "General Allowances",
+    "Housing Allowance"
   ],
   "real": {
     "Wage / Business": {
@@ -42,6 +44,18 @@
       "equals": [
         "Sickness / Activity Compensation",
         "sickness and activity compensation"
+      ]
+    },
+    "General Allowances": {
+      "equals": [
+        "General Allowances",
+        "general allowance"
+      ]
+    },
+    "Housing Allowance": {
+      "equals": [
+        "Housing Allowance",
+        "housing allowance"
       ]
     }
   },
