@@ -139,13 +139,105 @@
     "absent": "Not Applicable"
   },
   "synthetic": {
+    "numeric_facet": {
+      "extract": [
+        {
+          "pattern": "(\\d+(?:[.,]\\d+)?)(?:\\s*-\\s*(\\d+(?:[.,]\\d+)?))?\\s*(?:h\\b|hrs?\\b|hours?\\b|tim\\b|timmar\\b|tim/|t/v|h/v)",
+          "scale": 1.0
+        },
+        {
+          "pattern": "(\\d+(?:[.,]\\d+)?)(?:\\s*-\\s*(\\d+(?:[.,]\\d+)?))?\\s*%",
+          "scale": 0.4
+        }
+      ],
+      "ambiguous_if_preceded_by": [
+        "<",
+        ">",
+        "<=",
+        ">=",
+        "≤",
+        "≥",
+        "över",
+        "under",
+        "minst",
+        "max",
+        "upp till",
+        "mer än",
+        "mindre än",
+        "less than",
+        "more than",
+        "at least",
+        "up to"
+      ],
+      "bands": [
+        {
+          "name": "short",
+          "gte": 1,
+          "lt": 20
+        },
+        {
+          "name": "part",
+          "gte": 20,
+          "lt": 35
+        },
+        {
+          "name": "full",
+          "gte": 35
+        }
+      ],
+      "remap": {
+        "Permanent Full-time": {
+          "short": "Permanent Short Part-time",
+          "part": "Permanent Part-time",
+          "full": "Permanent Full-time"
+        },
+        "Permanent Part-time": {
+          "short": "Permanent Short Part-time",
+          "part": "Permanent Part-time",
+          "full": "Permanent Full-time"
+        },
+        "Permanent Short Part-time": {
+          "short": "Permanent Short Part-time",
+          "part": "Permanent Part-time",
+          "full": "Permanent Full-time"
+        },
+        "Temporary Full-time": {
+          "short": "Temporary Short Part-time",
+          "part": "Temporary Part-time",
+          "full": "Temporary Full-time"
+        },
+        "Temporary Part-time": {
+          "short": "Temporary Short Part-time",
+          "part": "Temporary Part-time",
+          "full": "Temporary Full-time"
+        },
+        "Temporary Short Part-time": {
+          "short": "Temporary Short Part-time",
+          "part": "Temporary Part-time",
+          "full": "Temporary Full-time"
+        },
+        "Self-Employed Full-time": {
+          "short": "Self-Employed Short Part-time",
+          "part": "Self-Employed Part-time",
+          "full": "Self-Employed Full-time"
+        },
+        "Self-Employed Part-time": {
+          "short": "Self-Employed Short Part-time",
+          "part": "Self-Employed Part-time",
+          "full": "Self-Employed Full-time"
+        },
+        "Self-Employed Short Part-time": {
+          "short": "Self-Employed Short Part-time",
+          "part": "Self-Employed Part-time",
+          "full": "Self-Employed Full-time"
+        }
+      }
+    },
     "Permanent Full-time": {
       "none_of": [
         "deltid",
         "part-time",
         "part time",
-        "1-19",
-        "20-34",
         "kort deltid",
         {
           "token": "visstid",
@@ -219,8 +311,7 @@
         ],
         [
           "full",
-          "heltid",
-          "100%"
+          "heltid"
         ]
       ],
       "equals": [
@@ -342,9 +433,7 @@
         ],
         [
           "part",
-          "deltid",
-          "50%",
-          "75%"
+          "deltid"
         ]
       ],
       "equals": [
@@ -374,11 +463,9 @@
           "fast anställ"
         ],
         [
-          "1-19",
           "few hours",
           "marginal",
-          "kort deltid",
-          "timmar i veckan"
+          "kort deltid"
         ]
       ]
     },
@@ -416,8 +503,7 @@
         ],
         [
           "full",
-          "heltid",
-          "100%"
+          "heltid"
         ]
       ],
       "equals": [
@@ -501,9 +587,7 @@
         ],
         [
           "part",
-          "deltid",
-          "50%",
-          "75%"
+          "deltid"
         ]
       ],
       "equals": [
@@ -554,11 +638,9 @@
           "student jobb"
         ],
         [
-          "1-19",
           "few hours",
           "marginal",
-          "kort deltid",
-          "timmar i veckan"
+          "kort deltid"
         ]
       ]
     },
@@ -580,8 +662,7 @@
         ],
         [
           "full",
-          "heltid",
-          "100%"
+          "heltid"
         ]
       ],
       "equals": [
@@ -627,9 +708,7 @@
         ],
         [
           "part",
-          "deltid",
-          "50%",
-          "75%"
+          "deltid"
         ]
       ]
     },
@@ -650,11 +729,9 @@
           "aktiebolag"
         ],
         [
-          "1-19",
           "few hours",
           "marginal",
-          "kort deltid",
-          "timmar i veckan"
+          "kort deltid"
         ]
       ]
     },

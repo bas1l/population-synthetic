@@ -276,6 +276,10 @@ def _swedish_identity(**overrides) -> dict:
     # negation: a cue before the token discards it; a cue-initial token still hits
     ("civil_status", "Inte gift", "__UNMAPPED__"),
     ("civil_status", "Never married", "Single/Never Married"),
+    # hours facet: stated hours re-band the attachment (AKU 1-19 / 20-34 / 35+)
+    ("employment_type", "Tillsvidareanställning, 15 timmar/vecka", "Permanent Short Part-time"),
+    ("employment_type", "Tillsvidareanställning, 30 timmar/vecka", "Permanent Part-time"),
+    ("employment_type", "Tillsvidareanställning, 40 timmar/vecka", "Permanent Full-time"),
 ])
 def test_swedish_scb_native_matching_rules(attr, raw, expected):
     mapper = get_synthetic_mapper("swedish")
