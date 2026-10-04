@@ -103,7 +103,10 @@ def main() -> None:
             "notes": "Housing tenure by dwelling type (BO0104 housing stock statistics, tenure codes 1-3)",
         },
         "BE/BE0101/BE0101S/HushallT03": {
-            "notes": "Household size distribution (BE0101S household statistics)",
+            "notes": (
+                "Household size distribution of persons (BE0101S household statistics, "
+                "ContentsCode BE0101DK = number of persons; includes children)"
+            ),
         },
     }
 

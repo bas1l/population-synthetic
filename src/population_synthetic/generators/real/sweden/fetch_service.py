@@ -375,13 +375,16 @@ class FetchService:
 
     @staticmethod
     def fetch_household_size(client: SCBPxWebClient) -> tuple[dict, str]:
+        # ContentsCode BE0101DK is SCB's "Number of persons" series: a persona is a
+        # person, so household_size is drawn from the share of persons living in each
+        # household size. The previous BE0101CZ series counted households instead.
         query = {
             "query": [
                 {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
                 {"code": "Hushallsstorlek", "selection": {"filter": "item", "values": [
                     "1P", "2P", "3P", "4P", "5P", "6P", "7+P",
                 ]}},
-                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["BE0101CZ"]}},
+                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["BE0101DK"]}},
                 {"code": "Tid", "selection": {"filter": "item", "values": ["2024"]}},
             ],
             "response": {"format": "json-stat2"},

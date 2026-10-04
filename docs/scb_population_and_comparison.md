@@ -42,7 +42,7 @@ The sampler fetches real demographic tables from the SCB PxWeb API and builds pr
 | 9 | `industry_sector` | `AKURLSysSNI07Ar` | SNI07 industry codes |
 | 10–11 | `employment_type` | `AKURLSysAnkAr` + `NAKUSysselOkArbtidAr` | attachment type × age × sex; hours × age × sex |
 | 12 | `housing_tenure` | `BO0104T04` | building type × tenure form |
-| 13 | `household_size` | `HushallT03` | household size (1–7+) |
+| 13 | `household_size` | `HushallT03` | persons by household size (1–7+; `ContentsCode` `BE0101DK`, number of persons) |
 | 14 | `income_source` | `TabVX13InkStruktN` | income component × age × employment status |
 | 15 | `birth_country_detail` | `FodelselandArK` | country × age × sex |
 

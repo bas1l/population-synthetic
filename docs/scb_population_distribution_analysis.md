@@ -126,10 +126,11 @@ Given this constraint, there are two possible strategies:
 
 ### 12. household_size — MARGINAL BY DESIGN
 
-- **Query:** `Region: "00"`, `Hushallsstorlek: [7 size categories]`
+- **Query:** `Region: "00"`, `Hushallsstorlek: [7 size categories]`, `ContentsCode: "BE0101DK"` (number of persons, not households)
 - **Parser:** Normalizes across size categories
 - **Sampling:** Marginal (Step 9)
 - **Analysis:** Marginal over all individual attributes. Household size correlates with age, civil status, and parental structure. A per-individual query could condition on these. This is a modeling limitation.
+- **Residual bias:** The persons series includes children aged 0–17, who are never personas; against adults aged 18–85 it understates 1- and 2-person households and overstates 3+ persons by about 8–13 percentage points combined. SCB publishes no household-size-by-age table that would remove this.
 
 ### 13. income_source — NO DIFFERENCE
 

@@ -142,11 +142,11 @@ const SPEC = {
     { id: "household", kind: "marginal", x: 8.9, y: 0.7, step: "8",
       label: "household_size", caption: "marginal", verdict: "marginal",
       table: "BE/BE0101/BE0101S/HushallT03",
-      tableName: "Households by size — HushallT03",
-      query: "Region=00, Hushallsstorlek [1P…7+P], Tid 2024",
+      tableName: "Persons by household size — HushallT03",
+      query: "Region=00, Hushallsstorlek [1P…7+P], ContentsCode BE0101DK (persons), Tid 2024",
       categories: ["1 person","2 persons","3 persons","4 persons","5 persons","6 persons","7+ persons"],
       used: [], option: null, marginal: true,
-      note: "Marginal by design — a national household-size marginal; no SCB table cross-tabulates it against age, civil status or parental structure." },
+      note: "Marginal by design — a national share of persons by household size (unit: persons, BE0101DK, not households); the series includes children 0–17, who are not personas. No SCB table cross-tabulates it against age, civil status or parental structure." },
   ],
 
   // conditioning the sampler actually uses (from sweden_spec edges + sample_service)

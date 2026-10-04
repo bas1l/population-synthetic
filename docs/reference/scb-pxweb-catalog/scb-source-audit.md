@@ -48,7 +48,7 @@ Highest-value wins:
 | 4 | civil_status | BE | `BE0101A/BefolkningNy` | — | **Keep** | Full 4-cat × age × sex × region. |
 | 5 | birth_location | BE | `BE0101E/FolkmFodlandHVD` (Alder=TOT1) | **same table, add Alder×Kon, Tid=2025** | **Enrich — implemented (Phase 2)** | Gains age+sex on the 3-way SE/EU/non-EU split, free. |
 | 6 | birth_country_detail | BE | `BE0101E/FodelselandArK` | — | **Keep** | Finest country×age×sex table (206 countries). |
-| 7 | household_size | BE | `BE0101S/HushallT03` | — | **Keep** | No size-by-age/sex table exists; keep + aggregate. |
+| 7 | household_size | BE | `BE0101S/HushallT03` | same table, series `BE0101CZ` (households) → `BE0101DK` (persons), 2026-10-03 | **Keep table — series switched** | No size-by-age/sex table exists; keep + aggregate. Series switched from `BE0101CZ` (households) to `BE0101DK` (persons), 2026-10-03, because a persona is a person. |
 | 8 | education_level | UF | `UF0506B/Utbildning` (16–74) | **`UF0506B/UtbBefRegionR`** (16–95+) | **Switch — implemented (Phase 1)** | **Closes the 75+ gap.** Same series/values, age→95+. |
 | 9 | employment_status | AM | `AM0401P/NAKUBefUtbNivAr` (no age) | **`AM0210D/ArRegArbStatus`** or `AM0401A/AKURLBefAr` | **Switch to add age — implemented (Phase 4)** | Adds status × age (× sex); drops the education cross (no 3-way exists). Caps at 74. |
 | 10 | industry_sector | AM | `AM0401I/AKURLSysSNI07Ar` (age→total) | **`AM0210F/ArRegSNI2007Riket`** | **Switch — implemented (Phase 3)** | Restores real age × sex. Needs collapse to 12-sector schema; register def. |
