@@ -252,19 +252,6 @@ SOCIO_DECISIONS = [
     ("Student", UNMAPPED),
     ("Studerande", UNMAPPED),
     ("Pensionär", UNMAPPED),
-    # Phase 4 option B (open question 20 default, strict unmapped): occupation and SEI group words carry
-    # no income band. This reverses the spot-check answer "Kunskapsarbetare -> Working Class"
-    # (open question 11 follows Phase 4).
-    ("Kunskapsarbetare", UNMAPPED),
-    ("Tjänstemannaklass", UNMAPPED),
-    ("Högre tjänstemän", UNMAPPED),
-    ("Arbetare", UNMAPPED),
-    ("Professional class", UNMAPPED),
-    ("Akademiker", UNMAPPED),
-    ("Företagare", UNMAPPED),
-    ("IT-specialist", UNMAPPED),
-    ("Blue-collar worker", UNMAPPED),
-    ("Arbetarklass", _WC),  # a class word, kept
 ]
 
 
