@@ -4,6 +4,15 @@ Draws a single synthetic person from the ``PopulationDistributions``
 produced by the Sweden fetch service via a deterministic chained
 sampling sequence, where each attribute is conditioned on prior draws
 (e.g. education given age and sex, employment given education).
+
+Every conditional lookup is fail-fast: a missing cell raises ``ValueError``
+naming the table and the cell. There is no other-sex or other-age-group
+fallback -- such a fallback silently substituted another population's
+distribution, and the age-group one iterated a ``set``, so its result depended
+on ``PYTHONHASHSEED``. The only cross-cell substitutions are the declared AKU
+age proxies for employment_type, built once in the fetch layer
+(``constants.AKU_ATTACHMENT_AGE_LABEL_MAP`` / ``EMPLOYMENT_TYPE_AGE_PROXIES``)
+and recorded in the output provenance.
 """
 from __future__ import annotations
 
@@ -11,7 +20,7 @@ import numpy as np
 from numpy.random import Generator
 
 from population_synthetic.generators.real.data import PopulationDistributions
-from population_synthetic.generators.real.helpers import VALID_AGE_GROUPS, age_to_group, sample_from
+from population_synthetic.generators.real.helpers import age_to_group, sample_from
 
 _SEX_CODES: dict[str, str] = {"men": "1", "women": "2"}
 
@@ -58,6 +67,14 @@ def _resolve_inc_age_key(age_group: str, emp_dist: dict) -> str | None:
     return None
 
 
+def _require_cell(table: dict, key: tuple, table_name: str) -> dict:
+    """Return ``table[key]``; raise if the cell is absent or empty (no fallback)."""
+    dist = table.get(key)
+    if not dist:
+        raise ValueError(f"No {table_name} distribution for cell {key!r}")
+    return dist
+
+
 class SampleService:
     @staticmethod
     def sample_one(
@@ -74,24 +91,10 @@ class SampleService:
         age, sex_label = age_sex_keys[chosen_idx]
         age_group = age_to_group(age)
         sex_code = _SEX_CODES.get(sex_label, "")
+        cell = (age_group, sex_label)
 
         # Step 2: education | (age_group, sex_label)
-        edu_dist = distributions.education_by_age.get((age_group, sex_label))
-        if edu_dist is None:
-            all_sexes = {s for (_, s) in distributions.education_by_age}
-            for fallback_sex in all_sexes:
-                edu_dist = distributions.education_by_age.get((age_group, fallback_sex))
-                if edu_dist is not None:
-                    break
-        if edu_dist is None:
-            for fallback_ag in reversed(list(VALID_AGE_GROUPS)):
-                edu_dist = distributions.education_by_age.get((fallback_ag, sex_label))
-                if edu_dist is not None:
-                    break
-        if edu_dist is None:
-            raise ValueError(
-                f"No education distribution for age_group={age_group!r}, sex={sex_label!r}"
-            )
+        edu_dist = _require_cell(distributions.education_by_age, cell, "education")
         education_level = sample_from(rng, edu_dist)
 
         # Step 3: employment_status -- register labour status over the full
@@ -104,107 +107,48 @@ class SampleService:
         # odds-multiplication derivation. ASSUMPTION (merge only): no status x age x
         # education interaction -- a documented derivation over real register
         # margins, NOT a synthetic distribution (see the merge spec and
-        # parse_employment_status_combined). Falls back to the age x sex leg when a
-        # given (age, education, sex) cell is unavailable.
+        # parse_employment_status_combined). When a given (age, education, sex)
+        # cell is unavailable the person's OWN (age_group, sex) register cell is
+        # used -- the documented merge design, never another sex's cell.
         emp_dist = None
         if merge_status_education and distributions.employment_status_by_edu is not None:
             edu_key = education_level.casefold()
-            emp_by_edu = distributions.employment_status_by_edu
-            emp_dist = emp_by_edu.get((age_group, edu_key, sex_label))
-            if emp_dist is None:
-                for fallback_sex in {s for (_, _e, s) in emp_by_edu}:
-                    emp_dist = emp_by_edu.get((age_group, edu_key, fallback_sex))
-                    if emp_dist is not None:
-                        break
+            emp_dist = distributions.employment_status_by_edu.get((age_group, edu_key, sex_label))
         if emp_dist is None:
-            emp_dist = distributions.employment_by_sex_education.get((age_group, sex_label))
-        if emp_dist is None:
-            for fallback_sex in {s for (_, s) in distributions.employment_by_sex_education}:
-                emp_dist = distributions.employment_by_sex_education.get((age_group, fallback_sex))
-                if emp_dist is not None:
-                    break
-        if emp_dist is None:
-            raise ValueError(
-                f"No employment_status distribution for age_group={age_group!r}, sex={sex_label!r}"
-            )
+            emp_dist = _require_cell(distributions.employment_by_sex_education, cell, "employment_status")
         employment_status_label = sample_from(rng, emp_dist)
         is_employed = employment_status_label in _EMPLOYED_STATUSES
 
         # Step 4: birth_location -- conditional on (age_group, sex_label);
         #         region + parental_structure marginal; socioeconomic conditional
-        bl_dist = distributions.birth_location.get((age_group, sex_label))
-        if bl_dist is None:
-            for fallback_sex in {s for (_, s) in distributions.birth_location}:
-                bl_dist = distributions.birth_location.get((age_group, fallback_sex))
-                if bl_dist is not None:
-                    break
-        if bl_dist is None:
-            raise ValueError(
-                f"No birth_location distribution for age_group={age_group!r}, sex={sex_label!r}"
-            )
+        bl_dist = _require_cell(distributions.birth_location, cell, "birth_location")
         birth_location_label = sample_from(rng, bl_dist)
         region_label = sample_from(rng, distributions.region)
         parental_structure_label = sample_from(rng, distributions.parental_structure)
 
-        se_dist = distributions.socioeconomic.get((age_group, sex_label))
-        if se_dist is None:
-            for fallback_sex in {s for (_, s) in distributions.socioeconomic}:
-                se_dist = distributions.socioeconomic.get((age_group, fallback_sex))
-                if se_dist is not None:
-                    break
-        if se_dist is None:
-            raise ValueError(
-                f"No socioeconomic distribution for age_group={age_group!r}, sex={sex_label!r}"
-            )
+        se_dist = _require_cell(distributions.socioeconomic, cell, "socioeconomic")
         socioeconomic_label = sample_from(rng, se_dist)
 
         # Step 5: civil_status -- conditional on (age_group, sex_label)
-        cs_dist = distributions.civil_status_by_age_sex.get((age_group, sex_label), {})
-        if not cs_dist:
-            for fallback_sex in {s for (_, s) in distributions.civil_status_by_age_sex}:
-                cs_dist = distributions.civil_status_by_age_sex.get((age_group, fallback_sex), {})
-                if cs_dist:
-                    break
-        if not cs_dist:
-            raise ValueError(f"No civil_status distribution for age_group={age_group}, sex={sex_label}")
+        cs_dist = _require_cell(distributions.civil_status_by_age_sex, cell, "civil_status")
         civil_status_label = sample_from(rng, cs_dist)
 
         # Step 6: industry_sector -- conditional on employment and (age_group, sex)
         industry_sector_raw: dict | None
         if is_employed:
-            ind_dist = distributions.industry_sector.get((age_group, sex_label))
-            if ind_dist is None:
-                for fallback_sex in {s for (_, s) in distributions.industry_sector}:
-                    ind_dist = distributions.industry_sector.get((age_group, fallback_sex))
-                    if ind_dist is not None:
-                        break
-            if ind_dist is None:
-                raise ValueError(
-                    f"No industry_sector distribution for age_group={age_group!r}, sex={sex_label!r}"
-                )
+            ind_dist = _require_cell(distributions.industry_sector, cell, "industry_sector")
             industry_sector_label = sample_from(rng, ind_dist)
             industry_sector_raw = {"label": industry_sector_label}
         else:
             industry_sector_raw = None
 
-        # Step 7: employment_type -- conditional on (age_group, sex_label)
+        # Step 7: employment_type -- conditional on (age_group, sex_label). The
+        #         18-24 and 75-85 cells are the declared AKU age proxies built in
+        #         the fetch layer (AKU covers ages 15-74 and publishes attachment
+        #         at 15-24, not 18-24).
         employment_type_raw: dict | None
         if is_employed:
-            emp_type_dist = distributions.employment_type_by_age.get((age_group, sex_label), {})
-            if not emp_type_dist:
-                for fallback_sex in {s for (_, s) in distributions.employment_type_by_age}:
-                    emp_type_dist = distributions.employment_type_by_age.get((age_group, fallback_sex), {})
-                    if emp_type_dist:
-                        break
-            if not emp_type_dist:
-                for fallback_ag in reversed(list(VALID_AGE_GROUPS)):
-                    emp_type_dist = distributions.employment_type_by_age.get((fallback_ag, sex_label), {})
-                    if emp_type_dist:
-                        break
-            if not emp_type_dist:
-                raise ValueError(
-                    f"No employment_type distribution for age_group={age_group!r}, sex={sex_label!r}"
-                )
+            emp_type_dist = _require_cell(distributions.employment_type_by_age, cell, "employment_type")
             composite_key = sample_from(rng, emp_type_dist)
             att_label, hrs_label = composite_key.split("|", 1)
             employment_type_raw = {
@@ -215,16 +159,7 @@ class SampleService:
             employment_type_raw = None
 
         # Step 8: housing_tenure -- conditional on (age_group, sex_label)
-        ht_dist = distributions.housing_tenure.get((age_group, sex_label))
-        if ht_dist is None:
-            for fallback_sex in {s for (_, s) in distributions.housing_tenure}:
-                ht_dist = distributions.housing_tenure.get((age_group, fallback_sex))
-                if ht_dist is not None:
-                    break
-        if ht_dist is None:
-            raise ValueError(
-                f"No housing_tenure distribution for age_group={age_group!r}, sex={sex_label!r}"
-            )
+        ht_dist = _require_cell(distributions.housing_tenure, cell, "housing_tenure")
         housing_tenure_label = sample_from(rng, ht_dist)
 
         # Step 9: household_size -- marginal
@@ -234,21 +169,19 @@ class SampleService:
         inc_emp_key = _STATUS_TO_INC_EMP.get(employment_status_label)
         if inc_emp_key is None:
             raise ValueError(f"No income_source employment mapping for: {employment_status_label!r}")
-        inc_age_key: str | None = None
-        inc_emp_dist = distributions.income_source_by_employment_age
-        matched_emp_dist = {age_k: d for (emp_k, age_k), d in inc_emp_dist.items() if emp_k == inc_emp_key}
+        matched_emp_dist = {
+            age_k: d
+            for (emp_k, age_k), d in distributions.income_source_by_employment_age.items()
+            if emp_k == inc_emp_key and d
+        }
         if not matched_emp_dist:
-            for (emp_k, age_k), d in inc_emp_dist.items():
-                if d:
-                    matched_emp_dist = {age_k: d}
-                    break
-        if not matched_emp_dist:
-            raise ValueError(
-                f"No income_source distribution for employment={inc_emp_key!r}"
-            )
+            raise ValueError(f"No income_source distribution for employment={inc_emp_key!r}")
         inc_age_key = _resolve_inc_age_key(age_group, matched_emp_dist)
         if inc_age_key is None:
-            inc_age_key = next(iter(matched_emp_dist))
+            raise ValueError(
+                f"No income_source distribution for cell (employment={inc_emp_key!r}, "
+                f"age_group={age_group!r}); available age keys: {sorted(matched_emp_dist)}"
+            )
         inc_src_dist = matched_emp_dist[inc_age_key]
         income_source_label = sample_from(rng, inc_src_dist)
 
@@ -257,16 +190,7 @@ class SampleService:
         if birth_location_label in _SWEDEN_LABELS:
             birth_country_raw = {"label": birth_location_label}
         else:
-            bc_dist = distributions.birth_country_detail.get((age_group, sex_label))
-            if bc_dist is None:
-                for fallback_sex in {s for (_, s) in distributions.birth_country_detail}:
-                    bc_dist = distributions.birth_country_detail.get((age_group, fallback_sex))
-                    if bc_dist is not None:
-                        break
-            if bc_dist is None:
-                raise ValueError(
-                    f"No birth_country_detail distribution for age_group={age_group!r}, sex={sex_label!r}"
-                )
+            bc_dist = _require_cell(distributions.birth_country_detail, cell, "birth_country_detail")
             birth_country_detail_label = sample_from(rng, bc_dist)
             if birth_country_detail_label in _SWEDEN_LABELS:
                 non_sweden = {k: v for k, v in bc_dist.items() if k not in _SWEDEN_LABELS}

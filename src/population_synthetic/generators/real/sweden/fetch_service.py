@@ -13,6 +13,7 @@ from population_synthetic.generators.real.data import PopulationDistributions
 
 from .constants import (
     AGE_SEX_TABLE,
+    AKU_ATTACHMENT_AGE_LABEL_MAP,
     BIRTH_COUNTRY_DETAIL_TABLE,
     BIRTH_COUNTRY_TOP_CODES,
     CIVIL_STATUS_TABLE,
@@ -21,6 +22,7 @@ from .constants import (
     EMPLOYMENT_ATTACHMENT_TABLE,
     EMPLOYMENT_BY_EDUCATION_TABLE,
     EMPLOYMENT_STATUS_EDU_TABLE,
+    EMPLOYMENT_TYPE_AGE_PROXIES,
     FAMILY_TABLE,
     FOREIGN_BORN_TABLE,
     HOUSEHOLD_SIZE_TABLE,
@@ -347,7 +349,12 @@ class FetchService:
         }
         raw_hours = client.fetch_table(WORKING_HOURS_TABLE, query_hours)
 
-        result = parse_employment_type_combined(raw_attach, raw_hours, age_group_map={})
+        result = parse_employment_type_combined(
+            raw_attach,
+            raw_hours,
+            age_group_map=AKU_ATTACHMENT_AGE_LABEL_MAP,
+            age_proxies=EMPLOYMENT_TYPE_AGE_PROXIES,
+        )
         return result, EMPLOYMENT_ATTACHMENT_TABLE, WORKING_HOURS_TABLE
 
     @staticmethod

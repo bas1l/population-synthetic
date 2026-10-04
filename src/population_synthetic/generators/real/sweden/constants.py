@@ -82,3 +82,16 @@ SCB_INCOME_BRACKETS: list[tuple[str, float, float]] = [
     ("800-999", 800, 1000),
     ("1000+",  1000, 1500),
 ]
+
+# --- employment_type: declared AKU age proxies -------------------------------
+# AKU (AKURLSysAnkAr attachment, NAKUSysselOkArbtidAr hours) covers ages 15-74.
+# Attachment is published for the band "15-24", which the lower-bound age resolver
+# cannot place in the pipeline's 18-24 group; it is mapped there explicitly. The
+# proxy therefore includes ages 15-17 in the 18-24 attachment mix. Hours are
+# published for "20-24", which resolves to 18-24 on its own.
+AKU_ATTACHMENT_AGE_LABEL_MAP: dict[str, str] = {"15-24 years": "18-24"}
+# No AKU table covers ages 75+. The 75-85 cell reuses the 65-74 attachment x
+# hours mix (plan Open question 17 default: a declared nearest-cell proxy,
+# recorded in the output provenance, rather than dropping the attribute). This is
+# the cell the hash-seed-0 run fell back to, so 75-85 personas are unchanged.
+EMPLOYMENT_TYPE_AGE_PROXIES: dict[str, str] = {"75-85": "65-74"}

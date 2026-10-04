@@ -93,7 +93,11 @@ def main() -> None:
         },
         "AM/AM0401/AM0401I/AKURLSysAnkAr": {
             "classification": "AKU",
-            "notes": "Employment attachment type by age/sex (AKU Labour Force Survey -- permanent/temporary/self-employed)",
+            "notes": (
+                "Employment attachment type by age/sex (AKU Labour Force Survey -- permanent/temporary/self-employed). "
+                "Declared age proxies: the AKU 15-24 band supplies the 18-24 attachment mix (includes ages 15-17); "
+                "75-85, outside AKU's 15-74 coverage, reuses the 65-74 attachment x hours mix"
+            ),
         },
         "AM/AM0401/AM0401S/NAKUSysselOkArbtidAr": {
             "classification": "AKU",

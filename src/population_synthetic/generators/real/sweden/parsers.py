@@ -924,7 +924,16 @@ def parse_employment_type_combined(
     raw_attach: dict,
     raw_hours: dict,
     age_group_map: dict,
+    age_proxies: dict[str, str] | None = None,
 ) -> dict[tuple[str, str], dict[str, float]]:
+    """Combine AKU attachment x hours into ``(age_group, sex) -> {"att|hrs": p}``.
+
+    ``age_group_map`` maps API age *labels* onto pipeline groups the lower-bound
+    resolver cannot place (AKU's "15-24 years" -> 18-24). ``age_proxies`` maps a
+    pipeline group with no AKU coverage onto the group whose mix it reuses
+    (75-85 -> 65-74). Every pipeline age group x sex must be covered afterwards,
+    else ``ValueError``.
+    """
     # --- Parse attachment by (age_group, sex) ---
     dims_a = raw_attach.get("dimension", {})
     vals_a = raw_attach.get("value", [])
@@ -1025,7 +1034,9 @@ def parse_employment_type_combined(
     # --- Combine: outer-product of attachment x hours per (age_group, sex) ---
     # Distribution keys are composite strings "{attachment_label}|{hours_label}"
     result: dict[tuple[str, str], dict[str, float]] = {}
-    all_keys = set(attach_by_age_sex.keys()) | set(hours_by_age_sex.keys())
+    # Sorted: a bare set union iterates in PYTHONHASHSEED order, which would make
+    # the result's key order (not its content) differ between processes.
+    all_keys = sorted(set(attach_by_age_sex.keys()) | set(hours_by_age_sex.keys()))
     for key in all_keys:
         age_group, sex = key
         if age_group not in VALID_AGE_GROUPS:
@@ -1046,6 +1057,25 @@ def parse_employment_type_combined(
 
     if not result:
         raise ValueError("No employment_type distribution could be built from attachment + hours data")
+
+    # Declared nearest-cell proxies for age groups no AKU table covers. A proxy
+    # may only fill a gap: overwriting a cell the API delivered, or pointing at a
+    # source cell that is itself missing, raises.
+    sexes = sorted({s for (_, s) in result})
+    for target, source in (age_proxies or {}).items():
+        for sex in sexes:
+            if (target, sex) in result:
+                raise ValueError(
+                    f"employment_type proxy {target}->{source}: cell {(target, sex)!r} is already "
+                    "delivered by the API; the proxy must only fill a gap"
+                )
+            if (source, sex) not in result:
+                raise ValueError(f"employment_type proxy {target}->{source}: source cell {(source, sex)!r} missing")
+            result[(target, sex)] = dict(result[(source, sex)])
+
+    missing = [(ag, s) for ag in VALID_AGE_GROUPS for s in sexes if (ag, s) not in result]
+    if missing:
+        raise ValueError(f"employment_type distribution has no cell for {missing}")
     return result
 
 

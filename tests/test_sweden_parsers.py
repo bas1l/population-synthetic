@@ -425,3 +425,92 @@ def test_parse_employment_status_combined_derivation_end_to_end():
     fb = result[("18-24", "upper secondary education 3 years (isced97 3a)", "men")]
     assert fb["Employed"] == pytest.approx(0.6, abs=1e-6)  # 600/1000 age-only
     assert fb["Student"] == pytest.approx(0.2, abs=1e-6)   # 200/1000
+
+
+# --- employment_type: AKU attachment x hours, declared age proxies ------------
+
+
+def _aku_fixtures() -> tuple[dict, dict]:
+    """Attachment (15-24 .. 65-74) and hours (15-19, 20-24 .. 65-74) payloads.
+
+    Laid out like the live AKU responses: attachment id order (Anknytningsgrad,
+    Kon, Alder), hours id order (VeckoarbetstidO, Kon, Alder). Each age band gets
+    a distinct attachment mix so a proxy that copies the wrong cell is visible.
+    """
+    ages_a = ["15-24", "25-34", "35-44", "45-54", "55-64", "65-74"]
+    ages_h = ["15-19", "20-24", "25-34", "35-44", "45-54", "55-64", "65-74"]
+    sex = [("1", "men"), ("2", "women")]
+
+    def attach_cell(sel: dict) -> float:
+        perm = 10.0 * (ages_a.index(sel["Alder"]) + 1)
+        return {"FA": perm, "TA": 100.0 - perm, "FÖ+MH": 5.0}[sel["Anknytningsgrad"]]
+
+    def hours_cell(sel: dict) -> float:
+        return {"1-19": 10.0, "20-34": 20.0, "35+": 70.0}[sel["VeckoarbetstidO"]]
+
+    raw_a = _jsonstat(
+        ["Anknytningsgrad", "Kon", "Alder"],
+        {
+            "Anknytningsgrad": [("FA", "permanent employees"), ("TA", "temporary employees"),
+                                ("FÖ+MH", "self-employed + family workers")],
+            "Kon": sex,
+            "Alder": [(a, f"{a} years") for a in ages_a],
+        },
+        attach_cell,
+    )
+    raw_h = _jsonstat(
+        ["VeckoarbetstidO", "Kon", "Alder"],
+        {
+            "VeckoarbetstidO": [("1-19", "1-19 hours"), ("20-34", "20-34 hours"), ("35+", "35+ hours")],
+            "Kon": sex,
+            "Alder": [(a, f"{a} years") for a in ages_h],
+        },
+        hours_cell,
+    )
+    return raw_a, raw_h
+
+
+def _p_attach(dist: dict[str, float], attach: str) -> float:
+    return sum(p for k, p in dist.items() if k.split("|", 1)[0] == attach)
+
+
+def test_employment_type_maps_aku_15_24_onto_18_24_and_proxies_75_85():
+    from population_synthetic.generators.real.sweden.constants import (
+        AKU_ATTACHMENT_AGE_LABEL_MAP,
+        EMPLOYMENT_TYPE_AGE_PROXIES,
+    )
+
+    raw_a, raw_h = _aku_fixtures()
+    result = P.parse_employment_type_combined(
+        raw_a, raw_h, AKU_ATTACHMENT_AGE_LABEL_MAP, EMPLOYMENT_TYPE_AGE_PROXIES
+    )
+    groups = ("18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85")
+    assert set(result) == {(g, s) for g in groups for s in ("men", "women")}
+    # 18-24 carries the AKU 15-24 attachment mix (FA = 10 of 105), not 65-74's.
+    assert _p_attach(result[("18-24", "men")], "permanent employees") == pytest.approx(10 / 105)
+    # 75-85 is an exact copy of 65-74 (the declared proxy).
+    assert result[("75-85", "women")] == result[("65-74", "women")]
+    assert result[("75-85", "women")] is not result[("65-74", "women")]
+    for dist in result.values():
+        assert _sums_to_one(dist)
+
+
+def test_employment_type_raises_when_an_age_group_is_uncovered():
+    raw_a, raw_h = _aku_fixtures()
+    # Without the 15-24 label map and the 75-85 proxy, 18-24 and 75-85 are gaps.
+    with pytest.raises(ValueError, match="no cell for"):
+        P.parse_employment_type_combined(raw_a, raw_h, {})
+
+
+def test_employment_type_proxy_must_not_overwrite_a_delivered_cell():
+    raw_a, raw_h = _aku_fixtures()
+    with pytest.raises(ValueError, match="already delivered"):
+        P.parse_employment_type_combined(
+            raw_a, raw_h, {"15-24 years": "18-24"}, {"75-85": "65-74", "25-34": "35-44"}
+        )
+
+
+def test_employment_type_proxy_source_must_exist():
+    raw_a, raw_h = _aku_fixtures()
+    with pytest.raises(ValueError, match="source cell"):
+        P.parse_employment_type_combined(raw_a, raw_h, {}, {"75-85": "18-24"})
