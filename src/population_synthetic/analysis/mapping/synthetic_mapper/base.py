@@ -34,6 +34,16 @@ Three responsibilities remain in the mapper itself:
   absorbs into a real category. The mapped record alone cannot express this (the
   engine returns the sentinel or the literal and nothing else), so diagnosing *which
   LLM value* failed to map is only possible from this log.
+- **Tie recording** -- every resolution in which more than one value hit in the
+  winning tier is appended to ``self.ties`` (candidates with their scores and
+  tokens, the winner, and the ``tie_break`` criterion that decided it), as is every
+  ``numeric_facet`` read left ambiguous (criterion ``facet_ambiguous``). The loader
+  writes the list to the ``{slug}.ties.csv`` sidecar.
+
+The mapping directory is validated once, at construction
+(:func:`mapping_engine.validate_mappings`): a missing ``matching`` block, an unknown
+matcher key, a ``priority`` list that is not a permutation of ``values`` or a
+malformed facet raises before any persona is mapped.
 """
 
 from __future__ import annotations
@@ -115,6 +125,11 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
             raise ValueError("synthetic mapper requires an '_index' block declaring 'attributes'")
         #: Ordered ``attribute -> config filename`` map (key order = axis order).
         self._attributes: dict[str, str] = index["attributes"]
+        #: Compiled synthetic-side matching options; validation raises on bad config.
+        self._matching = mapping_engine.validate_mappings(mappings, "synthetic mapping config")["synthetic"]
+        #: Multi-hit / ambiguous-facet log (one record per tied resolution), mirroring
+        #: :attr:`misses`; written to ``{slug}.ties.csv`` by the loader.
+        self.ties: list[dict[str, Any]] = []
         #: Total-miss log, appended to across every ``map_individual`` call on this
         #: instance (one instance maps one population). Each record is
         #: ``{persona_id, attribute, raw_value, mapped_to, masked_by_on_miss}``.
@@ -139,10 +154,11 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
     def _resolve_attr(self, attr: str, identity: dict, resolved: dict[str, Any], persona_id: str) -> Any:
         """Resolve one attribute against *identity*, memoising into *resolved*.
 
-        Delegates to :func:`mapping_engine.resolve_detailed` with the attribute's
+        Delegates to :func:`mapping_engine.resolve_traced` with the attribute's
         ``synthetic`` block, resolving a ``refine_from`` sibling first when declared
         (e.g. ``birth_location`` refined from ``birth_country_detail``). A total miss
-        is appended to :attr:`misses` with the raw string that caused it. Memoisation
+        is appended to :attr:`misses` with the raw string that caused it; a tie or an
+        ambiguous numeric facet is appended to :attr:`ties`. Memoisation
         also de-duplicates the record: an attribute pulled in early as a
         ``refine_from`` sibling is resolved -- and therefore recorded -- exactly once.
         """
@@ -158,12 +174,36 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
         if refine_from is not None:
             refine_value = self._resolve_attr(refine_from, identity, resolved, persona_id)
 
-        value, missed = mapping_engine.resolve_detailed(raw, rules_block, values, refine_value=refine_value)
+        res = mapping_engine.resolve_traced(
+            raw, rules_block, values, matching=self._matching, priority=block["priority"], refine_value=refine_value
+        )
+        value, missed = res.value, res.missed
+        raw_text = "" if raw is None else str(raw)
+        if len(res.candidates) > 1:
+            self.ties.append({
+                "persona_id": persona_id,
+                "attribute": attr,
+                "raw_value": raw_text,
+                "tier": res.tier,
+                "candidates": " | ".join(f"{c.value}:{c.score}:{c.token}" for c in res.candidates),
+                "winner": res.walked_value,
+                "criterion": res.criterion,
+            })
+        if res.facet == "ambiguous":
+            self.ties.append({
+                "persona_id": persona_id,
+                "attribute": attr,
+                "raw_value": raw_text,
+                "tier": "numeric_facet",
+                "candidates": " | ".join(res.facet_bands),
+                "winner": value,
+                "criterion": "facet_ambiguous",
+            })
         if missed:
             self.misses.append({
                 "persona_id": persona_id,
                 "attribute": attr,
-                "raw_value": "" if raw is None else str(raw),
+                "raw_value": raw_text,
                 "mapped_to": value,
                 "masked_by_on_miss": not is_unmapped(value),
             })

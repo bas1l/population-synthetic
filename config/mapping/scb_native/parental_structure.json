@@ -7,6 +7,14 @@
     "Single Father",
     "Other Than Parents"
   ],
+  "priority": [
+    "Natural Parents",
+    "Mother and Stepparent",
+    "Father and Stepparent",
+    "Single Mother",
+    "Single Father",
+    "Other Than Parents"
+  ],
   "real": {
     "Natural Parents": {
       "equals": [

@@ -15,7 +15,8 @@ For every comparison attribute file in each country dir this test asserts:
 3. every non-directive key of the ``synthetic`` block is a declared ``value``;
 4. any ``refine_from`` directive names an attribute present in the master.
 
-Directive keys (``absent`` / ``refine_from`` / ``on_miss``) are the only
+Directive keys (the engine's ``_DIRECTIVE_KEYS``: ``absent`` / ``refine_from`` /
+``on_miss`` / ``subfields`` / ``tie_break`` / ``negation`` / ``numeric_facet``) are the only
 non-value keys permitted on a rules block. ``age.json`` is values-only (``age_group``
 is derived at scoring time), so its missing ``real`` / ``synthetic`` blocks are
 skipped. The check reads the real ``config/mapping/{scb,istat}`` files (no mapper run),
@@ -29,12 +30,10 @@ import json
 import pytest
 
 from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.mapping.mapping_engine import _DIRECTIVE_KEYS
 from population_synthetic.analysis.mapping.real_mapper.mappings import load_index
 
 _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
-
-#: The only non-``value`` keys a ``real`` / ``synthetic`` rules block may carry.
-_DIRECTIVE_KEYS = {"absent", "refine_from", "on_miss"}
 
 _COUNTRY_DIRS = {"swedish": "scb", "italian": "istat"}
 

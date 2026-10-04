@@ -6,8 +6,35 @@ matcher tier, directive, and precedence rule can be exercised in isolation --
 before any production config is rewritten.
 """
 
-from population_synthetic.analysis.mapping.mapping_engine import normalize, resolve, resolve_detailed
+import pytest
+
+from population_synthetic.analysis.mapping import mapping_engine
+from population_synthetic.analysis.mapping.mapping_engine import (
+    MappingConfigError,
+    compile_matching,
+    normalize,
+    resolve_traced,
+    validate_mappings,
+    validate_priority,
+    validate_rules,
+)
 from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED, is_unmapped
+
+from ._mapping_fixtures import SUBSTRING_MATCHING, with_matching
+
+
+# The tests in this module pin the historic behaviour: they declare the
+# behaviour-preserving matching options explicitly (substring tokens, no negation,
+# ties broken by a ``priority`` list equal to the declared ``values`` order).
+def resolve(raw, block, values, **kwargs):
+    return mapping_engine.resolve(raw, block, values, matching=SUBSTRING_MATCHING, priority=list(values), **kwargs)
+
+
+def resolve_detailed(raw, block, values, **kwargs):
+    return mapping_engine.resolve_detailed(
+        raw, block, values, matching=SUBSTRING_MATCHING, priority=list(values), **kwargs
+    )
+
 
 # --- equals / contains precedence and first-match-by-order -----------------
 
@@ -275,3 +302,356 @@ def test_is_unmapped_recognizes_sentinel_and_legacy_none():
     assert is_unmapped("") is False
     assert is_unmapped(0) is False
     assert is_unmapped("Not Applicable") is False
+
+
+# ===========================================================================
+# Matching options: token boundaries, negation, tie-break, numeric facet and
+# config validation (the ``_index.json`` ``matching`` block)
+# ===========================================================================
+
+_NEG = {
+    "cues": ["not", "no", "inte", "ej", "ingen", "never", "non"],
+    "window": 2,
+    "clause_breaks": [",", ";", ":", "(", ")", "/", ".", " - ", "but", "men", "och", "and"],
+}
+
+
+def _m(token_mode="prefix", negation=None, tie_break=("longest", "priority")):
+    return {"token_mode": token_mode, "negation": negation, "tie_break": list(tie_break)}
+
+
+def _r(raw, block, values, matching, priority=None, **kwargs):
+    return mapping_engine.resolve(raw, block, values, matching=matching, priority=priority or list(values), **kwargs)
+
+
+# --- token boundaries ------------------------------------------------------
+
+def test_prefix_rejects_left_embedded_token():
+    values = ["3A", "Male", "Rental", "Short"]
+    block = {
+        "3A": {"contains": ["gymnasial"]},
+        "Male": {"contains": ["male"]},
+        "Rental": {"contains": ["rent"]},
+        "Short": {"contains": ["0 timmar"]},
+    }
+    prefix, substring = _m("prefix"), _m("substring")
+    for raw in ("Eftergymnasial utbildning", "female", "living with parents", "40 timmar i veckan"):
+        assert _r(raw, block, values, prefix) == UNMAPPED, raw
+        assert _r(raw, block, values, substring) != UNMAPPED, raw
+    # The unembedded forms still hit under prefix.
+    assert _r("Gymnasial utbildning", block, values, prefix) == "3A"
+    assert _r("0 timmar", block, values, prefix) == "Short"
+    assert _r("(0 timmar)", block, values, prefix) == "Short"
+
+
+def test_number_boundary_digit_counts_as_alphanumeric():
+    block = {"Zero": {"contains": ["0 timmar"]}, "Forty": {"contains": ["40 timmar"]}}
+    values = ["Zero", "Forty"]
+    assert _r("arbetar 40 timmar", block, values, _m("prefix")) == "Forty"
+    assert _r("arbetar 0 timmar", block, values, _m("prefix")) == "Zero"
+
+
+def test_prefix_accepts_compound_modifier():
+    block = {"5A": {"contains": ["högskole"]}}
+    assert _r("Högskoleexamen", block, ["5A"], _m("prefix")) == "5A"
+
+
+def test_substring_override_matches_compound_head():
+    values = ["Wage"]
+    plain = {"Wage": {"contains": ["lön"]}}
+    override = {"Wage": {"contains": [{"token": "lön", "mode": "substring"}]}}
+    assert _r("Månadslön", plain, values, _m("prefix")) == UNMAPPED
+    assert _r("Månadslön", override, values, _m("prefix")) == "Wage"
+
+
+def test_word_mode_requires_both_boundaries():
+    block = {"Gift": {"contains": ["gift"]}}
+    assert _r("gift", block, ["Gift"], _m("word")) == "Gift"
+    assert _r("gifta sig", block, ["Gift"], _m("word")) == UNMAPPED
+    assert _r("gifta sig", block, ["Gift"], _m("prefix")) == "Gift"
+    # A per-token word override inside a prefix side.
+    block_w = {"Gift": {"contains": [{"token": "gift", "mode": "word"}]}}
+    assert _r("gifta sig", block_w, ["Gift"], _m("prefix")) == UNMAPPED
+
+
+def test_token_mode_applies_to_all_of_and_none_of():
+    values = ["PermFull", "Other"]
+    block = {
+        "PermFull": {"all_of": [["fast"], ["heltid"]], "none_of": ["deltid"]},
+        "Other": {"contains": ["anställ"]},
+    }
+    # all_of member "fast" embedded in "Bofast" does not count under prefix.
+    assert _r("Bofast anställd heltid", block, values, _m("prefix")) == "Other"
+    assert _r("Bofast anställd heltid", block, values, _m("substring")) == "PermFull"
+    # none_of "deltid" embedded in "xdeltid" does not veto under prefix.
+    assert _r("fast heltid, anställd xdeltid", block, values, _m("prefix")) == "PermFull"
+    assert _r("fast heltid, anställd xdeltid", block, values, _m("substring")) == "Other"
+
+
+# --- negation ---------------------------------------------------------------
+
+def test_negation_cue_suppresses_following_token():
+    values = ["Married", "Employed"]
+    block = {"Married": {"contains": ["gift"]}, "Employed": {"contains": ["employed"]}}
+    neg = _m("prefix", _NEG)
+    assert _r("inte gift", block, values, neg) == UNMAPPED
+    assert _r("not employed", block, values, neg) == UNMAPPED
+    assert _r("gift", block, values, neg) == "Married"
+    # Without negation the historic engine hits.
+    assert _r("inte gift", block, values, _m("prefix")) == "Married"
+
+
+def test_negation_window_counts_words():
+    block = {"Employed": {"contains": ["employed"]}}
+    neg = _m("prefix", _NEG)
+    assert _r("not currently employed", block, ["Employed"], neg) == UNMAPPED   # cue 2 words back
+    assert _r("not at all currently employed", block, ["Employed"], neg) == "Employed"  # outside window
+
+
+def test_negation_stops_at_clause_break():
+    values = ["NA", "Retired"]
+    block = {"NA": {"contains": ["anställning"]}, "Retired": {"contains": ["pensionär"]}}
+    neg = _m("prefix", _NEG)
+    # "Ingen" negates "anställning" but the clause break ends its scope, so "pensionär" stands.
+    assert _r("Ingen anställning - pensionär", block, values, neg) == "Retired"
+    assert _r("Ingen anställning, pensionär", block, values, neg) == "Retired"
+    # Past tense is not negation.
+    assert _r("tidigare anställning", block, values, neg) == "NA"
+
+
+def test_token_starting_with_cue_not_negated():
+    values = ["Single", "Married"]
+    block = {"Single": {"contains": ["never married"]}, "Married": {"contains": ["married"]}}
+    neg = _m("prefix", _NEG, tie_break=["priority"])
+    # "married" inside "never married" is negated; the Single token itself is not.
+    assert _r("never married", block, values, neg, priority=["Married", "Single"]) == "Single"
+    assert _r("never married", block, values, _m("prefix", tie_break=["priority"]),
+              priority=["Married", "Single"]) == "Married"
+    assert _r("married", block, values, neg) == "Married"
+
+
+def test_negated_veto_does_not_veto():
+    block = {"Employed": {"contains": ["arbetar"], "none_of": ["student"]}}
+    neg = _m("prefix", _NEG)
+    assert _r("arbetar, student", block, ["Employed"], neg) == UNMAPPED
+    assert _r("arbetar, inte student", block, ["Employed"], neg) == "Employed"
+
+
+def test_attribute_negation_opt_out():
+    block = {"Outside EU": {"contains": ["eu"]}}
+    neg = _m("prefix", _NEG)
+    assert _r("non eu", block, ["Outside EU"], neg) == UNMAPPED
+    opted = {"negation": None, **block}
+    assert _r("non eu", opted, ["Outside EU"], neg) == "Outside EU"
+
+
+def test_equals_is_not_subject_to_negation():
+    block = {"NA": {"equals": ["ej anställd"]}}
+    assert _r("Ej anställd", block, ["NA"], _m("prefix", _NEG)) == "NA"
+
+
+# --- tie-break --------------------------------------------------------------
+
+def test_tie_break_longest_beats_values_order():
+    values = ["Owner", "Tenant-owned"]
+    block = {"Owner": {"contains": ["äg"]}, "Tenant-owned": {"contains": ["bostadsrätt"]}}
+    raw = "äger en bostadsrätt"
+    assert _r(raw, block, values, _m("substring", tie_break=["priority"])) == "Owner"
+    assert _r(raw, block, values, _m("substring")) == "Tenant-owned"
+
+
+def test_tie_break_longest_scores_all_of_by_summed_groups():
+    values = ["A", "B"]
+    block = {"A": {"all_of": [["ab"], ["cd"]]}, "B": {"all_of": [["abc"]]}}
+    assert _r("abc cd", block, values, _m("substring"), priority=["B", "A"]) == "A"  # 2 + 2 > 3
+
+
+def test_tie_break_priority_uses_priority_list_not_values():
+    values = ["Student", "Employed"]
+    block = {"Student": {"contains": ["studerar"]}, "Employed": {"contains": ["arbetar"]}}
+    raw = "studerar och arbetar"
+    m = _m("substring", tie_break=["priority"])
+    assert _r(raw, block, values, m, priority=["Student", "Employed"]) == "Student"
+    assert _r(raw, block, values, m, priority=["Employed", "Student"]) == "Employed"
+    # An attribute-level tie_break override replaces the side default.
+    override = {"tie_break": ["priority"], **block}
+    longest = _m("substring")
+    assert _r(raw, block, values, longest, priority=["Employed", "Student"]) == "Student"
+    assert _r(raw, override, values, longest, priority=["Employed", "Student"]) == "Employed"
+
+
+def test_equal_length_tie_falls_to_priority_and_is_reported():
+    values = ["A", "B"]
+    block = {"A": {"contains": ["xyz"]}, "B": {"contains": ["abc"]}}
+    res = resolve_traced("abc xyz", block, values, matching=_m("substring"), priority=["B", "A"])
+    assert res.value == "B"
+    assert res.criterion == "priority"
+    assert {c.value for c in res.candidates} == {"A", "B"}
+    res2 = resolve_traced("abcd xyz", {"A": {"contains": ["xyz"]}, "B": {"contains": ["abcd"]}},
+                          values, matching=_m("substring"), priority=["A", "B"])
+    assert (res2.value, res2.criterion) == ("B", "longest")
+    single = resolve_traced("xyz", block, values, matching=_m("substring"), priority=values)
+    assert (single.criterion, len(single.candidates)) == (None, 1)
+
+
+def test_tier_precedence_unchanged_by_longest():
+    values = ["Broad", "Exact"]
+    block = {"Broad": {"contains": ["a very long token"]}, "Exact": {"equals": ["x a very long token"]}}
+    assert _r("x a very long token", block, values, _m("substring")) == "Exact"
+
+
+# --- numeric facet -----------------------------------------------------------
+
+_HOURS = r"(\d+(?:[.,]\d+)?)(?:\s*-\s*(\d+(?:[.,]\d+)?))?\s*(?:h\b|hours?\b|timmar\b)"
+_PCT = r"(\d+(?:[.,]\d+)?)(?:\s*-\s*(\d+(?:[.,]\d+)?))?\s*%"
+_FACET_VALUES = ["Perm Full", "Perm Part", "Perm Short", "NA"]
+
+
+def _facet_block():
+    return {
+        "numeric_facet": {
+            "extract": [{"pattern": _HOURS, "scale": 1.0}, {"pattern": _PCT, "scale": 0.4}],
+            "ambiguous_if_preceded_by": ["över", "under", "<", ">", "more than", "up to"],
+            "bands": [{"name": "short", "gte": 1, "lt": 20}, {"name": "part", "gte": 20, "lt": 35},
+                      {"name": "full", "gte": 35}],
+            "remap": {v: {"short": "Perm Short", "part": "Perm Part", "full": "Perm Full"}
+                      for v in ("Perm Full", "Perm Part", "Perm Short")},
+        },
+        "Perm Full": {"contains": ["fast"]},
+        "NA": {"contains": ["pension"]},
+    }
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("fast, 1 h", "Perm Short"),
+    ("fast, 15 h", "Perm Short"),
+    ("fast, 19 h", "Perm Short"),
+    ("fast, 20 h", "Perm Part"),
+    ("fast, 34.5 h", "Perm Part"),
+    ("fast, 34,5 timmar", "Perm Part"),
+    ("fast, 35 h", "Perm Full"),
+    ("fast, 40 timmar i veckan", "Perm Full"),
+    ("fast, 80%", "Perm Part"),
+    ("fast, 90 %", "Perm Full"),
+    ("fast, 20-34 timmar", "Perm Part"),
+    ("fast tjänst", "Perm Full"),        # no hours stated: walked value kept
+    ("fast, 0 timmar", "Perm Full"),     # 0 is in no band: never overrides
+    ("pension 10 h", "NA"),              # walked value not in remap
+])
+def test_numeric_facet_rebands(raw, expected):
+    assert _r(raw, _facet_block(), _FACET_VALUES, _m("prefix")) == expected
+
+
+@pytest.mark.parametrize("raw", ["fast, 15-25 timmar", "fast, över 30 timmar", "fast, 10 h eller 40 h"])
+def test_numeric_facet_straddle_or_comparator_is_ambiguous_and_logged(raw):
+    res = resolve_traced(raw, _facet_block(), _FACET_VALUES, matching=_m("prefix"), priority=_FACET_VALUES)
+    assert res.value == "Perm Full"
+    assert res.facet == "ambiguous"
+
+
+# --- config validation -------------------------------------------------------
+
+def _dir(**index_extra):
+    return {
+        "_index": {"attributes": {"sex": "sex.json"}, **index_extra},
+        "sex": {"values": ["M", "F"], "priority": ["M", "F"],
+                "real": {"M": {"equals": ["1"]}}, "synthetic": {"M": {"contains": ["man"]}}},
+    }
+
+
+def test_valid_directory_compiles_both_sides():
+    out = validate_mappings(with_matching(_dir()))
+    assert set(out) == {"real", "synthetic"}
+
+
+def test_missing_matching_block_raises():
+    with pytest.raises(MappingConfigError, match="'matching' block is required"):
+        validate_mappings(_dir())
+
+
+def test_matching_block_missing_a_side_raises():
+    with pytest.raises(MappingConfigError, match="must declare exactly"):
+        validate_mappings(_dir(matching={"real": _m("substring")}))
+
+
+def test_matching_block_missing_a_key_raises():
+    with pytest.raises(MappingConfigError, match="must declare exactly"):
+        compile_matching({"token_mode": "prefix", "tie_break": ["priority"]})
+
+
+def test_unknown_token_mode_raises():
+    with pytest.raises(MappingConfigError, match="unknown token_mode"):
+        compile_matching(_m("fuzzy"))
+    with pytest.raises(MappingConfigError, match="unknown token mode"):
+        validate_rules({"M": {"contains": [{"token": "man", "mode": "fuzzy"}]}}, ["M"], "t")
+
+
+def test_unknown_matcher_key_raises():
+    # "contain" is a typo: it must raise, not be read as a composite sub-field.
+    with pytest.raises(MappingConfigError, match="unknown matcher key 'contain'"):
+        validate_rules({"M": {"contain": ["man"]}}, ["M"], "t")
+    # A declared sub-field is fine.
+    validate_rules({"subfields": ["hours"], "M": {"hours": {"contains": ["35+"]}}}, ["M"], "t")
+
+
+def test_unknown_block_key_raises():
+    with pytest.raises(MappingConfigError, match="unknown key 'Mle'"):
+        validate_rules({"Mle": {"contains": ["man"]}}, ["M"], "t")
+
+
+def test_priority_must_be_permutation_of_values():
+    with pytest.raises(MappingConfigError, match="permutation"):
+        validate_priority({"values": ["M", "F"], "priority": ["M"]}, "t")
+    with pytest.raises(MappingConfigError, match="permutation"):
+        validate_priority({"values": ["M", "F"], "priority": ["M", "X"]}, "t")
+    with pytest.raises(MappingConfigError, match="'priority' list is required"):
+        validate_priority({"values": ["M", "F"]}, "t")
+
+
+@pytest.mark.parametrize("window", [0, -1, 1.5, True, "2"])
+def test_negation_window_positive_int(window):
+    with pytest.raises(MappingConfigError, match="window"):
+        compile_matching(_m(negation={**_NEG, "window": window}))
+
+
+def test_negation_cue_must_be_single_word():
+    with pytest.raises(MappingConfigError, match="single word"):
+        compile_matching(_m(negation={**_NEG, "cues": ["not at all"]}))
+
+
+def test_attribute_negation_may_only_opt_out():
+    with pytest.raises(MappingConfigError, match="opt out"):
+        validate_rules({"negation": {"cues": ["x"]}, "M": {"contains": ["m"]}}, ["M"], "t")
+
+
+def test_tie_break_must_end_with_priority():
+    with pytest.raises(MappingConfigError, match="end with 'priority'"):
+        compile_matching(_m(tie_break=["longest"]))
+    with pytest.raises(MappingConfigError, match="unknown tie_break"):
+        compile_matching(_m(tie_break=["shortest", "priority"]))
+    with pytest.raises(MappingConfigError, match="end with 'priority'"):
+        validate_rules({"tie_break": ["longest"], "M": {"contains": ["m"]}}, ["M"], "t")
+
+
+def test_facet_remap_target_must_be_value():
+    block = _facet_block()
+    block["numeric_facet"]["remap"]["Perm Full"]["short"] = "Perm Tiny"
+    with pytest.raises(MappingConfigError, match="not one of values"):
+        validate_rules(block, _FACET_VALUES, "t")
+
+
+def test_facet_bands_must_not_overlap():
+    block = _facet_block()
+    block["numeric_facet"]["bands"][1]["gte"] = 15
+    with pytest.raises(MappingConfigError, match="overlap"):
+        validate_rules(block, _FACET_VALUES, "t")
+
+
+def test_empty_token_raises():
+    with pytest.raises(MappingConfigError, match="empty token"):
+        validate_rules({"M": {"contains": [""]}}, ["M"], "t")
+
+
+def test_equals_rejects_token_objects():
+    with pytest.raises(MappingConfigError, match="token must be a string"):
+        validate_rules({"M": {"equals": [{"token": "m", "mode": "prefix"}]}}, ["M"], "t")

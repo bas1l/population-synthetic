@@ -22,6 +22,29 @@
     "Blekinge",
     "Gotland"
   ],
+  "priority": [
+    "Stockholm",
+    "Västra Götaland",
+    "Skåne",
+    "Östergötland",
+    "Uppsala",
+    "Halland",
+    "Örebro",
+    "Jönköping",
+    "Gävleborg",
+    "Södermanland",
+    "Värmland",
+    "Dalarna",
+    "Västerbotten",
+    "Norrbotten",
+    "Kalmar",
+    "Västernorrland",
+    "Västmanland",
+    "Kronoberg",
+    "Jämtland",
+    "Blekinge",
+    "Gotland"
+  ],
   "real": {
     "Stockholm": {
       "equals": [

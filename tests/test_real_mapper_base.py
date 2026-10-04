@@ -22,7 +22,7 @@ import pytest
 from population_synthetic.analysis.mapping.real_mapper.base import BaseRealMapper
 from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED
 
-from ._mapping_fixtures import new_shape_mappings
+from ._mapping_fixtures import new_shape_mappings, with_matching
 
 
 def _real_record() -> dict:
@@ -58,11 +58,11 @@ def test_index_without_attributes_raises():
 
 
 def test_missing_config_block_for_attribute_raises():
-    # The master references ``age.json`` but no ``age`` block is present.
-    mappings = {"_index": {"attributes": {"employment_type": "employment_type.json"}}}
-    mapper = BaseRealMapper(mappings)
-    with pytest.raises(ValueError, match="missing config block"):
-        mapper.normalize_individual({"id": "x", "employment_type": {"attachment": {"label": "z"}}})
+    # The master references ``employment_type.json`` but no such block is present:
+    # construction-time validation rejects the directory before any record is mapped.
+    mappings = with_matching({"_index": {"attributes": {"employment_type": "employment_type.json"}}})
+    with pytest.raises(ValueError, match="attribute config file is missing"):
+        BaseRealMapper(mappings)
 
 
 # --- end-to-end resolution -------------------------------------------------

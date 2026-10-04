@@ -8,6 +8,15 @@
     "6 persons",
     "7+ persons"
   ],
+  "priority": [
+    "1 person",
+    "2 persons",
+    "3 persons",
+    "4 persons",
+    "5 persons",
+    "6 persons",
+    "7+ persons"
+  ],
   "real": {
     "1 person": {
       "equals": [

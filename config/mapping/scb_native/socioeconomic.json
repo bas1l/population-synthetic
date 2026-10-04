@@ -5,6 +5,12 @@
     "Middle Class",
     "Wealthy"
   ],
+  "priority": [
+    "Poverty",
+    "Working Class",
+    "Middle Class",
+    "Wealthy"
+  ],
   "real": {
     "Poverty": {
       "equals": [

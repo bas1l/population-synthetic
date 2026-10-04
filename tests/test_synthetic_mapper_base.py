@@ -22,7 +22,7 @@ import pytest
 from population_synthetic.analysis.mapping.synthetic_mapper import get_synthetic_mapper
 from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
 
-from ._mapping_fixtures import new_shape_mappings
+from ._mapping_fixtures import new_shape_mappings, with_matching
 
 
 def _synth_mapper() -> BaseSyntheticMapper:
@@ -129,6 +129,66 @@ def test_misses_accumulate_across_personas_and_skip_refine_duplicates():
     per_persona = [m for m in mapper.misses if m["persona_id"] == "persona_0"]
     attrs = [m["attribute"] for m in per_persona]
     assert len(attrs) == len(set(attrs))
+
+
+# --- tie log (the {slug}.ties.csv sidecar) -----------------------------------
+
+def test_ties_record_candidates_winner_and_criterion():
+    mappings = with_matching(
+        new_shape_mappings(),
+        synthetic={"token_mode": "substring", "negation": None, "tie_break": ["longest", "priority"]},
+    )
+    mapper = BaseSyntheticMapper(mappings)
+    # Both Secondary ("secondary") and Tertiary ("tertiary") hit in the contains tier;
+    # "secondary" is longer, so ``longest`` decides against the declared order.
+    out = mapper.map_individual({"age": 30, "education_level": "post-secondary or tertiary"}, "persona_7")
+    assert out["education_level"] == "Secondary"
+    ties = [t for t in mapper.ties if t["attribute"] == "education_level"]
+    assert len(ties) == 1
+    tie = ties[0]
+    assert tie["persona_id"] == "persona_7"
+    assert tie["raw_value"] == "post-secondary or tertiary"
+    assert tie["tier"] == "contains"
+    assert tie["winner"] == "Secondary"
+    assert tie["criterion"] == "longest"
+    assert "Secondary:9:secondary" in tie["candidates"]
+    assert "Tertiary:8:tertiary" in tie["candidates"]
+
+
+def test_single_hit_is_not_a_tie():
+    mapper = _synth_mapper()
+    mapper.map_individual({"age": 30, "education_level": "university"}, "p")
+    assert mapper.ties == []
+
+
+def test_ambiguous_numeric_facet_is_logged_as_tie_row():
+    mappings = new_shape_mappings()
+    et = mappings["employment_type"]
+    et["synthetic"]["numeric_facet"] = {
+        "extract": [{"pattern": r"(\d+)(?:\s*-\s*(\d+))?\s*(?:h\b|timmar\b)", "scale": 1.0}],
+        "ambiguous_if_preceded_by": ["över"],
+        "bands": [{"name": "part", "gte": 1, "lt": 35}, {"name": "full", "gte": 35}],
+        "remap": {
+            "Permanent Full-time": {"part": "Permanent Part-time", "full": "Permanent Full-time"},
+            "Permanent Part-time": {"part": "Permanent Part-time", "full": "Permanent Full-time"},
+        },
+    }
+    mapper = BaseSyntheticMapper(mappings)
+    out = mapper.map_individual({"age": 30, "employment_type": "fast heltid, 20 h"}, "p1")
+    assert out["employment_type"] == "Permanent Part-time"           # re-banded from stated hours
+    assert mapper.ties == []
+    out = mapper.map_individual({"age": 30, "employment_type": "fast heltid, 30-40 timmar"}, "p2")
+    assert out["employment_type"] == "Permanent Full-time"           # straddle: walked value kept
+    (row,) = mapper.ties
+    assert (row["persona_id"], row["criterion"], row["tier"]) == ("p2", "facet_ambiguous", "numeric_facet")
+    assert row["candidates"] == "full | part"
+
+
+def test_invalid_config_raises_at_construction():
+    mappings = new_shape_mappings()
+    mappings["education"]["synthetic"]["Primary"] = {"contain": ["primary"]}
+    with pytest.raises(ValueError, match="unknown matcher key 'contain'"):
+        BaseSyntheticMapper(mappings)
 
 
 # --- real-config integration: the Sweden Nordic-fold reconciliation ---------

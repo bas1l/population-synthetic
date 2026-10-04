@@ -6,6 +6,13 @@
     "Elementary Occupations",
     "Not Applicable"
   ],
+  "priority": [
+    "Professional & Managerial",
+    "Clerical & Administrative",
+    "Craft & Technical",
+    "Elementary Occupations",
+    "Not Applicable"
+  ],
   "real": {
     "Professional & Managerial": {
       "equals": [

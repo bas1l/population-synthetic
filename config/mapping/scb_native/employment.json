@@ -7,6 +7,14 @@
     "Sick Leave",
     "Other"
   ],
+  "priority": [
+    "Employed",
+    "Unemployed",
+    "Student",
+    "Retired",
+    "Sick Leave",
+    "Other"
+  ],
   "real": {
     "Employed": {
       "equals": [

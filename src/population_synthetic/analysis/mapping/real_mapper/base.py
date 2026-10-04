@@ -118,7 +118,9 @@ class BaseRealMapper(AbstractRealMapper):
 
         *mappings* is the per-country config merged by ``load_mappings`` (one entry
         per file, keyed by file stem, including the ``_index`` master). Fails fast
-        when no ``_index`` block with an ``attributes`` map is present.
+        when no ``_index`` block with an ``attributes`` map is present, and on any
+        defect :func:`mapping_engine.validate_mappings` finds (missing ``matching``
+        block, unknown matcher key, bad ``priority`` list, ...).
         """
         self.mappings = mappings
         index = mappings.get("_index")
@@ -126,6 +128,8 @@ class BaseRealMapper(AbstractRealMapper):
             raise ValueError("real mapper requires an '_index' block declaring 'attributes'")
         #: Ordered ``attribute -> config filename`` map (key order = axis order).
         self._attributes: dict[str, str] = index["attributes"]
+        #: Compiled real-side matching options; validation raises on bad config.
+        self._matching = mapping_engine.validate_mappings(mappings, "real mapping config")["real"]
 
     # -- config access ------------------------------------------------------
 
@@ -164,7 +168,9 @@ class BaseRealMapper(AbstractRealMapper):
         if refine_from is not None:
             refine_value = self._resolve_attr(refine_from, record, resolved)
 
-        value = mapping_engine.resolve(raw, rules_block, values, refine_value=refine_value)
+        value = mapping_engine.resolve(
+            raw, rules_block, values, matching=self._matching, priority=block["priority"], refine_value=refine_value
+        )
         resolved[attr] = value
         return value
 

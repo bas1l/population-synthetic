@@ -11,7 +11,23 @@
     "Self-Employed Short Part-time",
     "Not Applicable"
   ],
+  "priority": [
+    "Permanent Full-time",
+    "Permanent Part-time",
+    "Permanent Short Part-time",
+    "Temporary Full-time",
+    "Temporary Part-time",
+    "Temporary Short Part-time",
+    "Self-Employed Full-time",
+    "Self-Employed Part-time",
+    "Self-Employed Short Part-time",
+    "Not Applicable"
+  ],
   "real": {
+    "subfields": [
+      "attachment",
+      "hours"
+    ],
     "Permanent Full-time": {
       "attachment": {
         "contains": [

@@ -3,6 +3,10 @@
     "Male",
     "Female"
   ],
+  "priority": [
+    "Male",
+    "Female"
+  ],
   "real": {
     "Male": {
       "equals": [

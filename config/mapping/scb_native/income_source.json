@@ -9,6 +9,16 @@
     "General Allowances",
     "Housing Allowance"
   ],
+  "priority": [
+    "Wage / Business",
+    "Capital",
+    "Pension",
+    "Insurance / Allowance",
+    "Social Assistance",
+    "Sickness / Activity Compensation",
+    "General Allowances",
+    "Housing Allowance"
+  ],
   "real": {
     "Wage / Business": {
       "equals": [
