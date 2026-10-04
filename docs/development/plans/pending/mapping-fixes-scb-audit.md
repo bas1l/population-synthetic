@@ -316,17 +316,17 @@ numbers below come from a scratch copy of the SCB cache (seed 42, n 10,000), nev
 
 **Things the pipeline step must know.**
 
-1. **Synthetic income tokens are not moved yet.** Only `values`, `real` and (uncommitted, see 3)
-   `priority` were edited. Before the re-run the Phase 2 income config must move CSN / studielån /
-   studiebidrag / studiemedel / barnbidrag / child support to General Allowances and bostadsbidrag /
-   bostadstillägg / housing allowance to Housing Allowance (Pension `none_of`
-   `bostadstillägg för pension`), else the real side has 8 categories and the synthetic side
-   still files those rows under Insurance.
+1. **Synthetic income tokens.** The Phase 3 commits give the two new values only an `equals`
+   rule on their own canonical name (`b1924b5`, so every declared value stays reachable). The
+   token moves — CSN / studielån / studiebidrag / studiemedel / barnbidrag / child support →
+   General Allowances, bostadsbidrag / bostadstillägg / housing allowance → Housing Allowance —
+   were present only as uncommitted Phase 2 income config in the working tree on 2026-10-04 and
+   must be committed before the re-run, else the synthetic side still files those rows under
+   Insurance while the real side has 8 categories.
 2. **Global tier not mirrored.** `config/mapping/scb/income_source.json` has neither new value
    (Open question 18); Sweden's axis files map through `scb_native`, so nothing breaks today.
-3. **`priority` hunk left uncommitted.** The working tree's `scb_native/income_source.json`
-   `priority` list (the Phase 1 engine work, not yet committed) already includes the two new
-   values at the end; the committed file has only `values` + `real`.
+3. **`priority`.** The engine commits' `priority` list for `scb_native/income_source.json`
+   already ends with General Allowances, Housing Allowance.
 4. **New raise paths.** TabVX13 has no cell for students aged 65+ or unemployed aged 80+. The
    register gives P(Student | 65-85) ≈ 0.1 %, so a run at another seed or n can raise. Seed 42,
    n 10,000 draws none. Open question 22 (new): accept the raise, or declare proxies (e.g. students
