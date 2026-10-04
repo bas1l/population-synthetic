@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 **Author:** Basil
-**Status:** Pending — not started
+**Status:** In progress — Phase 3 code done 2026-10-04 (re-sample pending, see Phase 3 implementation notes)
 **Base Branch:** `dev` (note: `feature/household-size-persons-unit` is unmerged; implementation may
 stack on it, since Phase 3 shares its re-sample)
 **Branch:** `feature/mapping-fixes-scb-audit`
@@ -227,6 +227,80 @@ gives the same result under a permuted dimension order.
 `docs/reference/scb-pxweb-catalog/scb-source-audit.md` (325/330, AKU age map, median method),
 `docs/architecture/sweden-generation-explorer/js/data.js` (income node).
 
+#### Phase 3 implementation notes (code done 2026-10-04; re-sample NOT run)
+
+Commits: `3b0dfa3` (hash-seed determinism + AKU age proxies + fail-fast), `74b135e` (interpolated
+median), `80d827b` (325/330), plus the docs / `--cache-ttl-days` commit that follows them. All
+numbers below come from a scratch copy of the SCB cache (seed 42, n 10,000), never from
+`data/scb_api/`.
+
+| Item | What was done | Measured effect |
+|---|---|---|
+| Hash-seed determinism | `VALID_AGE_GROUPS` is an ordered tuple (youngest first); attachment/hours key union sorted. AKU attachment label `"15-24 years"` → 18-24 (`constants.AKU_ATTACHMENT_AGE_LABEL_MAP`); 75-85 → 65-74 declared proxy (`constants.EMPLOYMENT_TYPE_AGE_PROXIES`, Open question 17 default), applied in `parse_employment_type_combined`, which now raises if any age group × sex cell is uncovered or a proxy would overwrite an API cell. Proxies recorded in the output's `tables_used` note for `AKURLSysAnkAr`. | Byte-identical output under `PYTHONHASHSEED` 0 and 1. Against the pre-P3 code run with hash seed 0 (which reproduces the published file except `household_size`): only `employment_type` changes, for 530 employed personas, all aged 18-24. 75-85 personas are unchanged, because the proxy is the cell hash seed 0 fell back to. |
+| Reproduce published under hash seed 0 | Not possible as "determinism only": the deterministic code has no age fallback left, so the 18-24 change is the intended AKU fix, not an ordering artefact. | — |
+| Norway / Italy | Shared `VALID_AGE_GROUPS` only; their samplers keep `reversed(VALID_AGE_GROUPS)` age fallbacks (out of scope). Reversed tuple order is 75-85, 65-74, …. Norway's education table has no 75-85 cell (checked offline on the SSB cache), so the fallback picks 65-74 — the same cell hash seed 0 picked: Norway output unchanged. Italy could not be checked offline (ISTAT cache incomplete); unchanged whenever 65-74 is present. **Follow-up:** Norway's 75-85 education fallback is itself an undeclared proxy. | — |
+| Fail-fast | Every other-sex / other-age-group fallback in the Swedish sampler is `_require_cell(...)` → `ValueError` naming the cell; income_source raises on a missing status or age cell. Kept by design: the merged (age, education, sex) employment_status cell falls back to the person's **own** (age, sex) register cell (documented merge behaviour); its other-sex step was removed. | Dormant on current data (no output change). |
+| Median | `median_from_brackets(edges, counts)`: linear interpolation in the median bracket. Oracle fixture `tests/data/income_class/scb_median_oracle_2024.json` (SamForvInk1a counts vs SamForvInk1 `HE0110J8`, 20 cells). | Max abs error vs SCB published median 45.3 → 3.3 tkr; mean 19.7 → 0.9 tkr. 544 personas change `socioeconomic_class` (Middle 40.5 → 41.4 %, Working 29.4 → 28.7 %). **Norway:** national median 625,000 → 514,594 NOK; its class shares move by up to 19 points (Poverty, women 65+); Norway's reference is not re-sampled. |
+| 325 / 330 | `constants.INCOME_SOURCE_COMPONENTS` = 300…335 (8). Live `/en/` labels: `general allowance`, `housing allowance`; the table note lists studielån under 325 (Open question 10 resolved: studielån → General Allowances). `parse_income_source` derives strides from `id`/`size`, rejects an unselected extra dimension, and keys age on the **code** (`20-29`, `80-`): the live response switched its labels to en dashes, which the old label lookup missed and would have silently sent to the first age key. `scb_native/income_source.json`: values + `real` equals for **General Allowances** and **Housing Allowance**. | 1,082 personas change `income_source`; students 20-29 draw General Allowances 59 %. |
+
+**Things the pipeline step must know.**
+
+1. **Synthetic income tokens are not moved yet.** Only `values`, `real` and (uncommitted, see 3)
+   `priority` were edited. Before the re-run the Phase 2 income config must move CSN / studielån /
+   studiebidrag / studiemedel / barnbidrag / child support to General Allowances and bostadsbidrag /
+   bostadstillägg / housing allowance to Housing Allowance (Pension `none_of`
+   `bostadstillägg för pension`), else the real side has 8 categories and the synthetic side
+   still files those rows under Insurance.
+2. **Global tier not mirrored.** `config/mapping/scb/income_source.json` has neither new value
+   (Open question 18); Sweden's axis files map through `scb_native`, so nothing breaks today.
+3. **`priority` hunk left uncommitted.** The working tree's `scb_native/income_source.json`
+   `priority` list (the Phase 1 engine work, not yet committed) already includes the two new
+   values at the end; the committed file has only `values` + `real`.
+4. **New raise paths.** TabVX13 has no cell for students aged 65+ or unemployed aged 80+. The
+   register gives P(Student | 65-85) ≈ 0.1 %, so a run at another seed or n can raise. Seed 42,
+   n 10,000 draws none. Open question 22 (new): accept the raise, or declare proxies (e.g. students
+   65+ → students 50-64).
+5. **Cache TTL.** Half the SCB cache files date from 2026-05-15 (> 90 days), so a default run
+   would re-fetch them live. `generate_scb_population.py --cache-ttl-days` (new) overrides it.
+
+**Re-sampling command** (writes a new file; never overwrite the published one):
+
+```bash
+PYTHONHASHSEED=0 python scripts/generate/generate_scb_population.py --n 10000 --seed 42 \
+  --cache-ttl-days 100000 \
+  --output data/scb_api/scb_population_n10000_seed42_mapping-fixes_<date>.json
+# PowerShell: $env:PYTHONHASHSEED='0'; python scripts/generate/generate_scb_population.py ...
+```
+
+Expect exactly two live fetches (two new `data_*` files with today's mtime in
+`config/database/caches/scb/`): `HushallT03` (BE0101DK) and `TabVX13InkStruktN` (8 components).
+
+**Expected-diff check** (against `data/scb_api/scb_population_n10000_seed42_merge-status-edu_2026-07-16.json`):
+
+```python
+import json, collections
+from population_synthetic.generators.real.helpers import age_to_group
+old = json.load(open("data/scb_api/scb_population_n10000_seed42_merge-status-edu_2026-07-16.json", encoding="utf-8"))["individuals"]
+new = json.load(open("data/scb_api/scb_population_n10000_seed42_mapping-fixes_<date>.json", encoding="utf-8"))["individuals"]
+diff, ages = collections.Counter(), collections.Counter()
+for a, b in zip(old, new, strict=True):
+    for k in a.keys() | b.keys():
+        if json.dumps(a.get(k), sort_keys=True) != json.dumps(b.get(k), sort_keys=True):
+            diff[k] += 1
+            ages[(k, age_to_group(a["age"]))] += 1
+print(diff)
+assert set(diff) <= {"household_size", "employment_type", "socioeconomic_class", "income_source"}, diff
+assert {g for (k, g) in ages if k == "employment_type"} == {"18-24"}, ages
+```
+
+Expected counts on the 2026-10-04 SCB data: `household_size` 7,141, `income_source` 1,082,
+`socioeconomic_class` 544, `employment_type` 530 (all 18-24); every other attribute 0. Measured
+stepwise on the scratch cache, one commit at a time — each step changed only its own attribute:
+household switch (`98e10a5`) 7,141; determinism + AKU map (`3b0dfa3`) 530; median (`74b135e`) 544;
+325/330 (`80d827b`) 1,082. A different count in `household_size` or `income_source` alone means
+SCB revised one of the two live-fetched tables; any change in another attribute stops the run.
+Then point `swedish.yaml:5` and `swedish_02.yaml:5` at the new file.
+
 ### Phase 4 — Socioeconomic occupation proxy (decision point, not committed work)
 
 The `socio_occupation = proxy` decision assumed a sourced SCB income-by-occupation table would
@@ -354,6 +428,7 @@ Each item: proposed default, rows affected.
    first-named. ≈30 rows.
 10. **325 / 330 category names and studielån** — "General Allowances" / "Housing Allowance";
     studielån in 325 after checking TAB1388 metadata. 55 errors + 109 unflagged.
+    *Implemented with the defaults (Phase 3); the TAB1388 table note lists studielån under 325.*
 11. **Kunskapsarbetare** — the user chose Working Class; Middle is the more plausible lenient
     reading; the proxy cannot place it. Default: follow Phase 4 (unmapped under option B,
     otherwise the user's Working). 35 exact, ~69 with variants.
@@ -371,7 +446,8 @@ Each item: proposed default, rows affected.
     25 + ≈23 rows.
 17. **employment_type for ages 75–85** (no AKU source) — config-declared 65–74 proxy recorded in
     provenance; alternative raise (drops the attribute for those personas). Part of the 1,140
-    employed 18–24 and 75–85 personas in the real reference.
+    employed 18–24 and 75–85 personas in the real reference. *Implemented with the default
+    (`constants.EMPLOYMENT_TYPE_AGE_PROXIES`); recorded in the output's `tables_used` note.*
 18. **Mirror to the global tier** `config/mapping/scb/` — mirror attribute files identical today;
     skip industry and parental (they differ by design).
 19. **Label wording** — birth region: "Born in another EU country" / "Born outside the EU"
@@ -383,6 +459,10 @@ Each item: proposed default, rows affected.
 21. **Minor unmapped defaults** — "Trans man", "Uppland", "Region Väst", "Serbia", "rötter
     från", "Ensamstående kvinna", bare "Borgerlig familj", "Bifamilj", living with parents
     (housing, 55), garbled values → unmapped; rented house → Rental (41). ≈150 rows.
+
+22. **income_source cells with no SCB value** (students 65+, unemployed 80+) — now raise if drawn
+    (Phase 3 fail-fast; ≈ 0.1 % of 65+ register persons are students; none at seed 42, n 10,000).
+    Default: keep the raise; alternative: declared proxies (students 65+ → students 50-64).
 
 ## Combined re-run protocol
 
