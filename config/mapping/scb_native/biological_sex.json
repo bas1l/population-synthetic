@@ -47,7 +47,12 @@
         "pojke",
         "kille",
         "manlig",
-        "kön man"
+        "kön man",
+        "cis man",
+        "herr"
+      ],
+      "none_of": [
+        "female"
       ]
     },
     "Female": {
@@ -68,7 +73,11 @@
         "flicka",
         "tjej",
         "hona",
-        "woman"
+        "woman",
+        "kvinn"
+      ],
+      "none_of": [
+        "male"
       ]
     }
   }

@@ -271,3 +271,42 @@ SOCIO_DECISIONS = [
 @pytest.mark.parametrize("raw, expected", SOCIO_FIXED + SOCIO_FALSE_ALARMS + SOCIO_DECISIONS)
 def test_socioeconomic_class(resolve, raw, expected):
     assert resolve("socioeconomic_class", raw) == expected
+
+
+# ---------------------------------------------------------------------------
+# small attributes
+# ---------------------------------------------------------------------------
+
+SMALL_CASES = [
+    # biological_sex: legal sex; prefix mode already keeps "male" out of "female".
+    ("biological_sex", "Female", "Female"),
+    ("biological_sex", "Kvinna", "Female"),
+    ("biological_sex", "cis man", "Male"),
+    ("biological_sex", "herr", "Male"),
+    ("biological_sex", '{"male": 0.5, "female": 0.5}', UNMAPPED),  # both sexes named
+    ("biological_sex", "Trans man", UNMAPPED),  # legal sex unknown (open question 21)
+    # region: unaccented and province names that sit inside one län.
+    ("region", "Ostergotland", "Östergötland"),
+    ("region", "Östra Götaland", "Östergötland"),
+    ("region", "Västergötland", "Västra Götaland"),
+    ("region", "Gästrikland", "Gävleborg"),
+    ("region", "Svedala", "Skåne"),
+    ("region", "Svedaland", UNMAPPED),  # garbled; equals, not contains
+    ("region", "Uppland", UNMAPPED),  # split between two län (open question 21)
+    ("region", "Region Väst", UNMAPPED),
+    # birth_country_detail: "Sverige (född i utlandet)" is not Sweden-born.
+    ("birth_country_detail", "Sverige", "Sweden"),
+    ("birth_country_detail", "Sverige (född i utlandet)", UNMAPPED),
+    ("birth_country_detail", "Sverige (utanlandsfödd)", UNMAPPED),
+    ("birth_country_detail", "Uplandia", "Sweden"),
+    ("birth_country_detail", "Serbia", UNMAPPED),  # not in the top-20 reference (open question 21)
+    # household_size: "With parents (2)" is the person plus two parents.
+    ("household_size", "With parents (2)", "3 persons"),
+    ("household_size", "4 personer", "4 persons"),
+    ("household_size", "Ensamstående med ett barn", "2 persons"),
+]
+
+
+@pytest.mark.parametrize("attr, raw, expected", SMALL_CASES)
+def test_small_attributes(resolve, attr, raw, expected):
+    assert resolve(attr, raw) == expected

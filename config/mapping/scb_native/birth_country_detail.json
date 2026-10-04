@@ -216,7 +216,16 @@
         "blekinge",
         "gotland",
         "härjedalen",
-        "småland"
+        "småland",
+        "svensk födelseland",
+        "uplandia"
+      ],
+      "none_of": [
+        "född i utlandet",
+        "utomlands född",
+        "utlandsfödd",
+        "utanlandsfödd",
+        "born abroad"
       ]
     },
     "Syria": {

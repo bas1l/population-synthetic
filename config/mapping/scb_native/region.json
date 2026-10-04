@@ -224,7 +224,8 @@
         "mölndal",
         "trollhättan",
         "skövde",
-        "uddevalla"
+        "uddevalla",
+        "västergötland"
       ]
     },
     "Skåne": {
@@ -233,7 +234,8 @@
         "Skåne län",
         "Malmö",
         "Helsingborg",
-        "Lund"
+        "Lund",
+        "Svedala"
       ],
       "contains": [
         {
@@ -259,7 +261,10 @@
       "contains": [
         "östergötland",
         "linköping",
-        "norrköping"
+        "norrköping",
+        "ostergotland",
+        "östra götaland",
+        "norrk"
       ]
     },
     "Uppsala": {
@@ -313,7 +318,8 @@
       "contains": [
         "gävleborg",
         "gävle",
-        "gästrikland"
+        "gästrikland",
+        "gästrik"
       ]
     },
     "Södermanland": {
