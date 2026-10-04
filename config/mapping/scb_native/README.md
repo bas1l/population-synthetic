@@ -107,6 +107,42 @@ Each rule follows SCB's own definition of the category; the regression cases liv
   stays the `values` order, the generic `Insurance / Allowance` (which precedes them) vetoes their
   tokens. Parental or family support is not an SCB income component and is unmapped.
 
+The rules below have their regression cases in `tests/test_scb_native_audit_rules_social.py`.
+
+- **`industry_sector`** is SNI 2007, which classifies by *activity*, not by owner or wording:
+  professional / scientific / technical activities, R&D (SNI 72), marketing and PR, engineering
+  services and administrative services are `Financial & Business Services` (sections M–N);
+  municipal elderly care is `Healthcare & Social Work`, not `Public Administration`; vehicle sale and
+  repair is `Trade` (G 45); warehouse work without a trade context is `Transport` (H 52); labour-
+  market services — Arbetsförmedlingen, staffing, recruitment — are SNI 78 (`Financial & Business
+  Services`). A bare "Engineering" (C 25–30 or M 71), "Administration", general advice and
+  media-plus-culture texts (J or R) name no single section and are unmapped; a pensioner's former
+  job is not a current sector. Phrase priority is native: the longer phrase wins the contains tier.
+- **`parental_structure`** follows LE0102's legal ("ursprunglig") parents and folkbokföring
+  residence: a cohabiting or married couple's child has `Natural Parents` (a sambo couple counts);
+  adoptive parents are `Natural Parents`; after a divorce the parent the child lived with decides
+  (`Single Mother` / `Single Father`); a parent's new partner makes a stepparent family. A
+  two-phase text keeps the **earlier** phase ("both parents until the divorce …" → `Natural
+  Parents`), so `mother remarried` is not a token. Joint custody / alternating residence is
+  unmapped (the registered parent is unknown); a bare same-sex couple keeps `Natural Parents`
+  (above). Known residue: five two-phase texts whose *later* phase carries a divorce or custody veto
+  word ("…, then shared custody", "later separated") resolve to `__UNMAPPED__`, because a `none_of`
+  veto applies in every tier; honouring the earlier phase there needs clause splitting in the
+  engine.
+- **`socioeconomic_class`** is an income band relative to the (age, sex) median, so only income or
+  class wording places a persona: explicit poverty cues → `Poverty`; low income / låginkomst /
+  lägre inkomst / underklass → `Poverty`; modest / moderate, lower class / lägre klass, lower or
+  low socioeconomic status, lower-middle class, limited / pressed economy → `Working Class`;
+  median / average income → `Middle Class`; high-income / affluent → `Wealthy`. Explicit cues are
+  a single-group `all_of` (they must beat any `contains` token, which `longest` alone would not
+  give). Occupation, employment-status and SEI group words (student, pensionär, tjänsteman,
+  akademiker, professional, kunskapsarbetare, företagare, …) carry no income band and are
+  unmapped: no SCB table places an occupation in these bands without inventing the mapping.
+- **Small attributes.** `biological_sex`: text naming both sexes is unmapped. `region`: unaccented
+  and province names that lie in one län; "Uppland" and "Region Väst" are unmapped.
+  `birth_country_detail`: "Sverige (född i utlandet)" is not Sweden-born. `household_size`: "With
+  parents (2)" is three persons.
+
 ## Deprecated attributes
 
 `_index.json` also carries an optional `deprecated_attributes` list (schema documented in
