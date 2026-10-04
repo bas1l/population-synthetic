@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 **Author:** Basil
-**Status:** In progress — Phase 1 done 2026-10-04; Phase 2A done 2026-10-04; Phase 3 code done 2026-10-04 (re-sample pending, see Phase 3 implementation notes)
+**Status:** In progress — Phase 1 done 2026-10-04; Phase 2A done 2026-10-04; Phase 2B, Phase 4 (option B, sign-off pending) and Phase 5 done 2026-10-04; Phase 3 code done 2026-10-04 (re-sample pending, see Phase 3 implementation notes)
 **Base Branch:** `dev` (note: `feature/household-size-persons-unit` is unmerged; implementation may
 stack on it, since Phase 3 shares its re-sample)
 **Branch:** `feature/mapping-fixes-scb-audit`
@@ -351,6 +351,74 @@ requires it, so nothing was added; Open question 18 stays open. Note for that de
 keeps the historic `substring` / `["priority"]` matching, so copying the `scb_native` files
 (prefix-mode tokens, substring overrides, longest tie-break) would not be behaviour-equivalent.
 
+#### Phase 2B implementation notes (done 2026-10-04)
+
+Commits: `c5790c1` industry_sector, `e0cac42` parental_structure, `fc660e5` socioeconomic_class
+(boundary rules + status words), `fe29df9` socioeconomic_class (Phase 4 option B, see Phase 4),
+`eaa8202` small attributes, `5503dc5` README. Regression cases:
+`tests/test_scb_native_audit_rules_social.py` (fixed rows, first-pass false alarms and every
+decision / open-question default named below). The section-B simulators were ported onto the
+Phase 1 engine; the port scripts and the real-engine harness live in the session scratch area
+(`p2b/apply_*.py`, `p2b/ev.py`, `p2b/survive.py`).
+
+*Native, not stop-gap.* Industry and parental: the section's priority `all_of` steps became plain
+`contains` tokens (the longer phrase wins under `longest`), and every `none_of` veto that measured
+**dead** on the full pool and the curated rows was not carried (industry 26, e.g. `webbhotell`,
+`law`, `sjukhus`, `skönhetsvård`; parental: the father-led-stepfamily, grandfather and
+`intact single-parent` stand-ins). The word-boundary stand-ins `non-profit` (industry), `female`
+(biological_sex) and `ikt-` (now plain `ikt`) are not needed under `prefix`. Socio keeps its
+explicit cues as a single-group `all_of`: under `longest`, "professional" (12 characters) would
+beat "high-income" (11), so the "High-income / Affluent professional" rows need tier priority, not
+length. Live semantic vetoes stay (parental divorce / death / custody, industry `bioteknik`,
+`pensionär` on Healthcare). Dropped because they were wrong under the native engine: industry
+`friskvård` / `personalvård` vetoes (they kept "Friskvård och rehabilitering" out of Healthcare).
+
+*Decisions and open-question defaults applied.* Warehouse → Transport; labour-market services →
+SNI 78; two-phase parental text → earlier phase (`mother remarried` dropped; the `single-parent`
+Natural Parents veto dropped, it only fired on an "until … then single-parent" text); joint
+custody → unmapped (OQ 14); bare same-sex couple → Natural Parents (OQ 15: the section's
+`same-sex partner` veto was narrowed to parent-plus-partner wording, else 7 bare "two same-sex
+partners" texts fell to unmapped); industry undeterminables (OQ 16: bare Engineering,
+Administration, "Rådgivning (allmän)" and media + kultur → unmapped — the section's bare
+`rådgivning` / `management` tokens were narrowed to business-advice phrases; Kundtjänst stays
+F&B); socio OQ 12 (lägre / låg socioekonomisk, low SES, Lågklass → Working) and OQ 13 (begränsad /
+pressad / blygsam → Working; låg pension / låglön → Poverty; trygg / stabil unmapped); OQ 21
+(Trans man, Uppland, Region Väst, Serbia, rötter från, Ensamstående kvinna, bare Borgerlig
+familj, Bifamilj stay unmapped; text naming both sexes → unmapped). Extra single-row fixes:
+`waste management` (Manufacturing, not F&B via `management`), `agriculture and food production`
+/ `jordbruk och livsmedel` stay Agriculture, `trafiken` as a substring head (Hallandstrafiken),
+`uplandia` → Sweden, adoptive family → Natural Parents.
+
+**Measured (real engine; base = Phase 1 HEAD `b9b0a4f`; curated rows; "fixed" = resolved value
+equals the verdict's category; pool = full `01_Raw` Swedish, 21,931 personas).**
+
+| Attribute | Errors with a category | Correct at Phase 1 | Correct now | Section expected | Broke | FA kept | Pool newly `__UNMAPPED__` (in capped set) | Pool cleared |
+|---|---|---|---|---|---|---|---|---|
+| industry_sector | 537 | 76 | **518** | 520 | 0 | 83/83 | 78 (7) | 409 |
+| parental_structure | 407 | 4 | **383** | 382 | 0 | 82/82 | 147 (58) | 548 |
+| socioeconomic_class, boundary rules + status words | 176 | 15 | **164** | 166 | 0 | 28/28 | 406 (38) | 195 |
+| socioeconomic_class, + option B | 176 | 15 | 164 | — | 0 | 28/28 | **2,794 (887)** | 195 |
+| biological_sex | 11 | 7 | 10 | 10 | 0 | — | 1 (0) | 12 |
+| region | 11 | 0 | 11 | 11 | 0 | — | 0 | 49 |
+| birth_country_detail | 6 | 0 | 6 | 6 | 0 | — | 4 (0) | 2 |
+| household_size | 3 | 0 | 2 | 2 | 0 | 10/10 | 0 | 1 |
+
+Open rows match the section's list (garbled text, mixed cues such as "Lower-income middle class",
+"Moderately affluent", the negation rows "ej detaljhandel"). Undeterminable rows moved: industry 3
+(media + kultur → unmapped), parental 6 (non-biological / step wording → unmapped; "Both parents
+deceased by adulthood" → Other Than Parents), socio 5 (status words). **Deviation:** five
+two-phase parental texts in the pool whose *later* phase carries a divorce / custody veto word
+("…, then shared custody", "later separated", "until parents divorced") resolve to `__UNMAPPED__`
+instead of the earlier phase: a `none_of` vetoes its value in every tier, so honouring the earlier
+phase there needs clause splitting in the engine (not done). The curated design row ("…, then
+mother-headed single-parent household") keeps Natural Parents.
+
+*Full-N risk* (same approximation as 2A: mapped validity over every analysed attribute except
+`age_group`, against today's `population_cap/_index.json` `clean_available`, n = 100). 2B without
+option B: 105 currently-clean personas lose cleanliness; **no** combination falls below n. 2A + 2B
+without option B: 582 personas; only the 2A withdrawal (`swedish_02_all_pick_dag_v2_ollama_gemma4_e4b`,
+97). **2A + 2B with option B: 1,960 personas, 20 combinations below n** (see Phase 4 notes).
+
 ### Phase 3 — Real-population fixes and one combined re-sample
 
 **Goal.** Fix four sampler/fetch defects and re-sample the real reference **once**, together with
@@ -488,6 +556,35 @@ Options (Open question 20):
 
 Either option removes the status-only tokens (S3) here, not in Phase 2.
 
+#### Phase 4 implementation notes (option B applied 2026-10-04 as the default; sign-off pending)
+
+Open question 20 was applied with its proposed default, **B (strict unmapped)**, in its own commit
+(`fe29df9`) on top of the boundary rules (`fc660e5`), so it can be reverted alone. Removed from the
+`scb_native` synthetic block: Working `arbetar` (substring head; `arbetarklass` kept),
+`blue(-)collar`, `skilled / service / semi-skilled worker`, `Arbetare`, `Arbetsinkomst`, `Skilled
+manual worker (class)`; Middle `tjänsteman` / `tjänstemän` and every tjänstemanna- equals,
+`akademi(ker)`, `professional`, `professionell`, `white(-)collar`, `managerial`, `administrative`,
+`högskoleutbildad`, `it-`, `konsult`, `(egen)företagare`, `urban`, `intellektuell`, `Specialist`,
+`Mellanledande`, `B-skatt`, the small-business / entrepreneurial / technical-specialist equals;
+Wealthy `högre tjänstemän`. Class words stay (arbetarklass, medelklass, överklass, kapitalist,
+elite). **Open question 11 follows Phase 4: "Kunskapsarbetare" now resolves to `__UNMAPPED__`.
+This reverses the user's spot-check answer (Working Class); the plan default was applied, not the
+spot-check answer.**
+
+**Measured deviation from the option table (sign-off item).** The table's "S3 alone: 42 capped"
+undercounts option B by an order of magnitude. On the full `01_Raw` pool option B makes **2,794**
+personas newly `__UNMAPPED__` on socioeconomic_class (status words alone: 406), **887** of them in
+today's capped set (status words alone: 38); 1,541 currently-clean personas lose cleanliness, and
+**18 combinations** fall below n = 100 on socio alone (20 with 2A + 2B), all `swedish_02` v2 arms
+(gemma4_e4b, deepseek_r1_14b and the openrouter models; worst
+`swedish_02_all_generate_pick_v2_ollama_gemma4_e4b`, 227 clean → 65). Largest strings lost
+(case variants summed): "Professional class" 202, "IT-specialistklass" 74, "Professionell klass"
+73, "Tjänstemannaklass" 93, "Arbetare" 83, "Urban professional" 61, "Akademiker" 59, "Högre
+tjänstemannaklass" 56. Curated counts are unchanged by option B (164 / 176, 28 / 28 false alarms
+kept). Before the combined re-run this must be signed off, or `fe29df9` reverted; the alternatives
+are option A, or a narrower B that keeps EGP / SEI class labels ("Professional class",
+"Tjänstemannaklass") while dropping bare occupations.
+
 ### Phase 5 — Birth-region label rename
 
 FolkmFodlandHVD returns `FSV`/`FEU`/`FUEU`, i.e. Sweden / other EU / outside EU; the current
@@ -505,6 +602,31 @@ realism prompt. Tests use inline fixtures. Not fixed here: `refine_from` re-walk
 resolved sibling (183 rows, no persona rescued) and the independent sampling of
 birth_location and birth_country_detail (open investigation). Italy's "Europe (Other)" is the
 same mislabel, out of scope.
+
+#### Phase 5 implementation notes (done 2026-10-04)
+
+Commit `e8124ee`. Values renamed to **"Born in another EU country"** / **"Born outside the EU"**
+(open question 19 default). `real` keeps only the FolkmFodlandHVD labels (sv + en, plus the value
+names); the dead legacy labels (Norden, EU/EES utom Norden, Europa utom EU/EES, continents) are
+deleted. Synthetic: Norway, Iceland, Albania, Belarus, Bosnia, Serbia, Switzerland, UK / England /
+Scotland / Wales, Ukraine, Yugoslavia, Kosovo, Moldova, Montenegro, North Macedonia moved to the
+outside-EU list; Cyprus, Luxembourg, Malta and Åland added to the EU list; `nordic`, `scandinav`,
+`europe`, `european`, `eu/europe`, `immigrant` deleted. `island` (Swedish for Iceland) is a
+`word`-mode token, else "Åland Islands" (Finland) went outside the EU. Updated:
+`config/mapping/scb_native/README.md`, `docs/architecture/sweden-generation-explorer/js/data.js`,
+`docs/scb_population_and_comparison.md:178`, the `validate_mapped` module docstring, and
+`tests/test_synthetic_mapper_base.py` (the Norway case now asserts "Born outside the EU"; the other
+birth-location tests use inline fixtures). The generator needs no change (it keys only on the
+Sweden labels) and no chart or label config names these values. The global tier
+`config/mapping/scb/` keeps the old labels (open question 18: not mirrored, see the README).
+
+Measured (label-translated): 168 pool personas change birth region — 162 EU → outside the EU
+(birth country Norway 99, UK 24, Yugoslavia 17, Bosnia 17, Ukraine 3, other 2), 4 Sweden →
+`__UNMAPPED__`, 2 `__UNMAPPED__` → Sweden.
+Curated: 5 of 186 errors fixed (3 expected, plus the "Sverige (född i utlandet)" rows via
+birth_country_detail; the other 181 are the `refine_from` mechanism, still open); 12 / 12 false
+alarms kept; 4 personas newly `__UNMAPPED__` ("Sverige (född i utlandet)" texts;
+`birth_location` is deprecated, so `validate_mapped` exempts it and no persona is lost).
 
 ## Impact summary
 
@@ -592,18 +714,24 @@ Each item: proposed default, rows affected.
 11. **Kunskapsarbetare** — the user chose Working Class; Middle is the more plausible lenient
     reading; the proxy cannot place it. Default: follow Phase 4 (unmapped under option B,
     otherwise the user's Working). 35 exact, ~69 with variants.
+    *Implemented by default (Phase 4 option B): unmapped — reverses the spot-check answer.*
 12. **"Lägre socioekonomisk grupp", "låg socioekonomisk status", "low SES", "Lågklass"** →
     Working (read as "lower class"). Confirm; Lågklass is the plan's extension. ≥ 4 rows.
+    *Implemented with the default (Phase 2B).*
 13. **Generic economy wording** — "begränsad/pressad/blygsam" → Working; "låg pension",
     "låglön" → Poverty; "trygg/stabil" → unmapped. ≈30 design rows.
+    *Implemented with the defaults (Phase 2B).*
 14. **Joint custody and status-only socio words** — joint custody → unmapped (SCB: undeterminable
     without the registered parent); student/pensionär removal in Phase 4. Together 100 capped
     rows (58 + 42).
+    *Implemented with the defaults (Phase 2B / Phase 4); measured capped rows newly unmapped: parental 58 (all 2B causes), status words 38.*
 15. **Same-sex couple / "two dads"** with parenthood unstated — keep Natural Parents (README
     default); alternative unmapped. 45 rows.
+    *Implemented with the default (Phase 2B).*
 16. **Industry undeterminables** — bare "Engineering" unmapped (alternative SNI M71 → F&B);
     Administration, charity/aid, teknisk service, media + kultur unmapped; Kundtjänst stays F&B.
     25 + ≈23 rows.
+    *Implemented with the defaults (Phase 2B).*
 17. **employment_type for ages 75–85** (no AKU source) — config-declared 65–74 proxy recorded in
     provenance; alternative raise (drops the attribute for those personas). Part of the 1,140
     employed 18–24 and 75–85 personas in the real reference. *Implemented with the default
@@ -613,12 +741,16 @@ Each item: proposed default, rows affected.
 19. **Label wording** — birth region: "Born in another EU country" / "Born outside the EU"
     (alternative "EU (excl. Sweden)" / "Outside EU"). Also consider relabelling "Sickness /
     Activity Compensation", which the spot check showed is read as covering sjukpenning (13 rows).
+    *Birth-region wording implemented with the default (Phase 5); the Sickness / Activity relabel not done.*
 20. **Occupation proxy** — Phase 4 option A or B. Default B (strict unmapped), given no
     Poverty reachability and the self-made bias. Also decides whether employment_status (≈40)
     and income_source (≈50) occupation tails keep growing as token lists.
+    *Default B implemented (`fe29df9`) — measured impact far above the estimate: 887 capped personas,
+    18–20 combinations below n. Sign-off or revert before the re-run (Phase 4 notes).*
 21. **Minor unmapped defaults** — "Trans man", "Uppland", "Region Väst", "Serbia", "rötter
     från", "Ensamstående kvinna", bare "Borgerlig familj", "Bifamilj", living with parents
     (housing, 55), garbled values → unmapped; rented house → Rental (41). ≈150 rows.
+    *Implemented for the Phase 2B attributes (sex, region, birth country, parental); housing items are 2A.*
 
 22. **income_source cells with no SCB value** (students 65+, unemployed 80+) — now raise if drawn
     (Phase 3 fail-fast; ≈ 0.1 % of 65+ register persons are students; none at seed 42, n 10,000).
