@@ -854,6 +854,19 @@ and by `realism_ranking`. `hard_rules.yaml`: the research-degree-at-18-24 rule i
 impossible) and `retired_before_minimum_pension_age` added. Step 6 is re-run with `--force`, one
 round (later rounds are a top-up: same command with `--rounds 2` / `--rounds 3`, no `--force`).
 
+**Run 2026-10-04 21:52 → 2026-10-05 00:49** (57 combinations + `real_swedish_02`, 100 each, one
+round, 8 workers; restarted twice, pre-v5 caches deleted before resuming so no regime was mixed):
+5,800 calls, 0 failed personas, output 1.82 M tokens, ~$45.4 API-equivalent. Every report and cache
+carries the v5 stamps. Impossible individuals 115 / 5,800 (old prompt: 0): Reference 1 / 100,
+synthetic 114 / 5,700 (strategy E 79, A 21, D 8, C 4, B 2); 22 of 57 combinations non-zero (max 16 %,
+Mistral Medium × E). Axis A is no longer degenerate (13 distinct ranks; two combinations above the
+Reference after Holm); the mixed logit on `can_exist` now fits. Typicality falls ~0.4 (Reference mean
+5.42 → 4.91); closeness order by strategy unchanged, by model Spearman 0.93. The hard rule fired on 4
+personas, all judged impossible. **Known misreading:** the one Reference flag (and most of the 26
+parental_structure S3 flags) reads `parental_structure` as the person's own parenthood; it is the
+family they grew up in (LE0102), which v5 does not define. `realism_ranking --force --rounds 1` and
+manuscript Figure 5 rebuilt.
+
 ## Verification
 
 - `ruff check src/` and `pytest` pass; the golden test shows `scb`, `istat`, `ssb` unchanged.
