@@ -65,3 +65,25 @@ def test_preserved_sides_keep_historic_matching(tier, side):
                 assert all(isinstance(t, str) for t in rules.get(value, {}).get(key, [])), (
                     f"{tier}/{attr}.{side}.{value}.{key} carries a token-mode override"
                 )
+
+
+# --- scb_native synthetic: the audit's chosen rule priority -------------------
+
+#: SCB BAS labour-force hierarchy (employment) and the wage-first decision (income).
+_PRIORITY_ONLY = {
+    "employment_status": ["Employed", "Unemployed", "Student", "Retired", "Sick Leave", "Other"],
+    "income_source": None,  # wage first; the remaining order is the values order
+}
+
+
+def test_scb_native_synthetic_tie_break_and_priority_orders():
+    mappings = _load("scb_native")
+    compiled = mapping_engine.validate_mappings(mappings, "scb_native")
+    assert compiled["synthetic"].tie_break == ("longest", "priority")
+    attrs = mappings["_index"]["attributes"]
+    for attr, order in _PRIORITY_ONLY.items():
+        block = mappings[attrs[attr][:-5]]
+        assert block["synthetic"]["tie_break"] == ["priority"], attr
+        if order is not None:
+            assert block["priority"] == order, attr
+    assert mappings[attrs["income_source"][:-5]]["priority"][0] == "Wage / Business"

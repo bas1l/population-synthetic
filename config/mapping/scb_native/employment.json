@@ -65,6 +65,9 @@
     }
   },
   "synthetic": {
+    "tie_break": [
+      "priority"
+    ],
     "Employed": {
       "equals": [
         "Employed",
