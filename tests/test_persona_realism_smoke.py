@@ -39,6 +39,7 @@ from population_synthetic.analysis.model_ranking.loader import scheme_attributes
 from population_synthetic.analysis.persona_realism import artifacts as A  # noqa: E402
 from population_synthetic.analysis.persona_realism.config import JudgeConfig  # noqa: E402
 from population_synthetic.analysis.persona_realism.runner import (  # noqa: E402
+    JUDGE_CONTEXT_ISOLATION,
     RunnerSummary,
     run_combo_judgements,
 )
@@ -89,6 +90,9 @@ class _StubClient:
             "provider": "stub", "model": model,
             "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
             "elapsed_ms": 1,
+            # The runner refuses to cache a verdict from a client that does not vouch
+            # for call independence; the stub, like the real client, does.
+            "context_isolation": JUDGE_CONTEXT_ISOLATION,
         }
         if self._fail:
             raise RuntimeError("stub judge failure")

@@ -291,7 +291,8 @@ def test_default_client_factory_passes_timeout(monkeypatch):
 
     assert captured["timeout"] == cfg.timeout_seconds
     assert captured["model_name"] == cfg.judge_model
-    assert captured["default_config"] == {"temperature": cfg.temperature}
+    # No temperature is passed: the claude CLI cannot apply one (see judge.yaml).
+    assert "default_config" not in captured
 
 
 # --------------------------------------------------------------------------

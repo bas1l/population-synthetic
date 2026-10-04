@@ -145,6 +145,31 @@ _SEVERITY_CONFIG_STATUS = (
 )
 
 
+#: Stamped as a report's ``context_isolation`` when its verdict caches carry no tag:
+#: they were written before every judge call was made an independent conversation,
+#: i.e. under the shared-conversation regime. Distinct from every real tag, so the
+#: ``realism_ranking`` homogeneity gate refuses to rank such a report beside a fresh one.
+UNTAGGED_CONTEXT_ISOLATION = "untagged_shared_conversation"
+
+
+def _cache_context_isolation(present: list[LoadedPersona], combo_label: str) -> str | None:
+    """The single judge-regime tag of a combination's verdict caches (fail-fast).
+
+    Read from the caches, never from the config: a ``--rewrite-artifacts`` over old
+    caches must stamp the regime that actually judged them. Mixed tags inside one
+    combination raise -- its statistics would pool two regimes. ``None`` when no
+    persona is present (nothing was judged under any regime).
+    """
+    tags = {lp.context_isolation or UNTAGGED_CONTEXT_ISOLATION for lp in present}
+    if len(tags) > 1:
+        raise ValueError(
+            f"combo {combo_label!r}: its verdict caches were judged under mixed "
+            f"context-isolation regimes {sorted(tags)}; re-judge the combination with "
+            "--force so every persona comes from one regime."
+        )
+    return next(iter(tags)) if tags else None
+
+
 def _provenance_meta(cfg: JudgeConfig) -> dict[str, Any]:
     """Build the combo provenance meta from the judge config (verbatim snapshot).
 
@@ -156,7 +181,11 @@ def _provenance_meta(cfg: JudgeConfig) -> dict[str, Any]:
     return {
         "judge_model": cfg.judge_model,
         "n_rounds": cfg.n_rounds,
-        "temperature": cfg.temperature,
+        # The `claude` CLI has no sampling-temperature control: no value was set, and
+        # none is claimed. (Reports written before 2026-10 stamped a configured 0.0
+        # that never reached the model.)
+        "temperature": None,
+        "temperature_applied": False,
         "bootstrap": dict(cfg.bootstrap),
         "typicality_level": cfg.reliability_value("typicality_level"),
         "tail_threshold": float(cfg.reliability_value("tail_threshold")),
@@ -547,6 +576,9 @@ def write_combo_artifacts(
     tail_threshold = float(cfg.reliability_value("tail_threshold"))
 
     combo, present = load_combo_realism(out_dir, combo_label, expected_ids=expected_ids)
+    # The judge regime is a property of the caches, so it is stamped from them (and a
+    # combination mixing regimes is refused) -- whatever provenance the caller passed.
+    provenance = {**provenance, "context_isolation": _cache_context_isolation(present, combo_label)}
     stats = compute_realism_stats(
         combo,
         bootstrap=cfg.bootstrap,

@@ -19,7 +19,8 @@ marginals but rarely emit an incoherent individual. This task fills that gap.
 Per persona (the bare mapped demographic tuple; Sweden's deprecated `birth_location` is excluded to
 match `ComparisonScheme.attributes`, and `age` is shown to the judge as the bracketed `age_group`
 derived on demand from the raw integer via the canonical `attr_value` accessor, matching the analyzed
-scheme), the judge is called **N cold rounds** and returns two orthogonal axes plus a structured
+scheme), the judge is called **N independent rounds** -- each round its own fresh `claude -p` process
+with no shared history and no project context -- and returns two orthogonal axes plus a structured
 clash list:
 
 - **`can_exist`** — binary: can this attribute set describe one real person? False **only** on a hard
@@ -550,8 +551,8 @@ numbers:
   and the CSV's row count equals the report's `n_personas`. A partial directory (verdict caches but
   no report -- several exist on any real output base) is skipped with a machine-readable reason, or
   raises under `--strict`.
-- **Homogeneity.** Every consumed combination must share one `judge_model`, `prompt_template_sha256`
-  and `n_rounds`, read from the stamped provenance rather than from current config. A mismatch
+- **Homogeneity.** Every consumed combination must share one `judge_model`, `prompt_template_sha256`,
+  `context_isolation` and `n_rounds`, read from the stamped provenance rather than from current config. A mismatch
   **raises**, naming the offending combination: ranking units judged by different judges measures the
   judges, not the units.
 
@@ -573,8 +574,8 @@ the emitted artifacts disagree with the config that describes them.
 |-----|---------|
 | `judge_model` | Raw string passed to `claude -p ... --model`; must match a row in `model_pricing.yaml`. Default `claude-sonnet-5` (best coherence-judge tier + low latency + cost). |
 | `model_options` | GUI dropdown (Claude family). `judge_model` must be one of these; Fable-5 is the slowest/most-expensive selectable option. |
-| `n_rounds` | Independent judge calls per persona (default 3). N≥2 is required for any reliability or per-persona SD. |
-| `temperature` | Judge sampling temperature (default 0.0 — cold, for reproducibility). |
+| `n_rounds` | Independent judge calls per persona (default 3), each a fresh conversation. N≥2 is required for any reliability or per-persona SD. |
+| *(no `temperature`)* | **Deliberately absent; declaring it raises.** The `claude` CLI has no sampling-temperature control (no flag, no settings key; `--effort` is not a temperature), so the judge samples at the CLI's default. Reports stamp `temperature: null`, `temperature_applied: false`. Reports written before 2026-10-04 stamped `temperature: 0.0`, which never reached the model. |
 | `severity_weights` | **Declared but not wired.** Validated and stamped into provenance, but no computation reads it -- impossibility is decided solely by the `can_exist` majority (`reduce.possible_majority`). Every report carries a `severity_config_status` note saying so. |
 | `impossibility_severities` | **Declared but not wired** (same as above). Wiring severity gating into `reduce_persona` would change every existing impossibility rate and is a separate decision. |
 | `sample_size` | Personas judged per **synthetic** combination (nullable → all). Caps judge cost via seeded sampling. |
@@ -592,6 +593,40 @@ categories, anchored typicality exemplars, strict JSON output schema, explicit "
 guardrail).
 
 `hard_rules.yaml` — config-driven deterministic `incompatible_pair` checks (see below).
+
+## Call independence and the context-isolation tag
+
+Every judge call is an independent conversation: `ClaudeCodeClient` spawns one `claude -p` process per
+call with `--tools ""`, `--setting-sources ""` (no user/project settings, hooks, `CLAUDE.md` or
+memory), `--strict-mcp-config`, `--no-session-persistence`, the prompt on stdin, and an empty
+temporary working directory; the process is reaped (its tree killed on timeout) before the call
+returns. The runner still caches one client object per worker thread, but it holds only
+configuration, so nothing is shared between calls. Measured 2026-10-04: ~510 setup tokens per call,
+~3.3-3.7 s per short call including launch, ~250 MB peak working set per process (at most `workers`
+alive at once), zero processes left after a run.
+
+**Before 2026-10-04 this was not true.** The client kept one persistent process per worker thread and
+each call was the next turn of one growing conversation, so a round saw that persona's earlier rounds
+and every persona the thread had judged before (about 94% of the calls behind the pre-fix figures
+carried earlier judgements; the CLI also loaded the repository's `CLAUDE.md`). Round-to-round
+agreement (ICC, Krippendorff's α) from those runs is inflated by construction and verdicts depend on
+thread scheduling. See `docs/development/plans/completed/fix-claude-cli-conversation-leak.md`.
+
+The regimes cannot be mixed silently:
+
+- every persona cache records `context_isolation` (currently `fresh_process_per_call_v1`); a
+  pre-fix cache has no tag;
+- the runner raises on a cache whose tag is not the current one -- it is neither skipped as complete
+  nor topped up -- and points at `--force`. `--rewrite-artifacts` (plan-only, zero LLM calls) may
+  still read old caches;
+- the runner raises if a judge client's metadata does not report the current tag on a successful
+  call;
+- each report's `provenance.context_isolation` is read from its caches (an untagged combination is
+  stamped `untagged_shared_conversation`; a combination mixing regimes raises);
+- `realism_ranking` treats `context_isolation` as a judge-identity key, so a consumption set mixing
+  regimes raises.
+
+Re-judge everything after the fix with `--force` (see the plan for the run estimate).
 
 ## Reliability is self-consistency, not validity
 

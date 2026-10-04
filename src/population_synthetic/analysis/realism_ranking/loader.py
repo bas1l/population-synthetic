@@ -29,11 +29,12 @@ silently ranked, because a combination missing half its personas would simply ap
 to have an unusually clean impossibility rate.
 
 **Homogeneity.** Every consumed combination must share the same ``judge_model``,
-``prompt_template_sha256`` and ``n_rounds``. Ranking units judged by different judges,
-prompts, or round counts measures the judges, not the units. The identity is read from
+``prompt_template_sha256``, ``context_isolation`` (the judge-call regime) and
+``n_rounds``. Ranking units judged by different judges, prompts, call-isolation regimes
+or round counts measures the judges, not the units. The identity is read from
 each report's stamped ``provenance`` block -- what was actually used -- and never from
 the config as it currently stands, which may have moved on since. Under a round cap
-the third key is not dropped but *changed in kind*: the set is held to one consumed
+the ``n_rounds`` key is not dropped but *changed in kind*: the set is held to one consumed
 round count by construction, so ``n_rounds`` becomes a **capacity** requirement (every
 persona of every competitor must hold at least N cached rounds) instead of an equality.
 The first two keys are never relaxed -- no cap can repair a different judge or prompt.
@@ -98,7 +99,13 @@ ROUND_COUNT_KEY = "n_rounds"
 
 #: The provenance fields that must agree across the whole consumption set. Each one
 #: changes what the judge measured, so a mismatch makes the units incomparable.
-JUDGE_IDENTITY_KEYS: tuple[str, ...] = ("judge_model", "prompt_template_sha256", ROUND_COUNT_KEY)
+#: ``context_isolation`` is the judge-call regime read from the verdict caches: a
+#: report judged under the old shared-conversation regime (``untagged_shared_conversation``,
+#: or no key at all on a report written before the field existed) can never be ranked
+#: beside one whose every call was an independent conversation.
+JUDGE_IDENTITY_KEYS: tuple[str, ...] = (
+    "judge_model", "prompt_template_sha256", "context_isolation", ROUND_COUNT_KEY,
+)
 
 #: The subset compared when a round cap is active -- derived from the full tuple rather
 #: than restated, so the two can never list different judge fields. The cap already
@@ -506,8 +513,8 @@ def _assert_homogeneous(records: list[CompetitorRecord], *, cap_active: bool) ->
             raise ValueError(
                 f"Heterogeneous judge across the consumption set: {record.slug!r} differs "
                 f"from {baseline.slug!r} ({'; '.join(differing)}). Ranking combinations "
-                "judged by different judges, prompts, or round counts measures the judges, "
-                "not the combinations. Re-judge the odd combination(s) under one "
+                "judged by different judges, prompts, call-isolation regimes or round counts "
+                "measures the judges, not the combinations. Re-judge the odd combination(s) under one "
                 "configuration, or narrow the selection with --slug / --model / --strategy."
             )
 

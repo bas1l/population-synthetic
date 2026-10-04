@@ -174,7 +174,7 @@ python scripts/analyze/analyze_cost_efficiency.py --country swedish_02 --no-char
 
 # Persona realism judge (LLM-as-judge): judge each mapped persona's internal coherence with the
 # Claude CLI (default claude-sonnet-5; Fable is the slowest/most-expensive selectable option) over N
-# cold rounds -- can_exist (binary) + typicality (0-10) +
+# independent rounds (one fresh claude process per call) -- can_exist (binary) + typicality (0-10) +
 # severity-tagged clash issues -- and rank every combination PLUS the SCB real reference on a per-
 # combination impossibility rate (bootstrap CI) x typicality-dispersion-vs-SCB (Levene), with an
 # ICC/alpha judge self-consistency metric. Two-stage: run map_populations.py first (depends_on:

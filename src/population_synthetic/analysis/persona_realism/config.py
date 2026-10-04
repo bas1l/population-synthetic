@@ -36,12 +36,15 @@ class JudgeConfig:
     decided solely by the ``can_exist`` majority (see ``reduce.reduce_persona``).
     ``judge.yaml`` documents this and every report carries a ``severity_config_status``
     note saying so, so the stamp can never be mistaken for an active knob.
+
+    There is deliberately **no** ``temperature`` field: the judge runs through the
+    ``claude`` CLI, which has no sampling-temperature control, so :meth:`load` raises
+    on a ``temperature`` key rather than carry a value that is never applied.
     """
 
     judge_model: str
     model_options: tuple[str, ...]
     n_rounds: int
-    temperature: float
     severity_weights: dict[str, float]
     impossibility_severities: tuple[str, ...]
     sample_size: int | None
@@ -82,7 +85,7 @@ class JudgeConfig:
             raise ValueError(f"judge config {judge_path} did not parse to a mapping")
 
         required = [
-            "judge_model", "model_options", "n_rounds", "temperature",
+            "judge_model", "model_options", "n_rounds",
             "severity_weights", "impossibility_severities", "sample_size",
             "real_sample_size", "bootstrap", "workers", "timeout_seconds",
             "prompt_template",
@@ -90,6 +93,17 @@ class JudgeConfig:
         missing = [key for key in required if key not in data]
         if missing:
             raise ValueError(f"judge config {judge_path} is missing required keys: {missing}")
+
+        # A declared parameter the provider cannot honour is refused, not carried: the
+        # `claude` CLI (the only judge route) has no sampling-temperature control, and
+        # a stamped-but-unapplied temperature once made every report's provenance false.
+        if "temperature" in data:
+            raise ValueError(
+                f"judge config {judge_path} declares 'temperature', but the judge runs "
+                "through the `claude` CLI, which exposes no sampling-temperature control "
+                "(no flag, no settings key). Remove the key: it would be recorded in "
+                "provenance yet never applied."
+            )
 
         template_path = (config_dir / str(data["prompt_template"])).resolve()
         if not template_path.exists():
@@ -132,7 +146,6 @@ class JudgeConfig:
             judge_model=str(data["judge_model"]),
             model_options=tuple(str(m) for m in data["model_options"]),
             n_rounds=n_rounds,
-            temperature=float(data["temperature"]),
             severity_weights=dict(data["severity_weights"]),
             impossibility_severities=tuple(str(s) for s in data["impossibility_severities"]),
             sample_size=sample_size,

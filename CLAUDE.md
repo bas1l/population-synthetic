@@ -123,7 +123,7 @@ reported with the money it cost and the personas it kept; and **no composite sco
 about a third of the model axis is unmetered (priced `{in: 0, out: 0}`, the local `ollama_*` models)
 and unmetered is not free, so the flag travels as a data column and the scatter draws those models
 in a labelled zero-cost band on a symlog x-axis,
-`persona_realism/` an LLM-as-judge coherence task — judges each individual mapped persona N cold
+`persona_realism/` an LLM-as-judge coherence task — judges each individual mapped persona N independent
 rounds (`can_exist` binary + `typicality` 0-10 ordinal + severity-tagged clash issues) and reduces
 round → persona → combination into **that combination's own** impossibility rate (bootstrap CI),
 typicality dispersion, and judge self-reliability metric (ICC / Krippendorff's α — self-consistency,
@@ -252,7 +252,7 @@ that the task's outputs are already on disk — so it is confirmed by an unskipp
 ## Environment & Secrets
 
 - `GEMINI_API_KEY` environment variable required for identity generation with `--provider gemini` (raises `ValueError` if missing)
-- `--provider claude` requires the `claude` CLI on PATH; raises `RuntimeError` at construction if not found; no extra API key needed (Claude Code manages its own auth)
+- `--provider claude` requires the `claude` CLI on PATH; raises `RuntimeError` at construction if not found; no extra API key needed (Claude Code manages its own auth). Every call is a fresh minimal `claude -p` process (`--tools ""`, `--setting-sources ""`, empty temp cwd) -- never a persistent conversation -- and the CLI has no temperature control, so a configured temperature is recorded as `temperature_applied: false`
 - `OPENROUTER_API_KEY` environment variable required for identity generation with `--provider openrouter` (raises `ValueError` if missing)
 - `--provider ollama` needs no API key, but it **does** need an endpoint: select one with `--ollama-host <id>` from the registry at `config/synthetic/ollama_hosts.yaml` (omitted → that file's `default_host`). There is no default base URL in code and no `OLLAMA_BASE_URL` env read — both were removed, since a silent fallback dispatches a whole sweep to the wrong GPU while the outputs look normal. `--base-url` remains as an explicit ad-hoc override. Worker counts are per (model × host), declared in each `ollama_*` axis file's `parameters.parallel.workers` map; an unsupported (host, model) pair raises before any persona is generated. See [Ollama hosts](docs/ollama_server_models.md).
 - `--ollama-reconfigure` (off by default on the CLI, **on by default in the GUI flow**) adds a once-per-invocation pre-flight that sets the selected host's `OLLAMA_NUM_PARALLEL` to the run's resolved worker count via that host's optional `control_url` (`:11435`), then warms the model and gates on the server serving again. **A run may therefore restart the host's Ollama container**, evicting the loaded model and killing another user's in-flight request — accepted deliberately, and bounded by the skip check (a server already at the requested value is read and left untouched) and by the flag being opt-in. Never fatal: the outcome is one of `already_correct` / `applied` / `mismatch` / `failed` / `no_control_url` and is recorded in `run_metadata.json` with the `observed` value read back from `/status` (never the requested one).

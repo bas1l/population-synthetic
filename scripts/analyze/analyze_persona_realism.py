@@ -31,7 +31,7 @@ GUI dispatches this task one subprocess per combination and fails the task on th
 nonzero exit, so erroring on a withdrawal would take every later combination and every
 dependent task down with it. Exit 1 is reserved for a selection that matched nothing.
 
-Judge model, rounds, temperature, sampling size, and bootstrap
+Judge model, rounds, sampling size, and bootstrap
 params are config-driven (``config/analysis/persona_realism/``); cost per combo
 reuses ``config/analysis/model_pricing.yaml`` (fail-fast on a missing pricing row).
 
