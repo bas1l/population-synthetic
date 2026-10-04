@@ -189,3 +189,72 @@ PARENTAL_DECISIONS = [
 @pytest.mark.parametrize("raw, expected", PARENTAL_FIXED + PARENTAL_FALSE_ALARMS + PARENTAL_DECISIONS)
 def test_parental_structure(resolve, raw, expected):
     assert resolve("parental_structure", raw) == expected
+
+
+# ---------------------------------------------------------------------------
+# socioeconomic_class -- income band relative to the (age, sex) median: <0.6 / 0.6-1 / 1-2 / >2
+# ---------------------------------------------------------------------------
+
+_PO = "Poverty"
+_WC = "Working Class"
+_MC = "Middle Class"
+_WE = "Wealthy"
+
+SOCIO_FIXED = [
+    ("Ekonomiskt utsatt", _PO),  # explicit poverty cue
+    ("Ekonomiskt utsatt pensionär", _PO),
+    ("Ekonomiskt beroende av offentliga stöd", _PO),
+    ("Biståndsberoende", _PO),
+    ("Economically Disadvantaged", _PO),
+    ("High-income professional", _WE),  # the income cue decides, not the occupation word
+    ("Affluent professional", _WE),
+    ("Pensionär med hög inkomst", _WE),
+    ("Klassresenär från arbetarklass till medelklass", _MC),  # class journey: the current class
+    ("medelklass (student)", _MC),
+    ("Earning above average", _MC),
+    ("Borgare (medel)", _MC),
+]
+
+SOCIO_FALSE_ALARMS = [
+    ("High income bracket", _WE),
+    ("Betalda med hög inkomst", _WE),
+    ("At-risk-of-poverty", _PO),
+    ("Lägre medelklassen", _WC),
+    ("Lower middle class (lägre medelklass)", _WC),
+    ("Lägre medelklass (Tjänsteman)", _WC),
+]
+
+SOCIO_DECISIONS = [
+    # Boundary decision (2026-10-04): low income / underklass -> Poverty; modest / moderate -> Working;
+    # median / average -> Middle; lower class -> Working.
+    ("Låginkomsttagare", _PO),
+    ("Lägre inkomst", _PO),
+    ("Underklass", _PO),
+    ("modest income class", _WC),
+    ("moderate income", _WC),
+    ("Medianinkomst", _MC),
+    ("Average income", _MC),
+    ("Lower class", _WC),
+    ("Lägre klass", _WC),
+    # Open question 12 default: lower / low socioeconomic status and Lågklass read as "lower class".
+    ("Lägre socioekonomisk grupp", _WC),
+    ("Låg socioekonomisk status", _WC),
+    ("Lågklass", _WC),
+    # Lower-middle is Working Class everywhere (was split between two classes).
+    ("Lägre medelklass", _WC),
+    # Open question 13 defaults: generic economy wording.
+    ("Begränsad ekonomi", _WC),
+    ("Låg pension", _PO),
+    ("Ekonomiskt stabil", UNMAPPED),
+    # prefix mode: "hög inkomst" no longer matches inside "medelhög inkomst".
+    ("Medelhög inkomst", _MC),
+    # Status words carry no income band (Phase 4: removed under either option).
+    ("Student", UNMAPPED),
+    ("Studerande", UNMAPPED),
+    ("Pensionär", UNMAPPED),
+]
+
+
+@pytest.mark.parametrize("raw, expected", SOCIO_FIXED + SOCIO_FALSE_ALARMS + SOCIO_DECISIONS)
+def test_socioeconomic_class(resolve, raw, expected):
+    assert resolve("socioeconomic_class", raw) == expected
