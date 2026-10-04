@@ -273,8 +273,8 @@ def _swedish_identity(**overrides) -> dict:
     ("employment_status", "Heltidsanställd", "Employed"),
     # longest beats axis order; it-konsult
     ("industry_sector", "IT-konsulting", "Information & Communication"),
-    # negation: a cue before the token discards it; a cue-initial token still hits
-    ("civil_status", "Inte gift", "__UNMAPPED__"),
+    # negation: a cue before the token discards it (Married); a cue-initial token still hits
+    ("civil_status", "Inte gift", "Single/Never Married"),
     ("civil_status", "Never married", "Single/Never Married"),
     # hours facet: stated hours re-band the attachment (AKU 1-19 / 20-34 / 35+)
     ("employment_type", "Tillsvidareanställning, 15 timmar/vecka", "Permanent Short Part-time"),
