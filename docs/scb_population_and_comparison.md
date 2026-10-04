@@ -175,7 +175,7 @@ All populations use the same schema labels for comparability:
 | biological_sex | Male, Female |
 | education_level | No Formal Education, High School (Gymnasieskola), Vocational (Yrkeshogskola), University Degree |
 | employment_status | Employed, Unemployed, Student, Retired |
-| birth_location | Sweden, Nordic Country, Europe (Other), Outside Europe |
+| birth_location | Sweden, Born in another EU country, Born outside the EU (FolkmFodlandHVD `FSV`/`FEU`/`FUEU`; native tier, deprecated from analysis) |
 | ethnicity | Swedish, Nordic, European, Non-European |
 | region | 21 Swedish counties (e.g., Stockholm, Västra Götaland) |
 | current_environment_type | Urban Metropolis, Suburban, Rural/Countryside |

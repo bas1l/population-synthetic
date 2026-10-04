@@ -1,13 +1,13 @@
 {
   "values": [
     "Sweden",
-    "Europe (Other)",
-    "Outside Europe"
+    "Born in another EU country",
+    "Born outside the EU"
   ],
   "priority": [
     "Sweden",
-    "Europe (Other)",
-    "Outside Europe"
+    "Born in another EU country",
+    "Born outside the EU"
   ],
   "real": {
     "Sweden": {
@@ -18,34 +18,18 @@
         "Födda i Sverige"
       ]
     },
-    "Europe (Other)": {
+    "Born in another EU country": {
       "equals": [
-        "Europe (Other)",
-        "Norden utom Sverige",
-        "Nordic countries except Sweden",
-        "EU/EES utom Norden",
-        "EU/EEA excl. Nordic",
+        "Born in another EU country",
         "Born in another EU Member State",
-        "Födda i annat EU-land",
-        "Europa utom EU/EES",
-        "Europe excl. EU/EEA"
+        "Födda i annat EU-land"
       ]
     },
-    "Outside Europe": {
+    "Born outside the EU": {
       "equals": [
-        "Outside Europe",
         "Born outside the EU",
-        "Födda utanför EU",
-        "Afrika",
-        "Africa",
-        "Nordamerika",
-        "North America",
-        "Sydamerika",
-        "South America",
-        "Asien",
-        "Asia",
-        "Oceanien",
-        "Oceania"
+        "Born outside the EU",
+        "Födda utanför EU"
       ]
     }
   },
@@ -390,32 +374,22 @@
         "sverige"
       ]
     },
-    "Europe (Other)": {
+    "Born in another EU country": {
       "equals": [
-        "Europe (Other)"
+        "Born in another EU country"
       ],
       "contains": [
         "finland",
         "finl",
-        "norge",
-        "norway",
         "danmark",
         "denmark",
-        "island",
-        "iceland",
-        "albania",
-        "albanien",
         "austria",
-        "belarus",
         "belgien",
         "belgium",
-        "bosnia",
-        "bosnien",
         "bulgaria",
         "bulgarien",
         "croatia",
         "czech",
-        "england",
         "estland",
         "estonia",
         "france",
@@ -429,56 +403,39 @@
         "irland",
         "italien",
         "italy",
-        "jugoslavien",
-        "kosovo",
         "kroatien",
         "latvia",
         "lettland",
         "litauen",
         "lithuania",
-        "moldov",
-        "monteneg",
         "nederländerna",
         "netherlands",
-        "nordmakedon",
         "poland",
         "polen",
         "portugal",
         "romania",
         "rumänien",
-        "schweiz",
-        "scotland",
-        "serbia",
-        "serbien",
         "slovakia",
         "slovakien",
         "slovenia",
         "slovenien",
         "spain",
         "spanien",
-        "switzerland",
         "tjeckien",
         "tyskland",
-        "uk",
-        "ukraina",
-        "ukraine",
         "ungern",
-        "united kingdom",
-        "vitryssland",
-        "wales",
-        "yugoslavia",
         "österrike",
-        "nordic",
-        "scandinav",
-        "eu/europe",
-        "european",
-        "europe",
-        "immigrant"
+        "åland",
+        "cypern",
+        "cyprus",
+        "luxemburg",
+        "luxembourg",
+        "malta"
       ]
     },
-    "Outside Europe": {
+    "Born outside the EU": {
       "equals": [
-        "Outside Europe"
+        "Born outside the EU"
       ],
       "contains": [
         "afghanistan",
@@ -549,7 +506,37 @@
         "outside europe",
         "refugee",
         "displaced",
-        "international"
+        "international",
+        "norge",
+        "norway",
+        {
+          "token": "island",
+          "mode": "word"
+        },
+        "iceland",
+        "albania",
+        "albanien",
+        "belarus",
+        "bosnia",
+        "bosnien",
+        "england",
+        "jugoslavien",
+        "kosovo",
+        "moldov",
+        "monteneg",
+        "nordmakedon",
+        "schweiz",
+        "scotland",
+        "serbia",
+        "serbien",
+        "switzerland",
+        "uk",
+        "ukraina",
+        "ukraine",
+        "united kingdom",
+        "vitryssland",
+        "wales",
+        "yugoslavia"
       ]
     },
     "refine_from": "birth_country_detail"

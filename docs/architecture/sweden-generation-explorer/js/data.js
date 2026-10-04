@@ -96,9 +96,9 @@ const SPEC = {
     { id: "birthloc", kind: "cond", x: 8.9, y: 9.3, step: "4a",
       label: "birth_location", caption: "| age_group, sex", verdict: "equivalent",
       table: "BE/BE0101/BE0101E/FolkmFodlandHVD",
-      tableName: "Population by birth region (Sweden / EU-EFTA / outside) — FolkmFodlandHVD",
+      tableName: "Population by birth region (Sweden / other EU / outside the EU) — FolkmFodlandHVD",
       query: "Fodelseland [FSV,FEU,FUEU], HDI=TOT, Kon [1,2], Alder [single yrs 18–85], Tid 2025",
-      categories: ["Sweden","Europe (Other)","Outside Europe"],
+      categories: ["Sweden","Born in another EU country","Born outside the EU"],
       used: ["age_group","sex"], option: null, marginal: false,
       note: "Source-audit switch to an age×sex conditional query (was an all-ages, both-sexes aggregate). Bulk = per-individual: the sampler reads birth_location.get((age_group, sex)). Parents the country-of-birth detail draw for foreign-born individuals." },
 

@@ -118,12 +118,25 @@ axis).
 
 This tier deprecates **`birth_location`**, so Sweden analyses **14** axes (not 15) while the
 field is still present in generated/mapped populations. Reason: `birth_location` (coarse
-Sweden/EU/non-Europe) and `birth_country_detail` (top-20 specific countries) are sampled as
-independent marginals joined only by a binary Sweden/non-Sweden gate, so contradictory pairs
-occur (e.g. "Outside Europe" + "Germany"); `birth_country_detail` already carries the
-birthplace signal, so the coarse axis is dropped from scoring while retained in data. This
-sidesteps — does not fix — the sampling independence; see
+Sweden / other EU / outside the EU) and `birth_country_detail` (top-20 specific countries) are
+sampled as independent marginals joined only by a binary Sweden/non-Sweden gate, so
+contradictory pairs occur (e.g. "Born outside the EU" + "Germany"); `birth_country_detail`
+already carries the birthplace signal, so the coarse axis is dropped from scoring while retained
+in data. This sidesteps — does not fix — the sampling independence; see
 `docs/development/plans/active/deprecate-birth-location-analysis-axis.md`.
+
+**Birth-region labels.** FolkmFodlandHVD returns `FSV` / `FEU` / `FUEU` — born in Sweden, in
+another EU member state, outside the EU — so the two foreign values are named **`Born in another
+EU country`** and **`Born outside the EU`** (they were "Europe (Other)" / "Outside Europe", which
+misdescribed the table). The synthetic country lists follow EU membership: Norway, Iceland, the
+UK, Switzerland, Serbia, Bosnia, Ukraine, (former) Yugoslavia, Kosovo, Albania, Belarus, Moldova,
+Montenegro and North Macedonia are outside the EU; `nordic`, `scandinav`, `europe`, `european`
+and `immigrant` fit neither side and are not tokens. The `real` block lists only the three
+FolkmFodlandHVD labels (the legacy labels of other tables were dead). Still open: `refine_from`
+re-walks only the *resolved* `birth_country_detail` value, so a country outside its 21
+categories leaves `birth_location` unmapped even when the country is in these lists. The global
+tier `config/mapping/scb/` and Italy's `istat` keep the old labels (Italy's "Europe (Other)" is
+the same EU27 mislabel, out of scope).
 
 ## Resolution vs the coarse (global) tier
 
@@ -134,6 +147,14 @@ until the global tier is formalised as a native → global overlay:
 `age_group`, `biological_sex`, `education_level`, `employment_status`, `birth_location`,
 `socioeconomic_class`, `region`, `civil_status`, `housing_tenure`, `household_size`,
 `income_source`, `birth_country_detail`.
+
+Since the SCB-checked audit (`docs/development/plans/pending/mapping-fixes-scb-audit.md`) these
+files are **no longer verbatim copies**: the native synthetic blocks are written for this tier's
+`prefix` / negation / `longest` matching and carry the audit's rule changes and the birth-region
+rename, while `config/mapping/scb/` keeps the historic behaviour-preserving matching and rules.
+The global tier was deliberately not mirrored (it is read by no Swedish axis file, and the native
+rules would not mean the same under `substring` matching); re-deriving it is part of formalising
+the native → global overlay.
 
 3 attributes are **expanded to native resolution** here (the coarse tier merges them):
 

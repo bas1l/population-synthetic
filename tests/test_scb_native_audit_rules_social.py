@@ -310,3 +310,36 @@ SMALL_CASES = [
 @pytest.mark.parametrize("attr, raw, expected", SMALL_CASES)
 def test_small_attributes(resolve, attr, raw, expected):
     assert resolve(attr, raw) == expected
+
+
+# ---------------------------------------------------------------------------
+# birth_location -- FolkmFodlandHVD: FSV / FEU / FUEU (Sweden / other EU / outside the EU)
+# ---------------------------------------------------------------------------
+
+BIRTH_REGION_CASES = [
+    ("Stockholm", None, "Sweden"),
+    ("Polen", None, "Born in another EU country"),
+    ("Åland Islands", None, "Born in another EU country"),  # Finland; "island" is a whole word only
+    ("Oslo, Norge", None, "Born outside the EU"),
+    ("United Kingdom", None, "Born outside the EU"),
+    ("Island", None, "Born outside the EU"),  # Swedish for Iceland
+    ("Bagdad, Irak", None, "Born outside the EU"),
+    ("Europe", None, UNMAPPED),  # EU or not is undecidable
+    ("Nordic country", None, UNMAPPED),
+    ("", "Germany", "Born in another EU country"),  # refined from birth_country_detail
+    ("", "Bosnia and Herzegovina", "Born outside the EU"),
+]
+
+
+@pytest.mark.parametrize("raw, refine, expected", BIRTH_REGION_CASES)
+def test_birth_location(resolve, raw, refine, expected):
+    assert resolve("birth_location", raw, refine_value=refine) == expected
+
+
+def test_birth_location_real_labels():
+    block = load_mappings(_TIER)["birth_location"]
+    real = mapping_engine.compile_matching(load_mappings(_TIER)["_index"]["matching"]["real"])
+    for raw, expected in [("born in Sweden", "Sweden"), ("born in another EU Member State", "Born in another EU country"),
+                          ("born outside the EU", "Born outside the EU")]:
+        assert mapping_engine.resolve(raw, block["real"], block["values"], matching=real,
+                                      priority=block["priority"]) == expected

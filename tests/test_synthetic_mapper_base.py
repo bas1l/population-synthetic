@@ -193,12 +193,14 @@ def test_invalid_config_raises_at_construction():
 
 # --- real-config integration: the Sweden Nordic-fold reconciliation ---------
 
-def test_swedish_nordic_born_folds_into_europe_other():
-    # Sweden dropped the "Nordic Country" bucket in Phase 3: a Norway-born persona
-    # now folds into "Europe (Other)" on both sides.
+def test_swedish_norway_born_is_outside_the_eu():
+    # FolkmFodlandHVD splits Sweden / other EU / outside the EU, so a Norway-born
+    # persona is "Born outside the EU" and a Germany-born one "Born in another EU country".
     mapper = get_synthetic_mapper("swedish")
     out = mapper.map_individual(_swedish_identity(birth_country_detail="Norway"), "p")
-    assert out["birth_location"] == "Europe (Other)"
+    assert out["birth_location"] == "Born outside the EU"
+    out = mapper.map_individual(_swedish_identity(birth_country_detail="Germany"), "p")
+    assert out["birth_location"] == "Born in another EU country"
 
 
 def test_swedish_domestic_maps_to_sweden():
