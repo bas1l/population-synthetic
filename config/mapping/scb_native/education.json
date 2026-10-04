@@ -98,7 +98,44 @@
         "primary",
         "ingen utbildning",
         "ingen formell",
-        "lägre grundskola"
+        "lägre grundskola",
+        "folkskol",
+        "folk-skol",
+        "kortare än 9",
+        "shorter than 9",
+        "less than 9",
+        "ingen avslutad grundskol",
+        "ej fullgjord grundskol"
+      ],
+      "all_of": [
+        [
+          "grundskol",
+          "folkskol"
+        ],
+        [
+          "6 år",
+          "7 år",
+          "8 år",
+          "6-7",
+          "7-8",
+          "6–",
+          "7-år",
+          "8-år",
+          "lågstadi",
+          "mellanstadi",
+          "ej fullgjord",
+          "ingen avslutad",
+          "kortare än grundskol"
+        ]
+      ],
+      "none_of": [
+        "lower secondary",
+        "9 years",
+        "(grundskola",
+        "grundskola (primary",
+        "grundskolan)",
+        "('grundskola')",
+        "primary and secondary"
       ]
     },
     "Pre-Secondary 9-10 yrs (ISCED 2)": {
@@ -135,8 +172,53 @@
         "compulsory",
         "elementary",
         "primary school",
-        "folkskola",
-        "realskoleexamen"
+        "realskoleexamen",
+        {
+          "token": "grundskol",
+          "mode": "substring"
+        },
+        "realskol",
+        "introduktionsprogram",
+        "junior high",
+        "högstadiexamen",
+        "förgymnasial",
+        "grundläggande vuxen",
+        "sfi ",
+        "lower secondary education",
+        "(9 years)",
+        "introductory program"
+      ],
+      "all_of": [
+        [
+          "gymnasi",
+          "upper secondary"
+        ],
+        [
+          "pågående",
+          "ofullständig",
+          "avbruten",
+          "ingen gymnasi",
+          "ongoing",
+          "påbörjad",
+          "incomplete",
+          "no formal upper",
+          "gymnasiebehörighet",
+          "pågår",
+          "currently",
+          "in progress",
+          "enrolled"
+        ]
+      ],
+      "none_of": [
+        "post-secondary",
+        "post secondary",
+        "post-upper secondary",
+        "postsecondary",
+        "efter gymnasi",
+        "högskol",
+        "universit",
+        "university",
+        "eftergymnasial"
       ]
     },
     "Upper Secondary ≤ 2 yrs (ISCED 3C)": {
@@ -152,9 +234,38 @@
         "Home economics/household school (husmodersskola)"
       ],
       "contains": [
-        "upper secondary",
         "isced 3c",
-        "isced97 3c"
+        "isced97 3c",
+        "yrkesskola",
+        "lärling"
+      ],
+      "none_of": [
+        "post-secondary",
+        "post secondary",
+        "post-upper secondary",
+        "postsecondary",
+        "efter gymnasi"
+      ],
+      "all_of": [
+        [
+          "upper secondary",
+          "gymnasi",
+          "yrkesutbildning"
+        ],
+        [
+          "2 år",
+          "2-år",
+          "2 years",
+          "two-year",
+          "tvåårig",
+          "högst 2",
+          "or less",
+          "kortare än 2",
+          "2-årig",
+          "kortare än 3",
+          "shorter than 3",
+          "less than 3"
+        ]
       ]
     },
     "Upper Secondary 3 yrs (ISCED 3A)": {
@@ -170,9 +281,11 @@
         "High School Diploma",
         "secondary",
         "Komvux",
-        "Folkhögskola",
         "Kommunal vuxenutbildning",
-        "Adult education (voksenutbildning) diploma"
+        "Adult education (voksenutbildning) diploma",
+        "Baccalaureat",
+        "Baccalauréat",
+        "International Baccalaureate"
       ],
       "contains": [
         "upper secondary 3",
@@ -196,8 +309,36 @@
         "komvux",
         "kommunal vuxenutbildning",
         "vuxenutbildning",
-        "folkhögskola",
-        "folkhogskola"
+        "upper secondary",
+        "entrance qualification",
+        "preparatory",
+        {
+          "token": "förberedande",
+          "mode": "substring"
+        },
+        "högskolebehörighet",
+        "yrkesprogram",
+        "studentexamen",
+        "studentereexamen",
+        "reifeexamen",
+        "mogenhetsexamen",
+        "samhällsvetenskapsprogram",
+        "samhällsvetenskapligt program",
+        "samhällsprogram",
+        "samhällslinje",
+        "naturvetenskapsprogram",
+        "naturvetenskapligt program",
+        "ekonomiprogrammet",
+        "estetiska programmet",
+        "barn- och fritidsprogram",
+        "fordons- och transportprogram"
+      ],
+      "none_of": [
+        "post-secondary",
+        "post secondary",
+        "post-upper secondary",
+        "postsecondary",
+        "efter gymnasi"
       ]
     },
     "Post-Secondary < 3 yrs (ISCED 4+5B)": {
@@ -212,7 +353,8 @@
           "university",
           "higher education",
           "college",
-          "tertiary"
+          "tertiary",
+          "post-upper secondary"
         ],
         [
           "kortare än 3",
@@ -235,7 +377,10 @@
           "kort",
           "short",
           "första året",
-          "2-3 years"
+          "2-3 years",
+          "less than 2",
+          "mindre än 2",
+          "kortare än 2"
         ]
       ],
       "equals": [
@@ -246,7 +391,9 @@
         "Högskoleutbildning, kortare än 3 år",
         "Högskola/universitet, kortare än 3 år",
         "Eftergymnasial utbildning, kortare än 3 år",
-        "Yrkesexamen"
+        "Yrkesexamen",
+        "Högskoleexamen",
+        "Hogskoleexamen"
       ],
       "contains": [
         "post-secondary <",
@@ -259,13 +406,44 @@
         "yrkeshögskola",
         "yrkes",
         "higher vocational",
-        "yh-"
+        "yh-",
+        "högskoleexamen",
+        "hogskoleexamen",
+        "university diploma",
+        "higher education diploma",
+        "associate",
+        "short-cycle",
+        "short cycle",
+        "short_cycle",
+        "short tertiary",
+        "non-tertiary",
+        "polisutbildning",
+        "yrkeshögskol",
+        "kvalificerad yrkes"
       ],
       "none_of": [
         "master",
         "magister",
         "kandidat",
-        "bachelor"
+        "bachelor",
+        "universitets-",
+        "universitet/",
+        "3 år eller",
+        "(3 år)",
+        ", 3 år)",
+        "3-årig",
+        "3 years or",
+        "doktor",
+        "doctoral",
+        "phd",
+        "licentiat",
+        "behörighet",
+        {
+          "token": "förberedande",
+          "mode": "substring"
+        },
+        "entrance qualification",
+        "preparatory"
       ]
     },
     "Post-Secondary 3+ yrs (ISCED 5A)": {
@@ -280,7 +458,8 @@
           "university",
           "higher education",
           "college",
-          "tertiary"
+          "tertiary",
+          "post-upper secondary"
         ],
         [
           "3 år eller",
@@ -316,7 +495,6 @@
         "Sjuksköterskeexamen",
         "Lärarexamen",
         "Ekonomexamen",
-        "Hogskoleexamen",
         "Högskola/universitet, 3 år eller mer",
         "Högskoleutbildning, 3 år eller mer",
         "Universitetsutbildning",
@@ -389,7 +567,37 @@
         "first cycle",
         "grundnivå",
         "grundniva",
-        "higher education"
+        "higher education",
+        "magisterexamen",
+        "doktorand",
+        "psykologexamen",
+        "tandläkarexamen",
+        "läkarutbildning",
+        "juridikexamen",
+        "juridisk examen",
+        "lärarexamen",
+        "teacher education",
+        "sjuksköterskeutbildning",
+        "specialist nursing",
+        "ekonomexamen",
+        "ekonomxamen",
+        "samhällsvetarprogram",
+        "lång högre utbildning",
+        "längre högre utbildning",
+        "längre_högre",
+        "lång utbildning i högre",
+        "kanditexamen",
+        "mastér",
+        "μάsters"
+      ],
+      "none_of": [
+        "entrance qualification",
+        "preparatory",
+        {
+          "token": "förberedande",
+          "mode": "substring"
+        },
+        "behörighet"
       ]
     },
     "Post-Graduate (ISCED 6)": {
@@ -408,7 +616,10 @@
         "research degree",
         "licentiate",
         "isced 6",
-        "isced97 6"
+        "isced97 6",
+        "licentiat",
+        "medicine doktor",
+        "filosofie doktor"
       ]
     },
     "Unknown / Not reported": {
