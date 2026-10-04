@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 **Author:** Basil
-**Status:** In progress — Phase 3 code done 2026-10-04 (re-sample pending, see Phase 3 implementation notes)
+**Status:** In progress — Phase 1 done 2026-10-04; Phase 3 code done 2026-10-04 (re-sample pending, see Phase 3 implementation notes)
 **Base Branch:** `dev` (note: `feature/household-size-persons-unit` is unmerged; implementation may
 stack on it, since Phase 3 shares its re-sample)
 **Branch:** `feature/mapping-fixes-scb-audit`
@@ -142,6 +142,77 @@ matcher vocabulary, tie rule and ties sidecar ("Unified symmetric mapping config
 
 **Exit check.** The 100 % reproduction harness passes after 1a; after each later commit, re-map
 the capped mirror and count personas newly `__UNMAPPED__` per combo (Impact, full-N risk).
+
+**Status: done 2026-10-04** (commits `0977715` 1a, `dc1209b` 1b, `5877c43` 1c, `0803721` 1d,
+`201fa4f` 1e, plus the docs/plan commit).
+
+**Implementation notes (Phase 1).**
+
+- *Reproduction.* After 1a the old engine (HEAD) and the new one map the full `01_Raw` pool
+  (21,931 Swedish personas through `scb` and `scb_native`, 1,316 Italian through `istat`) and the
+  real SCB reference with **0** differing cells; the real-engine harness reproduces 12,552 / 12,552
+  curated rows. The Italian real reference (`data/istat_api/istat_population.json`) is not on disk,
+  so the Italian real side was checked only through the config contract test.
+- *`ssb` not touched.* `config/mapping/ssb/` has no `_index.json` and is not read by the engine (legacy
+  Norway label maps); the `matching` block lives in `scb_native`, `scb`, `istat` only.
+- *`priority` is per attribute file*, shared by both sides (as planned); every file starts with
+  `priority == values` (today's order already is BAS for employment and wage-first for income).
+  `tie_break` must end with `priority` (validator), so every tie resolves. Per-attribute overrides
+  are block directives: `tie_break` (employment_status, income_source → `["priority"]`) and
+  `negation: null` (biological_sex, birth_location).
+- *Composite sub-fields* are declared in a new `subfields` directive (real `employment_type`, all
+  three dirs); any other non-matcher key raises. Empty tokens raise; `equals` accepts strings only.
+- *Ties sidecar* `{slug}.ties.csv` (`persona_id, attribute, raw_value, tier, candidates, winner,
+  criterion`); ambiguous facet reads go to the **same** sidecar with `tier=numeric_facet`,
+  `criterion=facet_ambiguous` (no separate file).
+- *API change.* `mapping_engine.resolve` / `resolve_detailed` now require `matching=` and
+  `priority=`; `flatten_raw_population` / `flatten_individual` take `matching=` (the directory's
+  `matching.real`), wired in `scripts/analyze/compare_real_countries.py`.
+- *Substring overrides (1c).* Worklist generated over the full `01_Raw` Swedish pool with a stricter
+  criterion than the prototype: a token is listed only when the value's hit would be lost under
+  `prefix` (not merely when the first-listed token was mid-word), and `none_of` vetoes that fire only
+  mid-word are listed too (else e.g. `job` would stop vetoing "studentjobb" → Not Applicable, 211
+  cells). Overrides are applied per (attribute, token) to every occurrence in that attribute's
+  synthetic block. Kept `prefix` (the defect itself): the prototype's bug list plus `male`
+  (Female→Male), `sysselsatt` (Osysselsatt), `höginkomst`, `urban` (Suburban), `gotland`
+  (Ostergotland), `married parents`, `father only`, `secondary education` (Postsecondary),
+  `hotel`/`hotell` (webbhotell), `n/a`, `äktenskap`, `relation`, `retired`/`retire` (semiRetired),
+  `farfar`. Result: 127 (attribute, token) overrides / 168 occurrences in 10 attributes.
+- *Education routing (1c)* is section_config_A row 2 verbatim, **plus** a 4+5B `none_of`
+  [`master`, `magister`, `kandidat`, `bachelor`] (from row 3): without it 4 first-pass false alarms
+  ("Masterexamen (2-årig …)", "120 hp") regress 5A → 4+5B. The other row-3 vetoes and rows 1, 4–12
+  are left to Phase 2.
+- *Hour tokens (1e)* removed from the attachment `all_of` groups and the PFT veto (17 tokens):
+  measured zero effect on curated rows and capped cells beyond the facet alone.
+
+**Measured impact (real engine; curated rows excl. age_group/birth_location; each fix alone on the
+config committed with it).**
+
+| Fix | Rows changed | → correct | wrong → `__UNMAPPED__` | FA regressions | Capped cells | Expected (section) |
+|---|---|---|---|---|---|---|
+| tie-break (1b, with `it-konsult`) | 1,740 | 1,384 | 0 | 2 | 1,648 | 1,763 / 1,384 / 0 / 25 (23 fixed by it-konsult) |
+| prefix + overrides, no edu routing | 1,022 | 558 | 382 | 0 | 700 | 1,030 / 559 / 385 / 3; 700 |
+| prefix + overrides + edu routing (1c) | 1,234 | 1,102 | 46 | 0 | 851 | — |
+| negation (1d) | 140 | 28 | 107 | 0 | — | 140 / 28 / 107 / 0 |
+| hours facet (1e) | 264 | 197 | 0 | 0 | — | 264 / 197 / 0 / 0 |
+| all combined (final config) | 3,209 | 2,580 | 155 | 2 | 2,509 (3.33 %) | 3,136 / 2,087 / 493 / 47; 2,509 |
+
+The two remaining false-alarm losses: "Hyresrätt – lägenhet i villa" (the plan's named loss) and
+"Postgraduate diploma (Magisterexamen)" 5A → ISCED 6 (`longest`). Capped personas newly
+`__UNMAPPED__`: 289 → **55** after the edu routing (prefix alone) and **95** with all four fixes
+(expected 329), at most 13 in one combo (`…generate_pick_v2_ollama_mistral_nemo_12b`); none cleared.
+Deviations from the section are explained by the edu routing (+~520 correct, −~340 wrong→unmapped),
+`it-konsult` (−23 regressions) and the full-pool override list (−3 regressions).
+
+**For Phase 2.** (1) Express the C\* stop-gaps natively: drop `none_of` vetoes that only stood in
+for boundaries (`eftergymnasial`, `folkhögskol`, `enskild`, `penthouse`/`house`) or negation (civil
+`ej gift` etc. now resolve to `__UNMAPPED__` and need positive Single tokens). (2) "post-secondary
+education" without a length still hits 3A via `secondary education` (the hyphen is a word boundary):
+needs the row-1 3A/3C vetoes. (3) Zero-hour text ("0 timmar/vecka") still walks to an attachment value
+(the facet never overrides with 0); the planned Not Applicable rule is config. (4) The ties sidecar
+lists every `longest`/`priority` decision for review. (5) `tests/test_mapping_config_no_on_miss.py::
+test_every_declared_value_is_reachable[scb_native/income_source]` fails since Phase 3's `80d827b`
+(General Allowances / Housing Allowance have no synthetic tokens yet) — Phase 2/3 token work.
 
 ### Phase 2 — Config rule changes per attribute
 

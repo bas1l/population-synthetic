@@ -17,12 +17,59 @@ Same symmetric per-attribute schema as `config/mapping/scb/` (see
 `src/population_synthetic/analysis/mapping/mapping_engine.py`):
 
 - `values` — the ordered unified value set (also the comparison axis order).
+- `priority` — the same values in **rule-priority** order (a permutation of `values`, required),
+  consulted when several values hit in the same tier. Kept separate from `values` so the chart
+  order never decides a tie.
 - `real` — raw national-statistics label → unified value matchers, plus attribute
-  directives (`absent`, `on_miss`, `refine_from`).
+  directives (`absent`, `on_miss`, `refine_from`, `subfields`).
 - `synthetic` — raw LLM `identity.json` value → unified value matchers, plus directives.
 
 `_index.json` maps each comparison attribute to its per-attribute file (identical order to
-the coarse tier).
+the coarse tier) and declares the required `matching` block (below).
+
+## Matching rules (`_index.json` → `matching`)
+
+The engine has no in-code matching defaults; a missing or malformed block raises when a mapper is
+built. This tier's `real` side keeps the historic rules (`substring`, no negation,
+`tie_break: ["priority"]`); the `synthetic` side, which reads free LLM text, uses:
+
+- **`token_mode: "prefix"`** — a `contains` / `all_of` / `none_of` token must start at a word
+  start (the preceding character is not a letter or digit). This stops the left-embedding hits
+  the SCB-checked audit found (`gymnasial` in *efter*gymnasial, `male` in *fe*male, `rent` in
+  pa*rent*s, `skild` in *en*skild, `hög inkomst` in *medel*hög inkomst, `0 timmar` in
+  4*0 timmar*) while keeping compound *modifiers* (`högskole` in högskoleexamen). Compound
+  *heads*, which Swedish puts last and which must match mid-word (`lön` in månadslön, `anställd`
+  in heltidsanställd, `vård` in hemvård, `pension` in garantipension), are written as
+  `{"token": "lön", "mode": "substring"}`. The override list was generated over the full
+  `01_Raw` Swedish pool (tokens whose only hit in a persona value was mid-word) and reviewed by
+  hand; the tokens whose mid-word hits are the defect itself stay prefix. A token missing an
+  override fails loudly (`__UNMAPPED__`, visible to `validate_mapped`) rather than silently
+  matching the wrong category.
+- **`negation`** — a cue word (`inte`, `ej`, `ingen`, `not`, `no`, `never`, `utan`, …) among the
+  two words before a token, in the same clause, discards that hit; applies to `contains`, `all_of`
+  members and `none_of` (a negated veto does not veto), never to `equals`. A token that itself
+  starts with a cue still hits ("never married"). Past tense is not negation. `biological_sex`
+  and `birth_location` opt out (`"negation": null` in their `synthetic` block: "non-binary",
+  "non-EU").
+- **`tie_break: ["longest", "priority"]`** — within the winning tier, the value whose matched
+  token is longest wins (for `all_of`, the summed length of the group hits), then `priority`.
+  Tier precedence is unchanged. `employment_status` (SCB BAS hierarchy Employed > Unemployed >
+  Student > Retired > Sick > Other) and `income_source` (wage first) override it with
+  `"tie_break": ["priority"]`. Every multi-hit is written to `{slug}.ties.csv`.
+
+`employment_type`'s `synthetic` block also declares a **`numeric_facet`**: after the walk, weekly
+hours (or a percentage of a 40 h week) stated in the text re-band the walked attachment into the
+AKU agreed-hours bands 1–19 / 20–34 / 35+. A range spanning two bands or a number behind a
+comparator ("över 30") keeps the walked value and is logged as `facet_ambiguous` in the ties
+sidecar; `0 timmar` is in no band and never overrides. The attachment rules therefore carry no
+hour tokens; `heltid` / `deltid` remain the fallback when no hours are stated.
+
+`education_level` routes post-secondary text by stated length in its `all_of` tier: 4+5B needs a
+higher-education word and a short-length marker (`kortare än 3`, `2-årig`, `120 hp`, …, vetoed by
+`master` / `magister` / `kandidat` / `bachelor`), 5A a higher-education word and a ≥ 3-year or
+degree marker (`3 år eller`, `kandidat`, `master`, …). Without it, "Eftergymnasial utbildning,
+3 år eller längre" — which reached 3A only through the `gymnasial` substring bug — would fall
+to `__UNMAPPED__` under `prefix`.
 
 ## Deprecated attributes
 
