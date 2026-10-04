@@ -589,6 +589,7 @@
     },
     "General Allowances": {
       "equals": [
+        "General Allowances",
         "Studiemedel",
         "Studiebidrag",
         "Studentlån",
@@ -621,6 +622,7 @@
     },
     "Housing Allowance": {
       "equals": [
+        "Housing Allowance",
         "Bostadsbidrag",
         "Bostadstillägg"
       ],
