@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 **Author:** Basil
-**Status:** In progress — Phase 1 done 2026-10-04; Phase 2A done 2026-10-04; Phase 2B, Phase 4 (option B, sign-off pending) and Phase 5 done 2026-10-04; Phase 3 code done 2026-10-04 (re-sample pending, see Phase 3 implementation notes)
+**Status:** In progress — Phase 1 done 2026-10-04; Phase 2A done 2026-10-04; Phase 2B, Phase 4 (option B, sign-off pending) and Phase 5 done 2026-10-04; Phase 3 done 2026-10-04 (re-sampled); combined re-run steps 1–4 (mapping gate) done 2026-10-04, see "Pipeline run 2026-10-04 — mapping gate"
 **Base Branch:** `dev` (note: `feature/household-size-persons-unit` is unmerged; implementation may
 stack on it, since Phase 3 shares its re-sample)
 **Branch:** `feature/mapping-fixes-scb-audit`
@@ -778,6 +778,69 @@ persona generation. Every step needs `--force` because each skips existing outpu
    `--rewrite-artifacts` replays old values and is not a substitute. This is the only LLM step.
 7. **`realism_ranking --force`** (manuscript basis `--rounds 1`), then **`figure_selection
    --force`**.
+
+### Pipeline run 2026-10-04 — mapping gate
+
+Steps 1–4 of the protocol (re-sample, `mapping`, `validate_mapped`, `population_cap`; plus
+`validate_raw`), run for the committed `analysis_workflow.yaml` selection: `swedish_02` only, 13
+models × 5 v2 strategies = 65 combinations, `--n 100 --sample-seed 0`, every step `--force`, default
+`output_base`. Into an emptied `03_Analysis/`; the pre-run tree is the read-only reference
+`03_Analysis_backup-2026-10-04/`. Steps 5–7 not run. Phase 4 stood as reverted (`698bfed`:
+occupation tokens kept; status words still removed, `fc660e5`).
+
+**Re-sample.** `PYTHONHASHSEED=0 python scripts/generate/generate_scb_population.py --n 10000
+--seed 42 --cache-ttl-days 100000 --output
+data/scb_api/scb_population_n10000_seed42_mapping-fixes_2026-10-04.json`. Exactly two live fetches
+(`HushallT03`, `TabVX13InkStruktN`). Expected-diff check passed exactly: `household_size` 7,141,
+`income_source` 1,082, `socioeconomic_class` 544, `employment_type` 530 (all 18-24); every other
+attribute identical. Household shares 19.9 / 27.8 / 15.8 / 21.7 / 8.9 / 3.4 / 2.6 % vs BE0101DK
+19.7 / 28.2 / 15.9 / 21.2 / 9.3 / 3.2 / 2.6 % (χ² ≈ 4.7, df 6, within sampling error);
+income_source has 8 categories. Both Swedish axes point at the new file (`99b9b0d`); the old file is
+kept. The mapped real reference differs from the backup's only in those four attributes, with the
+same counts.
+
+**Curated rows** (new mapped value of each of the 12,793 rows; errors with a target category):
+civil 2,791 / 2,795, education 1,638 / 1,679, employment_status 355 / 377, employment_type 402 /
+692, housing 1,382 / 1,393, income 525 / 690 (the 59 reassigned to 325 / 330 count separately, as
+in 2A), industry 518 / 537, parental 383 / 407, socio 164 / 176, sex 10 / 11, region 11 / 11, birth
+country 6 / 6, household 2 / 3, birth_location 5 / 186 (`refine_from`, open). All equal to the 2A /
+2B measured figures (housing +1, below). Overall 8,192 / 9,505 real errors (86.2 %). False alarms
+kept 1,598 / 1,601 (age_group excluded: it is not a mapped field); lost exactly the three named
+(two "Aktivitetsstöd kompletterat med bostadsbidrag", "Hyresrätt – lägenhet i villa").
+Undeterminable rows: 1,061 unchanged, 347 moved (288 education, mostly length-unstated upper
+secondary → 3A), 86 → `__UNMAPPED__` (48 housing disjunctions / Ägarlägenhet, 22 education).
+
+**Whole-pool diff vs backup** (`mapping/`, 65 combinations, 11,461 personas):
+changed cells civil 2,813, education 2,812, housing 1,593, income 862, industry 580,
+employment_type 571, parental 570, socio 543, employment_status 412, birth_location 148 (after
+translating the Phase 5 labels), sex 11, region 11, birth country 6, household 2. 10,934 changed cells: 8,975 are curated rows, 12 are the same string audited
+elsewhere with the new value as verdict; the other 1,947 were matched against the plan's rules (3C → 3A 750, 325 / 330 168,
+status words 159, Phase 5 country lists 143, lower-middle → Working 112, joint custody 80, wage first
+59, hours facet / fixed-term 57, …). **First pass found five defects** — the `longest` tie-break
+picking a shorter-head category against the SCB definition, invisible to the curated list because
+the strings were never flagged: "Lower secondary school" → 3A (19 cells; `secondary school` beat
+`lower secondary`), "Fastighetsförvaltning" → Public Administration (12; `förvaltning` beat
+`fastighet`, SNI L 68 is F&B), "IT och konsulttjänster" / "IT and programming consultancy" → F&B
+(4), "Förskola och barnomsorg" → Healthcare (3; förskola is SNI P 85), "Divorced and remarried" →
+Divorced (3), plus "Gemensamt boende" (sambo) → unmapped and the Tenant-owned `seniorboende` veto
+that unmapped "Bostadsrätt i seniorboende" (4). Fixed with longer tokens and the veto dropped
+(`8c020a2`, regression cases added; simulated: 47 cells, one curated error fixed, none broken);
+steps 2–4 re-run. Residue after the re-run: 141 cells / 130 strings, none above 2 cells, each a
+documented rule (divorce without residence → unmapped, spouse's income → unmapped, civil marriage
+→ Natural Parents, `fastighetsägare` Owner veto, "vulnerable" poverty cue, ongoing gymnasium →
+ISCED 2) or a single garbled / mixed-cue text (e.g. "Förentalshus", "Blue-collar middle class",
+"Byggnad och konstnärligt verk"). Not changed: these are single rows whose correct category is
+itself undeterminable.
+
+**population_cap.** 57 included, 8 withdrawn (backup: 58 / 7). The only new withdrawal is
+`swedish_02_all_pick_dag_v2_ollama_gemma4_e4b` (116 → 99 clean < 100; predicted 97 in the 2A
+notes), accepted by design (Ägarlägenhet unmapped, OB not fetched; house-or-flat disjunctions).
+Lowest included margin: `…all_generate_pick_v2_openrouter_kimi_k3` 101. Largest drop:
+`…all_generate_pick_v2_ollama_mistral_nemo_12b` 145 → 113.
+
+**Verdict: EXPECTED** (after `8c020a2`). Not run: `validation_attrition` and steps 5–7.
+`tests/test_axis_facet_defaults.py::test_flow_default_selects_exactly_the_highest_version_strategies`
+fails on the committed `generate_parallel.yaml` (one strategy selected); unrelated, pre-existing.
 
 ## Verification
 
