@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 **Author:** Basil
-**Status:** In progress — Phase 1 done 2026-10-04; Phase 3 code done 2026-10-04 (re-sample pending, see Phase 3 implementation notes)
+**Status:** In progress — Phase 1 done 2026-10-04; Phase 2A done 2026-10-04; Phase 3 code done 2026-10-04 (re-sample pending, see Phase 3 implementation notes)
 **Base Branch:** `dev` (note: `feature/household-size-persons-unit` is unmerged; implementation may
 stack on it, since Phase 3 shares its re-sample)
 **Branch:** `feature/mapping-fixes-scb-audit`
@@ -259,6 +259,98 @@ synthetic block's `priority` list matches the BAS / wage-first orders.
 **Docs.** `config/mapping/scb_native/README.md` (per-attribute rule notes: adoptive = Natural
 Parents, contradicting the old README l.85–87; sambo; högskoleexamen; folkhögskola).
 
+#### Phase 2A implementation notes (done 2026-10-04)
+
+Commits: `434d392` civil_status, `df26fde` education_level, `7dfa46a` employment_status,
+`f1795b9` employment_type, `74fad2e` housing_tenure, `8dd7782` + `26a1e75` income_source,
+`d02ebd0` regression tests (`tests/test_scb_native_audit_rules_core.py`), `bce4c5a` README.
+The section-A token lists were ported onto the Phase 1 engine, not copied: the patch script that
+applies them to the pre-2A config lives with the measurement harness in the session scratch area
+(`p2a/apply_p2a.py`, `p2a/measure.py`).
+
+*Native, not stop-gap.* Dropped the vetoes that only stood in for boundaries or negation:
+civil `ogift`/`skild,`/`skild `/registered-partnership Single vetoes and Married
+`utan giftermål`/`äktenskapsskillnad`/`skilsmäss` vetoes (longest or negation now decides);
+education `eftergymnasial`/`förgymnasial`/`postgymnasial`/`folkhögskol` vetoes (prefix) and the
+5A `doctoral`/`phd`/`doktors` vetoes (ISCED 6 wins on length); employment_status `unemploy`,
+`not employed`, `ej/icke anställd`, `ingen anställning`, `utan arbete`, `osysselsatt`;
+employment_type the negated-employment vetoes (the zero-hour vetoes stay, unparenthesised — prefix
+keeps `0 timmar` off "40 timmar"); housing `penthouse` (now an apartment word of the Tenant-owned
+`all_of`). Kept as definitional vetoes: civil Single vetoes on a stated prior status (a longer
+Single token such as `ensamstående` would otherwise win on length), housing Owner vetoes on
+apartment / BRF / rental words, income Insurance vetoes on the specific transfers.
+Negated forms carry positive tokens: civil `ej gift`, `icke gift`, `utan sambo`, `ingen relation`,
+`ej registrerad`; education `ingen avslutad grundskol`, `ej fullgjord grundskol` (the engine
+negates `grundskol` after them); employment_type `ingen aktuell anställning`. Compound heads
+added as `substring` tokens: employment_status `lärare`, `läkare`, `ingenjör`, `utvecklare`,
+`specialist`, `konsult`, `anställning`, `direktör`, `arbeiter`, …; income `lärare`, `lärar`,
+`utvecklare`, `ingenjör`, `sjuksköterska`, `säljare`, `analyst`, `entrepren`, `salar`,
+`medarbetare`, Capital `utdelning`; education `förberedande`, `grundskol`; employment_status
+Student `stud` (all_of) and veto `jobb`.
+
+*Deviations from section A (and why).*
+- `income_source` `priority` stays the `values` order: `priority` is shared with the real side,
+  whose preserved-matching test requires `priority == values`. Ordering the generic Insurance /
+  Allowance last was tried and rejected for that reason; Insurance instead vetoes every 325 / 330
+  token. Wage vetoes `utdelning från` (own-company dividends) rather than every `utdelning`, so
+  "Lön … samt kapitalinkomster (ränta/utdelning)" stays Wage (wage first). `studiestart` is not a
+  General Allowances token: it would move the false alarm "Studiestartsstöd" (unmapped); "…från
+  CSN" still reaches 325 through `csn`. `sickness benefit` / `sjukpenning` veto Sickness / Activity
+  Compensation.
+- Open-question defaults applied: 4 (previously married → Divorced, unless widowhood is named),
+  6 (post-secondary with no length → unmapped), 9 (house-or-flat disjunctions → unmapped; listed
+  phrase tokens, so BRF-named disjunctions such as "Villa or Bostadsrätt" stay Tenant-owned as
+  before), 10 (studielån → General Allowances).
+- Extra fixes beyond the section (all single rows): education `magisterexamen` (5A) restores the
+  Phase 1 loss "Postgraduate diploma (Magisterexamen)"; "lower secondary education", "(9 years)",
+  "less than 2 years", `post-upper secondary`; housing `cooperative ownership/housing` (else
+  `bostadsbolag` wins on length), `hyrd`, `hyr `, `fastighetsägd`; Tenant-owned no longer vetoes
+  bare `ägarlägenhet` or `municipal` (they broke "Bostadsrätt (ägarlägenhet)" and "… municipality").
+- Not fixed (same as the section): "Tidigare pensionär men arbetar fortfarande" / "… med
+  deltidsarbete" (employment_status → unmapped: the Employed `tidigare` veto and the Retired
+  current-work veto both fire).
+
+**Measured (real engine; curated rows; "fixed" = resolved value equals the verdict's category,
+targets restricted to real values or `__UNMAPPED__`).**
+
+| Attribute | Targeted | Fixed before 2A (Phase 1) | Fixed now | Section expected | FA kept | Unflagged capped cells changed | 01_Raw newly `__UNMAPPED__` / cleared |
+|---|---|---|---|---|---|---|---|
+| civil_status | 2,792 | 13 | **2,791** | 2,785 | 16/16 | 28 / 4,553 | 1 / 169 |
+| education_level | 1,679 | 1,121 | **1,638** | 1,633 | 1,203/1,203 | 84 / 3,970 | 34 / 99 |
+| employment_status | 363 | 40 | **355** | 354 | 15/15 | 10 / 5,746 | 10 / 300 |
+| employment_type | 499 | 226 | **402** | 405 (208 + ≈197 facet) | 29/29 | 1 / 5,536 | 0 / 233 |
+| housing_tenure | 1,393 | 1,077 | **1,381** | 1,380 | 15/16 | 15 / 4,832 | 508 / 133 |
+| income_source | 690 | 1 | **525 + 59** reassigned to 325/330 | 526 + 55 | 105/107 | 88 / 5,693 | 262 / 760 |
+
+No targeted row that was right before 2A is wrong after it. False alarms lost: exactly the two
+named ("Hyresrätt – lägenhet i villa", "Aktivitetsstöd kompletterat med bostadsbidrag").
+Unflagged changes are the intended moves (sambo / separated, upper secondary 3C → 3A,
+folkhögskola, högskoleexamen, wage first, 325 / 330, parental support, förtidspension → Sick
+Leave). The capped-mirror counts are far below the section's 753 / 214 because Phase 1's
+longest tie-break had already moved most "upper secondary school (gymnasium)" rows to 3A.
+
+*Full-N risk.* Full `01_Raw` Swedish pool (21,931 personas): **603 personas** gain a
+`__UNMAPPED__` on one of the six attributes. Drivers: `Ägarlägenhet` 388 (decision: OB not
+fetched), house-or-flat disjunctions ≈ 55 (Open question 9), `äganderätt (lägenhet)` 16, parental
+/ family support 240 (decision), folkhögskola 25, `spouse's employment` 12. Per combination,
+against today's `population_cap/_index.json` (65 `swedish_02` v2 combinations): 357
+currently-clean personas lose cleanliness across the pool. **Sign-off item:
+`swedish_02_all_pick_dag_v2_ollama_gemma4_e4b` would be withdrawn** — 116 clean today, 19 lost
+(16 "Ägarlägenhet", 6 house-or-flat disjunctions; some personas carry both) → 97 < `--n` 100.
+Every other included combination keeps a margin ≥ 8 (the 7 combinations already excluded stay
+excluded). Larger losses sit in v1 pools the index does not hold
+(`swedish_all_pick_dag_ollama_gemma4_e4b` 108, `swedish_all_generate_pick_ollama_mistral_nemo_12b`
+39). Approximation: mapped validity over every attribute except `age_group` and the deprecated
+`birth_location`, raw validity unchanged, Phase 2B changes not included; the exit check is still
+the re-run's `population_cap`. Keeping that combination would need the Ägarlägenhet decision (OB
+not fetched → unmapped) or Open question 9 reversed for it; neither was changed here.
+
+*Global tier.* `config/mapping/scb/income_source.json` still declares six values and no 325 / 330
+tokens. No country axis selects `scb` (both Swedish axes map through `scb_native`) and no test
+requires it, so nothing was added; Open question 18 stays open. Note for that decision: `scb`
+keeps the historic `substring` / `["priority"]` matching, so copying the `scb_native` files
+(prefix-mode tokens, substring overrides, longest tie-break) would not be behaviour-equivalent.
+
 ### Phase 3 — Real-population fixes and one combined re-sample
 
 **Goal.** Fix four sampler/fetch defects and re-sample the real reference **once**, together with
@@ -316,13 +408,10 @@ numbers below come from a scratch copy of the SCB cache (seed 42, n 10,000), nev
 
 **Things the pipeline step must know.**
 
-1. **Synthetic income tokens.** The Phase 3 commits give the two new values only an `equals`
-   rule on their own canonical name (`b1924b5`, so every declared value stays reachable). The
-   token moves — CSN / studielån / studiebidrag / studiemedel / barnbidrag / child support →
-   General Allowances, bostadsbidrag / bostadstillägg / housing allowance → Housing Allowance —
-   were present only as uncommitted Phase 2 income config in the working tree on 2026-10-04 and
-   must be committed before the re-run, else the synthetic side still files those rows under
-   Insurance while the real side has 8 categories.
+1. **Synthetic income tokens.** Committed in Phase 2A (`8dd7782`, `26a1e75`): CSN / studielån /
+   studiebidrag / studiemedel / barnbidrag / child support → General Allowances, bostadsbidrag /
+   bostadstillägg / housing allowance → Housing Allowance, each value keeping the `equals` on its own
+   canonical name from `b1924b5`.
 2. **Global tier not mirrored.** `config/mapping/scb/income_source.json` has neither new value
    (Open question 18); Sweden's axis files map through `scb_native`, so nothing breaks today.
 3. **`priority`.** The engine commits' `priority` list for `scb_native/income_source.json`
@@ -468,7 +557,7 @@ personas. Measured newly-unmapped counts in today's capped set (5,800 personas):
 | industry_sector | 6 rows |
 | parental joint custody (gated) | 58 rows |
 | socio status words (Phase 4) | 42 rows |
-| Phase 2A config | not measured — measure in the Phase 2 exit check |
+| Phase 2A config | 603 personas in the full `01_Raw` pool; `swedish_02_all_pick_dag_v2_ollama_gemma4_e4b` would fall to 97 < 100 (Phase 2A notes) |
 
 A combination survives only if its pool beyond `--n` absorbs the loss; combos already near the
 threshold are the risk. Before the re-run, re-map the full `01_Raw` pool, run `validate_mapped`
