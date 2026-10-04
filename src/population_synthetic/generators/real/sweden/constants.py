@@ -51,9 +51,11 @@ INCOME_BRACKET_TABLE = "HE/HE0110/HE0110A/SamForvInk1a"
 
 # (bracket_code, low_sek_thousands, high_sek_thousands).
 # All monetary values are in SEK thousands (1 unit = 1 000 SEK).
-# The top bracket "1000+" is open-ended; [1 000, 1 500] is used as the closed
-# approximation for the midpoint — the top bracket holds a small population
-# share so this choice has negligible effect on the computed median.
+# The top bracket "1000+" is open-ended; [1 000, 1 500] is used as its closed
+# upper edge. The median never falls in it, so the choice does not touch the
+# interpolated median. It matters only where classify_brackets splits the top
+# bracket at the 2x-median threshold (cells whose median exceeds 500 tkr), and
+# then only for the small slice of that bracket's count below 2x median.
 SCB_INCOME_BRACKETS: list[tuple[str, float, float]] = [
     ("0",       0,     1),
     ("1-19",    1,    20),

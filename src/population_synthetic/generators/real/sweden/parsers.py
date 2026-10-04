@@ -1250,9 +1250,6 @@ _SCB_SEX_CODE_TO_LABEL: dict[str, str] = {"1": "men", "2": "women"}
 _BRACKET_CODE_TO_EDGES: dict[str, tuple[float, float]] = {
     code: (lo, hi) for code, lo, hi in SCB_INCOME_BRACKETS
 }
-_BRACKET_CODE_TO_MID: dict[str, float] = {
-    code: (lo + hi) / 2.0 for code, lo, hi in SCB_INCOME_BRACKETS
-}
 
 
 def parse_socioeconomic(raw: dict) -> dict[tuple[str, str], dict[str, float]]:
@@ -1338,11 +1335,10 @@ def parse_socioeconomic(raw: dict) -> dict[tuple[str, str], dict[str, float]]:
                 "cannot compute income class distribution"
             )
         ordered_codes = [c for c in _BRACKET_CODE_TO_EDGES if c in brk_dist]
-        midpoints = [_BRACKET_CODE_TO_MID[c] for c in ordered_codes]
         counts_list = [brk_dist[c] for c in ordered_codes]
         edges = [_BRACKET_CODE_TO_EDGES[c] for c in ordered_codes]
 
-        median = median_from_brackets(midpoints, counts_list)
+        median = median_from_brackets(edges, counts_list)
         result[cell_key] = classify_brackets(edges, counts_list, median)
 
     return result
