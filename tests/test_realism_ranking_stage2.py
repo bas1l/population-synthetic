@@ -67,13 +67,18 @@ def _split_options():
 def test_worst_clash_split_places_s3_by_stage2_class_and_keeps_the_reference_unsplit():
     block = builder._worst_clash_split(_records(), _split_options(), [])
     by = {row["slug"]: row["counts"] for row in block["competitors"]}
-    assert by["syn"] == {"none": 1, "S1": 0, "S2": 1, "S3b": 1, "S3a": 1, "S3": 0, "pipeline": 1}
-    assert by["real_swedish_02"] == {"none": 0, "S1": 1, "S2": 0, "S3b": 0, "S3a": 0, "S3": 1, "pipeline": 0}
+    assert by["syn"] == {"none": 1, "S1": 0, "S2": 1, "r3_impossible": 1, "S3": 0,
+                         "c_scb_category_limitation": 1, "pipeline": 1}
+    assert by["real_swedish_02"] == {"none": 0, "S1": 1, "S2": 0, "r3_impossible": 0, "S3": 1,
+                                     "c_scb_category_limitation": 0, "pipeline": 0}
     # each individual counted once
     for row in block["competitors"]:
         assert sum(row["counts"].values()) == row["n_individuals"]
     rows = builder.worst_clash_split_rows({"worst_clash_split": block})
-    assert rows[0]["n_S3a"] == 1 and "n_pipeline" in rows[0]
+    assert rows[0]["n_r3_impossible"] == 1 and rows[0]["n_c_scb_category_limitation"] == 1
+    assert "n_pipeline" in rows[0]
+    assert block["display"] == {"only_when_nonzero": ["S3", "pipeline"],
+                                "off_ladder": ["c_scb_category_limitation", "pipeline"]}
 
 
 def test_impossible_breakdown_counts_only_the_axis_a_impossible_set():
@@ -101,6 +106,24 @@ def test_split_config_must_map_every_class():
     spec = yaml.safe_load(_SPLIT_CONFIG.read_text(encoding="utf-8"))
     del spec["s3_split"]["judge_error"]
     with pytest.raises(ValueError, match="must map exactly"):
+        builder.worst_clash_split_options(spec)
+
+
+@pytest.mark.parametrize("key, value", [
+    ("only_when_nonzero", ["S3", "undeclared"]),
+    ("off_ladder", ["S2"]),
+])
+def test_split_display_lists_only_declared_off_ladder_categories(key, value):
+    spec = yaml.safe_load(_SPLIT_CONFIG.read_text(encoding="utf-8"))
+    spec["display"][key] = value
+    with pytest.raises(ValueError, match=f"display.{key}"):
+        builder.worst_clash_split_options(spec)
+
+
+def test_split_config_without_display_raises():
+    spec = yaml.safe_load(_SPLIT_CONFIG.read_text(encoding="utf-8"))
+    del spec["display"]
+    with pytest.raises(ValueError, match="missing 'display'"):
         builder.worst_clash_split_options(spec)
 
 

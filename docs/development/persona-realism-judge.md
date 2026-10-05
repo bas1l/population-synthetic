@@ -610,11 +610,16 @@ must state the same order, the loader raises otherwise). Two pipeline states com
     set) by stage-2 class.
   - `worst_clash_split` / `worst_clash_split.csv`: every individual counted once at its worst clash
     (none, S1, S2, S3), with S3 split by `config/analysis/realism_ranking/worst_clash_split.yaml`:
-    `raw_impossible` -> S3a "impossible individual"; `label_clash`, `ambiguous` -> S3b "contradictory
-    labels"; `mapping_error`, `judge_error` -> `pipeline`; `unclassified` and the reference's
-    `not_applicable_no_free_text` -> plain S3 (the reference is never split). Display labels are
-    `worst_clash_<id>` in `config/analysis/figure_terms.yaml` (`labels.worst_clash_label`) and
-    colours `palette.WORST_CLASH_COLORS`; an id without either raises when drawn.
+    `raw_impossible` -> `r3_impossible` ("R3: impossible"); `label_clash`, `ambiguous` ->
+    `c_scb_category_limitation` ("C: SCB category limitation" -- not a rank of the R1-R3 ladder:
+    a limitation of the SCB category system, not a generation issue); `mapping_error`,
+    `judge_error` -> `pipeline`; `unclassified` and the reference's `not_applicable_no_free_text`
+    -> plain `S3` ("R3: not split"; the reference is never split). CSV columns are `n_<id>`.
+    Display labels are `worst_clash_<id>` in `config/analysis/figure_terms.yaml`
+    (`labels.worst_clash_label`) and colours `palette.WORST_CLASH_COLORS`; an id without either
+    raises when drawn. The yaml's `display` block, copied into the ranking block, is presentation
+    only: `only_when_nonzero` (`S3`, `pipeline`: drawn and listed only when some count in the
+    figure is non-zero) and `off_ladder` (C, `pipeline`: listed after the ladder, set apart).
   A competitor without a stage-2 CSV makes both blocks null with a recorded skip when none has one,
   and raises when only some do.
 - **Cost.** About 2.4 times a stage-1 call each (prototype: $0.039 and about 30 s per call), but only

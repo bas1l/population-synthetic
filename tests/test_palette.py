@@ -230,9 +230,9 @@ def test_the_severity_palette_is_the_okabe_ito_set():
         "none": "#E4E4E4",
         "S1": "#56B4E9",
         "S2": "#E69F00",
-        "S3b": "#CC79A7",
-        "S3a": "#D55E00",
+        "r3_impossible": "#D55E00",
         "S3": "#0072B2",
+        "c_scb_category_limitation": "#CC79A7",
         "pipeline": "#009E73",
     }
     # Okabe-Ito yellow is unreadable as a thin bar or as count text on white.

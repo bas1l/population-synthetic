@@ -296,7 +296,7 @@ def figure_term(key: str, *, terms_path: str | Path | None = None) -> str:
 
 
 def worst_clash_label(category: str, *, terms_path: str | Path | None = None) -> str:
-    """Display label of a worst-clash category id (``S3a`` -> ``R3a: impossible``).
+    """Display label of a worst-clash category id (``r3_impossible`` -> ``R3: impossible``).
 
     Resolved through :func:`figure_term` under the key ``worst_clash_<id>``, so an id with
     no label raises rather than printing itself.

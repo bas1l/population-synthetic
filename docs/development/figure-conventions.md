@@ -207,23 +207,32 @@ which raises on an unknown id). Both are drawn from the Okabe–Ito colour-blind
 | `none` | no clash | light grey `#E4E4E4` |
 | `S1` | R1: unusual | sky blue `#56B4E9` |
 | `S2` | R2: implausible | orange `#E69F00` |
-| `S3b` | R3b: label clash | reddish purple `#CC79A7` |
-| `S3a` | R3a: impossible (and the unsplit R3 of the published figure) | vermillion `#D55E00` |
+| `r3_impossible` | R3: impossible (and the unsplit R3 of the published figure) | vermillion `#D55E00` |
 | `S3` | R3: not split (the reference, a failed stage-2 call) | blue `#0072B2` |
+| `c_scb_category_limitation` | C: SCB category limitation | reddish purple `#CC79A7` |
 | `pipeline` | pipeline | bluish green `#009E73` |
 
 Why this assignment:
 
-- **Ordinal, not just distinct.** None → R1 → R2 → R3a runs grey → cool → warm → dark warm, so the
-  levels read as increasing seriousness. R3b sits beside R3a in the warm end because it is still
-  the severest judge level. The unsplit R3 and `pipeline` are deliberately *outside* that run: "not
-  split" is a missing classification and `pipeline` an artefact, neither a degree of severity.
-- **Distinct under colour-vision deficiency.** The earlier set (grey R1, two near reds for R3a/R3b,
+- **Ordinal, not just distinct.** None → R1 → R2 → R3 runs grey → cool → warm → dark warm, so the
+  levels read as increasing seriousness. C is **not a rank**: a clash stage 2 traces to the SCB
+  category system itself, not to the generation, so its code is not an R and it is not drawn as a
+  step of the ladder; it keeps the reddish purple because the colour was CVD-checked in this set.
+  The unsplit R3 and `pipeline` are likewise *outside* the run: "not split" is a missing
+  classification and `pipeline` an artefact, neither a degree of severity.
+- **Order and presence in a legend.** The legend lists the ladder (R1, R2, R3, then R3 not split),
+  then a small gap, then the categories `display.off_ladder` in `worst_clash_split.yaml` names (C,
+  then pipeline). The categories `display.only_when_nonzero` names (`S3` not split, `pipeline`) are
+  drawn and listed only when some count the figure is given is non-zero; otherwise they are omitted
+  entirely. Both are presentation decisions on finished counts: the chart reads the two lists from
+  the block and checks the counts it was handed, computing nothing.
+- **Distinct under colour-vision deficiency.** (Measured when R3 and C were named R3a and R3b; the
+  colours are unchanged.) The earlier set (grey R1, two near reds for R3 and C,
   a violet `pipeline`) put R1 next to the "no clash" grey and fell to CIEDE2000 5.3 between R2 and
-  R3b under simulated tritanopia. Simulated with Machado et al. (2009) at full severity, the minimum
+  C under simulated tritanopia. Simulated with Machado et al. (2009) at full severity, the minimum
   CIEDE2000 over every pair of the seven categories is now 22.2 (normal vision), 12.5
-  (deuteranopia), 12.2 (protanopia) and 10.9 (tritanopia, R2 vs R3b). The weakest pair under
-  red–green deficiency is R2 vs R3a (orange vs vermillion), which still
+  (deuteranopia), 12.2 (protanopia) and 10.9 (tritanopia, R2 vs C). The weakest pair under
+  red–green deficiency is R2 vs R3 (orange vs vermillion), which still
   differs by 15 to 19 L* units under every simulation and so survives as a lightness step.
 - **No yellow, no black.** Okabe–Ito yellow `#F0E442` vanishes as a thin bar or as count text on
   white. Black was rejected for the unsplit R3 because it merges with the reference step outline

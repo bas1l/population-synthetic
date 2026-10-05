@@ -2253,7 +2253,7 @@ def worst_clash_split_options(spec: Mapping[str, Any]) -> dict[str, Any]:
     """Validate the ``worst_clash_split.yaml`` bundle (fail-fast; see that file for the rules)."""
     if not isinstance(spec, Mapping):
         raise ValueError(f"worst-clash split config must be a mapping, got {type(spec).__name__}")
-    for key in ("categories", "s3_split"):
+    for key in ("categories", "s3_split", "display"):
         if key not in spec:
             raise ValueError(f"worst-clash split config is missing {key!r}")
     categories = [str(c) for c in spec["categories"]]
@@ -2272,7 +2272,22 @@ def worst_clash_split_options(spec: Mapping[str, Any]) -> dict[str, Any]:
             f"worst-clash split categories must be exactly {sorted(required)} "
             f"(none/S1/S2 plus every s3_split target), got {categories}"
         )
-    return {"categories": categories, "s3_split": split}
+    display_spec = spec["display"]
+    if not isinstance(display_spec, Mapping) or set(display_spec) != {"only_when_nonzero", "off_ladder"}:
+        raise ValueError(
+            "worst-clash split display must be a mapping of exactly 'only_when_nonzero' and 'off_ladder', "
+            f"got {display_spec!r}"
+        )
+    display: dict[str, list[str]] = {}
+    for key in ("only_when_nonzero", "off_ladder"):
+        ids = [str(c) for c in (display_spec[key] or ())]
+        unknown = sorted(set(ids) - set(categories))
+        if unknown or len(set(ids)) != len(ids):
+            raise ValueError(f"worst-clash split display.{key} must list distinct declared categories, got {ids}")
+        display[key] = ids
+    if set(display["off_ladder"]) & set(_WORST_FIXED):
+        raise ValueError(f"worst-clash split display.off_ladder cannot hold a ladder level {list(_WORST_FIXED)}")
+    return {"categories": categories, "s3_split": split, "display": display}
 
 
 def _worst_clash_split(
@@ -2340,6 +2355,7 @@ def _worst_clash_split(
                 "can_exist, rankings and tests count every S3 as impossible",
         "categories": list(categories),
         "s3_split": dict(options["s3_split"]),
+        "display": {k: list(v) for k, v in options["display"].items()},
         "competitors": rows,
     }
 

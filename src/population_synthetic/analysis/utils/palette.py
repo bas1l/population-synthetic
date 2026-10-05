@@ -198,9 +198,10 @@ SEVERITY_SERIES: tuple[str, str, str] = ("#D55E00", "#E69F00", "#56B4E9")
 #: worst_clash_split.yaml``), keyed by category id; the categorical severity palette of the
 #: worst-clash figures. ``none`` is a neutral light grey (no clash is not a severity step);
 #: ``S1``/``S2`` are :data:`SEVERITY_SERIES`'s mild and middle steps. The stage-2 split of
-#: the severest level stays in the Okabe-Ito set: an impossible individual (``S3a``) keeps
-#: the severest step's vermillion, contradictory labels (``S3b``) take the reddish purple
-#: beside it, and the unsplit ``S3`` (the reference, or a failed stage-2 call) the dark blue
+#: the severest level stays in the Okabe-Ito set: an impossible individual (``r3_impossible``)
+#: keeps the severest step's vermillion, a limitation of the SCB categories
+#: (``c_scb_category_limitation``, not a rank) takes the reddish purple, and the unsplit
+#: ``S3`` (the reference, or a failed stage-2 call) the dark blue
 #: -- a hue outside the warm run, because "not split" is a missing classification, not a
 #: degree. Black was rejected there: it merges with the reference step outline drawn over
 #: the bars. ``pipeline`` (a mapping or judge artefact) is the bluish green, outside the
@@ -210,9 +211,9 @@ WORST_CLASH_COLORS: dict[str, str] = {
     "none": "#E4E4E4",
     "S1": SEVERITY_SERIES[2],
     "S2": SEVERITY_SERIES[1],
-    "S3b": "#CC79A7",
-    "S3a": SEVERITY_SERIES[0],
+    "r3_impossible": SEVERITY_SERIES[0],
     "S3": "#0072B2",
+    "c_scb_category_limitation": "#CC79A7",
     "pipeline": "#009E73",
 }
 

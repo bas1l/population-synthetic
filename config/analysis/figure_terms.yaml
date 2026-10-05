@@ -32,14 +32,15 @@ terms:
 
   # Worst clash per individual (config/analysis/realism_ranking/worst_clash_split.yaml),
   # one label per category id, as the legend prints it. The "R" ranks are the
-  # manuscript's atypicality ranks (the repository's S1-S3 severities); R3 is split by
-  # stage 2 into an impossible individual (R3a) and contradictory labels (R3b), and stays
-  # plain R3 where it cannot be split (the reference, which has no free text).
+  # manuscript's atypicality ranks (the repository's S1-S3 severities). Stage 2 keeps an
+  # impossible individual as R3 and moves a clash of the SCB categories themselves to C,
+  # which is not a rank (not a generation issue); R3 stays "not split" where stage 2 could
+  # not classify it (the reference, which has no free text, or a failed stage-2 call).
   worst_clash_title: "Atypicality rank:"
   worst_clash_none: "no clash"
   worst_clash_S1: "R1: unusual"
   worst_clash_S2: "R2: implausible"
-  worst_clash_S3a: "R3a: impossible"
-  worst_clash_S3b: "R3b: label clash"
+  worst_clash_r3_impossible: "R3: impossible"
+  worst_clash_c_scb_category_limitation: "C: SCB category limitation"
   worst_clash_S3: "R3: not split"
   worst_clash_pipeline: "pipeline"
