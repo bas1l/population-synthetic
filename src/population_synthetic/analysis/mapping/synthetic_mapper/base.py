@@ -41,8 +41,7 @@ Three responsibilities remain in the mapper itself:
   writes the list to the ``{slug}.ties.csv`` sidecar.
 - **Cross-field wiring** -- an attribute declaring a ``cross_field`` override is
   resolved with the record's raw fields and the siblings it reads already resolved
-  (see :mod:`mapping_engine`); ``age_group`` is pre-resolved to the integer age, the
-  value a ``resolved_range`` condition reads.
+  (see :mod:`mapping_engine`).
 
 The mapping directory is validated once, at construction
 (:func:`mapping_engine.validate_mappings`): a missing ``matching`` block, an unknown
@@ -247,14 +246,12 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
             logger.warning("%s: missing/non-integer age %r -- skipping persona", persona_id, raw_age)
             return None
 
-        # ``age_group`` resolves to the integer age before any other attribute, so a
-        # ``cross_field`` ``resolved_range`` condition can read it whatever the
-        # ``_index.json`` attribute order (age.json carries no synthetic rules block).
-        resolved: dict[str, Any] = {_AGE_GROUP_ATTR: age_int} if _AGE_GROUP_ATTR in self._attributes else {}
+        resolved: dict[str, Any] = {}
         result: dict[str, Any] = {"id": persona_id}
         for attr in self._attributes:
             if attr == _AGE_GROUP_ATTR:
                 result[_AGE_KEY] = age_int
+                resolved[attr] = age_int
                 continue
             result[attr] = self._resolve_attr(attr, identity, resolved, persona_id)
         return result

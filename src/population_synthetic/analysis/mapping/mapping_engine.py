@@ -149,14 +149,7 @@ never confused with value keys because the walk is driven by ``values``):
   **final** resolved value to be in the list (the attribute's own field is not
   allowed there, and the ``cross_field`` / ``refine_from`` dependency graph must be
   acyclic). Rules are tried in order and the first that fires sets the value to
-  ``to``; at most one rule fires. A ``resolved_range`` condition
-  (``{"field": "age_group", "resolved_range": {"lt": 66}}``) requires the named
-  sibling's final resolved value to be a number in the half-open range
-  ``gte <= value < lt`` (either bound may be omitted, not both); it is a resolved
-  read like ``resolved`` (same dependency and own-field rules), and a resolved value
-  that is not a number raises rather than counting as false. The synthetic mapper
-  resolves ``age_group`` to the persona's integer ``age``, which is how a rule
-  reads age. Overrides apply only to a matched (or ``absent``)
+  ``to``; at most one rule fires. Overrides apply only to a matched (or ``absent``)
   value, never to a total miss, and ``from`` / ``to`` must be declared ``values`` --
   so an override can move a persona between categories but can never turn a miss
   into a value or a value into a miss. The caller supplies the record's raw fields
@@ -213,9 +206,7 @@ _NEGATION_KEYS: frozenset[str] = frozenset({"cues", "window", "clause_breaks"})
 _TOKEN_OBJECT_KEYS: frozenset[str] = frozenset({"token", "mode"})
 _FACET_KEYS: frozenset[str] = frozenset({"extract", "ambiguous_if_preceded_by", "bands", "remap"})
 _CROSS_RULE_KEYS: frozenset[str] = frozenset({"from", "to", "when"})
-_CROSS_CONDITION_KINDS: frozenset[str] = frozenset({"raw", "resolved", "resolved_range"})
-#: Bound keys of a ``resolved_range`` condition (half-open: ``gte <= value < lt``).
-_RANGE_BOUND_KEYS: frozenset[str] = frozenset({"gte", "lt"})
+_CROSS_CONDITION_KINDS: frozenset[str] = frozenset({"raw", "resolved"})
 
 _UNDERSCORE_RE = re.compile(r"_")
 _WORD_RE = re.compile(r"\w+")
@@ -565,25 +556,8 @@ def _validate_cross_field(spec: Any, where: str, values: list[str]) -> None:
                 vals = cond["resolved"]
                 if not isinstance(vals, list) or not vals or not all(isinstance(v, str) and v for v in vals):
                     _fail(cwhere, "'resolved' must be a non-empty list of value names")
-            elif kind == "resolved_range":
-                _validate_range(cond["resolved_range"], f"{cwhere}.resolved_range")
             else:
                 _fail(cwhere, f"unknown condition kind {kind!r} (allowed: {sorted(_CROSS_CONDITION_KINDS)})")
-
-
-def _validate_range(spec: Any, where: str) -> None:
-    """Validate a ``resolved_range`` bound object: ``gte`` and/or ``lt``, numeric, ``gte < lt``."""
-    if not isinstance(spec, dict) or not spec or not set(spec) <= _RANGE_BOUND_KEYS:
-        _fail(where, f"must declare one or both of {sorted(_RANGE_BOUND_KEYS)} and nothing else")
-    for key, bound in spec.items():
-        if isinstance(bound, bool) or not isinstance(bound, (int, float)):
-            _fail(where, f"bound {key!r} must be a number, got {bound!r}")
-    if "gte" in spec and "lt" in spec and not spec["gte"] < spec["lt"]:
-        _fail(where, f"empty range: gte {spec['gte']!r} is not below lt {spec['lt']!r}")
-
-
-#: Condition kinds that read a sibling's *resolved* value (and so order resolution).
-_RESOLVED_KINDS: tuple[str, ...] = ("resolved", "resolved_range")
 
 
 def cross_field_dependencies(rules_block: dict) -> tuple[str, ...]:
@@ -591,7 +565,7 @@ def cross_field_dependencies(rules_block: dict) -> tuple[str, ...]:
     deps: list[str] = []
     for rule in rules_block.get("cross_field", ()):
         for cond in rule["when"]:
-            if any(k in cond for k in _RESOLVED_KINDS) and cond["field"] not in deps:
+            if "resolved" in cond and cond["field"] not in deps:
                 deps.append(cond["field"])
     return tuple(deps)
 
@@ -698,10 +672,9 @@ def _validate_cross_field_graph(blocks: dict[str, dict], where: str) -> None:
                 name = cond["field"]
                 if name not in blocks:
                     _fail(cwhere, f"field {name!r} is not an attribute of the _index master")
-                if any(k in cond for k in _RESOLVED_KINDS):
-                    if name == attr:
-                        _fail(cwhere, "a resolved condition may not read the attribute's own value")
                 if "resolved" in cond:
+                    if name == attr:
+                        _fail(cwhere, "a 'resolved' condition may not read the attribute's own value")
                     for v in cond["resolved"]:
                         if v not in blocks[name]["values"]:
                             _fail(cwhere, f"'resolved' value {v!r} is not one of {name}'s values")
@@ -1134,15 +1107,7 @@ def _condition_holds(
         return _match_scalar(raw, cond["raw"], matching)
     if name not in field_resolved:
         raise ValueError(f"cross_field reads the resolved value of {name!r}, which the caller did not resolve first")
-    value = field_resolved[name]
-    if "resolved_range" in cond:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(
-                f"cross_field resolved_range reads {name!r}, whose resolved value {value!r} is not a number"
-            )
-        bounds = cond["resolved_range"]
-        return ("gte" not in bounds or value >= bounds["gte"]) and ("lt" not in bounds or value < bounds["lt"])
-    return value in cond["resolved"]
+    return field_resolved[name] in cond["resolved"]
 
 
 def _resolve_core(
