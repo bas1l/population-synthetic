@@ -66,62 +66,6 @@ hour tokens; `heltid` / `deltid` remain the fallback when no hours are stated. Z
 are handled in config instead: every employed value vetoes `0 timmar` / `0 h/v` / `0 hours` (prefix
 mode keeps them off "40 timmar") and `Not Applicable` lists them.
 
-### Cross-field rules (`cross_field`, added 2026-10-05)
-
-A single field cannot always be coded alone: SCB/AKU code a job seeker who works part time, or a
-pensioner with paid hours, as `Employed`, and the evidence of that work sits in
-`employment_type`, not in `employment_status`. The synthetic side therefore carries an ordered
-`cross_field` list of post-resolution overrides (engine semantics in `mapping_engine.py`). A rule
-fires when the walked value is in `from` and every `when` condition holds: a `raw` condition is an
-ordinary matcher (prefix mode, negation, `none_of` vetoes) run on another field's raw text, a
-`resolved` condition reads a sibling's final value. The first rule that fires wins. An override
-never touches a total miss and only moves between declared values, so it can never change which
-personas are `__UNMAPPED__` (and hence never the `population_cap` selection).
-
-`employment_status` (rules in file order):
-
-1. `Unemployed` → `Employed` when the `employment_type` text names a current paid job (anställ*,
-   lönebidrag, extratjänst, nystartsjobb, *jobb, tjänst, heltid/deltid/halvtid, tillsvidare,
-   visstid, vikari*, tidsbegräns, tillfällig, säsong, full-/part-time, permanent, temporary,
-   contract, employ, frilans, konsult, egenföretag, casual, worker, wage, salary, …) and no
-   veto: job-search or no-job wording (arbetssök*, arbetslös*, söker, saknar, ingen anställning,
-   no employment, …), a labour-market programme without a wage (praktik, arbetsträning,
-   arbetsprövning, AMU, arbetsmarknadsinsats/-åtgärd/-politisk, program/programme,
-   etableringsprogram, aktivitetsstöd, fas 3, rehabilitering), unpaid work, sick or parental
-   leave, pension wording (it maps the type to `Not Applicable`), or an ended job (below).
-2. `Retired` → `Employed` when the type text shows work being done now: stated hours or a share of
-   a week (timmar, tim/, h/vecka, hours, %, procent), an assignment (uppdrag), hourly work
-   (timanställ*, timlön), extraarbete, deltidsarbete/-anställ/-jobb, own business, frilans,
-   konsult/consult, gig, säsongsarbete, vikariat, substitute, occasional, job sharing, reduced
-   hours, pensionärsavtal. A bare contract label ("Full-time", "Self-employed", "anställning") is
-   not evidence; ended jobs, "ej sannolikt", unpaid or association work and zero hours veto.
-3. `Retired` → `Employed` when the status text itself says the pensioner works (semi-retired,
-   delpension, delvis pensionerad, med/och arbete, vid sidan av pension, lönearbete, sidoinkomst,
-   part-time work, reduced hours, sysselsatt) **and** the type text names a paid job (rule 1's
-   token set).
-4. `Retired` → `Sick Leave` when the status, type or income text names a disability pension
-   (förtidspens*, sjukpens*, sjukersättning, aktivitetsersättning, sickness/activity compensation,
-   disability, invalidpension; in income also "early retirement pension", which the income mapping
-   already reads as sickness compensation), unless voluntary (frivillig, voluntary), converted
-   (omvandla*), hypothetical (innan pension, om berättigad) or ended. A bare "early retirement"
-   stays `Retired` (it may be an occupational early pension).
-
-`employment_type`:
-
-1. Any contract value → `Not Applicable` when the text says the job has ended (avslutad/avslutat,
-   avveckl*, nedlag*, tidigare, före detta, f.d., former, previous, "past)", before / pre- /
-   until retirement, fram till pension; "efter avslutad" excepted) **and** the final
-   `employment_status` is not `Employed` (mistral_nemo writes "Tidigare anställd" for a current
-   job, so an Employed persona keeps its contract).
-2. `Permanent <band>` → `Temporary <band>` (band kept) for fixed-term-by-design or stated
-   fixed-term wording: extratjänst, korttidsanställ/-avtal/-kontrakt, sommarjobb, summer job,
-   sommar(tids)anställ, interim(anställ), introduktionsanställ, tidsbegräns*, provtid, seasonal —
-   unless permanence is also stated (tillsvidare, permanent, fast anställ, fastanställ, fast tjänst).
-
-Open: text with **no** permanence information (bare "Heltid", "Part-time", "Anställning",
-"lönebidrag") still maps to `Permanent`; making it unmapped would change the `population_cap`
-selection, so it is left for a decision.
-
 `education_level` routes post-secondary text by stated length in its `all_of` tier: 4+5B needs a
 higher-education word and a short-length marker (`kortare än 3`, `2-årig`, `120 hp`, …, vetoed by
 `master` / `magister` / `kandidat` / `bachelor`), 5A a higher-education word and a ≥ 3-year or
