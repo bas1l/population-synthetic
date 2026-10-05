@@ -66,6 +66,7 @@ __all__ = [
     "clash_rows",
     "reduce_persona",
     "reduce_combo",
+    "round_clashes",
     "load_persona_verdicts",
     "load_combo_verdicts",
 ]
@@ -211,6 +212,15 @@ def _round_clashes(verdict: RoundVerdict) -> dict[ClashKey, str]:
         if key not in clashes:
             clashes[key] = issue.explanation
     return clashes
+
+
+def round_clashes(verdict: RoundVerdict) -> dict[ClashKey, str]:
+    """Public view of the within-round dedupe (:func:`_round_clashes`) for sibling modules.
+
+    ``stage2`` classifies exactly the S3 clashes the per-clash contract carries, so it
+    must read them through the same dedupe rather than re-deriving it.
+    """
+    return _round_clashes(verdict)
 
 
 def reduce_persona(rounds: list[RoundVerdict] | tuple[RoundVerdict, ...], *, persona_id: str = "") -> PersonaVerdict:

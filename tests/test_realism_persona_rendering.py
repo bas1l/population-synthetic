@@ -52,9 +52,8 @@ def _config_copy(tmp_path: Path, mutate) -> Path:
     data["persona_rendering"]["mapping_tier"] = _TIER_DIR.as_posix()
     mutate(data)
     (tmp_path / "judge.yaml").write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
-    (tmp_path / "judge_prompt.md").write_text(
-        (_CONFIG_DIR / "judge_prompt.md").read_text(encoding="utf-8"), encoding="utf-8"
-    )
+    for name in ("judge_prompt.md", "stage2_prompt.md"):
+        (tmp_path / name).write_text((_CONFIG_DIR / name).read_text(encoding="utf-8"), encoding="utf-8")
     return tmp_path
 
 

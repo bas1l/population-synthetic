@@ -97,6 +97,37 @@ def load_persona_rendering(block: Any, config_dir: Path, judge_path: Path) -> di
     return rendering
 
 
+def _load_stage2(block: Any, config_dir: Path, judge_path: Path) -> tuple[bool, Path, tuple[str, ...]]:
+    """Validate the ``stage2`` block (fail-fast): ``enabled``, ``prompt_template``, ``persona_class_order``.
+
+    The template must exist and its system text must state the configured persona-class
+    order verbatim (``a > b > ...``): the prompt tells the classifier the order and the
+    pipeline recomputes the persona class with it, so the two can never disagree.
+    """
+    from population_synthetic.analysis.persona_realism.prompt import load_prompt_template
+    from population_synthetic.analysis.utils.realism_stage2_csv import validate_class_order
+
+    if not isinstance(block, dict):
+        raise ValueError(f"judge config {judge_path} 'stage2' must be a mapping")
+    missing = [k for k in ("enabled", "prompt_template", "persona_class_order") if k not in block]
+    if missing:
+        raise ValueError(f"judge config {judge_path} 'stage2' is missing {missing}")
+    enabled = block["enabled"]
+    if not isinstance(enabled, bool):
+        raise ValueError(f"judge config {judge_path} 'stage2.enabled' must be true or false, got {enabled!r}")
+    template = (config_dir / str(block["prompt_template"])).resolve()
+    if not template.exists():
+        raise FileNotFoundError(f"stage-2 prompt template not found: {template}")
+    order = validate_class_order(block["persona_class_order"], where=f"{judge_path} stage2.persona_class_order")
+    system_str, _ = load_prompt_template(template)
+    if " > ".join(order) not in " ".join(system_str.split()):
+        raise ValueError(
+            f"stage-2 prompt {template} does not state the configured persona-class order "
+            f"{' > '.join(order)!r}; the prompt and judge.yaml must agree."
+        )
+    return enabled, template, order
+
+
 @dataclass(frozen=True)
 class JudgeConfig:
     """The persona-realism judge configuration, loaded once from ``judge.yaml``.
@@ -134,6 +165,9 @@ class JudgeConfig:
     config_dir: Path
     reliability: dict[str, Any] = field(default_factory=dict)
     persona_rendering: dict[str, dict[str, str]] = field(default_factory=dict)
+    stage2_enabled: bool = False
+    stage2_prompt_template: Path | None = None
+    stage2_persona_class_order: tuple[str, ...] = ()
 
     def prompt_identity(self) -> dict[str, str]:
         """The :data:`PROMPT_IDENTITY_KEYS` stamps for the prompt as configured now.
@@ -178,7 +212,7 @@ class JudgeConfig:
             "judge_model", "model_options", "n_rounds",
             "severity_weights", "impossibility_severities", "sample_size",
             "real_sample_size", "bootstrap", "workers", "timeout_seconds",
-            "prompt_template", "persona_rendering",
+            "prompt_template", "persona_rendering", "stage2",
         ]
         missing = [key for key in required if key not in data]
         if missing:
@@ -232,6 +266,8 @@ class JudgeConfig:
                 "(typicality_level, tail_threshold, variance_center)."
             )
 
+        stage2_enabled, stage2_template, stage2_order = _load_stage2(data["stage2"], config_dir, judge_path)
+
         return cls(
             judge_model=str(data["judge_model"]),
             model_options=tuple(str(m) for m in data["model_options"]),
@@ -247,4 +283,7 @@ class JudgeConfig:
             config_dir=config_dir,
             reliability=dict(reliability),
             persona_rendering=load_persona_rendering(data["persona_rendering"], config_dir, judge_path),
+            stage2_enabled=stage2_enabled,
+            stage2_prompt_template=stage2_template,
+            stage2_persona_class_order=stage2_order,
         )

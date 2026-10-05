@@ -38,6 +38,7 @@ the pure ``reduce``/``stats`` layers; the cost chain reuses the
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -71,6 +72,7 @@ from population_synthetic.analysis.persona_realism.reduce import (
     reduce_persona,
 )
 from population_synthetic.analysis.persona_realism.report import write_combo_report
+from population_synthetic.analysis.persona_realism.stage2 import STAGE2_SUBDIR, stage2_issue_rows
 from population_synthetic.analysis.persona_realism.stats import RealismStats, compute_realism_stats
 from population_synthetic.analysis.persona_realism.validation import (
     HardRule,
@@ -93,6 +95,18 @@ from population_synthetic.analysis.utils.realism_csv import (
     SEVERITY_RANK,
     RealismPersonaRow,
     write_realism_personas_csv,
+)
+from population_synthetic.analysis.utils.realism_stage2_csv import (
+    NOT_APPLICABLE,
+    STAGE2_CLASSES,
+    UNCLASSIFIED,
+    class_counts,
+    persona_rows_from_issues,
+    write_stage2_issues_csv,
+    write_stage2_personas_csv,
+)
+from population_synthetic.analysis.utils.realism_stage2_csv import (
+    SCHEMA_VERSION as STAGE2_CSV_SCHEMA_VERSION,
 )
 
 __all__ = [
@@ -219,8 +233,32 @@ def _provenance_meta(cfg: JudgeConfig) -> dict[str, Any]:
         # independently versioned contracts, and folding them into one number would
         # make a reader unable to tell which file its mismatch is about.
         "clash_csv_schema_version": CLASH_CSV_SCHEMA_VERSION,
+        "stage2_enabled": cfg.stage2_enabled,
+        "stage2_persona_class_order": list(cfg.stage2_persona_class_order),
+        "stage2_csv_schema_version": STAGE2_CSV_SCHEMA_VERSION,
         "config_dir": str(cfg.config_dir),
     }
+
+
+#: Every class a stage-2 count is keyed by, in report order (pipeline states last).
+STAGE2_REPORT_CLASSES: tuple[str, ...] = (*STAGE2_CLASSES, UNCLASSIFIED, NOT_APPLICABLE)
+
+
+def _cache_stage2_prompt(out_dir: Path, combo_label: str) -> str | None:
+    """The single stage-2 prompt hash of a combination's stage-2 caches (``None`` if none; mixed raises).
+
+    Read from the caches, like the stage-1 stamps, so a ``--rewrite-artifacts`` stamps the
+    prompt that actually classified them.
+    """
+    hashes = set()
+    for path in sorted((out_dir / STAGE2_SUBDIR).glob("persona_[0-9]*.json")):
+        hashes.add(json.loads(path.read_text(encoding="utf-8")).get("stage2_prompt_sha256"))
+    if len(hashes) > 1:
+        raise ValueError(
+            f"combo {combo_label!r}: its stage-2 caches were written under mixed stage-2 prompts "
+            f"{sorted(hashes, key=str)}; re-run with --force so every persona comes from one prompt."
+        )
+    return next(iter(hashes)) if hashes else None
 
 
 def _pricing_meta(pricing: PricingTable) -> dict[str, Any]:
@@ -537,6 +575,7 @@ def write_combo_artifacts(
     hard_rules: tuple[HardRule, ...] | None = None,
     pricing: PricingTable | None = None,
     provenance: dict[str, Any] | None = None,
+    raw_identity: Any = None,
     logger: logging.Logger | None = None,
 ) -> ComboArtifacts:
     """Compute + render + write one combination's realism artifacts under *out_dir*.
@@ -578,6 +617,9 @@ def write_combo_artifacts(
         hard_rules: pre-loaded hard rules; loaded from config when ``None``.
         pricing: pre-loaded pricing table; the default table is loaded when ``None``.
         provenance: pre-built provenance meta; built from *cfg* when ``None``.
+        raw_identity: ``persona_id -> identity.json dict`` reader for the stage-2 rows'
+            raw answers; ``None`` for a combination without free text (the real
+            reference), whose S3 clashes are ``not_applicable_no_free_text``.
     """
     logger = logger or _LOGGER
     out_dir = Path(out_dir)
@@ -601,6 +643,7 @@ def write_combo_artifacts(
         **provenance,
         "context_isolation": _cache_context_isolation(present, combo_label),
         **_cache_prompt_identity(present, combo_label),
+        "stage2_prompt_sha256": _cache_stage2_prompt(out_dir, combo_label),
     }
     stats = compute_realism_stats(
         combo,
@@ -610,6 +653,9 @@ def write_combo_artifacts(
     )
 
     cost, cost_coverage = _combo_cost(out_dir, cfg.judge_model, pricing, combo.n_personas)
+    stage2_block, s2_issue_rows, s2_persona_rows = _stage2_block(
+        present, out_dir, combo_label, cfg=cfg, pricing=pricing, raw_identity=raw_identity,
+    )
 
     validation: dict[str, Any] | None = None
     if hard_rules and present:
@@ -642,6 +688,7 @@ def write_combo_artifacts(
                 validation=validation,
                 provenance=provenance,
                 pricing=_pricing_meta(pricing),
+                stage2=stage2_block,
             )
         )
     else:
@@ -698,6 +745,24 @@ def write_combo_artifacts(
         )
     )
 
+    # --- stage-2 classification CSVs (reporting-only; same force gate) ---------- #
+    paths.append(
+        _emit_csv(
+            out_dir / f"{combo_label}_stage2.csv",
+            build_rows=lambda: s2_issue_rows,
+            write=write_stage2_issues_csv,
+            force=force, logger=logger,
+        )
+    )
+    paths.append(
+        _emit_csv(
+            out_dir / f"{combo_label}_stage2_personas.csv",
+            build_rows=lambda: s2_persona_rows,
+            write=write_stage2_personas_csv,
+            force=force, logger=logger,
+        )
+    )
+
     # --- typicality distribution figure (skip only when genuinely empty) ------- #
     paths.extend(
         _emit_figure(
@@ -723,6 +788,59 @@ def write_combo_artifacts(
     )
 
     return ComboArtifacts(stats=stats, combo=combo, row=row, cost_coverage=cost_coverage, paths=paths)
+
+
+def _stage2_block(
+    present: list[LoadedPersona],
+    out_dir: Path,
+    combo_label: str,
+    *,
+    cfg: JudgeConfig,
+    pricing: PricingTable,
+    raw_identity: Any,
+) -> tuple[dict[str, Any], list[Any], list[Any]]:
+    """The reporting-only stage-2 block + its two row sets for one combination.
+
+    Counts the S3 clashes and personas per stage-2 class, and the **impossible**
+    personas (``can_exist`` majority false) per persona class. Every impossible persona
+    must hold an S3 clash (the stage-1 contract makes ``can_exist`` false only with
+    one), so an impossible persona without a stage-2 row raises. Stage-2 cost is summed
+    from ``stage2/persona_*.jsonl`` exactly as the stage-1 cost is from the combo root.
+    """
+    issue_rows = stage2_issue_rows(present, out_dir, raw_identity=raw_identity, enabled=cfg.stage2_enabled)
+    persona_rows_ = persona_rows_from_issues(issue_rows, cfg.stage2_persona_class_order)
+    class_by_persona = {r.persona_id: r.persona_class for r in persona_rows_}
+    impossible = [
+        lp.persona_id for lp in present
+        if not reduce_persona(lp.rounds, persona_id=lp.persona_id).possible_majority
+    ]
+    lacking = [pid for pid in impossible if pid not in class_by_persona]
+    if lacking:
+        raise ValueError(
+            f"combo {combo_label!r}: impossible persona(s) {lacking[:5]} hold no S3 clash, so stage 2 "
+            "has nothing to classify -- the verdict cache contradicts the can_exist <=> S3 contract."
+        )
+    s2_dir = out_dir / STAGE2_SUBDIR
+    n_cached = len(list(s2_dir.glob("persona_[0-9]*.json"))) if s2_dir.is_dir() else 0
+    cost, coverage = _combo_cost(s2_dir, cfg.judge_model, pricing, n_cached)
+    block = {
+        "enabled": cfg.stage2_enabled,
+        "note": "reporting-only: stage 2 changes no impossibility rate, ranking or test",
+        "n_s3_issues": len(issue_rows),
+        "n_personas_with_s3": len(persona_rows_),
+        "issue_class_counts": class_counts(
+            {f"{r.persona_id}|{r.round_index}|{r.attr_a}|{r.attr_b}": r.stage2_class for r in issue_rows},
+            STAGE2_REPORT_CLASSES,
+        ),
+        "persona_class_counts": class_counts(class_by_persona, STAGE2_REPORT_CLASSES),
+        "n_impossible": len(impossible),
+        "impossible_by_class": class_counts(
+            {pid: class_by_persona[pid] for pid in impossible}, STAGE2_REPORT_CLASSES,
+        ),
+        "cost": cost,
+        "cost_coverage": coverage,
+    }
+    return block, issue_rows, persona_rows_
 
 
 def _emit_csv(csv_path, *, build_rows, write, force, logger) -> Path:

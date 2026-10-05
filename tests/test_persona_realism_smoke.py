@@ -473,7 +473,8 @@ def test_cli_combo_dispatch_tops_up_even_when_report_exists(tmp_path, monkeypatc
     rewrite; a no-op leaves artifacts untouched.
     """
     driver = _load_driver()
-    cfg = _cfg()
+    # Stage 2 is exercised by its own test below; here only the stage-1 dispatch is under test.
+    cfg = dataclasses.replace(_cfg(), stage2_enabled=False)
     attrs = scheme_attributes("swedish")
     label = "swedish_all_pick_claude_haiku"
     out_dir = tmp_path / label
@@ -492,7 +493,7 @@ def test_cli_combo_dispatch_tops_up_even_when_report_exists(tmp_path, monkeypatc
 
     def _spy_artifacts(o, combo_label, *, cfg, dpi, force, country="", model="", strategy="",
                        is_real_reference=False, expected_ids=None, hard_rules=None,
-                       pricing=None, logger=None):
+                       pricing=None, raw_identity=None, logger=None):
         calls["artifacts_force"] = force
         return object()
 
@@ -515,7 +516,8 @@ def test_cli_combo_dispatch_skips_rewrite_when_nothing_changed(tmp_path, monkeyp
     """When the report exists and the runner does no work, artifacts are NOT rewritten
     (idempotent), but the runner is still consulted (cheap, no LLM)."""
     driver = _load_driver()
-    cfg = _cfg()
+    # Stage 2 is exercised by its own test below; here only the stage-1 dispatch is under test.
+    cfg = dataclasses.replace(_cfg(), stage2_enabled=False)
     attrs = scheme_attributes("swedish")
     label = "swedish_all_pick_claude_haiku"
     out_dir = tmp_path / label
@@ -534,7 +536,7 @@ def test_cli_combo_dispatch_skips_rewrite_when_nothing_changed(tmp_path, monkeyp
 
     def _spy_artifacts(o, combo_label, *, cfg, dpi, force, country="", model="", strategy="",
                        is_real_reference=False, expected_ids=None, hard_rules=None,
-                       pricing=None, logger=None):
+                       pricing=None, raw_identity=None, logger=None):
         calls["artifacts_force"] = force
         return object()
 
@@ -560,6 +562,69 @@ def test_cli_combo_dispatch_skips_rewrite_when_nothing_changed(tmp_path, monkeyp
     assert calls["artifacts_force"] is True   # artifacts rewritten
     assert calls["force"] is False            # ... but nothing was re-judged
     assert calls["plan_only"] is True         # ... and the runner made no judge call at all
+
+
+def test_cli_combo_dispatch_runs_stage2_and_passes_the_raw_reader(tmp_path, monkeypatch):
+    """With stage 2 enabled the dispatch classifies the S3 rounds after stage 1, hands the
+    artifact writer the same raw-identity reader (from the population_cap mirror), and
+    rewrites the artifacts when stage 2 classified something; --rewrite-artifacts makes no
+    stage-2 call; the real reference gets no reader."""
+    driver = _load_driver()
+    cfg = dataclasses.replace(_cfg(), stage2_enabled=True)
+    attrs = scheme_attributes("swedish")
+    label = "swedish_all_pick_claude_haiku"
+    out_dir = tmp_path / "03_Analysis" / "persona_realism" / "swedish" / label
+    out_dir.mkdir(parents=True)
+    (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")
+    mirror = tmp_path / "03_Analysis" / "population_cap" / label / "persona_00000"
+    mirror.mkdir(parents=True)
+    (mirror / "identity.json").write_text('{"employment_type": "former job"}', encoding="utf-8")
+    calls: dict[str, Any] = {}
+
+    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False,
+                    plan_only=False, sample_size_override=None, logger=None):
+        return _summary(combo_label, o, skipped=1)
+
+    def _spy_stage2(present, combo_label, analyzed_attrs, o, c, *, raw_identity, force=False, logger=None):
+        calls["stage2"] = calls.get("stage2", 0) + 1
+        calls["raw"] = raw_identity("persona_00000")
+        from population_synthetic.analysis.persona_realism.stage2 import Stage2Summary
+
+        return Stage2Summary(combo_label, 1, 1, 1, 0, 0, 0)
+
+    def _spy_artifacts(o, combo_label, *, cfg, dpi, force, country="", model="", strategy="",
+                       is_real_reference=False, expected_ids=None, hard_rules=None,
+                       pricing=None, raw_identity=None, logger=None):
+        calls["artifacts_force"] = force
+        calls["artifact_reader"] = raw_identity
+        return object()
+
+    monkeypatch.setattr(driver, "run_combo_judgements", _spy_runner)
+    monkeypatch.setattr(driver, "run_combo_stage2", _spy_stage2)
+    monkeypatch.setattr(driver, "write_combo_artifacts", _spy_artifacts)
+    monkeypatch.setattr(driver, "has_cached_verdicts", lambda _d: True)
+    monkeypatch.setattr(driver, "load_combo_verdicts", lambda _d: {})
+
+    driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=[{"a": 1}], analyzed_attrs=attrs,
+        out_dir=out_dir, cfg=cfg, dpi=80, force=False, hard_rules=(), pricing=_PRICING,
+        output_base=tmp_path,
+    )
+    assert calls["stage2"] == 1
+    assert calls["raw"] == {"employment_type": "former job"}
+    assert calls["artifacts_force"] is True          # stage 2 classified a round
+    assert calls["artifact_reader"]("persona_00000") == {"employment_type": "former job"}
+
+    driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=[{"a": 1}], analyzed_attrs=attrs,
+        out_dir=out_dir, cfg=cfg, dpi=80, force=False, rewrite_artifacts=True,
+        hard_rules=(), pricing=_PRICING, output_base=tmp_path,
+    )
+    assert calls["stage2"] == 1                      # no stage-2 call on the zero-cost path
+
+    real = driver._Combo(label="real_swedish", country="swedish", strategy="", model="",
+                         is_real_reference=True, sample_size_override=None)
+    assert driver._raw_identity_reader(real, tmp_path) is None
 
 
 def test_write_persona_file_derives_age_group_from_raw_age(tmp_path):

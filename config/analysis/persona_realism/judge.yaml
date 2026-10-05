@@ -165,3 +165,28 @@ persona_rendering:
       "Post-Secondary 3+ yrs (ISCED 5A)": "Higher education of 3 years or more (bachelor's or master's level) (ISCED 1997 level 5A)"
       "Post-Graduate (ISCED 6)": "Research degree (licentiate or doctorate) (ISCED 1997 level 6)"
       "Unknown / Not reported": "Unknown / Not reported"
+
+# Stage 2: classify WHY each stage-1 S3 clash arose. Runs after stage 1 on every
+# persona holding >= 1 S3 clash in a round (one call per such round, same judge
+# model, same fresh-process-per-call client), reading the persona's raw free-text
+# answers (identity.json in the population_cap mirror) beside the mapped categories
+# and stage 1's explanations. Classes (defined in the prompt): raw_impossible,
+# label_clash, ambiguous, mapping_error, judge_error. The real reference has no free
+# text: its S3 clashes are not_applicable_no_free_text and cost no call. Outputs:
+# {combo}_stage2.csv (one row per S3 clash) and {combo}_stage2_personas.csv. Stage 2
+# is REPORTING-ONLY: it changes no impossibility rate, ranking or test.
+#
+# `persona_class_order` ranks the issue classes into one class per persona (the
+# highest-ranked issue wins). The prompt states the same order verbatim and the
+# loader raises unless it does. Its SHA-256 (`stage2_prompt_sha256`) is stamped into
+# every stage-2 cache and report; a cache written under another stage-2 prompt is
+# refused on resume (re-run with --force).
+stage2:
+  enabled: true
+  prompt_template: "stage2_prompt.md"
+  persona_class_order:
+    - "raw_impossible"
+    - "label_clash"
+    - "ambiguous"
+    - "mapping_error"
+    - "judge_error"
