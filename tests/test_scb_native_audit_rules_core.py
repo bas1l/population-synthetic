@@ -319,6 +319,15 @@ FORMER_JOB_AND_LEAVE = [
     # a former cue with no contract word stays a miss (the cap gate's pool must not move)
     ("employment_type", "Föräldraledighet", UNMAPPED),
     ("employment_type", "contractor (past)", UNMAPPED),
+    # one reading per language in employment_status and income_source alike: Swedish förtidspension /
+    # sjukpension = the disability benefit; English "early retirement" = old-age pension drawn early
+    ("employment_status", "Förtidspensionär", "Sick Leave"),
+    ("employment_status", "Sjukpensionär", "Sick Leave"),
+    ("employment_status", "early_retired", "Retired"),
+    ("income_source", "early_retirement_pension", _PE),
+    ("income_source", "Sjukpension", _SAC),
+    ("income_source", "Förtidspension", _SAC),
+    ("income_source", "Early retirement benefit (Förtidspension)", _SAC),
 ]
 
 CASES = (

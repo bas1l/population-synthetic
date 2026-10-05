@@ -114,7 +114,12 @@ Each rule follows SCB's own definition of the category; the regression cases liv
   CSN / studielån / barnbidrag are `General Allowances` (component 325) and bostadsbidrag /
   bostadstillägg `Housing Allowance` (330); since `priority` is shared with the real side and
   stays the `values` order, the generic `Insurance / Allowance` (which precedes them) vetoes their
-  tokens. Parental or family support is not an SCB income component and is unmapped.
+  tokens. Parental or family support is not an SCB income component and is unmapped. Swedish
+  förtidspension / sjukpension is the disability benefit (renamed sjuk- och aktivitetsersättning in
+  2003) and is `Sickness / Activity Compensation`, as `employment_status` codes it `Sick Leave`;
+  English "early retirement (pension)" is an old-age pension drawn before the reference age
+  (allmän pension from 63/64, tjänstepension from 55) and is `Pension`, as `employment_status` codes
+  it `Retired`.
 
 The rules below have their regression cases in `tests/test_scb_native_audit_rules_social.py`.
 

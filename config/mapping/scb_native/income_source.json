@@ -419,9 +419,8 @@
       "none_of": [
         "förtidspens",
         "invalidpension",
+        "sjukpens",
         "disability",
-        "early_retirement",
-        "early retirement pension",
         "bostadstillägg för pension",
         "bostadsbidrag för pension",
         "housing supplement",
@@ -578,7 +577,7 @@
         "aktivitetsersättning",
         "disability",
         "förtidspens",
-        "early_retirement_pension",
+        "sjukpens",
         "invalidpension"
       ],
       "none_of": [
