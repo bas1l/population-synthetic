@@ -51,7 +51,7 @@ from population_synthetic.analysis.utils.style import (
 from population_synthetic.analysis.utils.table_style import fit_to_page
 
 # Severity -> bar colour / legend caption for the clash taxonomy (S3 hard
-# contradiction reddest). These are protocol-fixed severity labels (see judge.py),
+# contradiction darkest and warmest). These are protocol-fixed severity labels (see judge.py),
 # so the mappings are structural presentation constants, not tunables; the *order*
 # they are drawn in comes from SEVERITY_LEVELS, the one definition of it.
 _SEVERITY_COLORS: dict[str, str] = {

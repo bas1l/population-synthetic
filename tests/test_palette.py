@@ -219,6 +219,27 @@ def test_host_colours_are_slots_of_the_house_series():
     assert HOST_COLORS["local"] == CATEGORICAL_SERIES[3]
 
 
+def test_the_severity_palette_is_the_okabe_ito_set():
+    """Pinned literally: the severity colours are a documented, CVD-checked choice.
+
+    Retuning them is a deliberate restyle that must re-run the colour-vision check recorded
+    in docs/development/figure-conventions.md, so the change has to be visible here.
+    """
+    assert SEVERITY_SERIES == ("#D55E00", "#E69F00", "#56B4E9")
+    assert palette.WORST_CLASH_COLORS == {
+        "none": "#E4E4E4",
+        "S1": "#56B4E9",
+        "S2": "#E69F00",
+        "S3b": "#CC79A7",
+        "S3a": "#D55E00",
+        "S3": "#0072B2",
+        "pipeline": "#009E73",
+    }
+    # Okabe-Ito yellow is unreadable as a thin bar or as count text on white.
+    assert "#F0E442" not in palette.WORST_CLASH_COLORS.values()
+    assert len(set(palette.WORST_CLASH_COLORS.values())) == len(palette.WORST_CLASH_COLORS)
+
+
 def test_the_sequential_ramp_is_the_only_magnitude_ramp():
     """Settled by ADR 2026-08-12: one house ramp, off-ramp grey for the unmeasured cells."""
     assert HEATMAP_CMAP == "inferno"

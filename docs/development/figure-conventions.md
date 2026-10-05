@@ -194,6 +194,48 @@ Annotation colour needs no adjustment for the change. `palette.text_color_on` as
 what it actually painted and picks white or black by WCAG relative luminance, so the two dark rungs
 take white text and the three light ones black, without a threshold tuned to any one ramp.
 
+### Severity categories take the Okabe–Ito set
+
+The clash severities and the worst-clash-per-individual categories are **categories**, not
+magnitudes, so they do not come from the ramp. Their one home is `palette.SEVERITY_SERIES` (the
+three judge levels, severest first) and `palette.WORST_CLASH_COLORS` (the worst-clash ids of
+`config/analysis/realism_ranking/worst_clash_split.yaml`, read through `palette.worst_clash_color`,
+which raises on an unknown id). Both are drawn from the Okabe–Ito colour-blind-safe set (Wong 2011):
+
+| Category | Display label | Colour |
+|----------|---------------|--------|
+| `none` | no clash | light grey `#E4E4E4` |
+| `S1` | R1: unusual | sky blue `#56B4E9` |
+| `S2` | R2: implausible | orange `#E69F00` |
+| `S3b` | R3b: label clash | reddish purple `#CC79A7` |
+| `S3a` | R3a: impossible (and the unsplit R3 of the published figure) | vermillion `#D55E00` |
+| `S3` | R3: not split (the reference, a failed stage-2 call) | blue `#0072B2` |
+| `pipeline` | pipeline | bluish green `#009E73` |
+
+Why this assignment:
+
+- **Ordinal, not just distinct.** None → R1 → R2 → R3a runs grey → cool → warm → dark warm, so the
+  levels read as increasing seriousness. R3b sits beside R3a in the warm end because it is still
+  the severest judge level. The unsplit R3 and `pipeline` are deliberately *outside* that run: "not
+  split" is a missing classification and `pipeline` an artefact, neither a degree of severity.
+- **Distinct under colour-vision deficiency.** The earlier set (grey R1, two near reds for R3a/R3b,
+  a violet `pipeline`) put R1 next to the "no clash" grey and fell to CIEDE2000 5.3 between R2 and
+  R3b under simulated tritanopia. Simulated with Machado et al. (2009) at full severity, the minimum
+  CIEDE2000 over every pair of the seven categories is now 22.2 (normal vision), 12.5
+  (deuteranopia), 12.2 (protanopia) and 10.9 (tritanopia, R2 vs R3b). The weakest pair under
+  red–green deficiency is R2 vs R3a (orange vs vermillion), which still
+  differs by 15 to 19 L* units under every simulation and so survives as a lightness step.
+- **No yellow, no black.** Okabe–Ito yellow `#F0E442` vanishes as a thin bar or as count text on
+  white. Black was rejected for the unsplit R3 because it merges with the reference step outline
+  drawn over the bars.
+
+Count text printed in a category colour on white is the weak point of any light categorical set:
+R1 and R2 reach only about 2.3:1 WCAG contrast, so such numbers stay bold and are never the only
+carrier of the value.
+
+The **per-level severity prevalence heatmaps** are unaffected: they plot a rate and stay on the house
+ramp (`inferno`) like every other heatmap.
+
 ---
 
 ## Labelling conventions
@@ -613,7 +655,9 @@ deliverable.
   `Manuscripts/40_llm-population-fidelity-benchmark/`
 - Crameri, Shephard and Heron (2020), *Nature Communications* 11:5444 — colour in science
   communication
-- Wong (2011), *Nature Methods* 8:441 — colourblind-safe categorical palettes
+- Wong (2011), *Nature Methods* 8:441 — colourblind-safe categorical palettes (the Okabe–Ito set)
+- Machado, Oliveira and Fernandes (2009), *IEEE TVCG* 15(6):1291 — the colour-vision-deficiency
+  simulation used to check the severity palette
 - WCAG 2 contrast ratios — the relative-luminance crossover `palette.text_color_for_rgb` uses
 - [`decisions/2026-08-12-self-contained-typicality-axis.md`](decisions/2026-08-12-self-contained-typicality-axis.md)
   — the sequential-ramp-only decision
