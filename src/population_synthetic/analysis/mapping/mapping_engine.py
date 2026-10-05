@@ -131,12 +131,37 @@ never confused with value keys because the walk is driven by ``values``):
   becomes ``remap[value][band]``. A number preceded by a comparator, or numbers
   spanning several bands, leave the walked value unchanged and are reported as
   ``facet_ambiguous``. A number in no band (``0 timmar``) never overrides.
+- ``cross_field`` — an ordered list of post-resolution overrides that read *other*
+  fields of the same record (synthetic side only; the real mapper does not wire it
+  and :func:`validate_mappings` rejects it there)::
+
+      "cross_field": [
+        {"from": ["Unemployed"], "to": "Employed",
+         "when": [{"field": "employment_type", "raw": {"contains": [...], "none_of": [...]}},
+                  {"field": "employment_status", "resolved": ["Unemployed", "Retired"]}]}
+      ]
+
+  A rule fires when the attribute's resolved value is in ``from`` and *every*
+  ``when`` condition holds: a ``raw`` condition evaluates an ordinary scalar matcher
+  (any tier, ``none_of`` vetoing, the side's token mode and negation) against the
+  named field's **raw** text -- the attribute's own field included -- and is false
+  when that text is absent; a ``resolved`` condition requires the named sibling's
+  **final** resolved value to be in the list (the attribute's own field is not
+  allowed there, and the ``cross_field`` / ``refine_from`` dependency graph must be
+  acyclic). Rules are tried in order and the first that fires sets the value to
+  ``to``; at most one rule fires. Overrides apply only to a matched (or ``absent``)
+  value, never to a total miss, and ``from`` / ``to`` must be declared ``values`` --
+  so an override can move a persona between categories but can never turn a miss
+  into a value or a value into a miss. The caller supplies the record's raw fields
+  and the already-resolved siblings; resolving an attribute that declares
+  ``cross_field`` without them raises.
 """
 
 from __future__ import annotations
 
 import math
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import Any
@@ -160,7 +185,7 @@ _MATCHER_KEYS: frozenset[str] = frozenset(
 #: Attribute-level directive keys on a ``real`` / ``synthetic`` rules block.
 #: These are never treated as values (the value-walk is driven by ``values``).
 _DIRECTIVE_KEYS: frozenset[str] = frozenset(
-    {"absent", "refine_from", "on_miss", "subfields", "tie_break", "negation", "numeric_facet"}
+    {"absent", "refine_from", "on_miss", "subfields", "tie_break", "negation", "numeric_facet", "cross_field"}
 )
 
 #: Scalar matcher tiers, swept in this order globally across all values.
@@ -180,6 +205,8 @@ _MATCHING_KEYS: frozenset[str] = frozenset({"token_mode", "negation", "tie_break
 _NEGATION_KEYS: frozenset[str] = frozenset({"cues", "window", "clause_breaks"})
 _TOKEN_OBJECT_KEYS: frozenset[str] = frozenset({"token", "mode"})
 _FACET_KEYS: frozenset[str] = frozenset({"extract", "ambiguous_if_preceded_by", "bands", "remap"})
+_CROSS_RULE_KEYS: frozenset[str] = frozenset({"from", "to", "when"})
+_CROSS_CONDITION_KINDS: frozenset[str] = frozenset({"raw", "resolved"})
 
 _UNDERSCORE_RE = re.compile(r"_")
 _WORD_RE = re.compile(r"\w+")
@@ -489,6 +516,60 @@ def _compile_facet(spec: Any, where: str, values: list[str]) -> NumericFacet:
     return NumericFacet(tuple(compiled_extract), amb_re, tuple(bands), {k: dict(v) for k, v in remap.items()})
 
 
+def _validate_cross_field(spec: Any, where: str, values: list[str]) -> None:
+    """Validate the shape of a ``cross_field`` rule list.
+
+    Field names are checked by :func:`validate_mappings`, which knows the sibling
+    attributes and their values.
+    """
+    if not isinstance(spec, list) or not spec:
+        _fail(where, "must be a non-empty list of rules")
+    for i, rule in enumerate(spec):
+        rwhere = f"{where}[{i}]"
+        if not isinstance(rule, dict) or set(rule) != _CROSS_RULE_KEYS:
+            _fail(rwhere, f"a cross_field rule must declare exactly {sorted(_CROSS_RULE_KEYS)}")
+        src = rule["from"]
+        if not isinstance(src, list) or not src or not all(isinstance(v, str) for v in src):
+            _fail(rwhere, "'from' must be a non-empty list of values")
+        if len(set(src)) != len(src):
+            _fail(rwhere, f"'from' repeats a value: {src!r}")
+        for v in src:
+            if v not in values:
+                _fail(rwhere, f"'from' value {v!r} is not one of values")
+        if rule["to"] not in values:
+            _fail(rwhere, f"'to' value {rule['to']!r} is not one of values")
+        if rule["to"] in src:
+            _fail(rwhere, f"'to' value {rule['to']!r} is also in 'from' (a no-op rule)")
+        when = rule["when"]
+        if not isinstance(when, list) or not when:
+            _fail(rwhere, "'when' must be a non-empty list of conditions")
+        for j, cond in enumerate(when):
+            cwhere = f"{rwhere}.when[{j}]"
+            if not isinstance(cond, dict) or "field" not in cond or len(cond) != 2:
+                _fail(cwhere, f"a condition must declare 'field' plus exactly one of {sorted(_CROSS_CONDITION_KINDS)}")
+            if not isinstance(cond["field"], str) or not cond["field"]:
+                _fail(cwhere, "'field' must name an attribute")
+            kind = next(k for k in cond if k != "field")
+            if kind == "raw":
+                _validate_matcher(cond["raw"], f"{cwhere}.raw", frozenset())
+            elif kind == "resolved":
+                vals = cond["resolved"]
+                if not isinstance(vals, list) or not vals or not all(isinstance(v, str) and v for v in vals):
+                    _fail(cwhere, "'resolved' must be a non-empty list of value names")
+            else:
+                _fail(cwhere, f"unknown condition kind {kind!r} (allowed: {sorted(_CROSS_CONDITION_KINDS)})")
+
+
+def cross_field_dependencies(rules_block: dict) -> tuple[str, ...]:
+    """Sibling attributes whose *resolved* value a ``cross_field`` block reads (in order, unique)."""
+    deps: list[str] = []
+    for rule in rules_block.get("cross_field", ()):
+        for cond in rule["when"]:
+            if "resolved" in cond and cond["field"] not in deps:
+                deps.append(cond["field"])
+    return tuple(deps)
+
+
 def validate_rules(rules_block: Any, values: list[str], where: str) -> None:
     """Validate one ``real`` / ``synthetic`` rules block against its ``values``. Raises on any defect."""
     if not isinstance(rules_block, dict):
@@ -519,6 +600,8 @@ def validate_rules(rules_block: Any, values: list[str], where: str) -> None:
                 _fail(kwhere, "an attribute may only opt out of negation (null); cues live in _index.json")
         elif key == "numeric_facet":
             _compile_facet(spec, kwhere, values)
+        elif key == "cross_field":
+            _validate_cross_field(spec, kwhere, values)
         else:
             _fail(kwhere, f"unknown key {key!r}: neither one of values nor a directive {sorted(_DIRECTIVE_KEYS)}")
 
@@ -554,6 +637,7 @@ def validate_mappings(mappings: dict, where: str = "mapping config") -> dict[str
     if set(matching_spec) != set(SIDES):
         _fail(f"{where} _index.matching", f"must declare exactly {list(SIDES)}, got {sorted(matching_spec)}")
     compiled = {side: compile_matching(matching_spec[side], f"{where} _index.matching.{side}") for side in SIDES}
+    blocks: dict[str, dict] = {}
     for attr, filename in index["attributes"].items():
         stem = filename[:-5] if filename.endswith(".json") else filename
         block = mappings.get(stem)
@@ -564,7 +648,58 @@ def validate_mappings(mappings: dict, where: str = "mapping config") -> dict[str
         for side in SIDES:
             if side in block:
                 validate_rules(block[side], block["values"], f"{fwhere}.{side}")
+        blocks[attr] = block
+    _validate_cross_field_graph(blocks, where)
     return compiled
+
+
+def _validate_cross_field_graph(blocks: dict[str, dict], where: str) -> None:
+    """Check every ``cross_field`` condition against the sibling attributes; reject cycles.
+
+    ``cross_field`` is wired by the synthetic mapper only, so a real-side block
+    declaring it raises rather than being silently ignored.
+    """
+    graph: dict[str, tuple[str, ...]] = {}
+    for attr, block in blocks.items():
+        if isinstance(block.get("real"), dict) and "cross_field" in block["real"]:
+            _fail(f"{where} {attr}.real", "'cross_field' is only supported on the synthetic side")
+        syn = block.get("synthetic")
+        if not isinstance(syn, dict) or "cross_field" not in syn:
+            continue
+        for i, rule in enumerate(syn["cross_field"]):
+            for j, cond in enumerate(rule["when"]):
+                cwhere = f"{where} {attr}.synthetic.cross_field[{i}].when[{j}]"
+                name = cond["field"]
+                if name not in blocks:
+                    _fail(cwhere, f"field {name!r} is not an attribute of the _index master")
+                if "resolved" in cond:
+                    if name == attr:
+                        _fail(cwhere, "a 'resolved' condition may not read the attribute's own value")
+                    for v in cond["resolved"]:
+                        if v not in blocks[name]["values"]:
+                            _fail(cwhere, f"'resolved' value {v!r} is not one of {name}'s values")
+        graph[attr] = cross_field_dependencies(syn)
+
+    def _deps(attr: str) -> tuple[str, ...]:
+        syn = blocks[attr].get("synthetic")
+        refine = (syn["refine_from"],) if isinstance(syn, dict) and syn.get("refine_from") else ()
+        return graph.get(attr, ()) + refine
+
+    state: dict[str, int] = {}
+
+    def _visit(attr: str, path: tuple[str, ...]) -> None:
+        if state.get(attr) == 2:
+            return
+        if state.get(attr) == 1:
+            _fail(where, f"cross_field / refine_from dependency cycle: {' -> '.join(path + (attr,))}")
+        state[attr] = 1
+        for dep in _deps(attr):
+            if dep in blocks:
+                _visit(dep, path + (attr,))
+        state[attr] = 2
+
+    for attr in graph:
+        _visit(attr, ())
 
 
 # ---------------------------------------------------------------------------
@@ -749,6 +884,8 @@ class Resolution:
     (more than one = a tie) and ``criterion`` names the ``tie_break`` criterion
     that decided it (None without a tie). ``facet`` is None when no numeric facet
     applies, else ``"applied"`` / ``"ambiguous"`` / ``"none"`` with the bands seen.
+    ``cross_field_rule`` is the index of the ``cross_field`` rule that fired (None
+    when none did) and ``pre_cross_value`` the value it replaced.
     """
 
     value: str | None
@@ -760,6 +897,8 @@ class Resolution:
     walked_value: str | None = None
     facet: str | None = None
     facet_bands: tuple[str, ...] = field(default=())
+    cross_field_rule: int | None = None
+    pre_cross_value: str | None = None
 
 
 def _pick(cands: list[Candidate], tie_break: tuple[str, ...], rank: dict[str, int]) -> tuple[Candidate, str | None]:
@@ -854,6 +993,8 @@ def resolve(
     matching: Matching | dict,
     priority: list[str],
     refine_value: str | None = None,
+    field_raw: Mapping[str, Any] | None = None,
+    field_resolved: Mapping[str, Any] | None = None,
 ) -> str | None:
     """Resolve one raw input to a unified value using *rules_block*.
 
@@ -881,6 +1022,9 @@ def resolve(
         The already-resolved value of the ``refine_from`` attribute, supplied by
         the caller. Only consulted when ``rules_block`` declares ``refine_from``
         and the primary walk misses.
+    field_raw / field_resolved:
+        The record's raw fields and its already-resolved sibling values, read by a
+        ``cross_field`` directive (both required when one is declared).
 
     Returns
     -------
@@ -889,7 +1033,8 @@ def resolve(
     ``UNMAPPED`` sentinel (``"__UNMAPPED__"``).
     """
     return resolve_traced(
-        raw_value, rules_block, values, matching=matching, priority=priority, refine_value=refine_value
+        raw_value, rules_block, values, matching=matching, priority=priority, refine_value=refine_value,
+        field_raw=field_raw, field_resolved=field_resolved,
     ).value
 
 
@@ -901,6 +1046,8 @@ def resolve_detailed(
     matching: Matching | dict,
     priority: list[str],
     refine_value: str | None = None,
+    field_raw: Mapping[str, Any] | None = None,
+    field_resolved: Mapping[str, Any] | None = None,
 ) -> tuple[str | None, bool]:
     """Resolve as :func:`resolve` does, and report whether it was a total miss.
 
@@ -915,7 +1062,8 @@ def resolve_detailed(
     ``absent`` directive is a declared outcome, not a miss, and reports ``False``.
     """
     res = resolve_traced(
-        raw_value, rules_block, values, matching=matching, priority=priority, refine_value=refine_value
+        raw_value, rules_block, values, matching=matching, priority=priority, refine_value=refine_value,
+        field_raw=field_raw, field_resolved=field_resolved,
     )
     return res.value, res.missed
 
@@ -928,9 +1076,49 @@ def resolve_traced(
     matching: Matching | dict,
     priority: list[str],
     refine_value: str | None = None,
+    field_raw: Mapping[str, Any] | None = None,
+    field_resolved: Mapping[str, Any] | None = None,
 ) -> Resolution:
     """Resolve and return the full :class:`Resolution` trace (tier, candidates, tie criterion, facet)."""
     eff = _effective_matching(_as_matching(matching), rules_block)
+    res = _resolve_core(raw_value, rules_block, values, eff, priority, refine_value)
+    rules = rules_block.get("cross_field")
+    if rules is None or res.missed:
+        return res
+    if field_raw is None or field_resolved is None:
+        raise ValueError("cross_field directive declared but the caller supplied no field_raw / field_resolved")
+    for i, rule in enumerate(rules):
+        if res.value in rule["from"] and all(
+            _condition_holds(cond, field_raw, field_resolved, eff) for cond in rule["when"]
+        ):
+            return replace(res, value=rule["to"], cross_field_rule=i, pre_cross_value=res.value)
+    return res
+
+
+def _condition_holds(
+    cond: dict, field_raw: Mapping[str, Any], field_resolved: Mapping[str, Any], matching: Matching
+) -> bool:
+    """Evaluate one ``cross_field`` ``when`` condition (see the module docstring)."""
+    name = cond["field"]
+    if "raw" in cond:
+        raw = field_raw.get(name)
+        if _is_absent(raw):
+            return False
+        return _match_scalar(raw, cond["raw"], matching)
+    if name not in field_resolved:
+        raise ValueError(f"cross_field reads the resolved value of {name!r}, which the caller did not resolve first")
+    return field_resolved[name] in cond["resolved"]
+
+
+def _resolve_core(
+    raw_value: Any,
+    rules_block: dict,
+    values: list[str],
+    eff: Matching,
+    priority: list[str],
+    refine_value: str | None,
+) -> Resolution:
+    """Absent literal, primary walk + numeric facet, ``refine_from`` walk, miss default."""
     absent = rules_block.get("absent")
     # Default a total miss to the explicit UNMAPPED sentinel (not a bare None), so a
     # "mapped, but nothing matched" outcome is legible downstream.

@@ -39,6 +39,9 @@ Three responsibilities remain in the mapper itself:
   tokens, the winner, and the ``tie_break`` criterion that decided it), as is every
   ``numeric_facet`` read left ambiguous (criterion ``facet_ambiguous``). The loader
   writes the list to the ``{slug}.ties.csv`` sidecar.
+- **Cross-field wiring** -- an attribute declaring a ``cross_field`` override is
+  resolved with the record's raw fields and the siblings it reads already resolved
+  (see :mod:`mapping_engine`).
 
 The mapping directory is validated once, at construction
 (:func:`mapping_engine.validate_mappings`): a missing ``matching`` block, an unknown
@@ -174,8 +177,16 @@ class BaseSyntheticMapper(AbstractSyntheticMapper):
         if refine_from is not None:
             refine_value = self._resolve_attr(refine_from, identity, resolved, persona_id)
 
+        # ``cross_field`` overrides read raw sibling text and, for ``resolved``
+        # conditions, a sibling's final value -- resolve those siblings first (the
+        # dependency graph is validated acyclic at construction).
+        cross_field = "cross_field" in rules_block
+        for dep in mapping_engine.cross_field_dependencies(rules_block):
+            self._resolve_attr(dep, identity, resolved, persona_id)
+
         res = mapping_engine.resolve_traced(
-            raw, rules_block, values, matching=self._matching, priority=block["priority"], refine_value=refine_value
+            raw, rules_block, values, matching=self._matching, priority=block["priority"], refine_value=refine_value,
+            field_raw=identity if cross_field else None, field_resolved=resolved if cross_field else None,
         )
         value, missed = res.value, res.missed
         raw_text = "" if raw is None else str(raw)

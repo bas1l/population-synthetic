@@ -35,9 +35,14 @@ def resolve():
     matching = mapping_engine.compile_matching(index["matching"]["synthetic"])
 
     def _resolve(attr: str, raw: str) -> str:
+        # Each case is a single field resolved in isolation: the record carries only this
+        # raw value, so a ``cross_field`` raw condition on another field cannot fire, and
+        # a resolved employment_status of Employed keeps the ended-job rule out of the way
+        # (the cross-field rules are covered by ``test_mapping_cross_field.py``).
         block = mappings[index["attributes"][attr][:-5]]
         return mapping_engine.resolve(raw, block["synthetic"], block["values"], matching=matching,
-                                      priority=block["priority"])
+                                      priority=block["priority"], field_raw={attr: raw},
+                                      field_resolved={"employment_status": "Employed"})
     return _resolve
 
 
