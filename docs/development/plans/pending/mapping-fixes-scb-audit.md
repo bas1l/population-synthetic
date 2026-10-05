@@ -945,6 +945,21 @@ against the v6 hash; a full `persona_realism --force` re-judge (~5,800 personas,
 Remaining mapping errors seen in the test: a student, homemaker or job seeker whose type names a
 current full-time job (AKU: Employed) and a retiree with a bare job type.
 
+### `cross_field` removed — 2026-10-05
+
+User decision: each attribute is mapped from its own free text only; no mapping rule may depend on
+another attribute. The `cross_field` directive, the `resolved_range` condition, the synthetic
+mapper's record context and every rule built on them (the employment AKU rules and the
+disability-pension age gate above) are removed by reverting `9bb067a`, `5ee7674`, `bfe0dec`,
+`80eb36c` and `1246f59`. `config/mapping/` and `src/population_synthetic/analysis/mapping/` are
+back to their state at `c6d96fd`. The two sections above ("Employment cross-field fix" and the age
+gate half of "Judge prompt v6 …") are history, not current behaviour; judge prompt v6 (`e9c51b5`)
+stays. None of the removed rules is to be re-expressed as a single-field matcher until the v6
+re-judge of the 115 v5-impossible personas has been classified (mapping / judge / genuine).
+The pre-existing `refine_from` directive (`birth_location` re-walked from the resolved
+`birth_country_detail`) is also cross-attribute and is untouched by this removal; Sweden deprecates
+`birth_location`, so it does not reach the analysed axes there.
+
 ## Verification
 
 - `ruff check src/` and `pytest` pass; the golden test shows `scb`, `istat`, `ssb` unchanged.
