@@ -144,7 +144,7 @@ Tier order is `equals` -> `all_of` -> `contains` -> numeric (composite in a fina
 `absent` (missing-input literal), `refine_from` (re-walk a sibling's resolved value, e.g.
 `birth_location` from `birth_country_detail`), `on_miss` (default when all miss -- **forbidden on
 both Swedish tiers**, see below), `subfields`, and the per-attribute matching overrides
-`tie_break`, `negation: null` and `numeric_facet` (below). Each attribute file also declares
+`tie_break`, `negation: null` and `numeric_facet` (below), and `cross_field` (synthetic side only). Each attribute file also declares
 `priority`, a permutation of `values` used by the `priority` tie-break criterion, so the axis /
 chart order never decides a tie. The `_index.json` master lists the in-scope attributes (`attribute -> filename`,
 key order = axis order) -- pure mapping scope; country scope is data-driven (Italy's master omits
@@ -185,6 +185,19 @@ whose bands overlap or whose remap target is not a value.
   the raw text (`extract` regexes with a `scale`, `bands`, `remap` from walked value to band
   value); a comparator or a multi-band read leaves the walked value and is reported as
   `facet_ambiguous`.
+- `cross_field` -- an ordered list of post-resolution overrides `{from, to, when}` that read other
+  fields of the same record: a `when` condition is either `{"field": f, "raw": <matcher>}` (an
+  ordinary matcher on field *f*'s raw text, own field included; false when that text is absent) or
+  `{"field": f, "resolved": [values]}` (sibling *f*'s final value). The first rule whose `from`
+  holds the resolved value and whose conditions all hold sets the value to `to`. It never applies to
+  a total miss and `from` / `to` must be declared values, so it cannot change which personas are
+  `__UNMAPPED__`. Only the synthetic mapper wires it (it passes the identity and the siblings it
+  resolved first); a `real`-side declaration, an unknown field, a `resolved` condition on the
+  attribute's own value or a `cross_field` / `refine_from` dependency cycle raises at validation,
+  and resolving such an attribute without the record context raises. `scb_native` uses it for the
+  AKU employment rules (job seeker or pensioner with current paid work → `Employed`, disability
+  pension → `Sick Leave`, ended job → `Not Applicable`, fixed-term by design → `Temporary`); see
+  `config/mapping/scb_native/README.md`.
 
 With `substring` / `null` / `["priority"]` and `priority == values` the engine is exactly the
 historic first-hit-in-declared-order resolver; the global `scb` tier, `istat` and every `real`
