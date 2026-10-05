@@ -288,6 +288,39 @@ PIPELINE_RUN_FIXED = [
     ("housing_tenure", "Seniorboende (äldreboende med egen lägenhet)", UNMAPPED),  # false alarm kept
 ]
 
+# 2026-10-05: an employment_type whose OWN text says the job is former / ended, or that the person
+# is on parental leave instead of working, has no current contract -> Not Applicable. Text that
+# states current work (after the leave, covering a leave, part-time beside it) keeps its contract.
+# Each string is read alone; no rule reads another attribute.
+_NA = "Not Applicable"
+FORMER_JOB_AND_LEAVE = [
+    ("employment_type", "former permanent full-time employment", _NA),
+    ("employment_type", "Full-time permanent (past)", _NA),
+    ("employment_type", "full_time_permanent_previous", _NA),
+    ("employment_type", "retired (previously seasonal)", _NA),
+    ("employment_type", "Permanent full-time employment (before retirement)", _NA),
+    ("employment_type", "former permanent full-time (pre-retirement)", _NA),
+    ("employment_type", "Före detta heltidsanställd sjukvårdare", _NA),
+    ("employment_type", "Tidigare fast anställning (heltid)", _NA),
+    ("employment_type", "Tidigare deltidsanställning 20–34 timmar per vecka, nu avslutad", _NA),
+    ("employment_type", "tidigare säsongsanställning (avslutad)", _NA),
+    ("employment_type", "pensionär (eget företag, avvecklat)", _NA),
+    ("employment_type", "Föräldraledighet, heltid (utan lön)", _NA),
+    ("employment_type", "Anställning med föräldraledighet (tillsvidare)", _NA),
+    # exceptions: the text states a current job
+    # "efter avslutad" = probation completed: no veto (the Temporary reading of "provanställning" is a separate,
+    # pre-existing permanence mis-read left unchanged here)
+    ("employment_type", "Tillsvidareanställning på 100 procent efter avslutad provanställning", "Temporary Full-time"),
+    ("employment_type", "Heltidstjänst efter föräldraledighet", "Permanent Full-time"),
+    ("employment_type", "Fixed-term employment, 40 hours/week (parental leave cover)", "Temporary Full-time"),
+    ("employment_type", "Föräldraledig med deltidsarbete", "Permanent Part-time"),
+    ("employment_type", "Tidigare med fulltid (35h/vecka), nu halvtidsanställd (18h/vecka)", "Permanent Full-time"),
+    ("employment_type", "Permanent Employee (Tidigare Tjänsteman)", "Permanent Full-time"),
+    # a former cue with no contract word stays a miss (the cap gate's pool must not move)
+    ("employment_type", "Föräldraledighet", UNMAPPED),
+    ("employment_type", "contractor (past)", UNMAPPED),
+]
+
 CASES = (
     _cases("civil_status", CIVIL_FIXED, CIVIL_FALSE_ALARMS, CIVIL_DECISIONS)
     + _cases("education_level", EDUCATION_FIXED, EDUCATION_FALSE_ALARMS, EDUCATION_DECISIONS)
@@ -296,6 +329,7 @@ CASES = (
     + _cases("housing_tenure", HOUSING_FIXED, HOUSING_FALSE_ALARMS, HOUSING_DECISIONS)
     + _cases("income_source", INCOME_FIXED, INCOME_FALSE_ALARMS, INCOME_DECISIONS)
     + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in PIPELINE_RUN_FIXED]
+    + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in FORMER_JOB_AND_LEAVE]
 )
 
 

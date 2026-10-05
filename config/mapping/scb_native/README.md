@@ -95,7 +95,16 @@ Each rule follows SCB's own definition of the category; the regression cases liv
   sjukersättning is `Sick Leave`, not `Retired`; homemakers and carers are `Other`.
 - **`employment_type`**: fixed-term, project, probation and doctoral posts are Temporary; an own
   company, sole trader or näringsidkare is Self-Employed; negated employment and zero stated hours
-  are `Not Applicable`.
+  are `Not Applicable`. So is a contract the text itself says is former or ended ("former",
+  "previous(ly)", "före detta", "f.d.", "tidigare anställd / fast / tillsvidare / …", "(past)",
+  ", avslutad", "nu avslutad", "avvecklat", "before retirement", "pre-retirement", …) or that the
+  person is on parental leave from ("med föräldraledighet", "föräldraledighet, heltid",
+  ", föräldraledig", …): every contract value vetoes these cues and `Not Applicable`'s `all_of`
+  needs a cue plus a contract word. The cues are phrases taken from the `01_Raw` pool so that text
+  stating a current job keeps its contract — "efter avslutad provanställning", "efter
+  föräldraledighet", "parental leave cover", parental leave beside stated working hours, "Tidigare
+  med fulltid, nu halvtidsanställd". A cue with no contract word ("Föräldraledighet", "contractor
+  (past)") stays unmapped. The rule reads `employment_type`'s own text only.
 - **`housing_tenure`** is a property of the building: `Owner-occupied` is SMAG only, so any
   apartment, BRF or rental word vetoes it and an owned flat is a bostadsrätt. Ägarlägenhet (OB)
   is not fetched and is unmapped; bostadsbolag is a landlord (`Rental`). A house-or-flat
