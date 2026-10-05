@@ -905,6 +905,46 @@ Stale until re-run (they read the capped mapped files): `fidelity`, `multivariat
 `figure_selection`, and every manuscript figure drawn from them. Not stale: `validation_attrition`,
 `generation_metadata` (selection unchanged), `real_population_stats` (reference unchanged).
 
+### Judge prompt v6 and the disability-pension age gate — 2026-10-05
+
+Two fixes from the review of the 53 impossible personas (raw-text reviews of method E, 34 + 71
+rows):
+
+- **Judge prompt v6.** v5 read `parental_structure` as the persona's own parenthood ("Single
+  Mother" + `Married` or + `1 person` → S3): 26 of the 53 carried such a flag. The category is the
+  family of origin (generation prompt, config 006: "the family composition the persona grew up in
+  as a child"; real side SCB LE0102T17, children 0–17 by family type). v6 adds one schema
+  definition line and nothing else: *"parental_structure is the family the person GREW UP in
+  (which parents they lived with as a child), not their own parenthood or current household."*
+- **Disability pension → `Sick Leave` only below 66.** The three `Retired` → `Sick Leave`
+  `cross_field` rules now also require `{"field": "age_group", "resolved_range": {"lt": 66}}`:
+  sickness / activity compensation runs at most to the month before 66 (2023–2025; the month
+  before 67 from 2026, when it follows the riktålder), then becomes an old-age pension. The engine
+  gained the generic `resolved_range` condition (half-open numeric range on a sibling's resolved
+  value; non-number raises; counts as a dependency) and the synthetic mapper pre-resolves
+  `age_group` to the integer age. Dry run against the pre-fix config (no production re-run):
+  full `01_Raw` swedish_02 pool (19,948 mapped incl. the capped mirror) — 4 personas change
+  `Sick Leave` → `Retired` (ages 72–88), of which one is in the capped pool (glm_52 E
+  persona_00017, 78, "Sjukpensionär" + "Premiepension"); zero moves into or out of
+  `__UNMAPPED__`; no changed persona is aged 66, so the 66/67 choice moves nobody.
+
+Test, scratch only (`run_2026-10-05_v6`), one call per persona and prompt through the production
+render + client path: v5 and v6 on the 53 currently-impossible personas, v6 on the benchmarks.
+Parental-structure S3: v5 re-call 15 of 26, v6 0 of 26. Genuine contradictions (8): v5 7, v6 7
+(the miss, gpt_oss_120b persona_00164, reads "Pension" at 53 after mapping; the occupational
+detail is only in the raw text). Judge errors (28): v5 16 impossible, v6 1 (gpt56_sol 00132, sick
+at 77). Mapping errors (16): v5 12, v6 11. Benchmarks: contradictions caught 16/20 (v5 first call
+15/20, v5 majority of 3 16/20), coherent flagged 0/20, ISCED edge cases 0/14 impossible, held-out
+40 (20 real SCB) 0 impossible — unchanged from v5. 200 calls, 0 failures, 308 s at 8 workers,
+163k output tokens, ≈ $3.1 at list price.
+
+Not done: the production verdict caches are still v5 and are refused by `realism_ranking`
+against the v6 hash; a full `persona_realism --force` re-judge (~5,800 personas, one round ≈ 2.5 h,
+≈ $90 at list price) and then `realism_ranking` are needed. The mapping chain (`mapping` →
+`validate_mapped` → `population_cap`) must be re-run for the age gate before that re-judge.
+Remaining mapping errors seen in the test: a student, homemaker or job seeker whose type names a
+current full-time job (AKU: Employed) and a retiree with a bare job type.
+
 ## Verification
 
 - `ruff check src/` and `pytest` pass; the golden test shows `scb`, `istat`, `ssb` unchanged.
