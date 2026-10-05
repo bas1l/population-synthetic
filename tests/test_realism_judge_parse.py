@@ -311,6 +311,16 @@ def test_load_real_prompt_template_splits_sections():
     assert '"can_exist"' in system_str
 
 
+def test_real_prompt_defines_parental_structure_as_family_of_origin():
+    # v6: parental_structure is who raised the person (generation prompt, SCB LE0102T17:
+    # children 0-17 by family type), not the persona's own parenthood. v5 lacked the line and
+    # rated "Single Mother" + Married / 1 person impossible. It must sit in the system prompt.
+    system_str, _ = prompt.load_prompt_template(_CONFIG_DIR / "judge_prompt.md")
+    definitions = system_str.split("SCHEMA DEFINITIONS", 1)[1].split("Reason across", 1)[0]
+    assert "parental_structure is the family the person GREW UP in" in " ".join(definitions.split())
+    assert "not their own parenthood" in " ".join(definitions.split())
+
+
 def test_parse_template_missing_sentinel_raises():
     with pytest.raises(ValueError, match="SYSTEM"):
         prompt.parse_prompt_template("<!-- USER -->\n{persona_block}\n")
