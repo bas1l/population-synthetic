@@ -561,6 +561,69 @@ family of tests, a denominator beside every rate, `skipped_combinations` and `sk
 reasons, the `pseudo_replication` and `single_run_per_combination` caveats, and the bootstrap seed
 plus resolved library versions.
 
+## Stage 2: why an S3 clash arose (reporting only)
+
+Stage 1 sees only a persona's mapped categories. An S3 clash can therefore come from four
+places: the generating model wrote an impossible person, it described a real situation with
+categories the schema makes mutually exclusive, the mapper mis-coded one attribute, or stage 1
+applied a wrong rule. Stage 2 tells these apart. After stage 1, every persona with at least one
+S3 clash in a round gets one more call per such round: the judge reads the persona's raw
+free-text answers (`identity.json` in the `population_cap` mirror), the mapped categories exactly
+as stage 1 saw them, and stage 1's explanation of each S3 clash, and returns one class per clash
+(`config/analysis/persona_realism/stage2_prompt.md`):
+
+| class | meaning |
+|---|---|
+| `raw_impossible` | the raw answers themselves describe no possible person (an age-based one must name the listed legal fact it rests on) |
+| `label_clash` | a real situation whose chosen categories exclude each other under the schema (e.g. a working student coded Student + a contract) |
+| `ambiguous` | the raw text cannot decide it (e.g. a bare contract type next to a non-working status, income not wage) |
+| `mapping_error` | one attribute's own raw answer was mis-coded, and correcting it would remove the clash |
+| `judge_error` | the mapped pair is not contradictory; stage 1 applied a wrong rule or limit |
+
+The persona class is the highest-ranked issue class under `stage2.persona_class_order` in
+`judge.yaml` (raw_impossible > label_clash > ambiguous > mapping_error > judge_error; the prompt
+must state the same order, the loader raises otherwise). Two pipeline states complete it:
+`unclassified` (the stage-2 call failed every attempt; retried on the next run) and
+`not_applicable_no_free_text` (the real reference has no free text: no call is made).
+
+- **Same client path as stage 1** (fresh `claude -p` process per call, isolation tag checked).
+- **Cache** `<combo>/stage2/persona_XXXXX.json` + `.jsonl` telemetry, in a sub-directory so the
+  stage-1 glob never sees it. Each cached round carries the fingerprint of the stage-1 S3 clashes
+  it classified, plus the stage-2 prompt hash, judge model, isolation tag, the stage-1 prompt
+  identity and the raw-identity hash. Resume classifies only missing rounds; any mismatch raises
+  and points at `--force`, which re-judges stage 1 and clears the combination's stage-2 files.
+  `--rewrite-artifacts` makes no stage-2 call: an S3 clash without a cached class is written as
+  `unclassified`.
+- **Outputs** (per combination, under the same force gate as the other CSVs):
+  `{combo}_stage2.csv` (schema `stage2_csv_schema_version` 1; one row per S3 clash at the
+  per-clash contract's key `(persona_id, round_index, attr_a, attr_b)`: class, misread attribute,
+  legal fact, reason, the two attributes' raw answers, the quoted raw strings) and
+  `{combo}_stage2_personas.csv` (one row per persona with an S3 clash: persona class). The report
+  gains a `stage2` block (class counts, the impossible personas by class, stage-2 cost) and its
+  provenance `stage2_enabled`, `stage2_prompt_sha256` (read from the caches),
+  `stage2_persona_class_order`, `stage2_csv_schema_version`.
+- **Ranking.** `realism_ranking` reads `{combo}_stage2.csv` (trimmed to the consumed rounds under
+  `--rounds`) and reconciles it against the S3 rows of `{combo}_clashes.csv` (any difference
+  raises). Two **reporting-only** blocks use it; neither changes Axis A, `can_exist`, a ranking or a
+  test, where every S3 still counts as impossible:
+  - `stage2_breakdown` / `stage2_breakdown.csv`: each competitor's impossible individuals (the Axis A
+    set) by stage-2 class.
+  - `worst_clash_split` / `worst_clash_split.csv`: every individual counted once at its worst clash
+    (none, S1, S2, S3), with S3 split by `config/analysis/realism_ranking/worst_clash_split.yaml`:
+    `raw_impossible` -> S3a "impossible individual"; `label_clash`, `ambiguous` -> S3b "contradictory
+    labels"; `mapping_error`, `judge_error` -> `pipeline`; `unclassified` and the reference's
+    `not_applicable_no_free_text` -> plain S3 (the reference is never split). Display labels are
+    `worst_clash_<id>` in `config/analysis/figure_terms.yaml` (`labels.worst_clash_label`) and
+    colours `palette.WORST_CLASH_COLORS`; an id without either raises when drawn.
+  A competitor without a stage-2 CSV makes both blocks null with a recorded skip when none has one,
+  and raises when only some do.
+- **Cost.** About 2.4 times a stage-1 call each (prototype: $0.039 and about 30 s per call), but only
+  on personas with an S3 clash (1-2 % of the judged ones).
+- **Regression check, not validation.** The prompt was revised against 69 hand-labelled personas
+  (2026-10-05) and re-run once on the same 69: agreement 54/69 (kappa 0.70). The labels and the
+  revisions come from the same review, so this measures rule-following, not accuracy on unseen
+  personas.
+
 ## Config knobs — `config/analysis/persona_realism/`
 
 All judge behaviour is config-driven; a missing or malformed value **raises** (no silent default).
@@ -587,6 +650,7 @@ the emitted artifacts disagree with the config that describes them.
 | `workers` | Parallel judge-call fan-out (ThreadPool `max_workers`). |
 | `timeout_seconds` | Per-call subprocess wall-clock timeout (default 600). Threaded into the `ClaudeCodeClient` the judge factory builds; 600 s is a generous ceiling that also covers the slowest *selectable* judge (a Fable/Opus single turn can run for minutes) if you select it — Sonnet, the default, finishes in seconds. The client's own 120 s default is too tight for the slow tiers and is raised only for the judge. |
 | `prompt_template` | Path (relative to the config dir) to the system+user template. |
+| `stage2` | Stage 2 (see above): `enabled` (bool), `prompt_template` (relative path, here `stage2_prompt.md`), `persona_class_order` (a permutation of the five stage-2 classes, stated verbatim in the prompt). All three required; the loader raises otherwise. |
 | `persona_rendering` | Judge-facing labels for canonical category values: `mapping_tier` (relative to the config dir) + `labels: {attribute: {canonical value: label}}`. Applied **only** to the persona lines of the prompt; mapped data, verdict caches, CSVs and hard rules keep canonical values. The loader raises unless each attribute is declared in the tier's `_index.json` and its keys are **exactly** that category file's `values` (total coverage -- a partial map would leave some values coded, and a value falling through unrendered is a fallback; `Unknown / Not reported` is therefore listed, mapped to itself), with non-empty, distinct labels. A persona value outside the map raises at render time, so judging a population from another mapping tier needs its own map first. Today: `education_level` (scb_native) as plain Swedish-statistics wording + ISCED 1997 level. |
 
 `judge_prompt.md` — the constraint-scaffolded system + user template, **v7 since 2026-10-05**
