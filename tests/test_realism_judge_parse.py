@@ -321,6 +321,18 @@ def test_real_prompt_defines_parental_structure_as_family_of_origin():
     assert "not their own parenthood" in " ".join(definitions.split())
 
 
+def test_real_prompt_v7_defines_sick_leave_and_young_pension_income():
+    # v7: Sick Leave also covers an employee sick-listed from a job at any age (only the benefit
+    # ends at the reference age), and young pension income is not impossible by itself while the
+    # statutory pension ages stay hard. Both must sit in the schema definitions.
+    system_str, _ = prompt.load_prompt_template(_CONFIG_DIR / "judge_prompt.md")
+    definitions = " ".join(system_str.split("SCHEMA DEFINITIONS", 1)[1].split("Reason across", 1)[0].split())
+    assert 'employment_status "Sick Leave" also covers an employee who is on sick leave from a job, at any age' in definitions
+    assert "Only sickness or activity compensation (a benefit) ends at the pension reference age" in definitions
+    assert "Pension income at a young age is not by itself impossible" in definitions
+    assert "an occupational pension cannot be drawn before 55" in definitions
+
+
 def test_parse_template_missing_sentinel_raises():
     with pytest.raises(ValueError, match="SYSTEM"):
         prompt.parse_prompt_template("<!-- USER -->\n{persona_block}\n")

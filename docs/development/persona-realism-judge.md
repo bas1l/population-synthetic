@@ -589,11 +589,15 @@ the emitted artifacts disagree with the config that describes them.
 | `prompt_template` | Path (relative to the config dir) to the system+user template. |
 | `persona_rendering` | Judge-facing labels for canonical category values: `mapping_tier` (relative to the config dir) + `labels: {attribute: {canonical value: label}}`. Applied **only** to the persona lines of the prompt; mapped data, verdict caches, CSVs and hard rules keep canonical values. The loader raises unless each attribute is declared in the tier's `_index.json` and its keys are **exactly** that category file's `values` (total coverage -- a partial map would leave some values coded, and a value falling through unrendered is a fallback; `Unknown / Not reported` is therefore listed, mapped to itself), with non-empty, distinct labels. A persona value outside the map raises at render time, so judging a population from another mapping tier needs its own map first. Today: `education_level` (scb_native) as plain Swedish-statistics wording + ISCED 1997 level. |
 
-`judge_prompt.md` — the constraint-scaffolded system + user template, **v6 since 2026-10-05**
-(v5 since 2026-10-04; v6 adds one schema definition and nothing else):
+`judge_prompt.md` — the constraint-scaffolded system + user template, **v7 since 2026-10-05**
+(v5 since 2026-10-04; v6 adds one schema definition, v7 two definition lines, nothing else):
 schema definitions (education = highest *completed* level; `Retired` = old-age pensioner, disability
 pension is `Sick Leave`; v6: `parental_structure` is the family the person grew up in -- which
-parents they lived with as a child -- not their own parenthood or current household), four constraint categories (biological / legal-institutional / temporal /
+parents they lived with as a child -- not their own parenthood or current household; v7: `Sick Leave`
+also covers an employee sick-listed from a job at any age, only sickness / activity compensation ends
+at the pension reference age; pension income at a young age is not impossible by itself, while an
+occupational pension before 55 and sickness / activity compensation past the reference age stay
+hard), four constraint categories (biological / legal-institutional / temporal /
 definitional), a no-rescue rule (no invented circumstances, no re-reading a label), the explicit
 "unusual ≠ impossible" guardrail, `can_exist` false iff at least one S3 issue, and the rule that
 typical study lengths and career timing are not legal minimums (an unusually early qualification is
@@ -607,6 +611,10 @@ v6 exists because v5 read `parental_structure` as the persona's own parenthood (
 (config 006) asks for "the family composition the persona grew up in as a child", and the real side
 is SCB LE0102T17, children aged 0-17 by family type. Caches judged under v5 carry the v5 template
 hash and are refused on resume and by `realism_ranking`: re-judge with `--force`.
+v7 exists because v6 still rated two plain readings S3: a person sick-listed from a job at 77
+(`Sick Leave` read as sickness compensation only, which ends at the reference age) and pension income
+beside `Employed` at 35 (survivor's and disability pensions have no minimum age). The template hash
+changes again, so v6 caches are refused like v5 ones.
 
 `hard_rules.yaml` — config-driven deterministic `incompatible_pair` checks (see below). A rule is
 reserved for a **logical, legal or definitional** contradiction; rare-but-attainable is possible and
