@@ -103,6 +103,25 @@ def test_unresolved_sibling_raises():
         _r("jobless", [rule], {}, {})
 
 
+@pytest.mark.parametrize("bounds, age, want", [
+    ({"lt": 66}, 65, "Employed"),
+    ({"lt": 66}, 66, "Unemployed"),
+    ({"gte": 19, "lt": 66}, 18, "Unemployed"),
+    ({"gte": 19, "lt": 66}, 19, "Employed"),
+    ({"gte": 66}, 66, "Employed"),
+])
+def test_resolved_range_is_half_open(bounds, age, want):
+    rule = {"from": ["Unemployed"], "to": "Employed", "when": [{"field": "age", "resolved_range": bounds}]}
+    assert _r("jobless", [rule], {}, {"age": age}).value == want
+
+
+@pytest.mark.parametrize("value", ["45-54", None, True])
+def test_resolved_range_on_a_non_number_raises(value):
+    rule = {"from": ["Unemployed"], "to": "Employed", "when": [{"field": "age", "resolved_range": {"lt": 66}}]}
+    with pytest.raises(ValueError, match="not a number"):
+        _r("jobless", [rule], {}, {"age": value})
+
+
 def test_negation_applies_inside_a_raw_condition():
     prefix = {"token_mode": "prefix", "negation": {"cues": ["ingen"], "window": 2, "clause_breaks": [","]},
               "tie_break": ["priority"]}
@@ -157,10 +176,28 @@ def test_valid_cross_field_passes():
      "not one of job's values"),
     ([{"from": ["Unemployed"], "to": "Employed", "when": [{"field": "status", "resolved": ["Employed"]}]}],
      "own value"),
+    ([{"from": ["Unemployed"], "to": "Employed", "when": [{"field": "status", "resolved_range": {"lt": 1}}]}],
+     "own value"),
+    ([{"from": ["Unemployed"], "to": "Employed", "when": [{"field": "job", "resolved_range": {}}]}],
+     "one or both of"),
+    ([{"from": ["Unemployed"], "to": "Employed", "when": [{"field": "job", "resolved_range": {"lte": 5}}]}],
+     "one or both of"),
+    ([{"from": ["Unemployed"], "to": "Employed", "when": [{"field": "job", "resolved_range": {"lt": "66"}}]}],
+     "must be a number"),
+    ([{"from": ["Unemployed"], "to": "Employed",
+       "when": [{"field": "job", "resolved_range": {"gte": 66, "lt": 66}}]}], "empty range"),
 ])
 def test_malformed_cross_field_raises(rules, match):
     with pytest.raises(MappingConfigError, match=match):
         validate_mappings(_dir(status_rules=rules))
+
+
+def test_resolved_range_counts_as_a_dependency():
+    status_rules = [{"from": ["Unemployed"], "to": "Employed", "when": [{"field": "job", "resolved_range": {"lt": 1}}]}]
+    job_rules = [{"from": ["Perm"], "to": "NA", "when": [{"field": "status", "resolved": ["Unemployed"]}]}]
+    assert mapping_engine.cross_field_dependencies({"cross_field": status_rules}) == ("job",)
+    with pytest.raises(MappingConfigError, match="dependency cycle"):
+        validate_mappings(_dir(status_rules=status_rules, job_rules=job_rules))
 
 
 def test_dependency_cycle_raises():
@@ -289,6 +326,24 @@ def test_employment_status_cross_field(mapper, status, job, want_status, want_ty
 @pytest.mark.parametrize("status, job, income, want_status", DISABILITY)
 def test_disability_pension_is_sick_leave(mapper, status, job, income, want_status):
     assert _map(mapper, status, job, income)[0] == want_status
+
+
+# Sickness / activity compensation is paid at most to the month before 66 (2023-2025 rule;
+# from 2026 the month before 67): from 66 the person draws an old-age pension, so the
+# disability-pension wording no longer moves a pensioner to Sick Leave.
+DISABILITY_BY_AGE = [
+    ("Pensionär", "Sjukpensionär, 0 timmar/vecka", "Premiepension", 78, "Retired"),  # glm_52 persona_00017 (E)
+    ("Pensionär", "Sjukpensionär, 0 timmar/vecka", "Premiepension", 65, "Sick Leave"),
+    ("Pensionär", "Sjukpensionär, 0 timmar/vecka", "Premiepension", 66, "Retired"),
+    ("Pensionär", "Förtidspensionär", "Pension", 77, "Retired"),  # mistral_nemo persona_00101 (E, v1 pool)
+    ("Retired", "Disability insurance", "Pension", 88, "Retired"),  # llama31_8b persona_00082
+    ("early_retired", "not_applicable", "early_retirement_pension", 60, "Sick Leave"),  # haiku 00013 text, age 60
+]
+
+
+@pytest.mark.parametrize("status, job, income, age, want_status", DISABILITY_BY_AGE)
+def test_disability_pension_is_sick_leave_only_below_66(mapper, status, job, income, age, want_status):
+    assert _map(mapper, status, job, income, age=age)[0] == want_status
 
 
 @pytest.mark.parametrize("status, job, want_type", FIXED_TERM)

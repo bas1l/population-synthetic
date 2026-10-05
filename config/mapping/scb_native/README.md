@@ -74,7 +74,10 @@ pensioner with paid hours, as `Employed`, and the evidence of that work sits in
 `cross_field` list of post-resolution overrides (engine semantics in `mapping_engine.py`). A rule
 fires when the walked value is in `from` and every `when` condition holds: a `raw` condition is an
 ordinary matcher (prefix mode, negation, `none_of` vetoes) run on another field's raw text, a
-`resolved` condition reads a sibling's final value. The first rule that fires wins. An override
+`resolved` condition reads a sibling's final value, and a `resolved_range` condition
+(`{"field": "age_group", "resolved_range": {"lt": 66}}`, half-open `gte <= v < lt`) requires a
+sibling's final value to be a number in range -- `age_group` resolves to the integer age on the
+synthetic side, so this is how a rule reads age. The first rule that fires wins. An override
 never touches a total miss and only moves between declared values, so it can never change which
 personas are `__UNMAPPED__` (and hence never the `population_cap` selection).
 
@@ -104,7 +107,11 @@ personas are `__UNMAPPED__` (and hence never the `population_cap` selection).
    disability, invalidpension; in income also "early retirement pension", which the income mapping
    already reads as sickness compensation), unless voluntary (frivillig, voluntary), converted
    (omvandla*), hypothetical (innan pension, om berättigad) or ended. A bare "early retirement"
-   stays `Retired` (it may be an occupational early pension).
+   stays `Retired` (it may be an occupational early pension). Only below age 66 (2026-10-05):
+   sickness and activity compensation are paid at most to the month before 66 under the
+   2023-2025 rules (to the month before 67 from 2026, when the limit follows the riktålder;
+   no pool persona aged 66 is affected by the choice), after which the person draws an old-age pension -- so a
+   pensioner of 66+ whose text still says "sjukpensionär" is `Retired`.
 
 `employment_type`:
 

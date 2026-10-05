@@ -188,7 +188,10 @@ whose bands overlap or whose remap target is not a value.
 - `cross_field` -- an ordered list of post-resolution overrides `{from, to, when}` that read other
   fields of the same record: a `when` condition is either `{"field": f, "raw": <matcher>}` (an
   ordinary matcher on field *f*'s raw text, own field included; false when that text is absent) or
-  `{"field": f, "resolved": [values]}` (sibling *f*'s final value). The first rule whose `from`
+  `{"field": f, "resolved": [values]}` (sibling *f*'s final value) or
+  `{"field": f, "resolved_range": {"gte": a, "lt": b}}` (sibling *f*'s final value is a number in
+  the half-open range, either bound optional; a non-number raises -- the synthetic mapper
+  pre-resolves `age_group` to the integer age, so this is how a rule reads age). The first rule whose `from`
   holds the resolved value and whose conditions all hold sets the value to `to`. It never applies to
   a total miss and `from` / `to` must be declared values, so it cannot change which personas are
   `__UNMAPPED__`. Only the synthetic mapper wires it (it passes the identity and the siblings it
@@ -196,7 +199,7 @@ whose bands overlap or whose remap target is not a value.
   attribute's own value or a `cross_field` / `refine_from` dependency cycle raises at validation,
   and resolving such an attribute without the record context raises. `scb_native` uses it for the
   AKU employment rules (job seeker or pensioner with current paid work → `Employed`, disability
-  pension → `Sick Leave`, ended job → `Not Applicable`, fixed-term by design → `Temporary`); see
+  pension below 66 → `Sick Leave`, ended job → `Not Applicable`, fixed-term by design → `Temporary`); see
   `config/mapping/scb_native/README.md`.
 
 With `substring` / `null` / `["priority"]` and `priority == values` the engine is exactly the
