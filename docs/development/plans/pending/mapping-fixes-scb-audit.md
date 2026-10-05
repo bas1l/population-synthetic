@@ -867,6 +867,44 @@ parental_structure S3 flags) reads `parental_structure` as the person's own pare
 family they grew up in (LE0102), which v5 does not define. `realism_ranking --force --rounds 1` and
 manuscript Figure 5 rebuilt.
 
+### Employment cross-field fix — 2026-10-05
+
+The v5 judge rated method-E personas impossible for `Unemployed` + a contract type whose raw text
+describes a real situation SCB codes differently (a job seeker with a part-time or wage-subsidised
+job, a working pensioner, a disability pensioner, a job that has ended). One field cannot be coded
+alone there, so the engine gained a config-declared `cross_field` override directive (`1246f59`;
+synthetic side only, never touches a miss, so the unmapped set and the cap selection cannot move)
+and `scb_native` uses it for (`80eb36c`, token sets in `config/mapping/scb_native/README.md`):
+
+- `employment_status`: job seeker / unemployed whose `employment_type` names a current paid job →
+  `Employed`; pensioner whose type shows current work (hours, assignment, hourly, own business,
+  consultancy …; a bare contract label is not evidence) or whose status says they work → `Employed`;
+  disability / early-retirement pension named in status, type or income → `Sick Leave`.
+- `employment_type`: ended / former job → `Not Applicable` unless the final status is `Employed`;
+  fixed-term by design (extratjänst, short-term, summer, interim, introduction, probation,
+  seasonal, tidsbegräns*) → `Temporary`, band kept, unless permanence is stated.
+
+Full-pool dry run (11,461 personas): 351 personas / 358 cells change, zero unmapped flips. Re-run
+of `mapping` → `validate_mapped` → `population_cap` (`--force`, 65 combinations, 9:08–9:18): the
+cap index (selected ids, counts, withdrawals) is identical to the pre-run snapshot; the real
+reference is unchanged. Capped diff: 78 personas / 80 cells (Unemployed → Employed 37, Retired →
+Employed 14, Retired → Sick Leave 5, contract → Not Applicable 21, Permanent → Temporary 3); 61 of
+the 78 are method E. Their 78 verdict caches were set aside and `persona_realism` re-run without
+`--force` (one round, 8 workers, 9:18–9:25, 78 calls, 57k output tokens); the other 5,722 caches
+match the new mapped records exactly. Impossible individuals 115 → 53 (synthetic 114 → 52; E 79 →
+34); 18 combinations non-zero, none above the Reference after Holm. `realism_ranking --force
+--rounds 1` and manuscript Figure 5 rebuilt.
+
+Open: (1) text with no permanence information still maps to `Permanent` — 1,288 pool personas /
+471 capped (28 combinations); resolving it would need an unmapped outcome or a new category, which
+moves the cap selection. (2) The disability rule has no age gate: one capped persona (78, raw
+"Sjukpensionär") is now `Sick Leave` and judged impossible. (3) Job seekers whose type names a
+full-time permanent job are flipped too (ILO rule as specified), absorbing those raw contradictions.
+Stale until re-run (they read the capped mapped files): `fidelity`, `multivariate_fidelity`,
+`model_ranking`, `method_significance`, `cost_efficiency` (joins model_ranking), `consistency`,
+`figure_selection`, and every manuscript figure drawn from them. Not stale: `validation_attrition`,
+`generation_metadata` (selection unchanged), `real_population_stats` (reference unchanged).
+
 ## Verification
 
 - `ruff check src/` and `pytest` pass; the golden test shows `scb`, `istat`, `ssb` unchanged.
