@@ -197,6 +197,7 @@ from population_synthetic.analysis.realism_ranking.builder import (
     severity_driver_rows,
     severity_driver_value_rows,
     severity_pair_summary,
+    stage2_breakdown_rows,
     summary_rows,
     typicality_band_rows,
     typicality_closeness_decomposition_rows,
@@ -210,6 +211,8 @@ from population_synthetic.analysis.realism_ranking.builder import (
     typicality_histogram_rows,
     typicality_summary_rows,
     validate_typicality_bands,
+    worst_clash_split_options,
+    worst_clash_split_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (
     RATE_GRID_VARIANTS,
@@ -242,6 +245,8 @@ _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
 #: The resampling settings of the typicality_closeness block (seeds, iteration counts,
 #: interval level, noise quantile). Read fail-fast here and passed verbatim.
 _CLOSENESS_CONFIG = PROJECT_ROOT / "config" / "analysis" / "realism_ranking" / "typicality_closeness.yaml"
+#: The reporting-only worst-clash split (R3 split by stage 2 for the figures).
+_WORST_SPLIT_CONFIG = PROJECT_ROOT / "config" / "analysis" / "realism_ranking" / "worst_clash_split.yaml"
 
 #: The provider -> hosting-class map that tints the distribution grid's column labels and
 #: ternary points (the same file rank_models.py classifies with).
@@ -604,6 +609,10 @@ def main() -> None:
         variance_center = str(cfg.reliability_value("variance_center"))
         typicality_bands = _parse_bands(args.typicality_bands)
         closeness = _load_closeness_options(_CLOSENESS_CONFIG)
+        if not _WORST_SPLIT_CONFIG.is_file():
+            raise FileNotFoundError(f"Worst-clash split config not found: {_WORST_SPLIT_CONFIG}")
+        with open(_WORST_SPLIT_CONFIG, "r", encoding="utf-8") as fh:
+            worst_split = worst_clash_split_options(yaml.safe_load(fh))
         # Column-label and point tints of the distribution grid, classified from config
         # here so the chart module never imports model_ranking.
         hosting = (
@@ -721,6 +730,7 @@ def main() -> None:
             ),
             closeness=closeness,
             skipped_combinations=country_skipped,
+            worst_clash_split=worst_split,
         )
 
         print(f"Report written to {_write_json(ranking, ranking_json)}")
@@ -733,6 +743,20 @@ def main() -> None:
         else:
             print("No contrast CSV: there is no real competitor to contrast against "
                   "(recorded in skipped_tests).")
+
+        # Reporting-only: every individual at its worst clash, R3 split by stage 2.
+        split_csv = _write_csv(worst_clash_split_rows(ranking), country_dir / "worst_clash_split.csv")
+        if split_csv is not None:
+            print(f"Worst-clash split CSV written to {split_csv}")
+        else:
+            print("No worst-clash split: stage 2 is missing for a competitor (recorded in skipped_tests).")
+
+        # Reporting-only: each competitor's impossible personas split by stage-2 class.
+        stage2_csv = _write_csv(stage2_breakdown_rows(ranking), country_dir / "stage2_breakdown.csv")
+        if stage2_csv is not None:
+            print(f"Stage-2 breakdown CSV written to {stage2_csv}")
+        else:
+            print("No stage-2 breakdown: no competitor carries a stage-2 CSV (recorded in skipped_tests).")
 
         # Two grains, one table each: the attribute pairs that drove each cell, and the
         # category pairs under them. All three severity levels live in the same file

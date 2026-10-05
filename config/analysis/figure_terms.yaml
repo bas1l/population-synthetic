@@ -29,3 +29,17 @@ terms:
   strategy_key_title: "Strategies"
   # The real population, as its column heading and legend entry print it.
   reference: "Reference"
+
+  # Worst clash per individual (config/analysis/realism_ranking/worst_clash_split.yaml),
+  # one label per category id, as the legend prints it. The "R" ranks are the
+  # manuscript's atypicality ranks (the repository's S1-S3 severities); R3 is split by
+  # stage 2 into an impossible individual (R3a) and contradictory labels (R3b), and stays
+  # plain R3 where it cannot be split (the reference, which has no free text).
+  worst_clash_title: "Atypicality rank:"
+  worst_clash_none: "no clash"
+  worst_clash_S1: "R1: unusual"
+  worst_clash_S2: "R2: implausible"
+  worst_clash_S3a: "R3a: impossible"
+  worst_clash_S3b: "R3b: label clash"
+  worst_clash_S3: "R3: not split"
+  worst_clash_pipeline: "pipeline"

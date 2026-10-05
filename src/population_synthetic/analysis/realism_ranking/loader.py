@@ -80,6 +80,11 @@ from population_synthetic.analysis.utils.realism_csv import (
     RealismPersonaRow,
     read_realism_personas_csv,
 )
+from population_synthetic.analysis.utils.realism_stage2_csv import (
+    Stage2IssueRow,
+    read_stage2_issues_csv,
+    reconcile_with_clashes,
+)
 from population_synthetic.analysis.utils.registry import analysis_output_dir
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
@@ -169,6 +174,11 @@ class CompetitorRecord:
     report_path: Path
     personas_csv_path: Path
     clashes: tuple[RealismClashRow, ...] = ()
+    #: The stage-2 rows (one per S3 clash) from ``{combo}_stage2.csv``, reconciled
+    #: against the S3 rows of ``clashes``; ``None`` when the file is absent (the
+    #: combination was judged before stage 2 existed). Reporting-only: nothing in
+    #: Axis A, Axis B or a test reads it.
+    stage2: tuple[Stage2IssueRow, ...] | None = None
 
     @property
     def impossible_indicators(self) -> tuple[int, ...]:
@@ -327,6 +337,8 @@ def _load_one(
         expected_counts_source=personas_csv_path,
     )
 
+    stage2 = _read_stage2(combo_dir, label, clashes, rounds_cap=None)
+
     return CompetitorRecord(
         slug=label,
         country=country,
@@ -345,7 +357,37 @@ def _load_one(
         report_path=report_path,
         personas_csv_path=personas_csv_path,
         clashes=tuple(clashes),
+        stage2=stage2,
     )
+
+
+def _read_stage2(
+    combo_dir: Path,
+    label: str,
+    clashes: list[RealismClashRow] | tuple[RealismClashRow, ...],
+    *,
+    rounds_cap: int | None,
+) -> tuple[Stage2IssueRow, ...] | None:
+    """Read ``{label}_stage2.csv`` (``None`` when absent), cap it, and reconcile it.
+
+    Under a round cap only the rows of the first *rounds_cap* rounds are kept -- the
+    file is keyed by the same 0-based round index as the verdict cache, so the trim is
+    exact. The kept rows must name exactly the S3 clashes of *clashes* (which, under a
+    cap, were themselves rebuilt from the trimmed cache), or the two describe different
+    states of the cache and this raises.
+    """
+    path = combo_dir / f"{label}_stage2.csv"
+    if not path.is_file():
+        return None
+    rows = read_stage2_issues_csv(path)
+    if rounds_cap is not None:
+        rows = [row for row in rows if row.round_index < rounds_cap]
+    reconcile_with_clashes(
+        rows,
+        ((c.persona_id, c.round_index, c.attr_a, c.attr_b) for c in clashes if c.severity == "S3"),
+        label=str(path),
+    )
+    return tuple(rows)
 
 
 # --------------------------------------------------------------------------- #
@@ -492,6 +534,7 @@ def _load_one_capped(
         # downstream messages point at the file a reader would inspect.
         personas_csv_path=combo_dir / f"{label}_personas.csv",
         clashes=tuple(clashes),
+        stage2=_read_stage2(combo_dir, label, clashes, rounds_cap=rounds_cap),
     )
 
 

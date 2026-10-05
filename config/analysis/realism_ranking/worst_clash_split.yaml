@@ -1,0 +1,44 @@
+# Worst clash per individual, with the impossible level split by stage 2 -- REPORTING-ONLY.
+#
+# Read by scripts/analyze/rank_persona_realism.py and passed verbatim to
+# realism_ranking.builder (block `worst_clash_split`, file worst_clash_split.csv). Each
+# judged individual is counted once, at the severity of its worst clash over the consumed
+# judge rounds (the per-persona `max_severity`). An individual whose worst clash is S3
+# (impossible) is placed by its stage-2 persona class (config/analysis/persona_realism/
+# judge.yaml stage2), so the figure can tell an impossible individual from contradictory
+# labels. Nothing here changes the Axis A impossibility rate, can_exist, a ranking or a
+# test: there every S3 counts as impossible, whatever stage 2 said.
+#
+# The loader RAISES unless:
+#   - `categories` lists `none`, `S1` and `S2` and every target of `s3_split`, each once
+#     (the list is the draw order, least to most severe);
+#   - `s3_split` maps every stage-2 class AND both pipeline states (`unclassified`,
+#     `not_applicable_no_free_text`) to one category -- no class may fall through.
+# Each category id must have a display label `worst_clash_<id>` in
+# config/analysis/figure_terms.yaml and a colour in analysis/utils/palette.py
+# WORST_CLASH_COLORS (checked when a figure draws it).
+
+categories:
+  - "none"
+  - "S1"
+  - "S2"
+  - "S3b"
+  - "S3a"
+  - "S3"
+  - "pipeline"
+
+s3_split:
+  # R3a "impossible individual": the raw answers themselves describe no possible person.
+  raw_impossible: "S3a"
+  # R3b "contradictory labels": a real situation (or an undecidable one) whose chosen
+  # categories exclude each other under the schema.
+  label_clash: "S3b"
+  ambiguous: "S3b"
+  # Pipeline artefacts, kept apart from R3a/R3b and expected near zero: the mapper
+  # mis-coded one attribute, or stage 1 applied a wrong rule.
+  mapping_error: "pipeline"
+  judge_error: "pipeline"
+  # Not split: the real reference has no free text, and an unclassified S3 clash (its
+  # stage-2 call failed) has no class. Both stay plain R3.
+  unclassified: "S3"
+  not_applicable_no_free_text: "S3"

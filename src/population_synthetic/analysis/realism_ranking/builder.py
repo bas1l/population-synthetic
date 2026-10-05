@@ -84,6 +84,12 @@ from population_synthetic.analysis.utils.realism_csv import (
     SEVERITY_LEVELS,
     SEVERITY_RANK,
 )
+from population_synthetic.analysis.utils.realism_stage2_csv import (
+    NOT_APPLICABLE,
+    STAGE2_CLASSES,
+    UNCLASSIFIED,
+    persona_class,
+)
 from population_synthetic.analysis.utils.stats_tests import (
     bootstrap_ci,
     bootstrap_cliffs_delta_ci,
@@ -2167,6 +2173,207 @@ def _typicality_closeness(
 # --------------------------------------------------------------------------- #
 
 
+#: Every class a stage-2 count is keyed by, pipeline states last.
+STAGE2_BREAKDOWN_CLASSES: tuple[str, ...] = (*STAGE2_CLASSES, UNCLASSIFIED, NOT_APPLICABLE)
+
+
+def _stage2_breakdown(records: Sequence[CompetitorRecord], skips: list[_Skip]) -> dict[str, Any] | None:
+    """Each competitor's impossible personas split by stage-2 class. REPORTING-ONLY.
+
+    The impossible set is exactly the one Axis A counts (``can_exist`` majority false
+    on the consumed rounds); this block only says, per competitor, how many of those
+    personas stage 2 classed as ``raw_impossible`` / ``label_clash`` / ``ambiguous`` /
+    ``mapping_error`` / ``judge_error`` (or ``unclassified`` / not applicable). It feeds
+    no rank, contrast or test. The persona class is recomputed from the consumed rounds'
+    issue rows under the order the producer stamped (``stage2_persona_class_order``),
+    which must agree across the set, as must the stage-2 prompt of every synthetic
+    competitor that has one. Absent everywhere -> ``None`` with a recorded skip; absent
+    for some competitors only -> raises (a partial breakdown would read as complete).
+    """
+    have = [r for r in records if r.stage2 is not None]
+    if not have:
+        skips.append(_Skip(
+            test="stage2_breakdown",
+            reason="no competitor carries a {combo}_stage2.csv (judged before stage 2 existed, or "
+                   "stage2.enabled is false); re-run analyze_persona_realism.py.",
+        ))
+        return None
+    lacking = sorted(r.slug for r in records if r.stage2 is None)
+    if lacking:
+        raise ValueError(
+            f"Stage-2 breakdown: {lacking} carry no stage-2 CSV while other competitors do; "
+            "re-run scripts/analyze/analyze_persona_realism.py --rewrite-artifacts for them."
+        )
+    orders = {tuple(r.provenance.get("stage2_persona_class_order") or ()) for r in records}
+    if len(orders) != 1 or not next(iter(orders)):
+        raise ValueError(f"Stage-2 breakdown: the competitors stamp different or no persona-class orders {orders}")
+    order = next(iter(orders))
+    prompts = {r.provenance.get("stage2_prompt_sha256") for r in records
+               if not r.is_real_reference and r.provenance.get("stage2_prompt_sha256") is not None}
+    if len(prompts) > 1:
+        raise ValueError(
+            f"Stage-2 breakdown: synthetic competitors were classified under different stage-2 prompts {prompts}"
+        )
+    rows = []
+    for record in records:
+        issues: dict[str, list[str]] = {}
+        for row in record.stage2 or ():
+            issues.setdefault(row.persona_id, []).append(row.stage2_class)
+        impossible = [p.persona_id for p in record.personas if not p.can_exist_majority]
+        counts = {c: 0 for c in STAGE2_BREAKDOWN_CLASSES}
+        for pid in impossible:
+            if pid not in issues:
+                raise ValueError(
+                    f"Stage-2 breakdown: {record.slug} persona {pid} is impossible but has no S3 "
+                    "clash in the consumed rounds; the verdict cache breaks the can_exist <=> S3 contract."
+                )
+            counts[persona_class(issues[pid], order)] += 1
+        rows.append({
+            "slug": record.slug,
+            "model": record.model,
+            "strategy": record.strategy,
+            "is_real_reference": record.is_real_reference,
+            "impossible_count": len(impossible),
+            "by_class": counts,
+        })
+    return {
+        "note": "reporting-only: changes no rank, contrast or test",
+        "classes": list(STAGE2_BREAKDOWN_CLASSES),
+        "persona_class_order": list(order),
+        "stage2_prompt_sha256": next(iter(prompts)) if prompts else None,
+        "competitors": rows,
+    }
+
+
+#: The worst-clash levels below S3, which the split never touches.
+_WORST_FIXED: tuple[str, ...] = ("none", "S1", "S2")
+
+
+def worst_clash_split_options(spec: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the ``worst_clash_split.yaml`` bundle (fail-fast; see that file for the rules)."""
+    if not isinstance(spec, Mapping):
+        raise ValueError(f"worst-clash split config must be a mapping, got {type(spec).__name__}")
+    for key in ("categories", "s3_split"):
+        if key not in spec:
+            raise ValueError(f"worst-clash split config is missing {key!r}")
+    categories = [str(c) for c in spec["categories"]]
+    if len(set(categories)) != len(categories) or not categories:
+        raise ValueError(f"worst-clash split categories must be distinct and non-empty, got {categories}")
+    split = {str(k): str(v) for k, v in dict(spec["s3_split"]).items()}
+    needed = set(STAGE2_BREAKDOWN_CLASSES)
+    if set(split) != needed:
+        raise ValueError(
+            f"worst-clash split s3_split must map exactly {sorted(needed)}; "
+            f"missing {sorted(needed - set(split))}, unknown {sorted(set(split) - needed)}"
+        )
+    required = set(_WORST_FIXED) | set(split.values())
+    if set(categories) != required:
+        raise ValueError(
+            f"worst-clash split categories must be exactly {sorted(required)} "
+            f"(none/S1/S2 plus every s3_split target), got {categories}"
+        )
+    return {"categories": categories, "s3_split": split}
+
+
+def _worst_clash_split(
+    records: Sequence[CompetitorRecord],
+    options: Mapping[str, Any] | None,
+    skips: list[_Skip],
+) -> dict[str, Any] | None:
+    """Each competitor's individuals counted once at their worst clash, R3 split by stage 2.
+
+    REPORTING-ONLY. The worst clash is the per-persona ``max_severity`` over the consumed
+    rounds (empty = no clash); an S3 individual is placed by its stage-2 persona class
+    through ``options["s3_split"]``. The real reference has no free text, so its S3
+    individuals land in the unsplit category by construction. Feeds no rank or test.
+    """
+    if options is None:
+        skips.append(_Skip(test="worst_clash_split",
+                           reason="the caller passed no worst-clash split options"))
+        return None
+    options = worst_clash_split_options(options)
+    if any(r.stage2 is None for r in records):
+        skips.append(_Skip(
+            test="worst_clash_split",
+            reason="not every competitor carries a {combo}_stage2.csv, so S3 cannot be split; "
+                   "re-run analyze_persona_realism.py (with stage2.enabled).",
+        ))
+        return None
+    orders = {tuple(r.provenance.get("stage2_persona_class_order") or ()) for r in records}
+    if len(orders) != 1 or not next(iter(orders)):
+        raise ValueError(f"Worst-clash split: the competitors stamp different or no persona-class orders {orders}")
+    order = next(iter(orders))
+    categories = options["categories"]
+    rows = []
+    for record in records:
+        issues: dict[str, list[str]] = {}
+        for row in record.stage2 or ():
+            issues.setdefault(row.persona_id, []).append(row.stage2_class)
+        counts = {c: 0 for c in categories}
+        s3_classes = {c: 0 for c in STAGE2_BREAKDOWN_CLASSES}
+        for persona in record.personas:
+            worst = persona.max_severity or "none"
+            if worst != "S3":
+                if worst not in _WORST_FIXED:
+                    raise ValueError(f"{record.slug} {persona.persona_id}: unknown max_severity {worst!r}")
+                counts[worst] += 1
+                continue
+            if persona.persona_id not in issues:
+                raise ValueError(
+                    f"Worst-clash split: {record.slug} {persona.persona_id} has an S3 clash but no stage-2 "
+                    "row; the per-persona and stage-2 CSVs describe different states of the cache."
+                )
+            cls = persona_class(issues[persona.persona_id], order)
+            s3_classes[cls] += 1
+            counts[options["s3_split"][cls]] += 1
+        rows.append({
+            "slug": record.slug,
+            "model": record.model,
+            "strategy": record.strategy,
+            "is_real_reference": record.is_real_reference,
+            "n_individuals": len(record.personas),
+            "counts": counts,
+            "s3_by_stage2_class": s3_classes,
+        })
+    return {
+        "note": "reporting-only: R3 split by stage 2 for the figures; the impossibility rate, "
+                "can_exist, rankings and tests count every S3 as impossible",
+        "categories": list(categories),
+        "s3_split": dict(options["s3_split"]),
+        "competitors": rows,
+    }
+
+
+def worst_clash_split_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten ``worst_clash_split`` into ``worst_clash_split.csv`` rows (slug order)."""
+    block = ranking.get("worst_clash_split")
+    if not block:
+        return []
+    return [
+        {
+            "slug": row["slug"], "model": row["model"], "strategy": row["strategy"],
+            "is_real_reference": row["is_real_reference"], "n_individuals": row["n_individuals"],
+            **{f"n_{c}": row["counts"][c] for c in block["categories"]},
+        }
+        for row in block["competitors"]
+    ]
+
+
+def stage2_breakdown_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten ``stage2_breakdown`` into ``stage2_breakdown.csv`` rows (slug order)."""
+    block = ranking.get("stage2_breakdown")
+    if not block:
+        return []
+    out = []
+    for row in block["competitors"]:
+        out.append({
+            "slug": row["slug"], "model": row["model"], "strategy": row["strategy"],
+            "is_real_reference": row["is_real_reference"], "impossible_count": row["impossible_count"],
+            **{f"n_{c}": row["by_class"][c] for c in block["classes"]},
+        })
+    return out
+
+
 def build_ranking(
     records: Sequence[CompetitorRecord],
     country: str,
@@ -2180,6 +2387,7 @@ def build_ranking(
     withdrawn: Sequence[str],
     closeness: Mapping[str, Any],
     skipped_combinations: Sequence[tuple[str, str]] = (),
+    worst_clash_split: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble one country's complete ranking document.
 
@@ -2203,7 +2411,9 @@ def build_ranking(
     *country* (``CapIndex.withdrawn_slugs`` filtered at the edge); *closeness* is the
     resolved resampling bundle of ``typicality_closeness``
     (:data:`~.typicality_closeness.CLOSENESS_OPTION_KEYS`). All three are required and
-    never defaulted here. ``typicality_distribution`` and ``typicality_closeness`` take
+    never defaulted here. *worst_clash_split* is the validated ``worst_clash_split.yaml``
+    bundle; omitted, the reporting-only ``worst_clash_split`` block is null with a skip.
+    ``typicality_distribution`` and ``typicality_closeness`` take
     their level count from *typicality*, so without it both are null with a recorded
     skip; ``typicality_effects`` needs no level count and is always built.
     """
@@ -2290,6 +2500,10 @@ def build_ranking(
             synthetic, real, n_levels=n_levels, options=closeness, skips=skips,
         )
 
+    # Reporting-only, like the severity blocks; both append to *skips*.
+    stage2 = _stage2_breakdown(records, skips)
+    worst_split = _worst_clash_split(records, worst_clash_split, skips)
+
     provenance = dict(records[0].provenance) if records else {}
     return {
         "process": "realism_ranking",
@@ -2343,6 +2557,12 @@ def build_ranking(
         # One closeness-to-the-reference value per combination (TV similarity primary),
         # and the model + strategy decomposition of it. Unit: the combination.
         "typicality_closeness": closeness_block,
+        # Each competitor's impossible personas by stage-2 class (why the clash arose).
+        # Reporting only: no rank, contrast or test reads it.
+        "stage2_breakdown": stage2,
+        # Every individual at its worst clash, R3 split into impossible individual /
+        # contradictory labels / pipeline by stage 2 -- the figure data. Reporting only.
+        "worst_clash_split": worst_split,
         "factor_significance": {
             "by_model": by_model,
             "by_method": by_method,

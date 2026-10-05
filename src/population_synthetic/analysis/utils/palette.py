@@ -82,6 +82,7 @@ __all__ = [
     "RESIDUAL_GREY",
     "SECONDARY_GREY",
     "SEVERITY_SERIES",
+    "WORST_CLASH_COLORS",
     "SIGNIFICANCE_CMAP",
     "STAGE_SERIES",
     "SURFACE",
@@ -93,6 +94,7 @@ __all__ = [
     "relative_luminance",
     "text_color_for_rgb",
     "text_color_on",
+    "worst_clash_color",
 ]
 
 # ------------------------------------------------------------------
@@ -186,6 +188,31 @@ STAGE_SERIES: tuple[str, ...] = ("#0571B0", "#92C5DE", "#F4A582", "#CA0020")
 #: as a defect, and giving it a hue would enlist it into the reading that the other two
 #: carry.
 SEVERITY_SERIES: tuple[str, str, str] = ("#C44E52", "#DD8452", "#8C8C8C")
+
+#: The worst-clash-per-individual categories (``config/analysis/realism_ranking/
+#: worst_clash_split.yaml``), keyed by category id. ``none``/``S1``/``S2`` are the published
+#: figure's colours (a light grey, then :data:`SEVERITY_SERIES` from grey to orange). The
+#: unsplit ``S3`` keeps the severest step's red; its stage-2 split darkens it for an
+#: impossible individual (``S3a``) and lightens it for contradictory labels (``S3b``), so
+#: both still read as the impossible level. ``pipeline`` (a mapping or judge artefact) is a
+#: muted violet outside the red family on purpose: it is not a verdict on the individual.
+WORST_CLASH_COLORS: dict[str, str] = {
+    "none": "#E4E4E4",
+    "S1": SEVERITY_SERIES[2],
+    "S2": SEVERITY_SERIES[1],
+    "S3b": "#E58F92",
+    "S3a": "#7F1D25",
+    "S3": SEVERITY_SERIES[0],
+    "pipeline": "#8172B2",
+}
+
+
+def worst_clash_color(category: str) -> str:
+    """The colour of worst-clash *category*; raises on an id the palette does not know."""
+    if category not in WORST_CLASH_COLORS:
+        raise KeyError(f"no worst-clash colour for category {category!r}; known: {sorted(WORST_CLASH_COLORS)}")
+    return WORST_CLASH_COLORS[category]
+
 
 #: The single series singled out for contrast against a field of
 #: :data:`CATEGORICAL_SERIES` members -- a reference competitor among ordinary ones, or

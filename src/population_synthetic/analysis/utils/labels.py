@@ -295,6 +295,15 @@ def figure_term(key: str, *, terms_path: str | Path | None = None) -> str:
     return _display_string(terms[key], field=f"terms.{key}", value=key, path=path)
 
 
+def worst_clash_label(category: str, *, terms_path: str | Path | None = None) -> str:
+    """Display label of a worst-clash category id (``S3a`` -> ``R3a: impossible``).
+
+    Resolved through :func:`figure_term` under the key ``worst_clash_<id>``, so an id with
+    no label raises rather than printing itself.
+    """
+    return figure_term(f"worst_clash_{category}", terms_path=terms_path)
+
+
 def reference_source(country_id: str, *, countries_dir: str | Path | None = None) -> str:
     """Return the short name of *country_id*'s reference source (``swedish_02`` -> ``SCB``).
 
