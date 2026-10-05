@@ -288,7 +288,7 @@ def test_runner_refuses_a_client_that_does_not_vouch_for_isolation(tmp_path):
 
 
 def test_judge_config_refuses_a_temperature_the_cli_cannot_apply(tmp_path):
-    for name in ("judge.yaml", "judge_prompt.md"):
+    for name in ("judge.yaml", "judge_prompt.md", "stage2_prompt.md"):
         (tmp_path / name).write_text((_CONFIG_DIR / name).read_text(encoding="utf-8"), encoding="utf-8")
     # The rendering's mapping tier is relative to the config dir; re-anchor it on the repo.
     judge = tmp_path / "judge.yaml"
