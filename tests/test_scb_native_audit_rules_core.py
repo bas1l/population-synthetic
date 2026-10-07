@@ -288,9 +288,9 @@ PIPELINE_RUN_FIXED = [
     ("housing_tenure", "Seniorboende (äldreboende med egen lägenhet)", UNMAPPED),  # false alarm kept
 ]
 
-# 2026-10-05: an employment_type whose OWN text says the job is former / ended, or that the person
-# is on parental leave instead of working, has no current contract -> Not Applicable. Text that
-# states current work (after the leave, covering a leave, part-time beside it) keeps its contract.
+# 2026-10-05: an employment_type whose OWN text says the job is former / ended has no current
+# contract -> Not Applicable. Text that states current work (after the leave, covering a leave,
+# part-time beside it) keeps its contract. (Parental leave from a held contract: see M4 below.)
 # Each string is read alone; no rule reads another attribute.
 _NA = "Not Applicable"
 FORMER_JOB_AND_LEAVE = [
@@ -306,7 +306,6 @@ FORMER_JOB_AND_LEAVE = [
     ("employment_type", "tidigare säsongsanställning (avslutad)", _NA),
     ("employment_type", "pensionär (eget företag, avvecklat)", _NA),
     ("employment_type", "Föräldraledighet, heltid (utan lön)", _NA),
-    ("employment_type", "Anställning med föräldraledighet (tillsvidare)", _NA),
     # exceptions: the text states a current job
     # "efter avslutad" = probation completed: no veto (the Temporary reading of "provanställning" is a separate,
     # pre-existing permanence mis-read left unchanged here)
@@ -352,6 +351,80 @@ CURRENT_WORK_BEATS_STATUS = [
     ("employment_status", "Hemarbetande närstående", "Other"),
 ]
 
+# 2026-10-07, M1-M5 (plan section "2026-10-07: current work beats a status word"). Each string is
+# read alone; no rule reads another attribute. Unstated permanence -> Permanent and unstated hours ->
+# the Full-time band (Part-time beside a part-time word), the file's bare-word convention; stated
+# hours re-band through the numeric facet.
+_PF, _PP, _PS = "Permanent Full-time", "Permanent Part-time", "Permanent Short Part-time"
+_TF, _TP = "Temporary Full-time", "Temporary Part-time"
+M1_TO_M5 = [
+    # M1: a pension / student / retired word beside stated current work -> the contract
+    ("employment_type", "Pensionär med konsultverksamhet (flexibel timtabell)", "Self-Employed Full-time"),
+    ("employment_type", "pensionär (delvis, 15 timmar/vecka)", _PS),
+    ("employment_type", "Pensionär (delpension med 20 timmar/vecka)", _PP),
+    ("employment_type", "part-time student employment (12 hours/week)", _PS),
+    ("employment_type", "Full-time student with part-time employment", _PP),
+    ("employment_type", "Retired and employed", _PF),
+    ("employment_type", "Retired but employed part-time", _PP),
+    ("employment_type", "Pensionär, deltidsarbete", _PP),
+    ("employment_type", "Pensionär med säsongsanställning (sommar, 25h/veckan)", _TP),
+    ("employment_type", "Pensionär med konsultuppdrag (frilans, varierande timmar)", "Self-Employed Full-time"),
+    ("employment_type", "Extraanställning som pensionär enligt särskilt tidsbegränsat avtal, deltid", _TP),
+    ("employment_type", "Arbetslivsinriktad pension, 10 timmar/vecka, tillsvidare", _PS),
+    # M1 negatives: ended work, no work cue, a band word that qualifies the status, zero hours,
+    # and a text Not Applicable never took (a job word) keep their old reading
+    ("employment_type", "pensionär (eget företag, avvecklat)", _NA),
+    ("employment_type", "Pensionär", _NA),
+    ("employment_type", "Pensionär, tidigare anställd", _NA),
+    ("employment_type", "Tidigare tillsvidareanställd, nu pensionär", _NA),
+    ("employment_type", "Former tillsvidareanställning, deltid 20-30 h/week, now retired", _NA),
+    ("employment_type", "Full-time student", _NA),
+    ("employment_type", "Part-time student", _NA),
+    ("employment_type", "Pensionär (heltid)", _NA),
+    ("employment_type", "deltidspensionär", _NA),
+    ("employment_type", "Ingen anställning (pensionär), 0 timmar/vecka", _NA),
+    ("employment_type", "Retired — no active employment, 0 weekly working hours", _NA),
+    ("employment_type", "Student (full-time) - no weekly working hours", _NA),
+    ("employment_type", "Pensionär (ej längre anställd)", _NA),
+    ("employment_type", "Timanställning vid behov (behovsanställning), extraarbete vid sidan av studierna", _TP),
+    ("employment_type", "Studiejobb (max 20 timmar/vecka)", UNMAPPED),
+    # M2: a retired / homemaker / job-seeker status text that itself states paid work -> Employed
+    ("employment_status", "Hemarbetande konsult", "Employed"),
+    ("employment_status", "pensioner with part-time work", "Employed"),
+    ("employment_status", "Semi-retired with reduced hours", "Employed"),
+    ("employment_status", "Lönearbete vid sidan av pension", "Employed"),
+    ("employment_status", "Arbetssökande med deltidsjobb", "Employed"),
+    ("employment_status", "Sysselsatt deltids efter pensionering men har planer på att heltidslägga av sitt arbete",
+     "Employed"),
+    ("employment_status", "Hemarbetande", "Other"),
+    ("employment_status", "Hemmafru", "Other"),
+    ("employment_status", "Pensionär", "Retired"),
+    ("employment_status", "Arbetssökande", "Unemployed"),
+    ("employment_status", "Arbetssökande (söker deltidsjobb)", "Unemployed"),
+    ("employment_status", "Tidigare sysselsatt, nu pensionär", "Retired"),
+    ("employment_status", "Pensionär (tidigare heltidsanställd)", "Retired"),
+    # M3: "fulltidsarbetslös" is unemployed, not a "fulltid" job
+    ("employment_status", "Fulltidsarbetslös", "Unemployed"),
+    ("employment_status", "Fulltid", "Employed"),
+    # M4: parental leave from a stated contract -> that contract; explicitly unpaid / no job -> Not
+    # Applicable; parental leave with no contract word stays unmapped
+    ("employment_type", "Föräldraledig från tillsvidareanställning, heltid", _PF),
+    ("employment_type", "Anställning med föräldraledighet (tillsvidare)", _PF),
+    ("employment_type", "Tillsvidareanställning med föräldraledighet (40 timmar)", _PF),
+    ("employment_type", "Föräldraledighet med tillsvidareavtal (oberoende av aktuell arbetstid)", _PF),
+    ("employment_type", "Fixed-term employment, 40 hours/week (parental leave cover)", _TF),
+    ("employment_type", "Föräldraledighet, heltid (utan lön)", _NA),
+    ("employment_type", "Parental leave, no job", _NA),
+    ("employment_type", "Föräldraledig utan anställning", _NA),
+    ("employment_type", "Föräldraledighet", UNMAPPED),
+    ("employment_type", "On parental leave", UNMAPPED),
+    # M5: korttidsanställning is fixed-term
+    ("employment_type", "Korttidsanställning (max 90 dagar)", _TF),
+    ("employment_type", "korttidsanställning (3 månader, 20 timmar/vecka)", _TP),
+    ("employment_type", "Deltid (minst 20 timmar/vecka, korttidsanställning)", _TP),
+    ("employment_type", "Tillsvidareanställning, heltid", _PF),
+]
+
 CASES = (
     _cases("civil_status", CIVIL_FIXED, CIVIL_FALSE_ALARMS, CIVIL_DECISIONS)
     + _cases("education_level", EDUCATION_FIXED, EDUCATION_FALSE_ALARMS, EDUCATION_DECISIONS)
@@ -362,6 +435,7 @@ CASES = (
     + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in PIPELINE_RUN_FIXED]
     + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in FORMER_JOB_AND_LEAVE]
     + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in CURRENT_WORK_BEATS_STATUS]
+    + [pytest.param(a, raw, want, id=f"M1-M5:{a}:{raw[:40]}") for a, raw, want in M1_TO_M5]
 )
 
 

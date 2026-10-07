@@ -57,6 +57,12 @@ built. This tier's `real` side keeps the historic rules (`substring`, no negatio
   Student > Retired > Sick > Other) and `income_source` (wage first) override it with
   `"tie_break": ["priority"]`. Every multi-hit is written to `{slug}.ties.csv`.
 
+**`all_of_rules`** (engine key): a list of self-contained `{all_of, none_of}` rules on one value,
+swept in the `all_of` tier. A rule honours only its own `none_of`, never the value's, so it is the
+one way to reach a value past its own veto; every veto the rule still needs is written into it.
+Used by `employment_type` and `employment_status` for "a status word, except beside stated current
+work, unless that work is over".
+
 `employment_type`'s `synthetic` block also declares a **`numeric_facet`**: after the walk, weekly
 hours (or a percentage of a 40 h week) stated in the text re-band the walked attachment into the
 AKU agreed-hours bands 1–19 / 20–34 / 35+. A range spanning two bands or a number behind a
@@ -95,19 +101,41 @@ Each rule follows SCB's own definition of the category; the regression cases liv
   sjukersättning is `Sick Leave`, not `Retired`; homemakers and carers are `Other`. "Hemarbetande"
   is not an `Employed` veto: alone (or with full-time wording only — "hemarbetande på heltid") it is
   the homemaker (`Other`), but beside an occupation noun from `Employed`'s own list ("Hemarbetande
-  konsult") it is work done from home and the BAS priority makes it `Employed`.
+  konsult") it is work done from home and the BAS priority makes it `Employed`. More generally
+  (2026-10-07), a retired / homemaker / job-seeker status text that itself states paid work —
+  `konsult*`, `lönearbet*`, `arbetar`, part-time / reduced hours, `deltid*`, `extraarbet*` — is
+  `Employed` through an `all_of_rules` rule on `Employed` ("pensioner with part-time work",
+  "Lönearbete vid sidan av pension", "Arbetssökande med deltidsjobb"); ended work, `söker` /
+  `seeking` and volunteer words veto that rule, so "Arbetssökande (söker deltidsjobb)" stays
+  `Unemployed`. The whole word "fulltidsarbetslös" vetoes `Employed` (it is not a `fulltid` job).
 - **`employment_type`**: fixed-term, project, probation and doctoral posts are Temporary; an own
   company, sole trader or näringsidkare is Self-Employed; negated employment and zero stated hours
   are `Not Applicable`. So is a contract the text itself says is former or ended ("former",
   "previous(ly)", "före detta", "f.d.", "tidigare anställd / fast / tillsvidare / …", "(past)",
-  ", avslutad", "nu avslutad", "avvecklat", "before retirement", "pre-retirement", …) or that the
-  person is on parental leave from ("med föräldraledighet", "föräldraledighet, heltid",
-  ", föräldraledig", …): every contract value vetoes these cues and `Not Applicable`'s `all_of`
-  needs a cue plus a contract word. The cues are phrases taken from the `01_Raw` pool so that text
-  stating a current job keeps its contract — "efter avslutad provanställning", "efter
-  föräldraledighet", "parental leave cover", parental leave beside stated working hours, "Tidigare
-  med fulltid, nu halvtidsanställd". A cue with no contract word ("Föräldraledighet", "contractor
-  (past)") stays unmapped. The rule reads `employment_type`'s own text only.
+  ", avslutad", "nu avslutad", "avvecklat", "before retirement", "pre-retirement", …): every
+  contract value vetoes these cues and `Not Applicable`'s `all_of` needs a cue plus a contract
+  word. The cues are phrases taken from the `01_Raw` pool so that text stating a current job keeps
+  its contract — "efter avslutad provanställning", "Tidigare med fulltid, nu halvtidsanställd". A
+  cue with no contract word ("contractor (past)") stays unmapped. The rule reads
+  `employment_type`'s own text only.
+  Parental leave is **not** an ended job (2026-10-07; SCB BAS counts a parent on paid leave as
+  employed with the job): leave from a stated contract keeps that contract ("Anställning med
+  föräldraledighet (tillsvidare)" → `Permanent Full-time`); leave the text itself calls unpaid or
+  jobless ("utan lön", "unpaid", "utan anställning", "no job") is `Not Applicable` through an
+  `all_of_rules` rule on it; leave with no contract word ("Föräldraledighet") stays unmapped.
+  `korttidsanställ*` is Temporary.
+  A pensioner / student / retired word beside stated current work maps to the contract, not to
+  `Not Applicable` (2026-10-07): each contract value carries an `all_of_rules` rule `[Not
+  Applicable's own status tokens] + [a work cue]` — `anställ*`, `employ*`, `konsult*`, `frilans`,
+  `arbetar`, `working`, `deltidsarbet*` / `extraarbet*` / `lönearbet*`, stated hours (`timmar`,
+  `tim`, `h/v`, `hours`, …) — vetoed by ended-work cues (bare `tidigare`, `avveckl*`, `avslutad`,
+  `former`, …), zero hours, unpaid / volunteer words and `Not Applicable`'s own `none_of` (`job`,
+  `jobb`, …), so it fires only on text `Not Applicable` would otherwise take. Temporary and
+  Self-Employed words pick their own rule; a part-time word picks Part-time. What the text leaves
+  unstated follows the bare-word convention: Permanent, Full-time band, re-banded by stated hours
+  ("pensionär (delvis, 15 timmar/vecka)" → `Permanent Short Part-time`). A band word on its own is
+  not a work cue, because it qualifies the status itself: "Full-time student", "Pensionär
+  (heltid)", "deltidspensionär" stay `Not Applicable`.
   A consulting business stated beside a pensioner word ("Pensionär med konsultverksamhet") is a
   current own business: `konsultverksamhet` is a Self-Employed token and, being longer than
   `pensionär`, wins the `longest` tie-break. With no stated hours it lands on `Self-Employed

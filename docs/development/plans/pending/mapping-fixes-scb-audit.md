@@ -986,6 +986,66 @@ vid sidan av pension (12 timmar)", …) and still map to `Not Applicable`. Fixin
 deciding the attachment for unstated contracts and lifting the `pension` veto on the Permanent
 values, which is a rule decision, not a token miss.
 
+### Current work beats a status word, generalised (M1–M5) — 2026-10-07
+
+Generalises the two fixes above and closes the 28 open `01_Raw` cases. Hard principle unchanged:
+each attribute is mapped from its own raw text; no rule reads another attribute. Synthetic side of
+`config/mapping/scb_native/` only; the real side and every other tier are untouched.
+
+**Engine.** A value-wide `none_of` cannot say "veto `pension`, except beside stated current work,
+unless that work is said to be over". The engine gains one matcher key, `all_of_rules`: a list of
+self-contained `{all_of, none_of}` rules on a value, swept in the `all_of` tier and scored like
+`all_of`. A rule honours only its own `none_of`, not the value's, so every veto it still needs is
+written into the rule. Configs without the key resolve exactly as before.
+
+- **M1** (`employment_type`): each contract value carries a rule
+  `[Not Applicable's own status tokens (pension/pensionär/pensioner/pensio/student/studer/studie/retired)]
+  + [a current-work cue]`. Cues: `anställ*`, `employ*`, `konsult*`, `frilans`/`freelanc*`, `arbetar`,
+  `working`/`works`/`work`, `deltidsarbet*`/`extraarbet*`/`lönearbet*`, `deltidstjänst`, stated hours
+  (`timmar`, `tim`, `timme`, `h/v`, `h/w`, `hours`, `hrs`), own-business words. Vetoes in every rule:
+  ended work (`tidigare`, `avveckl*`, `avslutad`/`avslutat`, `former`, `previous`, `f.d.`, `före detta`,
+  `before retirement`, `no longer`, …), zero hours (`0 timmar`, `0h`, `0 weekly`, `no weekly`, …),
+  unpaid / volunteer words, and Not Applicable's own `none_of` (`job`, `jobb`, …), so a rule fires
+  only on text Not Applicable itself would take. The family comes from the text: Temporary and
+  Self-Employed words route to their rules and veto the Permanent ones; a part-time word
+  (`deltid`, `part-time`, `halvtid`, `partiell`, `half-time`) picks the Part-time rule. **Convention
+  for what the text leaves unstated:** the file's bare-word convention — unstated permanence is
+  Permanent (as bare `anställning` / `employed` / `heltid` are), unstated hours are the Full-time band
+  (Part-time beside a part-time word), and stated hours re-band through the numeric facet.
+  *Deviation from the brief:* bare `heltid` / `deltid` / `part-time` / `full-time` / `%` are **not**
+  current-work cues on their own here, because in this pool they qualify the status word itself:
+  "Full-time student" (92 raw personas), "Part-time student", "Pensionär (heltid)",
+  "deltidspensionär", "Pensionär (delpension, 75%)". They decide the band only once a work cue is
+  present. Bare `arbete` is not a cue either ("Trädgårdsarbete", "rätt att återvända till arbete").
+- **M2** (`employment_status`): `Employed` carries a rule `[retired / homemaker / job-seeker word]
+  + [stated paid work: konsult*, lönearbet*, arbetar, working, part-time, reduced hours, deltid*,
+  extraarbet*, employed]`, vetoed by ended work, `söker` / `seeking` / `looking for`, volunteer
+  words and `fulltidsarbetslös`. It wins on BAS priority in the `all_of` tier. Plain "Hemarbetande",
+  "Hemmafru", "Pensionär", "Arbetssökande" are unchanged.
+- **M3** (`employment_status`): `Employed` vetoes the whole word `fulltidsarbetslös`, so it no longer
+  wins on `fulltid`; `Unemployed` takes it.
+- **M4** (`employment_type`): the parental-leave cues (`on parental leave`, `med föräldraledighet`,
+  `föräldraledighet, heltid`, `, föräldraledig`, …) leave every contract value's `none_of` and Not
+  Applicable's `all_of`. Parental leave from a stated contract keeps that contract (SCB BAS counts a
+  parent on paid leave as employed with the job; the real side has no Employed + Not Applicable
+  pair). Not Applicable gains a rule `[parental-leave word] + [utan lön | unpaid | obetald | utan
+  anställning | no job | without pay]`; parental leave with no contract word stays unmapped.
+- **M5** (`employment_type`): `korttidsanställ*` is a Temporary token (and a Permanent veto); the
+  band comes from stated hours, else Full-time.
+
+**Dry run** (HEAD config vs working tree, fresh identity cache, no production writes): 14,248
+`swedish_02` `01_Raw` personas — 79 change one attribute each; 5,700 capped personas — 14 change;
+**no persona moves into or out of `__UNMAPPED__`**, so cap selection cannot move. An earlier draft
+whose status group was wider than Not Applicable's own tokens moved 8 raw personas out of
+`__UNMAPPED__` ("Studiejobb (max 20 timmar/vecka)", "early retirement transition (reduced hours)",
+…); the rule was narrowed to Not Applicable's own triggers and vetoes, which removed all 8.
+
+Side effects worth a look (all `01_Raw`, none capped): "Studentjobb (10-20 timmar/vecka,
+korttidsanställning)" Temporary Part-time → Temporary Full-time (M5: `korttidsanställ` outscores
+`studentjobb`; 10–20 h straddles two bands, so the facet keeps the walked value); "Föräldraledig
+med möjlighet till deltidsarbete" Not Applicable → Permanent Part-time (M4: the cue that made it
+Not Applicable is gone); "På deltid/arbetslös" Unemployed → Employed (M2).
+
 ## Verification
 
 - `ruff check src/` and `pytest` pass; the golden test shows `scb`, `istat`, `ssb` unchanged.

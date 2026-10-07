@@ -352,7 +352,116 @@
         "between jobs",
         "laid off (in",
         "utanför arbetskraften",
-        "lärlingsutbildning"
+        "lärlingsutbildning",
+        {
+          "token": "fulltidsarbetslös",
+          "mode": "word"
+        }
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              {
+                "token": "pension",
+                "mode": "substring"
+              },
+              "retire",
+              "semi-retire",
+              {
+                "token": "hemarbetande",
+                "mode": "substring"
+              },
+              "hemmafru",
+              "homemaker",
+              {
+                "token": "arbetssök",
+                "mode": "substring"
+              },
+              {
+                "token": "arbetslös",
+                "mode": "substring"
+              },
+              "unemploy",
+              "jobseek",
+              "job seek"
+            ],
+            [
+              {
+                "token": "konsult",
+                "mode": "substring"
+              },
+              {
+                "token": "lönearbet",
+                "mode": "substring"
+              },
+              "arbetar",
+              "working",
+              "works",
+              "part-time",
+              "part time",
+              "reduced hours",
+              "deltid",
+              {
+                "token": "deltidsjobb",
+                "mode": "substring"
+              },
+              {
+                "token": "deltidsarbet",
+                "mode": "substring"
+              },
+              {
+                "token": "deltidsanställ",
+                "mode": "substring"
+              },
+              {
+                "token": "deltidstjänst",
+                "mode": "substring"
+              },
+              {
+                "token": "extraarbet",
+                "mode": "substring"
+              },
+              "extrajobb",
+              "employed",
+              "lönarbet"
+            ]
+          ],
+          "none_of": [
+            "tidigare",
+            "före detta",
+            "former",
+            "previous",
+            "f.d.",
+            "avslutad",
+            "avslutat",
+            "avveckl",
+            "no longer",
+            "ej längre",
+            "inte längre",
+            "söker",
+            "sökande efter",
+            "seeking",
+            "looking for",
+            "jobbsök",
+            "inför pension",
+            {
+              "token": "fulltidsarbetslös",
+              "mode": "word"
+            },
+            "arbetar inte",
+            "not working",
+            "frivillig",
+            {
+              "token": "volontär",
+              "mode": "substring"
+            },
+            "volunteer",
+            "ideell",
+            "oavlönad",
+            "unpaid"
+          ]
+        }
       ]
     },
     "Unemployed": {

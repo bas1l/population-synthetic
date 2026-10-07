@@ -140,7 +140,10 @@ since legacy artefacts carry a bare `None`). Matcher vocabulary:
 `employment_type`'s attachment x hours; the sub-field names must be declared in the side's
 `subfields` directive, so a typo such as `"contain"` raises instead of being read as a sub-field).
 Tier order is `equals` -> `all_of` -> `contains` -> numeric (composite in a final pass), with
-`none_of` a veto (not a tier) that rejects its value in every tier. Attribute-level directives:
+`none_of` a veto (not a tier) that rejects its value in every tier. The one exception is
+`all_of_rules`: a list of self-contained `{all_of, none_of}` rules on a value, swept in the `all_of`
+tier, each honouring only its own `none_of` -- the way to state "a word normally vetoes this value,
+except beside X, unless Y" (used by `scb_native` `employment_type` / `employment_status`). Attribute-level directives:
 `absent` (missing-input literal), `refine_from` (re-walk a sibling's resolved value, e.g.
 `birth_location` from `birth_country_detail`), `on_miss` (default when all miss -- **forbidden on
 both Swedish tiers**, see below), `subfields`, and the per-attribute matching overrides

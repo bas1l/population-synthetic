@@ -75,12 +75,31 @@ candidates and the deciding criterion (the synthetic mapper writes every multi-h
 to the ``{slug}.ties.csv`` sidecar). A total miss yields the ``UNMAPPED`` sentinel
 (or the attribute-level ``on_miss`` literal, when one is declared).
 
-Tier order (``none_of`` vetoes its value in every tier):
+Tier order (``none_of`` vetoes its value in every tier, except the value's
+self-contained ``all_of_rules``, which carry their own ``none_of``):
 
 1. ``equals`` — exact match: the normalized+stripped raw equals a normalized token.
 2. ``all_of`` — AND-of-ORs: the raw contains at least one token from *every* group.
+   ``all_of_rules`` hit in this same tier (see below).
 3. ``contains`` — the raw contains any token.
 4. ``int`` / ``int_gte`` — numeric: ``int(raw)`` is in the list / ``>=`` the bound.
+
+``all_of_rules`` -- a list of **self-contained** conjunctive rules on one value,
+each ``{"all_of": [[...], ...], "none_of": [...]}`` (``none_of`` optional). A rule
+hits when every one of its groups hits and none of *its own* ``none_of`` tokens
+does; the value-level ``none_of`` does **not** apply to it, so a rule is the one
+place a value can be reached past its own veto. It exists for a narrow exception
+that a value-wide veto cannot express ("a status word normally vetoes this value,
+except when the same text also states current paid work, unless that work is
+said to be over"): the rule states the exception and every veto it still needs,
+in full, in one place. Its score is the summed length of its groups' best tokens,
+exactly like ``all_of``, and it competes in the ``all_of`` tier::
+
+    "Permanent Full-time": {
+      "none_of": ["pension", ...],
+      "all_of_rules": [{"all_of": [["pension"], ["timmar", "anställ"]],
+                        "none_of": ["tidigare", "deltid", ...]}]
+    }
 
 A **composite** matcher (used by ``employment_type`` real, whose raw record has
 ``attachment`` + ``hours`` sub-fields) keys sub-fields of a dict raw value instead
@@ -154,7 +173,7 @@ from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED, is_un
 #: Matcher keys recognised inside a per-value matcher block. Any other key must be
 #: a sub-field declared in the side's ``subfields`` directive (composite matcher).
 _MATCHER_KEYS: frozenset[str] = frozenset(
-    {"equals", "contains", "all_of", "none_of", "int", "int_gte"}
+    {"equals", "contains", "all_of", "all_of_rules", "none_of", "int", "int_gte"}
 )
 
 #: Attribute-level directive keys on a ``real`` / ``synthetic`` rules block.
@@ -180,6 +199,7 @@ _MATCHING_KEYS: frozenset[str] = frozenset({"token_mode", "negation", "tie_break
 _NEGATION_KEYS: frozenset[str] = frozenset({"cues", "window", "clause_breaks"})
 _TOKEN_OBJECT_KEYS: frozenset[str] = frozenset({"token", "mode"})
 _FACET_KEYS: frozenset[str] = frozenset({"extract", "ambiguous_if_preceded_by", "bands", "remap"})
+_RULE_KEYS: frozenset[str] = frozenset({"all_of", "none_of"})
 
 _UNDERSCORE_RE = re.compile(r"_")
 _WORD_RE = re.compile(r"\w+")
@@ -402,6 +422,15 @@ def _validate_token_list(value: Any, where: str, *, allow_object: bool) -> None:
         _validate_token(tok, where, allow_object=allow_object)
 
 
+def _validate_all_of(spec: Any, where: str) -> None:
+    if not isinstance(spec, list) or not spec:
+        _fail(where, "must be a non-empty list of token groups")
+    for group in spec:
+        if not isinstance(group, list) or not group:
+            _fail(where, "every all_of group must be a non-empty list")
+        _validate_token_list(group, where, allow_object=True)
+
+
 def _validate_matcher(matcher: Any, where: str, subfields: frozenset[str]) -> None:
     if not isinstance(matcher, dict) or not matcher:
         _fail(where, "matcher must be a non-empty object")
@@ -412,12 +441,17 @@ def _validate_matcher(matcher: Any, where: str, subfields: frozenset[str]) -> No
         elif key in ("contains", "none_of"):
             _validate_token_list(spec, kwhere, allow_object=True)
         elif key == "all_of":
+            _validate_all_of(spec, kwhere)
+        elif key == "all_of_rules":
             if not isinstance(spec, list) or not spec:
-                _fail(kwhere, "must be a non-empty list of token groups")
-            for group in spec:
-                if not isinstance(group, list) or not group:
-                    _fail(kwhere, "every all_of group must be a non-empty list")
-                _validate_token_list(group, kwhere, allow_object=True)
+                _fail(kwhere, "must be a non-empty list of {all_of, none_of} rules")
+            for i, rule in enumerate(spec):
+                rwhere = f"{kwhere}[{i}]"
+                if not isinstance(rule, dict) or "all_of" not in rule or not set(rule) <= _RULE_KEYS:
+                    _fail(rwhere, f"a rule must declare 'all_of' and optionally 'none_of', got {rule!r}")
+                _validate_all_of(rule["all_of"], f"{rwhere}.all_of")
+                if "none_of" in rule:
+                    _validate_token_list(rule["none_of"], f"{rwhere}.none_of", allow_object=True)
         elif key == "int":
             if not isinstance(spec, list) or not all(isinstance(i, int) and not isinstance(i, bool) for i in spec):
                 _fail(kwhere, "must be a list of integers")
@@ -652,6 +686,31 @@ def _vetoed(text: str, matcher: dict, matching: Matching) -> bool:
     return False
 
 
+def _all_of_hit(text: str, groups: list, matching: Matching) -> tuple[int, str] | None:
+    """``(summed length, joined tokens)`` when every group hits, else None."""
+    total, toks = 0, []
+    for group in groups:
+        n, tok = _best_token(text, group, matching)
+        if n == 0:
+            return None
+        total += n
+        toks.append(tok)
+    return total, "+".join(toks)
+
+
+def _rules_hit(text: str, matcher: dict, matching: Matching) -> tuple[int, str] | None:
+    """Best-scoring hit among *matcher*'s self-contained ``all_of_rules`` (own ``none_of`` only)."""
+    best = None
+    for rule in matcher.get("all_of_rules") or ():
+        none_of = rule.get("none_of")
+        if none_of and any(_token_hit(text, tok, matching) for tok in none_of):
+            continue
+        hit = _all_of_hit(text, rule["all_of"], matching)
+        if hit is not None and (best is None or hit[0] > best[0]):
+            best = (hit[0], "rule:" + hit[1])
+    return best
+
+
 def _tier_hit(raw: Any, text: str, matcher: dict, tier: str, matching: Matching) -> tuple[int, str] | None:
     """Evaluate one scalar *tier* of *matcher*: ``(score, token)`` on a hit, else None."""
     if tier == "equals":
@@ -666,14 +725,7 @@ def _tier_hit(raw: Any, text: str, matcher: dict, tier: str, matching: Matching)
     if tier == "all_of":
         all_of = matcher.get("all_of")
         if all_of is not None:
-            total, toks = 0, []
-            for group in all_of:
-                n, tok = _best_token(text, group, matching)
-                if n == 0:
-                    return None
-                total += n
-                toks.append(tok)
-            return total, "+".join(toks)
+            return _all_of_hit(text, all_of, matching)
         return None
 
     if tier == "contains":
@@ -705,6 +757,8 @@ def _match_scalar(raw: Any, matcher: dict, matching: Matching) -> bool:
     resolved in isolation. The top-level value-walk instead sweeps tiers globally.
     """
     text = normalize(raw)
+    if _rules_hit(text, matcher, matching) is not None:
+        return True
     if _vetoed(text, matcher, matching):
         return False
     return any(_tier_hit(raw, text, matcher, tier, matching) for tier in _SCALAR_TIERS)
@@ -787,11 +841,15 @@ def _walk(
     text = normalize(raw)
     scalar = [(v, rules_block[v]) for v in values if isinstance(rules_block.get(v), dict)]
     scalar = [(v, m) for v, m in scalar if not _is_composite(m)]
-    live = [(v, m) for v, m in scalar if not _vetoed(text, m, matching)]
+    live = {v for v, m in scalar if not _vetoed(text, m, matching)}
     for tier in _SCALAR_TIERS:
         cands = []
-        for value, matcher in live:
-            hit = _tier_hit(raw, text, matcher, tier, matching)
+        for value, matcher in scalar:
+            hit = _tier_hit(raw, text, matcher, tier, matching) if value in live else None
+            if tier == "all_of":
+                rule = _rules_hit(text, matcher, matching)
+                if rule is not None and (hit is None or rule[0] > hit[0]):
+                    hit = rule
             if hit is not None:
                 cands.append(Candidate(value, hit[0], hit[1]))
         if cands:

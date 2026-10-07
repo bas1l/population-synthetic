@@ -281,6 +281,57 @@ def test_all_of_beats_contains_across_values_globally():
     assert resolve("permanent contract", block, values) == "Broad"
 
 
+# --- all_of_rules: self-contained conjunctive exceptions --------------------
+
+_RULE_VALUES = ["Job", "NotApplicable"]
+_RULE_BLOCK = {
+    "Job": {
+        "contains": ["employed"],
+        "none_of": ["pension"],
+        "all_of_rules": [{"all_of": [["pension"], ["hours", "employed"]], "none_of": ["former"]}],
+    },
+    "NotApplicable": {"contains": ["pension"]},
+}
+
+
+def test_all_of_rule_reaches_a_value_past_its_own_veto():
+    # The value-level veto blocks "pension" texts, but the rule states the exception.
+    assert resolve("pensioner, 15 hours a week", _RULE_BLOCK, _RULE_VALUES) == "Job"
+    assert resolve("pensioner, employed", _RULE_BLOCK, _RULE_VALUES) == "Job"
+    # No work cue: the rule misses and the veto still holds.
+    assert resolve("pensioner", _RULE_BLOCK, _RULE_VALUES) == "NotApplicable"
+    # The value's own contains is untouched.
+    assert resolve("employed", _RULE_BLOCK, _RULE_VALUES) == "Job"
+
+
+def test_all_of_rule_honours_only_its_own_none_of():
+    assert resolve("pensioner, former employed", _RULE_BLOCK, _RULE_VALUES) == "NotApplicable"
+    # The rule's veto does not reach the value's own contains tier.
+    assert resolve("former employed", _RULE_BLOCK, _RULE_VALUES) == "Job"
+
+
+def test_all_of_rule_competes_in_the_all_of_tier():
+    res = mapping_engine.resolve_traced(
+        "pensioner, 15 hours", _RULE_BLOCK, _RULE_VALUES, matching=SUBSTRING_MATCHING, priority=_RULE_VALUES
+    )
+    assert (res.tier, res.value, res.token) == ("all_of", "Job", "rule:pension+hours")
+    # An equals hit on another value still wins (earlier tier).
+    block = {**_RULE_BLOCK, "NotApplicable": {"equals": ["pension 15 hours"], "contains": ["pension"]}}
+    assert resolve("pension 15 hours", block, _RULE_VALUES) == "NotApplicable"
+
+
+def test_all_of_rules_validation():
+    validate_rules(_RULE_BLOCK, _RULE_VALUES, "t")
+    with pytest.raises(MappingConfigError, match="must declare 'all_of'"):
+        validate_rules({"Job": {"all_of_rules": [{"none_of": ["x"]}]}}, ["Job"], "t")
+    with pytest.raises(MappingConfigError, match="must declare 'all_of'"):
+        validate_rules({"Job": {"all_of_rules": [{"all_of": [["a"]], "contains": ["x"]}]}}, ["Job"], "t")
+    with pytest.raises(MappingConfigError, match="non-empty list"):
+        validate_rules({"Job": {"all_of_rules": []}}, ["Job"], "t")
+    with pytest.raises(MappingConfigError, match="non-empty list"):
+        validate_rules({"Job": {"all_of_rules": [{"all_of": [[]]}]}}, ["Job"], "t")
+
+
 # --- normalization primitive ----------------------------------------------
 
 def test_normalize_lowercases_and_collapses_underscores_but_keeps_hyphens():
