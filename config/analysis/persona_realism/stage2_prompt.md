@@ -16,6 +16,14 @@ is wage from work; (2) mapping_error only when correcting that one attribute's
 coding would remove the clash; (3) an industry named next to a non-working status is
 ambiguous unless the industry answer itself says current work; (4) an age-based
 raw_impossible names the listed legal fact it uses.
+
+Version v2 (2026-10-07): three verified legal facts (sources checked against riksdagen.se,
+forsakringskassan.se and pensionsmyndigheten.se): (1) new "Housing allowance
+eligibility" (bostadsbidrag, SFB ch. 96); (2) new "Housing supplement eligibility"
+(bostadstillägg, SFB ch. 101); (3) "Pension income without minimum age" narrowed:
+pension insurance and IPS old-age payouts cannot start before 55 (IL ch. 58 §§ 10, 24).
+Plus one rule: an S3 resting on a legal or age rule that is NOT listed is not decided
+here -- it is ambiguous, with legal_fact "unlisted: <rule>".
 -->
 <!-- SYSTEM -->
 You audit verdicts of an automatic demographic realism judge (stage 1).
@@ -60,8 +68,28 @@ fact has a title; cite it by that exact title:
   - "Public old-age pension minimum age": The public old-age pension (allmän pension) can be drawn at the earliest from
     63 in 2023-2025 and from 64 from 2026; guarantee pension (garantipension) only
     from the riktålder (66 in 2023-2025, 67 from 2026).
-  - "Pension income without minimum age": Survivor's pension (e.g. widow's pension, child pension) and private savings
-    have no minimum age; pension income at a young age is unusual, not impossible.
+  - "Pension income without minimum age": Survivor's pension (e.g. widow's pension, child pension) and
+    disability-linked pension (sickness/activity compensation, the sickness pension of
+    an insurance) have no minimum age. Old-age payouts from occupational or private
+    pension insurance and from an individual pension savings account (IPS) cannot
+    start before age 55, except when the person has sickness compensation (or, rarely,
+    with a special exemption from the Tax Agency) (Inkomstskattelagen ch. 58 §§ 10, 24).
+    Ordinary private savings are not pension income.
+  - "Housing allowance eligibility": Housing allowance (bostadsbidrag) is paid only to
+    (a) a household with children: a person who has custody of a child living with
+    them, permanently or alternately, or a child living with them part of the time
+    because of custody or contact, or a foster child placed by an authority; or (b) a
+    young person without children aged 18 to 28 (it cannot be paid if the person or
+    their spouse/partner has turned 29). A person aged 29 or older with no child living
+    with them, even part of the time, cannot receive it (Socialförsäkringsbalken
+    SFS 2010:110, ch. 96 §§ 4-11).
+  - "Housing supplement eligibility": Housing supplement (bostadstillägg) is paid only
+    to a person who receives sickness or activity compensation, or the WHOLE public
+    old-age pension (all of the income and premium pension) from the age it can be
+    paid: the riktålder, which was 66 in 2023-2025 and is 67 from 2026; an old-age
+    pension taken before that age gives no right to it. (An equivalent EEA pension
+    counts the same way; a widow's pension under the old rules is not available to
+    anyone born 1945 or later.) (Socialförsäkringsbalken SFS 2010:110, ch. 101 §§ 3, 6.)
   - "Unemployment benefit and work": Unemployment insurance benefit (a-kassa) is paid only for hours a person is
     without work; a person working full time cannot draw it for that time. A
     part-time or hourly worker can be a registered, partially unemployed job
@@ -79,7 +107,7 @@ CLASSES (assign exactly one to each S3 issue):
     The mapped categories are a faithful reading of the raw text. When the
     impossibility rests on an age, it must rest on one of the legal facts listed
     above, named in "legal_fact"; an age limit that is not listed is not a
-    reason for raw_impossible.
+    reason for raw_impossible (see UNLISTED RULES below).
 
   label_clash — the raw answers, read together, describe a situation that really
     exists, but the categories the model chose (and the mapper faithfully coded)
@@ -108,7 +136,9 @@ CLASSES (assign exactly one to each S3 issue):
     benefit, or a misreading of a schema definition (e.g. calling a 30-year-old
     with a doctorate impossible, or a married person living alone impossible).
     Use this when the mapped pair itself is possible under the definitions and
-    legal facts above.
+    legal facts above. A rule that is merely not listed is NOT judge_error by
+    that fact alone (see UNLISTED RULES below); judge_error needs the rule to be
+    clearly wrong under the definitions or the listed facts.
 
   ambiguous — the raw text is too thin to decide between a possible and an
     impossible reading, and nothing in the other answers settles it (e.g. a
@@ -116,6 +146,16 @@ CLASSES (assign exactly one to each S3 issue):
     not work, where nothing tells whether that contract is current or past). Use
     this only when a careful
     human reader would genuinely be unable to choose.
+
+UNLISTED RULES: if a stage-1 S3 issue rests on a legal or age rule that is not one
+of the verified legal facts above (e.g. an eligibility condition or an age limit of
+some benefit or status that is not listed), do not decide whether that rule is real
+or false. Classify the issue ambiguous and set "legal_fact" to the literal string
+"unlisted: <short name of the rule stage 1 used>". This does not apply when the rule
+is clearly wrong under the schema definitions or a listed fact (e.g. a listed legal
+limit applied to a benefit it does not cover, or a contradiction with a listed fact):
+that is judge_error. It also does not apply when the issue is decided without the
+rule, by a mapping_error or by the plain raw text.
 
 TENSE OF A JOB (employment_type, industry_sector next to a non-working status):
   - If no raw answer states whether the job is current or past, do not assume
@@ -135,7 +175,9 @@ How to decide, per issue:
   2. Check each attribute's mapping in isolation. If one raw answer, read alone,
      plainly says something different from its category -> mapping_error.
   3. Otherwise check the mapped pair against the schema definitions and legal
-     facts. If it is not contradictory -> judge_error.
+     facts. If it is not contradictory -> judge_error. If the contradiction rests
+     only on a legal or age rule that is not listed -> ambiguous, with
+     "legal_fact" "unlisted: <rule>" (UNLISTED RULES).
   4. Otherwise read the raw answers together, applying TENSE OF A JOB above. Do not invent circumstances the
      text does not state, but do read ordinary words in their ordinary sense.
      If the text describes a real situation -> label_clash; if the text itself
@@ -154,7 +196,7 @@ OUTPUT — return ONE JSON object and NOTHING else (no prose, no code fence):
      "class": "<raw_impossible|label_clash|mapping_error|judge_error|ambiguous>",
      "misread_attribute": "<attribute name if class is mapping_error, else null>",
      "raw_quotes": {"<attribute>": "<exact raw answer>", "...": "..."},
-     "legal_fact": "<exact title of the listed legal fact an age-based raw_impossible rests on, else null>",
+     "legal_fact": "<exact title of the listed legal fact an age-based raw_impossible rests on; \"unlisted: <rule>\" for an issue left ambiguous under UNLISTED RULES; else null>",
      "reason": "<one sentence>"}
   ],
   "persona_class": "<class>"

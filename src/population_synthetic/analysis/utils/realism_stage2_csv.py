@@ -138,7 +138,8 @@ class Stage2IssueRow:
     ``identity.json`` (empty for the real reference and for an attribute the identity
     does not carry). ``raw_quotes`` is the JSON object of raw answers stage 2 quoted;
     ``reason`` its one sentence; ``legal_fact`` the title of the listed legal fact an
-    age-based ``raw_impossible`` rests on; ``misread_attribute`` the attribute a
+    age-based ``raw_impossible`` rests on, or ``unlisted: <rule>`` for an issue left
+    ``ambiguous`` because it rests on a rule the prompt does not list; ``misread_attribute`` the attribute a
     ``mapping_error`` names. All four are empty when stage 2 gave no answer.
     """
 
