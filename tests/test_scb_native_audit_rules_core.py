@@ -330,6 +330,28 @@ FORMER_JOB_AND_LEAVE = [
     ("income_source", "Early retirement benefit (Förtidspension)", _SAC),
 ]
 
+# 2026-10-07: current-work wording in the attribute's own text beats a status word in the same text.
+# employment_type: a consulting business stated beside "pensionär" is a current own business (hours unstated ->
+# the Full-time band every bare self-employment word lands on); an ended business or a bare pensioner keeps
+# Not Applicable. employment_status: "hemarbetande" beside an occupation noun is working from home (Employed);
+# alone, or beside full-time wording only, it is the homemaker (Other).
+CURRENT_WORK_BEATS_STATUS = [
+    ("employment_type", "Pensionär med konsultverksamhet (flexibel timtabell)", "Self-Employed Full-time"),
+    ("employment_type", "Pensionär med konsultverksamhet, 15 timmar/vecka", "Self-Employed Short Part-time"),
+    ("employment_type", "Pensionär", _NA),
+    ("employment_type", "pensionär (eget företag, avvecklat)", _NA),
+    ("employment_type", "pensionär (konsultverksamhet avvecklad)", _NA),
+    ("employment_status", "Hemarbetande konsult", "Employed"),
+    ("employment_status", "Hemarbetande lärare", "Employed"),
+    ("employment_status", "Hemarbetande", "Other"),
+    ("employment_status", "hemarbetande", "Other"),
+    ("employment_status", "Hemmafru", "Other"),
+    ("employment_status", "Hemmaman", "Other"),
+    ("employment_status", "Hemarbetande på heltid", "Other"),
+    ("employment_status", "Hemarbetande (sköter hemmet och barnen)", "Other"),
+    ("employment_status", "Hemarbetande närstående", "Other"),
+]
+
 CASES = (
     _cases("civil_status", CIVIL_FIXED, CIVIL_FALSE_ALARMS, CIVIL_DECISIONS)
     + _cases("education_level", EDUCATION_FIXED, EDUCATION_FALSE_ALARMS, EDUCATION_DECISIONS)
@@ -339,6 +361,7 @@ CASES = (
     + _cases("income_source", INCOME_FIXED, INCOME_FALSE_ALARMS, INCOME_DECISIONS)
     + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in PIPELINE_RUN_FIXED]
     + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in FORMER_JOB_AND_LEAVE]
+    + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in CURRENT_WORK_BEATS_STATUS]
 )
 
 

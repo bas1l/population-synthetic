@@ -960,6 +960,32 @@ The pre-existing `refine_from` directive (`birth_location` re-walked from the re
 `birth_country_detail`) is also cross-attribute and is untouched by this removal; Sweden deprecates
 `birth_location`, so it does not reach the analysed axes there.
 
+### Current work beats a status word — 2026-10-07
+
+Two single-attribute errors, each fixed from the attribute's own text only:
+
+- `employment_type`: "Pensionär med konsultverksamhet (flexibel timtabell)" went to `Not Applicable`
+  on `pensionär`. `konsultverksamhet` is now a `Self-Employed Full-time` contains token; being
+  longer than `pensionär` it wins the `longest` tie-break. No hours are stated ("flexibel timtabell"
+  has no number), so it stays on the Full-time band where every bare self-employment word lands;
+  a stated number re-bands it through the facet. Ended businesses ("avvecklat") and a bare
+  "Pensionär" keep `Not Applicable`.
+- `employment_status`: "Hemarbetande konsult" went to `Other` because `hemarbetande` vetoed
+  `Employed`. The bare veto is replaced by full-time phrasings ("hemarbetande på heltid",
+  "(heltid", ", heltid"), so an occupation noun from `Employed`'s list beside it wins on BAS
+  priority; plain "hemarbetande", "hemmafru" and "hemmaman" stay `Other`.
+
+Dry run against the HEAD config (no production writes): of 21,931 Swedish `01_Raw` personas and
+5,700 capped personas, exactly the two target personas change (gpt_oss_120b
+`generate_evaluate_random_pick_v2` persona_00345, gemma4_e4b `generate_pick_v2` persona_00272),
+one attribute each, with no move into or out of `__UNMAPPED__`, so cap selection is unaffected.
+
+Open, not changed: 28 `01_Raw` personas name a pensioner beside stated paid work with no stated
+attachment ("Pensionär med deltidsarbete", "Lönearbetande pensionär (20 timmar/vecka)", "Arbete
+vid sidan av pension (12 timmar)", …) and still map to `Not Applicable`. Fixing them means
+deciding the attachment for unstated contracts and lifting the `pension` veto on the Permanent
+values, which is a rule decision, not a token miss.
+
 ## Verification
 
 - `ruff check src/` and `pytest` pass; the golden test shows `scb`, `istat`, `ssb` unchanged.

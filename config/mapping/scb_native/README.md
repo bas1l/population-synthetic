@@ -92,7 +92,10 @@ Each rule follows SCB's own definition of the category; the regression cases liv
   values, so "post-secondary education" with no length is unmapped.
 - **`employment_status`** follows the BAS hierarchy (`tie_break: ["priority"]`): a working student
   or pensioner is `Employed`; job-seeking and past-tense text leave `Employed`; förtidspension /
-  sjukersättning is `Sick Leave`, not `Retired`; homemakers and carers are `Other`.
+  sjukersättning is `Sick Leave`, not `Retired`; homemakers and carers are `Other`. "Hemarbetande"
+  is not an `Employed` veto: alone (or with full-time wording only — "hemarbetande på heltid") it is
+  the homemaker (`Other`), but beside an occupation noun from `Employed`'s own list ("Hemarbetande
+  konsult") it is work done from home and the BAS priority makes it `Employed`.
 - **`employment_type`**: fixed-term, project, probation and doctoral posts are Temporary; an own
   company, sole trader or näringsidkare is Self-Employed; negated employment and zero stated hours
   are `Not Applicable`. So is a contract the text itself says is former or ended ("former",
@@ -105,6 +108,11 @@ Each rule follows SCB's own definition of the category; the regression cases liv
   föräldraledighet", "parental leave cover", parental leave beside stated working hours, "Tidigare
   med fulltid, nu halvtidsanställd". A cue with no contract word ("Föräldraledighet", "contractor
   (past)") stays unmapped. The rule reads `employment_type`'s own text only.
+  A consulting business stated beside a pensioner word ("Pensionär med konsultverksamhet") is a
+  current own business: `konsultverksamhet` is a Self-Employed token and, being longer than
+  `pensionär`, wins the `longest` tie-break. With no stated hours it lands on `Self-Employed
+  Full-time`, the band every bare self-employment word lands on; stated hours re-band it through
+  the numeric facet. A bare "verksamhet" is not a cue ("kommunal / ideell verksamhet").
 - **`housing_tenure`** is a property of the building: `Owner-occupied` is SMAG only, so any
   apartment, BRF or rental word vetoes it and an owned flat is a bostadsrätt. Ägarlägenhet (OB)
   is not fetched and is unmapped; bostadsbolag is a landlord (`Rental`). A house-or-flat
