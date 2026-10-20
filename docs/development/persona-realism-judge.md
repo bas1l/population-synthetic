@@ -750,6 +750,22 @@ raises the same way on every path that may write (`--rewrite-artifacts` may stil
 needs no check of its own: it classifies from the stage-1 cache's snapshot, and the stage-1 gate has
 already matched that snapshot to the mapped file before stage 2 runs.
 
+## The selection, not the folder
+
+A combination's folder can hold cache files of personas the current cap no longer selects: a
+re-cap of `population_cap` draws a different persona set, and nothing deletes the files the old
+set left. So no reader takes its persona set from the folder. The roster is the set stage 1
+selects from the capped mapped file (`population_cap/_mapped/{combo}.json`, through
+`resolve_mapped_dir`), under the one rule in `persona_realism/selection.py`, and every consumer
+reads that set and nothing else: stage 2 classifies the roster's S3 rounds only (a persona outside
+it raises), the reduction and the `{combo}_personas.csv` / `_clashes.csv` / `_stage2.csv` writers
+read only the roster's caches, both costs sum only the roster's telemetry, and the stage-2 prompt
+stamp reads only the roster's stage-2 caches. `realism_ranking`'s round-cap path re-derives the same
+roster from the same mapped file. A leftover file is ignored and kept -- `--force` clears the
+roster's files only -- and each combination logs one INFO line with the count it ignored. A selected
+persona with no cache stays a failed persona (`n_failed`), as before; under a round cap a cache
+count that disagrees with the report's `n_personas` / `n_failed` raises.
+
 ## Reliability is self-consistency, not validity
 
 The ICC / Krippendorff's α metric measures the judge's agreement **with itself** across the N rounds

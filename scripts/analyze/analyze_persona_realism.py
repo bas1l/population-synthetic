@@ -92,6 +92,7 @@ from population_synthetic.analysis.model_ranking.loader import scheme_attributes
 from population_synthetic.analysis.persona_realism.artifacts import (
     ComboArtifacts,
     load_realism_hard_rules,
+    log_leftover_persona_files,
     write_combo_artifacts,
 )
 from population_synthetic.analysis.persona_realism.config import JudgeConfig
@@ -478,7 +479,13 @@ def _run_one_combo(
             combo.label, summary.failed,
         )
 
-    if not has_cached_verdicts(out_dir):
+    # The roster is the persona set stage 1 selected from the capped mapped population.
+    # Every reader below is bounded by it: a leftover cache file of a persona an earlier
+    # cap selected is ignored (and kept), never classified, reduced or costed.
+    selected_ids = list(summary.selected_ids)
+    log_leftover_persona_files(out_dir, combo.label, selected_ids, logger=logger)
+
+    if not has_cached_verdicts(out_dir, selected_ids):
         # Nothing was judged and nothing is cached, so there is nothing to reduce. Writing
         # here would publish a report claiming n_personas=0 -- which downstream reads as a
         # judged competitor holding no data, not as a unit still waiting to be judged, and
@@ -492,16 +499,18 @@ def _run_one_combo(
         )
         return None
 
-    # Stage 2 (reporting-only): classify every not-yet-classified S3 round. Skipped on the
+    # Stage 2 (reporting-only): classify every not-yet-classified S3 round of the selected
+    # personas (the roster, not the folder). Skipped on the
     # zero-cost --rewrite-artifacts path (it would call the judge); the artifacts then mark
     # any S3 clash without a cached classification as unclassified.
     raw_reader = _raw_identity_reader(combo, output_base) if cfg.stage2_enabled else None
     stage2_classified = 0
     if cfg.stage2_enabled and not (rewrite_artifacts and not force):
-        present = [lp for lp in load_combo_verdicts(out_dir).values() if lp is not None]
+        loaded = load_combo_verdicts(out_dir, expected_ids=selected_ids)
+        present = [lp for lp in loaded.values() if lp is not None]
         s2 = run_combo_stage2(
             present, combo.label, analyzed_attrs, out_dir, cfg,
-            raw_identity=raw_reader, force=force, logger=logger,
+            selected_ids=selected_ids, raw_identity=raw_reader, force=force, logger=logger,
         )
         stage2_classified = s2.classified
         if s2.failed:
@@ -523,7 +532,7 @@ def _run_one_combo(
         cfg=cfg, dpi=dpi, force=rewrite,
         country=combo.country, model=combo.model, strategy=combo.strategy,
         is_real_reference=combo.is_real_reference,
-        expected_ids=list(summary.selected_ids) or None,
+        expected_ids=selected_ids,
         hard_rules=hard_rules, pricing=pricing, raw_identity=raw_reader, logger=logger,
     )
 

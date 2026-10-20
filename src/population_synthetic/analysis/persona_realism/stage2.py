@@ -295,12 +295,21 @@ def run_combo_stage2(
     out_dir: str | Path,
     cfg: JudgeConfig,
     *,
+    selected_ids: Sequence[str],
     raw_identity: Callable[[str], dict[str, Any]] | None,
     force: bool = False,
     client_factory: Callable[[], Any] | None = None,
     logger: logging.Logger | None = None,
 ) -> Stage2Summary:
     """Classify every not-yet-classified S3 round of *present* (the loaded stage-1 cache).
+
+    *selected_ids* is the roster stage 1 judged
+    (:func:`~population_synthetic.analysis.persona_realism.selection.selected_persona_ids`
+    over the capped mapped population), and *present* must be the selected personas'
+    loaded caches (``load_combo_verdicts(..., expected_ids=selected_ids)``): stage 2
+    classifies the analysed sample only, never a leftover cache file of a persona an
+    earlier cap selected. A persona of *present* outside the roster raises. *force*
+    clears the stage-2 files of the selected personas only; a leftover's are kept.
 
     *raw_identity* maps a persona id to its raw ``identity.json`` dict; ``None`` marks a
     combination without free text (the real reference): nothing is called and every S3
@@ -316,6 +325,14 @@ def run_combo_stage2(
     out_dir = Path(out_dir)
     if not cfg.stage2_enabled:
         raise ValueError("run_combo_stage2 called while judge.yaml stage2.enabled is false")
+    roster = set(selected_ids)
+    outside = sorted(lp.persona_id for lp in present if lp.persona_id not in roster)
+    if outside:
+        raise ValueError(
+            f"combo {combo_label!r}: stage 2 was handed {len(outside)} persona(s) outside the "
+            f"selected roster ({outside[:5]}); load the stage-1 cache with the roster "
+            "(load_combo_verdicts(..., expected_ids=selected_ids)), never by globbing the folder."
+        )
     s3_by_persona = {lp.persona_id: (lp, s3_rounds(lp)) for lp in present}
     s3_by_persona = {pid: v for pid, v in s3_by_persona.items() if v[1]}
     n_rounds = sum(len(r) for _, r in s3_by_persona.values())
@@ -445,11 +462,15 @@ def run_combo_stage2(
         return len(new), failed
 
     if force and s2_dir.is_dir():
-        # --force re-judged stage 1 from scratch, so every stage-2 file of this combination
-        # (including those of personas that no longer hold an S3 clash) is stale: the cost
-        # sum globs this directory, and an old call left here would be billed again.
-        for stale in s2_dir.glob("persona_*"):
-            stale.unlink()
+        # --force re-judged stage 1 from scratch, so every stage-2 file of a selected
+        # persona (including those that no longer hold an S3 clash) is stale: the cost
+        # sum reads the selected personas' telemetry, and an old call left here would be
+        # billed again. A leftover file of a persona outside the roster is not ours to
+        # delete; every reader ignores it.
+        for pid in sorted(roster):
+            for stale in (s2_dir / f"{pid}.json", s2_dir / f"{pid}.jsonl"):
+                if stale.is_file():
+                    stale.unlink()
 
     classified = failed = 0
     try:

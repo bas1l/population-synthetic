@@ -130,6 +130,11 @@ def _judge(base, label, *, model, strategy, n_impossible, is_real=False, offset=
     summary = run_combo_judgements(
         population, label, attrs, out_dir, cfg, client_factory=_stub_factory(),
     )
+    # The capped mapped population the judge drew from: the round cap re-derives the
+    # judged persona set from it, so it sits where population_cap would have put it.
+    mapped = analysis_output_dir("population_cap", base) / MAPPED_SUBDIR
+    mapped.mkdir(parents=True, exist_ok=True)
+    (mapped / f"{label}.json").write_text(json.dumps({"individuals": population}), encoding="utf-8")
     return A.write_combo_artifacts(
         out_dir, label, cfg=cfg, dpi=80, force=True,
         country=_COUNTRY, model=model, strategy=strategy, is_real_reference=is_real,

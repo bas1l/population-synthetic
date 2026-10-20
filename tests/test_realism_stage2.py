@@ -28,6 +28,7 @@ from population_synthetic.analysis.utils.realism_stage2_csv import (
 _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
 _ORDER = ("raw_impossible", "label_clash", "ambiguous", "mapping_error", "judge_error")
 _ATTRS = ["age_group", "employment_status", "employment_type", "income_source"]
+_SEL = ["persona_00001"]  # the selected roster the fixtures persona belongs to
 
 
 # --------------------------------------------------------------------------- #
@@ -141,14 +142,14 @@ def _answer(_user):
 def test_run_writes_cache_resumes_and_force_reclassifies(tmp_path, cfg):
     client = _StubClient(_answer)
     persona = _persona()
-    s = stage2.run_combo_stage2([persona], "combo", _ATTRS, tmp_path, cfg, raw_identity=_raw,
+    s = stage2.run_combo_stage2([persona], "combo", _ATTRS, tmp_path, cfg, selected_ids=_SEL, raw_identity=_raw,
                                 client_factory=lambda: client)
     assert (s.classified, s.skipped, s.failed, client.calls) == (1, 0, 0, 1)
     cache = json.loads((tmp_path / "stage2" / "persona_00001.json").read_text(encoding="utf-8"))
     assert cache["rounds"][0]["issues"][0]["class"] == "mapping_error"
     assert (tmp_path / "stage2" / "persona_00001.jsonl").is_file()
     # resume: nothing to do
-    s = stage2.run_combo_stage2([persona], "combo", _ATTRS, tmp_path, cfg, raw_identity=_raw,
+    s = stage2.run_combo_stage2([persona], "combo", _ATTRS, tmp_path, cfg, selected_ids=_SEL, raw_identity=_raw,
                                 client_factory=lambda: client)
     assert (s.classified, s.skipped, client.calls) == (0, 1, 1)
     # the rows carry the cached class and the raw answers read from identity
@@ -156,24 +157,24 @@ def test_run_writes_cache_resumes_and_force_reclassifies(tmp_path, cfg):
     assert [(r.stage2_class, r.misread_attribute, r.raw_b) for r in rows] == [
         ("mapping_error", "employment_type", "former permanent full-time")]
     # force classifies again from scratch
-    s = stage2.run_combo_stage2([persona], "combo", _ATTRS, tmp_path, cfg, raw_identity=_raw,
+    s = stage2.run_combo_stage2([persona], "combo", _ATTRS, tmp_path, cfg, selected_ids=_SEL, raw_identity=_raw,
                                 force=True, client_factory=lambda: client)
     assert (s.classified, client.calls) == (1, 2)
 
 
 def test_a_changed_stage1_verdict_is_refused_on_resume(tmp_path, cfg):
     client = _StubClient(_answer)
-    stage2.run_combo_stage2([_persona()], "combo", _ATTRS, tmp_path, cfg, raw_identity=_raw,
+    stage2.run_combo_stage2([_persona()], "combo", _ATTRS, tmp_path, cfg, selected_ids=_SEL, raw_identity=_raw,
                             client_factory=lambda: client)
     changed = _persona(explanation="a different stage-1 verdict")
     with pytest.raises(ValueError, match="--force"):
-        stage2.run_combo_stage2([changed], "combo", _ATTRS, tmp_path, cfg, raw_identity=_raw,
+        stage2.run_combo_stage2([changed], "combo", _ATTRS, tmp_path, cfg, selected_ids=_SEL, raw_identity=_raw,
                                 client_factory=lambda: client)
 
 
 def test_a_failed_call_stays_uncached_and_reads_as_unclassified(tmp_path, cfg):
     client = _StubClient(lambda _u: "not json")
-    s = stage2.run_combo_stage2([_persona()], "combo", _ATTRS, tmp_path, cfg, raw_identity=_raw,
+    s = stage2.run_combo_stage2([_persona()], "combo", _ATTRS, tmp_path, cfg, selected_ids=_SEL, raw_identity=_raw,
                                 client_factory=lambda: client)
     assert (s.classified, s.failed, client.calls) == (0, 1, 3)
     assert not (tmp_path / "stage2" / "persona_00001.json").exists()
@@ -183,7 +184,7 @@ def test_a_failed_call_stays_uncached_and_reads_as_unclassified(tmp_path, cfg):
 
 def test_no_free_text_makes_no_call_and_is_not_applicable(tmp_path, cfg):
     client = _StubClient(_answer)
-    s = stage2.run_combo_stage2([_persona()], "real", _ATTRS, tmp_path, cfg, raw_identity=None,
+    s = stage2.run_combo_stage2([_persona()], "real", _ATTRS, tmp_path, cfg, selected_ids=_SEL, raw_identity=None,
                                 client_factory=lambda: client)
     assert (s.not_applicable, client.calls) == (1, 0)
     rows = stage2.stage2_issue_rows([_persona()], tmp_path, raw_identity=None, enabled=True)
@@ -258,3 +259,34 @@ def test_config_order_disagreeing_with_the_prompt_raises(tmp_path):
                                               "mapping_error", "judge_error"]
     with pytest.raises(ValueError, match="does not state the configured persona-class order"):
         JudgeConfig.load(_copy_config(tmp_path, swap))
+
+
+# --------------------------------------------------------------------------- #
+# the roster: stage 2 classifies the capped selection only                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_a_persona_outside_the_roster_is_refused(tmp_path, cfg):
+    """Stage 2 is handed the selected personas only; a leftover reaching it is a caller bug."""
+    client = _StubClient(_answer)
+    with pytest.raises(ValueError, match="outside the selected roster"):
+        stage2.run_combo_stage2([_persona(), _persona("persona_00099")], "combo", _ATTRS, tmp_path, cfg,
+                                selected_ids=_SEL, raw_identity=_raw, client_factory=lambda: client)
+    assert client.calls == 0
+
+
+def test_force_clears_the_selected_personas_files_only(tmp_path, cfg):
+    """--force re-classifies the selection; a leftover's stage-2 files are kept, never deleted."""
+    client = _StubClient(_answer)
+    s2_dir = tmp_path / "stage2"
+    s2_dir.mkdir()
+    leftover = {s2_dir / "persona_00099.json": '{"stage2_prompt_sha256": "other", "rounds": []}',
+                s2_dir / "persona_00099.jsonl": ""}
+    for path, text in leftover.items():
+        path.write_text(text, encoding="utf-8")
+    stage2.run_combo_stage2([_persona()], "combo", _ATTRS, tmp_path, cfg, selected_ids=_SEL,
+                            raw_identity=_raw, client_factory=lambda: client)
+    s = stage2.run_combo_stage2([_persona()], "combo", _ATTRS, tmp_path, cfg, selected_ids=_SEL,
+                                raw_identity=_raw, force=True, client_factory=lambda: client)
+    assert (s.classified, client.calls) == (1, 2)
+    assert {path: path.read_text(encoding="utf-8") for path in leftover} == leftover

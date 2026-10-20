@@ -460,6 +460,7 @@ def _summary(label: str, out_dir, *, written: int = 0, topped_up: int = 0, skipp
         requested=written + topped_up, written=written, topped_up=topped_up,
         skipped=skipped, failed=0, total_rounds=written + topped_up,
         successful_rounds=written + topped_up, failed_rounds=0, passes=1, out_dir=out_dir,
+        selected_ids=tuple(f"persona_{i:05d}" for i in range(written + topped_up + skipped)),
     )
 
 
@@ -585,7 +586,8 @@ def test_cli_combo_dispatch_runs_stage2_and_passes_the_raw_reader(tmp_path, monk
                     plan_only=False, sample_size_override=None, logger=None):
         return _summary(combo_label, o, skipped=1)
 
-    def _spy_stage2(present, combo_label, analyzed_attrs, o, c, *, raw_identity, force=False, logger=None):
+    def _spy_stage2(present, combo_label, analyzed_attrs, o, c, *, selected_ids, raw_identity,
+                    force=False, logger=None):
         calls["stage2"] = calls.get("stage2", 0) + 1
         calls["raw"] = raw_identity("persona_00000")
         from population_synthetic.analysis.persona_realism.stage2 import Stage2Summary
@@ -602,8 +604,8 @@ def test_cli_combo_dispatch_runs_stage2_and_passes_the_raw_reader(tmp_path, monk
     monkeypatch.setattr(driver, "run_combo_judgements", _spy_runner)
     monkeypatch.setattr(driver, "run_combo_stage2", _spy_stage2)
     monkeypatch.setattr(driver, "write_combo_artifacts", _spy_artifacts)
-    monkeypatch.setattr(driver, "has_cached_verdicts", lambda _d: True)
-    monkeypatch.setattr(driver, "load_combo_verdicts", lambda _d: {})
+    monkeypatch.setattr(driver, "has_cached_verdicts", lambda _d, _ids=None: True)
+    monkeypatch.setattr(driver, "load_combo_verdicts", lambda _d, expected_ids=None: {})
 
     driver._run_one_combo(
         combo=_combo_of(driver, label), individuals=[{"a": 1}], analyzed_attrs=attrs,
@@ -1109,3 +1111,108 @@ def test_has_cached_verdicts_ignores_the_combo_report(tmp_path):
     assert has_cached_verdicts(combo_dir) is False   # the report is not a cache file
     (combo_dir / "persona_00000.json").write_text("{}", encoding="utf-8")
     assert has_cached_verdicts(combo_dir) is True
+    # A cache of a persona outside the roster never makes the combination look judged.
+    assert has_cached_verdicts(combo_dir, ["persona_00001"]) is False
+    assert has_cached_verdicts(combo_dir, ["persona_00000"]) is True
+
+
+# --------------------------------------------------------------------------- #
+# leftover caches of personas outside the current capped selection             #
+# --------------------------------------------------------------------------- #
+
+
+class _Stage2Stub:
+    """Classifies the one S3 pair the stage-1 stub emits; counts the personas it was shown."""
+
+    def __init__(self, seen: list[str]) -> None:
+        self._seen = seen
+        self.last_metadata: dict[str, object] = {}
+
+    def generate_content(self, user: str, *, model: str, system_instruction: str) -> str:
+        self._seen.append(user)
+        self.last_metadata = {
+            "provider": "stub", "model": model, "prompt_tokens": 10, "completion_tokens": 5,
+            "total_tokens": 15, "elapsed_ms": 1, "context_isolation": JUDGE_CONTEXT_ISOLATION,
+        }
+        return json.dumps({
+            "issues": [{"attributes": ["age_group", "education_level"], "class": "label_clash",
+                        "reason": "stub", "raw_quotes": {}}],
+            "persona_class": "label_clash",
+        })
+
+
+def _judge_through_driver(driver, monkeypatch, base, label, population, cfg, seen, **kwargs):
+    """Run the CLI's ``_run_one_combo`` with both judge stages on stub clients."""
+    from population_synthetic.analysis.persona_realism import stage2 as stage2_mod
+
+    def _runner(*args, **kw):
+        return run_combo_judgements(*args, client_factory=_stub_factory(), **kw)
+
+    def _stage2(*args, **kw):
+        return stage2_mod.run_combo_stage2(*args, client_factory=lambda: _Stage2Stub(seen), **kw)
+
+    monkeypatch.setattr(driver, "run_combo_judgements", _runner)
+    monkeypatch.setattr(driver, "run_combo_stage2", _stage2)
+    for record in population:   # the population_cap mirror holds each capped persona's raw answers
+        persona_dir = base / "03_Analysis" / "population_cap" / label / record["id"]
+        persona_dir.mkdir(parents=True, exist_ok=True)
+        (persona_dir / "identity.json").write_text(json.dumps({"age": 17}), encoding="utf-8")
+    out_dir = base / "03_Analysis" / "persona_realism" / "swedish" / label
+    driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=population,
+        analyzed_attrs=scheme_attributes("swedish"), out_dir=out_dir, cfg=cfg, dpi=60,
+        hard_rules=(), pricing=_PRICING, output_base=base, **kwargs,
+    )
+    return out_dir
+
+
+def test_leftover_caches_outside_the_selection_reach_no_output(tmp_path, monkeypatch, caplog):
+    """A re-cap leaves the cache files of personas it no longer selects in the folder.
+
+    The leftover here is an *impossible* persona judged under an earlier cap (stage-1
+    cache + telemetry) whose S3 clash stage 2 never classified, plus a stage-2 cache
+    written under another stage-2 prompt. Read from the folder, it would be sent to
+    stage 2 (whose raw-answer read then fails: the mirror no longer holds it), counted
+    in the impossibility rate, billed in both costs, and refused as a mixed stage-2
+    prompt. Read from the roster, the combination's artifacts are byte-identical to a
+    run on a folder that never held it -- and the leftover is kept on disk.
+    """
+    driver = _load_driver()
+    cfg = dataclasses.replace(_cfg(), stage2_enabled=True)
+    attrs = scheme_attributes("swedish")
+    label = "swedish_all_pick_claude_haiku"
+    selection = _synthetic_population(attrs)
+    leftover = _persona(attrs, attrs[0], "IMPOSSIBLE", "persona_00099")
+
+    clean_seen: list[str] = []
+    clean_dir = _judge_through_driver(
+        driver, monkeypatch, tmp_path / "clean", label, selection, cfg, clean_seen, force=False,
+    )
+
+    # The earlier cap judged the leftover (stage 1 only); the re-cap dropped it.
+    left_base = tmp_path / "left"
+    left_dir = left_base / "03_Analysis" / "persona_realism" / "swedish" / label
+    run_combo_judgements([leftover], label, attrs, left_dir, cfg, client_factory=_stub_factory())
+    (left_dir / "stage2").mkdir()
+    (left_dir / "stage2" / "persona_00099.json").write_text(
+        json.dumps({"persona_id": "persona_00099", "stage2_prompt_sha256": "an older prompt", "rounds": []}),
+        encoding="utf-8",
+    )
+    planted = {path: path.read_bytes() for path in left_dir.rglob("persona_00099*")}
+    assert len(planted) == 3   # verdict cache, its telemetry, a stage-2 cache
+
+    left_seen: list[str] = []
+    with caplog.at_level("INFO"):
+        _judge_through_driver(driver, monkeypatch, left_base, label, selection, cfg, left_seen, force=False)
+
+    # Stage 2 classified exactly the selected S3 rounds, no more.
+    assert len(left_seen) == len(clean_seen) == cfg.n_rounds
+    assert "ignoring 3 leftover cache file(s) of 1 persona(s) outside the 4 selected" in caplog.text
+    # The selected personas' artifacts are unchanged by the leftover's presence.
+    for name in (f"{label}.json", f"{label}.csv", f"{label}_personas.csv", f"{label}_clashes.csv",
+                 f"{label}_clash_explanations.csv", f"{label}_stage2.csv", f"{label}_stage2_personas.csv"):
+        produced = (left_dir / name).read_text(encoding="utf-8")
+        assert produced == (clean_dir / name).read_text(encoding="utf-8"), name
+        assert "persona_00099" not in produced, name
+    # ... and the leftover itself was neither rewritten nor deleted.
+    assert {path: path.read_bytes() for path in left_dir.rglob("persona_00099*")} == planted

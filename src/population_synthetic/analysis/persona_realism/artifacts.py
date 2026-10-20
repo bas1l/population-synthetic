@@ -42,7 +42,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from population_synthetic.analysis.generation_metadata.cost import persona_cost
 from population_synthetic.analysis.generation_metadata.interaction_parser import parse_interactions
@@ -113,7 +113,9 @@ __all__ = [
     "ComboArtifacts",
     "combo_clash_rows",
     "load_combo_realism",
+    "leftover_persona_files",
     "load_realism_hard_rules",
+    "log_leftover_persona_files",
     "persona_rows",
     "write_combo_artifacts",
 ]
@@ -244,14 +246,15 @@ def _provenance_meta(cfg: JudgeConfig) -> dict[str, Any]:
 STAGE2_REPORT_CLASSES: tuple[str, ...] = (*STAGE2_CLASSES, UNCLASSIFIED, NOT_APPLICABLE)
 
 
-def _cache_stage2_prompt(out_dir: Path, combo_label: str) -> str | None:
+def _cache_stage2_prompt(out_dir: Path, combo_label: str, persona_ids: set[str] | None = None) -> str | None:
     """The single stage-2 prompt hash of a combination's stage-2 caches (``None`` if none; mixed raises).
 
     Read from the caches, like the stage-1 stamps, so a ``--rewrite-artifacts`` stamps the
-    prompt that actually classified them.
+    prompt that actually classified them. With *persona_ids* (the roster) only the
+    selected personas' caches are read; a leftover is ignored.
     """
     hashes = set()
-    for path in sorted((out_dir / STAGE2_SUBDIR).glob("persona_[0-9]*.json")):
+    for path in _persona_files(out_dir / STAGE2_SUBDIR, "persona_[0-9]*.json", persona_ids):
         hashes.add(json.loads(path.read_text(encoding="utf-8")).get("stage2_prompt_sha256"))
     if len(hashes) > 1:
         raise ValueError(
@@ -259,6 +262,61 @@ def _cache_stage2_prompt(out_dir: Path, combo_label: str) -> str | None:
             f"{sorted(hashes, key=str)}; re-run with --force so every persona comes from one prompt."
         )
     return next(iter(hashes)) if hashes else None
+
+
+def _persona_id_of(path: Path) -> str:
+    """The persona id a ``persona_XXXXX.json``/``.jsonl`` (or ``.tmp``) file belongs to."""
+    return path.name.split(".", 1)[0]
+
+
+def _persona_files(directory: Path, pattern: str, persona_ids: set[str] | None) -> list[Path]:
+    """The *pattern* files of *directory*, restricted to *persona_ids* when given (sorted).
+
+    The one place a per-persona file set is read from a folder. ``None`` keeps every
+    file (a roster-less call); with a roster, a leftover file of a persona outside it is
+    dropped, so it can reach no cost, count or provenance stamp.
+    """
+    if not directory.is_dir():
+        return []
+    files = sorted(directory.glob(pattern))
+    if persona_ids is None:
+        return files
+    return [path for path in files if _persona_id_of(path) in persona_ids]
+
+
+def leftover_persona_files(combo_dir: str | Path, selected_ids: Sequence[str]) -> list[Path]:
+    """Every per-persona file under *combo_dir* whose persona is outside *selected_ids*.
+
+    Covers the verdict cache and telemetry at the combo root and the stage-2 cache and
+    telemetry under ``stage2/``. These are leftovers of an earlier cap (a re-cap draws a
+    different persona set): every reader ignores them and nothing deletes them.
+    """
+    combo_dir = Path(combo_dir)
+    roster = set(selected_ids)
+    leftovers: list[Path] = []
+    for directory in (combo_dir, combo_dir / STAGE2_SUBDIR):
+        if directory.is_dir():
+            leftovers.extend(
+                path for path in sorted(directory.glob("persona_*"))
+                if path.is_file() and _persona_id_of(path) not in roster
+            )
+    return leftovers
+
+
+def log_leftover_persona_files(
+    combo_dir: str | Path,
+    combo_label: str,
+    selected_ids: Sequence[str],
+    logger: logging.Logger | None = None,
+) -> int:
+    """Log one INFO line with the number of ignored leftover files; return that number."""
+    leftovers = leftover_persona_files(combo_dir, selected_ids)
+    n_personas = len({_persona_id_of(path) for path in leftovers})
+    (logger or _LOGGER).info(
+        "combo %s: ignoring %d leftover cache file(s) of %d persona(s) outside the %d selected "
+        "(kept on disk, read by nothing)", combo_label, len(leftovers), n_personas, len(set(selected_ids)),
+    )
+    return len(leftovers)
 
 
 def _pricing_meta(pricing: PricingTable) -> dict[str, Any]:
@@ -293,8 +351,12 @@ def _combo_cost(
     judge_model: str,
     pricing: PricingTable,
     n_cached_personas: int,
+    persona_ids: set[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Aggregate a combo's judge-call cost from the per-persona ``persona_*.jsonl`` logs.
+
+    With *persona_ids* (the roster) only the selected personas' logs are summed: a
+    leftover log of a persona an earlier cap selected is not part of this sample's cost.
 
     Each ``<out_dir>/persona_XXXXX.jsonl`` is exactly one persona's telemetry
     (append-accumulated across resumed/top-up passes), so the combo cost is the sum
@@ -316,7 +378,7 @@ def _combo_cost(
         "total_personas": n_cached_personas,
         "status": "none",
     }
-    jsonl_files = sorted(out_dir.glob("persona_*.jsonl"))
+    jsonl_files = _persona_files(out_dir, "persona_*.jsonl", persona_ids)
     if not jsonl_files:
         cost = {
             "input_tokens": None, "output_tokens": None, "total_tokens": None,
@@ -613,7 +675,10 @@ def write_combo_artifacts(
         is_real_reference: whether this combination is the ``real_{country}``
             competitor. It is a *label only*: the real competitor's artifacts are
             computed exactly like any other combination's.
-        expected_ids: the selected persona roster (marks absent personas failed).
+        expected_ids: the selected persona roster (marks absent personas failed). Only
+            these personas' files are read -- verdict caches, telemetry, stage-2 caches --
+            so a leftover file of a persona outside it reaches no output. ``None`` reads
+            every file in the folder (roster-less callers only).
         hard_rules: pre-loaded hard rules; loaded from config when ``None``.
         pricing: pre-loaded pricing table; the default table is loaded when ``None``.
         provenance: pre-built provenance meta; built from *cfg* when ``None``.
@@ -637,13 +702,16 @@ def write_combo_artifacts(
     tail_threshold = float(cfg.reliability_value("tail_threshold"))
 
     combo, present = load_combo_realism(out_dir, combo_label, expected_ids=expected_ids)
+    # The roster bounds every per-persona file read below (cost logs, stage-2 caches), so a
+    # leftover file of a persona outside the selection reaches no output.
+    roster = set(expected_ids) if expected_ids is not None else None
     # The judge regime is a property of the caches, so it is stamped from them (and a
     # combination mixing regimes is refused) -- whatever provenance the caller passed.
     provenance = {
         **provenance,
         "context_isolation": _cache_context_isolation(present, combo_label),
         **_cache_prompt_identity(present, combo_label),
-        "stage2_prompt_sha256": _cache_stage2_prompt(out_dir, combo_label),
+        "stage2_prompt_sha256": _cache_stage2_prompt(out_dir, combo_label, roster),
     }
     stats = compute_realism_stats(
         combo,
@@ -652,9 +720,10 @@ def write_combo_artifacts(
         tail_threshold=tail_threshold,
     )
 
-    cost, cost_coverage = _combo_cost(out_dir, cfg.judge_model, pricing, combo.n_personas)
+    cost, cost_coverage = _combo_cost(out_dir, cfg.judge_model, pricing, combo.n_personas, roster)
     stage2_block, s2_issue_rows, s2_persona_rows = _stage2_block(
         present, out_dir, combo_label, cfg=cfg, pricing=pricing, raw_identity=raw_identity,
+        roster=roster,
     )
 
     validation: dict[str, Any] | None = None
@@ -798,6 +867,7 @@ def _stage2_block(
     cfg: JudgeConfig,
     pricing: PricingTable,
     raw_identity: Any,
+    roster: set[str] | None = None,
 ) -> tuple[dict[str, Any], list[Any], list[Any]]:
     """The reporting-only stage-2 block + its two row sets for one combination.
 
@@ -821,8 +891,8 @@ def _stage2_block(
             "has nothing to classify -- the verdict cache contradicts the can_exist <=> S3 contract."
         )
     s2_dir = out_dir / STAGE2_SUBDIR
-    n_cached = len(list(s2_dir.glob("persona_[0-9]*.json"))) if s2_dir.is_dir() else 0
-    cost, coverage = _combo_cost(s2_dir, cfg.judge_model, pricing, n_cached)
+    n_cached = len(_persona_files(s2_dir, "persona_[0-9]*.json", roster))
+    cost, coverage = _combo_cost(s2_dir, cfg.judge_model, pricing, n_cached, roster)
     block = {
         "enabled": cfg.stage2_enabled,
         "note": "reporting-only: stage 2 changes no impossibility rate, ranking or test",
