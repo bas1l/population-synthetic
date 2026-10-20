@@ -13,8 +13,10 @@ would flatter the models that wasted the most tokens. Worse, an *excluded*
 combination has no capped mirror at all, so the capped measurement is not merely
 biased for the seven combinations the full-N rule withdrew, it is missing.
 
-``raw_cost.py`` therefore totals cost over the **full generated pool** in ``01_Raw``,
-which is the only population that contains every token the run actually paid for.
+``raw_cost.py`` therefore totals cost over every **finished** persona of the generated
+pool in ``01_Raw`` -- the only population that contains every token the run paid for on
+a persona it completed. Generations stopped midway (failed ``validate_raw``) are an
+artefact of interrupting the run and are excluded.
 Nothing in this package reads the capped mirror, and ``generation_metadata`` is left
 exactly as it is -- putting the reader here is what keeps that process's shipped read
 contract untouched.

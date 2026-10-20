@@ -1,13 +1,21 @@
-"""raw_cost.py -- total one combination's LLM cost over the **full generated pool**.
+"""raw_cost.py -- total one combination's LLM cost over the **finished generated pool**.
 
 Reads the per-persona ``llm_interactions.{jsonl,json}`` telemetry under
 ``{output_base}/01_Raw/{slug}/persona_*/``, sums the tokens every call in the run
 actually consumed, and prices them through ``config/analysis/model_pricing.yaml``.
 
+**Only finished personas are costed.** A persona that failed the raw-completeness gate
+(``validate_raw``) is a generation stopped midway -- only ``identity.partial.json`` on
+disk -- which is an artefact of interrupting the run, not a property of the model or the
+method. Its calls are excluded; a finished persona is costed whether or not it later
+passed the mapped-value gate, because a rejected finished persona was still paid for.
+The caller passes the finished persona ids (``validate_raw``'s own verdicts), so this
+module never re-derives completeness.
+
 **Why the full pool.** ``generation_metadata`` totals the same telemetry over the
 capped mirror (``03_Analysis/population_cap/``), i.e. over the ~100 personas a
 combination was subsampled down to. That is the wrong denominator for a cost figure
-twice over: the discarded personas were paid for, and they are discarded *at a rate
+twice over: the discarded (finished) personas were paid for, and they are discarded *at a rate
 that varies by model* -- one live combination generated 549 personas to keep 100 --
 so a capped cost figure understates the wasteful models most. A withdrawn
 combination has no capped mirror at all and would simply be absent. This module is
@@ -106,7 +114,7 @@ INTERACTION_FILENAMES = ("llm_interactions.jsonl", "llm_interactions.json")
 #: every record so the basis travels as data, not as prose in a chart caption -- a
 #: cost number read without its basis is uninterpretable, and the alternative basis
 #: (the capped mirror) differs from this one by up to 5.5x.
-COST_BASIS = "generated_pool_01_raw"
+COST_BASIS = "finished_pool_01_raw"
 
 #: Config declaring per-persona costs measured on a comparable API for models whose
 #: own run telemetry cannot be priced. See the JSON's own description for why the
@@ -217,7 +225,7 @@ class RawPricing:
 
 @dataclass(frozen=True)
 class RawCostTotals:
-    """One combination's cost over the full generated pool.
+    """One combination's cost over the finished generated pool.
 
     Every rate-like field ships beside the counts it was computed from (guide 03
     sect. 4), and every absent quantity is ``None`` rather than ``0`` (guide 03
@@ -228,8 +236,11 @@ class RawCostTotals:
     slug: str
     model: str
     cost_basis: str
-    #: ``persona_*`` directories on disk -- the generated pool.
+    #: Finished personas (passed ``validate_raw``) -- the pool the cost covers.
     n_personas: int
+    #: ``persona_*`` directories on disk that did NOT finish (failed ``validate_raw``):
+    #: generations stopped midway, whose telemetry is excluded from every total.
+    n_personas_unfinished: int
     #: How many of them carried an interaction log at all.
     n_personas_with_interactions: int
     #: How many of them reported at least one prompt/completion token count.
@@ -577,8 +588,9 @@ def raw_cost_for_slug(
     *,
     strategy_id: str | None = None,
     calibration: dict[str, Any] | None = None,
+    finished: frozenset[str],
 ) -> RawCostTotals:
-    """Total one combination's LLM cost over its full ``01_Raw`` pool.
+    """Total one combination's LLM cost over its finished ``01_Raw`` personas.
 
     Parameters
     ----------
@@ -592,11 +604,15 @@ def raw_cost_for_slug(
         business (``analysis/utils/axes.decompose_slug``), not this module's.
     pricing:
         A table from :func:`load_raw_pricing`.
+    finished:
+        The persona ids (``persona_*`` directory names) that passed ``validate_raw``.
+        Only their telemetry is summed; every other persona directory is an unfinished
+        generation and is counted in ``n_personas_unfinished`` only.
 
     Returns
     -------
     RawCostTotals
-        Cost and token totals over the generated pool, with ``cost_basis`` set to
+        Cost and token totals over the finished pool, with ``cost_basis`` set to
         :data:`COST_BASIS`.
 
     Raises
@@ -606,7 +622,8 @@ def raw_cost_for_slug(
         read, so an unpriceable model fails identically whether or not the run
         produced tokens.
     FileNotFoundError
-        When the combination has no ``01_Raw`` pool directory.
+        When the combination has no ``01_Raw`` pool directory, or a *finished* persona
+        has no directory in it (the validator's verdicts and the pool disagree).
     ValueError
         When an interaction log is malformed, carries a non-integer token count, or
         repeats a ``(persona_id, call_index)`` key -- the last being the
@@ -622,7 +639,17 @@ def raw_cost_for_slug(
             f"Cost over the generated pool cannot be computed -- {_MISSING_POOL_REMEDY}."
         )
 
-    persona_dirs = _persona_dirs(slug_dir)
+    all_dirs = _persona_dirs(slug_dir)
+    on_disk = {p.name for p in all_dirs}
+    stray = sorted(set(finished) - on_disk)
+    if stray:
+        raise FileNotFoundError(
+            f"Combination {slug!r}: {len(stray)} persona(s) validate_raw passed have no "
+            f"directory under {slug_dir} (first: {stray[:5]}). The validator's verdicts are "
+            "stale for this pool; re-run validate_raw for this combination."
+        )
+    persona_dirs = [p for p in all_dirs if p.name in finished]
+    n_unfinished = len(all_dirs) - len(persona_dirs)
     seen_keys: dict[tuple[str, int], Path] = {}
     n_calls = 0
     n_unkeyed_calls = 0
@@ -705,7 +732,7 @@ def raw_cost_for_slug(
             has_token_data = False
 
     # Exception path: a model whose own telemetry cannot be priced, but for which a
-    # per-persona cost was measured on a comparable API. Scaled by the pool this
+    # per-persona cost was measured on a comparable API. Scaled by the finished pool this
     # combination actually generated, and stamped with the calibration's own basis so
     # it can never be summed with measured spend as though it were the same quantity.
     calibrated: tuple[float, str] | None = None
@@ -734,6 +761,7 @@ def raw_cost_for_slug(
         model=model_id,
         cost_basis=cost_basis,
         n_personas=len(persona_dirs),
+        n_personas_unfinished=n_unfinished,
         n_personas_with_interactions=n_with_interactions,
         n_personas_with_tokens=n_with_tokens,
         n_calls=n_calls,

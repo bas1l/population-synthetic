@@ -77,7 +77,35 @@ def test_cost_is_totalled_over_the_whole_generated_pool_not_the_cap(tmp_path) ->
 
     assert record.cost.n_personas == 10
     assert record.cost.total_cost_usd == pytest.approx(0.21)
-    assert record.cost.cost_basis == "generated_pool_01_raw"
+    assert record.cost.cost_basis == "finished_pool_01_raw"
+
+
+def test_unfinished_generations_are_not_charged(tmp_path) -> None:
+    # 12 persona dirs, 2 of them generations stopped midway (failed validate_raw): the cost
+    # covers the 10 finished ones only -- including the 2 that later failed the mapped gate.
+    base = tmp_path
+    write_attrition(base, [make_attrition_row(METERED_MODEL, SIMPLE_STRATEGY, generated=12,
+                                              raw_valid=10, clean=8, selected=8, requested_n=8)])
+    write_performance(base, [(METERED_MODEL, SIMPLE_STRATEGY, 0.8, 8)])
+    write_telemetry(base, [(METERED_MODEL, SIMPLE_STRATEGY)])
+    write_raw_pool(base, slug_for(METERED_MODEL, SIMPLE_STRATEGY), n_personas=12, n_unfinished=2)
+    record = load_cost_records(base, COUNTRY, pricing=_PRICING).records[0]
+
+    assert record.cost.n_personas == 10
+    assert record.cost.n_personas_unfinished == 2
+    assert record.cost.total_cost_usd == pytest.approx(0.21)
+
+
+def test_validate_raw_count_disagreeing_with_raw_valid_raises(tmp_path) -> None:
+    base = tmp_path
+    write_attrition(base, [make_attrition_row(METERED_MODEL, SIMPLE_STRATEGY, generated=12,
+                                              raw_valid=11, clean=8, selected=8, requested_n=8)])
+    write_performance(base, [(METERED_MODEL, SIMPLE_STRATEGY, 0.8, 8)])
+    write_telemetry(base, [(METERED_MODEL, SIMPLE_STRATEGY)])
+    write_raw_pool(base, slug_for(METERED_MODEL, SIMPLE_STRATEGY), n_personas=12, n_unfinished=2)
+
+    with pytest.raises(ValueError, match="raw_valid=11"):
+        load_cost_records(base, COUNTRY, pricing=_PRICING)
 
 
 def test_unmetered_model_reports_measured_zero_and_the_flag(tmp_path) -> None:

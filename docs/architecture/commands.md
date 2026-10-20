@@ -250,7 +250,8 @@ generated — because collapsing withdrawn into missing is exactly how the previ
 of this figure went wrong.
 
 `cost_efficiency` joins that CSV to `model_ranking`'s accuracy and to LLM cost totalled over the
-**full generated pool**, not the capped mirror. Its join key is the run slug, which
+**finished personas of the generated pool** (generations stopped midway, i.e. failing
+`validate_raw`, are excluded), not the capped mirror. Its join key is the run slug, which
 `generation_metadata`'s summary does not publish: it is reconstructed from that file's `model` +
 `method` columns through `manifest_loader.axis_slug` and checked on every read against the slug
 `model_ranking` does publish for the same pair, so the reconstruction rule is proved against live

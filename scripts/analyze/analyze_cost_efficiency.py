@@ -100,7 +100,8 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Publish each combination's fidelity beside the cost of the run that "
-            "produced it, measured over the FULL generated pool rather than the capped "
+            "produced it, measured over every FINISHED persona of the generated pool (generations "
+            "stopped midway excluded) rather than the capped "
             "mirror. Withdrawn combinations are reported, never silently dropped."
         )
     )

@@ -48,7 +48,7 @@ def _row(**overrides) -> CostRow:
         total_cost_usd=1.5,
         cost_per_usable_persona=0.0125,
         cost_per_100_usable_personas=1.25,
-        cost_basis="generated_pool_01_raw",
+        cost_basis="finished_pool_01_raw",
         unmetered=False,
         has_token_data=True,
         price_in=1.0,

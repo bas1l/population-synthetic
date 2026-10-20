@@ -207,8 +207,8 @@ def _caption(
     metered = totals["metered"]
     scored_n = sorted({int(e["accuracy"]["n_scored"]) for e in document["combinations"]})
     lines = [
-        f"Cost basis: {document['cost_basis']} -- every LLM call of the full generated "
-        f"pool, not the capped mirror "
+        f"Cost basis: {document['cost_basis']} -- every LLM call of the finished personas of "
+        f"the generated pool (generations stopped midway excluded), not the capped mirror "
         f"({'/'.join(str(n) for n in scored_n)} personas) the accuracy is scored on.",
         f"x = cost_per_100_usable_personas = 100 * total_cost_usd / clean personas (passed both "
         f"validity gates). y = overall_tv_similarity over n_scored personas. "

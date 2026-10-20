@@ -75,6 +75,12 @@ def _write_persona(
     return persona_dir
 
 
+def _finished(base: Path, slug: str) -> frozenset[str]:
+    """Every persona dir of the pool, i.e. a pool in which every generation finished."""
+    pool = base / RAW_STAGE_DIR / slug
+    return frozenset(p.name for p in pool.glob("persona_*") if p.is_dir())
+
+
 def _call(persona_id: str, call_index: int, prompt: int | None, completion: int | None) -> dict:
     return {
         "category": "age",
@@ -152,7 +158,7 @@ def test_priced_model_totals_the_whole_pool(tmp_path: Path) -> None:
     ])
     _write_persona(tmp_path, slug, "persona_00001", [_call("persona_00001", 1, 3000, 1250)])
 
-    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing)
+    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
     assert totals.n_personas == 2
     assert totals.n_personas_with_interactions == 2
@@ -174,7 +180,7 @@ def test_unmetered_model_is_a_measured_zero_never_absent(tmp_path: Path) -> None
     slug = "swedish_02_all_pick_v2_" + UNMETERED_MODEL
     _write_persona(tmp_path, slug, "persona_00000", [_call("persona_00000", 1, 4321, 8765)])
 
-    totals = raw_cost_for_slug(tmp_path, slug, UNMETERED_MODEL, pricing)
+    totals = raw_cost_for_slug(tmp_path, slug, UNMETERED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
     assert totals.unmetered is True
     assert totals.has_token_data is True
@@ -191,7 +197,7 @@ def test_absent_pricing_entry_raises_and_names_the_model_and_config(tmp_path: Pa
     _write_persona(tmp_path, slug, "persona_00000", [_call("persona_00000", 1, 10, 10)])
 
     with pytest.raises(KeyError) as exc:
-        raw_cost_for_slug(tmp_path, slug, UNPRICED_MODEL, pricing)
+        raw_cost_for_slug(tmp_path, slug, UNPRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
     message = str(exc.value)
     assert UNPRICED_MODEL in message
@@ -205,7 +211,7 @@ def test_absent_pricing_raises_even_without_any_telemetry(tmp_path: Path) -> Non
     _write_persona(tmp_path, slug, "persona_00000", [_call("persona_00000", 1, None, None)])
 
     with pytest.raises(KeyError, match=UNPRICED_MODEL):
-        raw_cost_for_slug(tmp_path, slug, UNPRICED_MODEL, pricing)
+        raw_cost_for_slug(tmp_path, slug, UNPRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
 
 def test_no_token_data_is_absent_not_zero(tmp_path: Path) -> None:
@@ -216,7 +222,7 @@ def test_no_token_data_is_absent_not_zero(tmp_path: Path) -> None:
         _call("persona_00000", 2, None, None),
     ])
 
-    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing)
+    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
     assert totals.has_token_data is False
     assert totals.total_cost_usd is None, "no telemetry is absent cost, never 0.0"
@@ -234,7 +240,7 @@ def test_unmetered_without_telemetry_is_still_absent(tmp_path: Path) -> None:
     slug = "swedish_02_all_pick_v2_" + UNMETERED_MODEL
     _write_persona(tmp_path, slug, "persona_00000", [_call("persona_00000", 1, None, None)])
 
-    totals = raw_cost_for_slug(tmp_path, slug, UNMETERED_MODEL, pricing)
+    totals = raw_cost_for_slug(tmp_path, slug, UNMETERED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
     assert totals.unmetered is True
     assert totals.has_token_data is False
@@ -247,7 +253,7 @@ def test_persona_without_an_interaction_log_is_counted_in_the_pool(tmp_path: Pat
     _write_persona(tmp_path, slug, "persona_00000", [_call("persona_00000", 1, 100, 100)])
     (tmp_path / RAW_STAGE_DIR / slug / "persona_00001").mkdir(parents=True)
 
-    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing)
+    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
     assert totals.n_personas == 2, "the generated pool is every persona dir on disk"
     assert totals.n_personas_with_interactions == 1
@@ -264,7 +270,7 @@ def test_duplicate_call_key_raises_naming_the_persona_and_file(tmp_path: Path) -
     ])
 
     with pytest.raises(ValueError) as exc:
-        raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing)
+        raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
     message = str(exc.value)
     assert "persona_00007" in message
@@ -280,7 +286,7 @@ def test_duplicate_across_two_persona_files_raises(tmp_path: Path) -> None:
     _write_persona(tmp_path, slug, "persona_00001", [_call("persona_00000", 1, 10, 10)])
 
     with pytest.raises(ValueError, match="persona_00000"):
-        raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing)
+        raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
 
 def test_calls_without_a_call_index_are_counted_as_unkeyed(tmp_path: Path) -> None:
@@ -292,7 +298,7 @@ def test_calls_without_a_call_index_are_counted_as_unkeyed(tmp_path: Path) -> No
     record["persona_id"] = None
     _write_persona(tmp_path, slug, "persona_00000", [record, _call("persona_00000", 2, 100, 50)])
 
-    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing)
+    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
     assert totals.n_calls == 2
     assert totals.n_unkeyed_calls == 1
@@ -307,7 +313,7 @@ def test_cache_tokens_are_priced_through_the_multipliers(tmp_path: Path) -> None
     record["cache_creation_tokens"] = 4_000
     _write_persona(tmp_path, slug, "persona_00000", [record])
 
-    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing)
+    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
     assert totals.cache_read_tokens == 10_000
     assert totals.cache_creation_tokens == 4_000
@@ -324,7 +330,7 @@ def test_cache_tokens_without_a_multiplier_block_raise(tmp_path: Path) -> None:
     _write_persona(tmp_path, slug, "persona_00000", [record])
 
     with pytest.raises(ValueError, match="cache_multipliers"):
-        raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing)
+        raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
 
 def test_legacy_json_array_log_is_read(tmp_path: Path) -> None:
@@ -338,7 +344,7 @@ def test_legacy_json_array_log_is_read(tmp_path: Path) -> None:
         filename="llm_interactions.json",
     )
 
-    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing)
+    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
     assert totals.n_calls == 1
     assert totals.input_tokens == 1000
@@ -352,14 +358,14 @@ def test_non_integer_token_count_raises(tmp_path: Path) -> None:
     _write_persona(tmp_path, slug, "persona_00000", [record])
 
     with pytest.raises(ValueError, match="prompt_tokens"):
-        raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing)
+        raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing, finished=_finished(tmp_path, slug))
 
 
 def test_missing_raw_pool_raises_and_names_the_path(tmp_path: Path) -> None:
     pricing = load_raw_pricing(_write_pricing(tmp_path))
 
     with pytest.raises(FileNotFoundError, match="absent_slug"):
-        raw_cost_for_slug(tmp_path, "absent_slug", PRICED_MODEL, pricing)
+        raw_cost_for_slug(tmp_path, "absent_slug", PRICED_MODEL, pricing, finished=frozenset())
 
 
 # --- the live 5.5x case (task 4.3) ------------------------------------------
@@ -376,6 +382,15 @@ def _capped_total_usd(summary_csv: Path, model: str, method: str) -> float:
             if row["model"] == model and row["method"] == method:
                 return float(row["cost_mean"]) * int(row["cost_n"])
     raise AssertionError(f"{model} x {method} absent from {summary_csv}")
+
+
+def _live_finished(output_base: Path, slug: str) -> frozenset[str]:
+    """The persona ids validate_raw passed for one live combination."""
+    path = analysis_output_dir("validate_raw", output_base, for_read=True) / f"{slug}.csv"
+    if not path.is_file():
+        pytest.skip(f"validate_raw verdicts not present: {path}")
+    with open(path, encoding="utf-8", newline="") as fh:
+        return frozenset(r["persona_id"] for r in csv.DictReader(fh) if r["passed"] == "True")
 
 
 def test_raw_pool_cost_exceeds_the_capped_mirror_cost() -> None:
@@ -398,12 +413,13 @@ def test_raw_pool_cost_exceeds_the_capped_mirror_cost() -> None:
         pytest.skip(f"generation_metadata summary not present: {summary_csv}")
 
     pricing = load_raw_pricing()
-    totals = raw_cost_for_slug(output_base, slug, _LIVE_MODEL, pricing)
+    totals = raw_cost_for_slug(output_base, slug, _LIVE_MODEL, pricing,
+                               finished=_live_finished(output_base, slug))
     capped = _capped_total_usd(summary_csv, _LIVE_MODEL, _LIVE_STRATEGY)
 
     assert totals.has_token_data is True
     assert totals.total_cost_usd is not None
-    assert totals.n_personas > 500, "the generated pool, not the capped 100"
+    assert totals.n_personas > 400, "the finished pool, not the capped 100"
     assert capped > 0
     assert totals.total_cost_usd > capped
     # The gap tracks the pool/cap ratio (549/100); anything near 1.0 would mean the
@@ -423,7 +439,7 @@ def test_the_shipped_calibration_config_loads() -> None:
     assert doc["cost_basis"] == "calibrated_openrouter_2026-08-21"
     # The basis must differ from the measured one, or a consumer summing the two
     # could not tell an estimate from a measurement.
-    assert doc["cost_basis"] != "generated_pool_01_raw"
+    assert doc["cost_basis"] != COST_BASIS
     assert set(doc["models"]) == {"claude_haiku", "claude_sonnet"}
     for entry in doc["models"].values():
         assert len(entry["methods"]) == 5
@@ -455,3 +471,31 @@ def test_a_calibrated_model_missing_a_method_raises() -> None:
     # when in truth nobody measured it -- the exact zero-vs-absent confusion.
     with pytest.raises(ValueError, match="calibrated but has no entry"):
         calibrated_persona_cost("m", "b", doc)
+
+
+def test_unfinished_personas_are_excluded_from_every_total(tmp_path: Path) -> None:
+    """A generation stopped midway (failed validate_raw) is not charged to the run."""
+    pricing = load_raw_pricing(_write_pricing(tmp_path))
+    slug = "swedish_02_all_pick_v2_" + PRICED_MODEL
+    _write_persona(tmp_path, slug, "persona_00000", [_call("persona_00000", 1, 1000, 500)])
+    _write_persona(tmp_path, slug, "persona_00001", [_call("persona_00001", 1, 9000, 9000)])
+
+    totals = raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing,
+                               finished=frozenset({"persona_00000"}))
+
+    assert totals.n_personas == 1
+    assert totals.n_personas_unfinished == 1
+    assert totals.n_calls == 1
+    assert totals.input_tokens == 1000
+    assert totals.output_tokens == 500
+    assert totals.cost_basis == COST_BASIS
+
+
+def test_finished_persona_without_a_directory_raises(tmp_path: Path) -> None:
+    pricing = load_raw_pricing(_write_pricing(tmp_path))
+    slug = "swedish_02_all_pick_v2_" + PRICED_MODEL
+    _write_persona(tmp_path, slug, "persona_00000", [_call("persona_00000", 1, 1000, 500)])
+
+    with pytest.raises(FileNotFoundError, match="persona_00009"):
+        raw_cost_for_slug(tmp_path, slug, PRICED_MODEL, pricing,
+                          finished=frozenset({"persona_00000", "persona_00009"}))

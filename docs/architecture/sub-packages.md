@@ -268,10 +268,11 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
   second analysis node whose upstreams are other analysis nodes rather than the gate. **The
   denominator is the point:** `generation_metadata` totals cost over the capped mirror, i.e. the ~100
   personas each combination was subsampled down to, whereas `raw_cost.py` totals the same
-  `llm_interactions.jsonl` telemetry over the **full generated pool in `01_Raw`**, because the
-  discarded personas were paid for. The two bases differ by up to 4.8× on the live grid and the gap
+  `llm_interactions.jsonl` telemetry over every **finished** persona of the generated pool in
+  `01_Raw` (passed `validate_raw`; a generation stopped midway is excluded, a finished persona the
+  mapped gate rejected is not), because the discarded personas were paid for. The two bases differ by up to 4.8× on the live grid and the gap
   is largest exactly where retention is worst, so a capped figure flatters the models that wasted the
-  most tokens; the basis (`generated_pool_01_raw`) is a field on every record, a CSV column and a
+  most tokens; the basis (`finished_pool_01_raw`) is a field on every record, a CSV column and a
   caption on the figure. `raw_cost.py` deliberately re-implements the `model_pricing.yaml` accessor
   rather than importing `generation_metadata.pricing`, whose package `__init__` would pull
   `utils/capped_source` back into the import graph of the one module written to avoid the mirror; it

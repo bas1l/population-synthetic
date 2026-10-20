@@ -10,8 +10,10 @@ columns rather than caption prose because the table travels without the code tha
 it (ADR 2026-08-07: caveats travel as data fields):
 
 ``cost_basis``
-    Which persona population the cost was totalled over. Two are possible -- the full
-    generated pool in ``01_Raw``, or the ~100-persona capped mirror -- and they differ
+    Which persona population the cost was totalled over. Two are possible -- the finished
+    personas of the generated pool in ``01_Raw`` (``finished_pool_01_raw``: passed
+    ``validate_raw``; generations stopped midway excluded), or the ~100-persona capped
+    mirror -- and they differ
     by up to 5.5x on the live grid, in a direction that varies by model. A cost figure
     whose basis is not stated is not a figure, it is a number.
 ``unmetered``
@@ -130,10 +132,10 @@ class CostRow:
 
     **The gate counts**, from the attrition contract. ``generated`` is the pool the run
     actually produced, ``clean`` the personas that passed both validity gates,
-    ``selected`` what the cap drew. ``generation_multiplier`` (``generated / clean``) is
-    carried because it is what explains a high cost per usable persona -- a model that
-    wastes nine personas in ten pays for ten. It is **not** used to correct the cost:
-    the cost here is measured over the generated pool directly, and the discarded
+    ``selected`` what the cap drew. ``generation_multiplier`` (``raw_valid / clean``, finished
+    personas per usable one) is carried because it is what explains a high cost per usable
+    persona -- a model that wastes nine personas in ten pays for ten. It is **not** used to
+    correct the cost: the cost here is measured over the finished pool directly, and the discarded
     personas turn out to be systematically cheaper than the kept ones, so multiplying a
     capped figure by this factor would over-correct.
 

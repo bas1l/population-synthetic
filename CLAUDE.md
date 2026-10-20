@@ -113,8 +113,10 @@ plus per-combo deep diagnostics and per-country cross-factor significance (Krusk
 across the model and method factors), read from the LLM-call telemetry of the **capped mirror**
 (`03_Analysis/population_cap/`, produced by `population_cap`), not `01_Raw` directly,
 `cost_efficiency/` the accuracy-vs-cost join — pairs `model_ranking`'s TV fidelity with the same
-per-call LLM telemetry, but totalled over the **full generated pool in `01_Raw`** rather than over
-the capped mirror, because the discarded personas were paid for: the two bases differ by up to 4.8×
+per-call LLM telemetry, but totalled over every **finished** persona of the generated pool in
+`01_Raw` (passed `validate_raw`, whether or not it later passed the mapped gate; a generation stopped
+midway is excluded) rather than over the capped mirror, because the discarded personas were paid
+for: the two bases differ by up to 4.8×
 on the live grid and the gap is widest exactly where retention is worst, so a capped figure flatters
 the models that wasted the most tokens. The basis is a CSV column and is printed on the figure; the
 join key is the run slug reconstructed from `generation_metadata`'s slug-less `model` + `method`

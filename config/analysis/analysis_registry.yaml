@@ -339,8 +339,9 @@ processes:
       it, per country x model x method, and emits a tidy CSV, a JSON report and an
       accuracy-vs-cost scatter. THE DENOMINATOR IS THE POINT: generation_metadata totals
       its cost over the capped mirror -- the ~100 personas each combination was
-      subsampled down to -- whereas this task totals the same per-call telemetry over the
-      FULL generated pool in 01_Raw, because the discarded personas were paid for. The
+      subsampled down to -- whereas this task totals the same per-call telemetry over
+      every FINISHED persona of the generated pool in 01_Raw (passed validate_raw; a
+      generation stopped midway is excluded), because the discarded personas were paid for. The
       two bases differ by up to 4.8x on the live grid, and the gap is largest exactly
       where retention is worst, so a capped figure flatters the models that wasted the
       most tokens. The basis travels as a CSV column and is printed on the figure. The
