@@ -150,7 +150,10 @@ Each rule follows SCB's own definition of the category; the regression cases liv
   the numeric facet. A bare "verksamhet" is not a cue ("kommunal / ideell verksamhet").
 - **`housing_tenure`** is a property of the building: `Owner-occupied` is SMAG only, so any
   apartment, BRF or rental word vetoes it and an owned flat is a bostadsrätt. Ägarlägenhet (OB)
-  is not fetched and is unmapped; bostadsbolag is a landlord (`Rental`). A house-or-flat
+  is not fetched and is unmapped: the real side's Boendeform request excludes OB, so the
+  reference `Owner-occupied` is SMAG (houses) only and an owned apartment has no category on this
+  table -- a table-scope limit, not a mapping gap (decided 2026-10-19 after the Figure 6
+  labelling, which had first marked it a mapping miss). Bostadsbolag is a landlord (`Rental`). A house-or-flat
   disjunction ("Eget hus eller lägenhet") names no tenure and is unmapped.
 - **`income_source`** is wage first (`tie_break: ["priority"]`, Wage first in `values`): any stated
   paid work, including an occupation or employer named as the source, is `Wage / Business`.
