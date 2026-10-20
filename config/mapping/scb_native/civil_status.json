@@ -77,7 +77,21 @@
         "Ugiffrad",
         "Ej gifvener",
         "Ingle",
-        "Umarrietad"
+        "Umarrietad",
+        "Dating",
+        "living apart together (LAT)",
+        "Bor tillsammans",
+        "dating casually",
+        "De Facto Spouse",
+        "en sammanboende",
+        "Living Apart Together",
+        "living together",
+        "ogieft",
+        "Samliv",
+        "Sammanboende i Sverige",
+        "Sammanlevande par",
+        "sammänbor",
+        "Unattached"
       ],
       "contains": [
         "gemensamt boende",
@@ -164,7 +178,8 @@
         "Maried",
         "Separerad",
         "Separat",
-        "Separerad under process"
+        "Separerad under process",
+        "Separerat"
       ],
       "contains": [
         "remarried",

@@ -186,7 +186,8 @@ PARENTAL_DECISIONS = [
     # prefix mode: "father only" no longer matches inside "grandfather only".
     ("Grandfather only", "Other Than Parents"),
     # Open question 21 defaults: no child relation stated / bare family label.
-    ("Ensamstående kvinna", UNMAPPED),
+    # figure-6 labelling 2026-10-19: a single woman in the parental field is a single mother
+    ("Ensamstående kvinna", _SM),
     ("Borgerlig familj", UNMAPPED),
 ]
 

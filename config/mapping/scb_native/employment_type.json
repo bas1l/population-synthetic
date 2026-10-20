@@ -399,7 +399,57 @@
         "full-time",
         "heltid",
         "Fast tjänst",
-        "Sysselsatt"
+        "Sysselsatt",
+        "Anställd i private sektor",
+        "Fasta arbetsplats (40 timmar/vecka)",
+        "100% tjänstgöring",
+        "35 timmar/vecka",
+        "37.5 timmar/vecka",
+        "A-ställning, 37.5 timmar",
+        "Anställd i privata sektorn",
+        "Anställd i staten",
+        "Anställd i större privat företag",
+        "Anställd inom privat sektor (t.ex. företag)",
+        "Anställd inom privatsektorn",
+        "Anställd med 40 timmars arbetsvecka",
+        "Anställd med fasta timmar",
+        "Anställd med flexibel arbetsorganisation",
+        "Anställd med flexibelt arbetssätt",
+        "Anställd på 37.5 timmar/vecka",
+        "Anställd som forskare vid en vetenskaplig institution",
+        "Anställd vid myndighet",
+        "Fast today, 37.5 hours",
+        "Fasta arbetsplats med 40-timmars vecka",
+        "Fasta arbetsplats, 40 timmar veckan",
+        "Fasta tid - 40 timmar per vecka",
+        "Fasta tid - 40 timmar/vecka",
+        "Fulgtid | 40 timmar/vecka",
+        "Fuljtidstjänst (40 timmar/vecka)",
+        "Full-tidstjänster",
+        "Förbundsanställd",
+        "government employment",
+        "Government/state employment (fixed allowance)",
+        "helftidsarbete",
+        "Helkontrakt (full tid, 40 timmar/vecka)",
+        "heltime",
+        "heltime arbete",
+        "Kollektivavtalsanställd",
+        "Kommunal tjänst",
+        "Kontorsanställd, dagtid (Office worker, day shift)",
+        "Lärare vid en gymnasieskola i Uppsala (fast)",
+        "Lönearbetare",
+        "Lönearbete",
+        "Medarbetare hos en privatfirma",
+        "municipal employment",
+        "Private Sector Employment",
+        "Public sector employment",
+        "Public sector employment (förvaltningen)",
+        "Regelbundet anställd",
+        "Regular Employment",
+        "Regular employment (tillsvideregående)",
+        "Tenured position",
+        "tillsvids",
+        "Tjänstemanstjänst (40 h/vecka)"
       ],
       "contains": [
         {
@@ -870,7 +920,18 @@
         "tillsvidareanställning, deltid",
         "permanent part-time",
         "deltidsanställd",
-        "Halvtid"
+        "Halvtid",
+        "30 timmar i veckan",
+        "Delarbetstid inom offentlig sektor, 24 timmar/vecka",
+        "Delarbetstid med utökad flexibilitet kring barnomsorg",
+        "Halvtid (20-25 timmar/vecka)",
+        "Halvtidstjänst",
+        "Halvtidstjänst, 30 timmar/vecka",
+        "hälftid",
+        "Minskad arbetstid p.g.a vårdansvar (Indefinierat, 20h/vecka)",
+        "Parttid",
+        "Parttime",
+        "Parttime anställd"
       ],
       "contains": [
         "deltidsanställ",
@@ -1213,6 +1274,13 @@
         "pre-retirement",
         "fram till pension",
         "innan pension"
+      ],
+      "equals": [
+        "Anställd med 25% arbetstid",
+        "Delad arbetstid (30-40%)",
+        "Delad tid (30% av arbetstiden)",
+        "Delad tid (40% av arbetstiden)",
+        "early retirement transition (reduced hours, 10-15 hours/week)"
       ]
     },
     "Temporary Full-time": {
@@ -1276,7 +1344,21 @@
       "equals": [
         "visstidsanställning, heltid",
         "temporary full-time",
-        "Project-based"
+        "Project-based",
+        "Utbildningsanställd",
+        "Anställd (tidsbegränsat, över 1 år)",
+        "apprenticeship contract",
+        "Arbete som researchassistent (projektbaserat)",
+        "call center temp",
+        "Korttidspraktik, 100% (40h), 3 månader",
+        "Projektanställd",
+        "Projektbaserat kontrakt",
+        "prosjektarbete",
+        "Provanställd",
+        "Tidskontrakt (40 timmar/vecka, 6 månader)",
+        "Tidskontrakt (6 månader, 35 timmar/vecka)",
+        "Uppdragskontrakt (9 månader), 40 timmar/vecka",
+        "Viss tid"
       ],
       "contains": [
         "visstidsanställning",
@@ -1672,7 +1754,25 @@
         "timanställning",
         "temporary part-time",
         "studiejobb",
-        "Casual worker"
+        "Casual worker",
+        "apprenticeship contract (6 months, 25h/week)",
+        "Casual",
+        "Feriejobb – cirka 30 timmar per vecka under sommarlovet",
+        "Flerårskontrakt (30 timmar/vecka)",
+        "Förårstidskontrakt (1-6 månader), 30 timmar/vecka",
+        "Hourly Worker",
+        "Hourly/on-call contract (intermittent employment)",
+        "Hourly/on-call employment",
+        "Introduktionsjobb, 12 månader, 25 timmar/vecka",
+        "Korttidsarbete (20 timmar/vecka, 6 månader)",
+        "lärlingsplats (del av introduktionsprogram, 20h/vecka)",
+        "Nolltimmarsavtal, variabel tid",
+        "Studentarbete (studiejobb)",
+        "Studiejobb (max 20 timmar/vecka)",
+        "Tidlönare (30h/vecka), 1 år",
+        "Tidsbegränsat avtal kopplat till specifikt projekt (9 mån), 30 hours/week",
+        "Tidvis kontrakt (vid behov)",
+        "Timavlönat arbete"
       ],
       "contains": [
         "timanställ",
@@ -2041,6 +2141,11 @@
         "pre-retirement",
         "fram till pension",
         "innan pension"
+      ],
+      "equals": [
+        "Gästlektorsbefattning, 10 h/vecka",
+        "Timlön, 12 timmar/vecka",
+        "Timlönt arbete, ej bindande, 10 h/vecka"
       ]
     },
     "Self-Employed Full-time": {
@@ -2083,7 +2188,15 @@
         "enskild firma",
         "frilansare",
         "företagare",
-        "self-employed/freelance"
+        "self-employed/freelance",
+        "Independent contractor",
+        "Entrepreneur",
+        "Företagare (enhet)",
+        "Företagsägare, flexibel arbetstid, ingen fast timantal",
+        "Limited Company Owner",
+        "Selfständig",
+        "Selvställig",
+        "Sole proprietor"
       ],
       "contains": [
         "self-employed",
@@ -2527,6 +2640,9 @@
             }
           ]
         }
+      ],
+      "equals": [
+        "Konsultuppdrag, Betald per faktura, Flexibelt antal timmar, 20–30 h/vecka"
       ]
     },
     "Self-Employed Short Part-time": {
@@ -2726,7 +2842,47 @@
         "voluntary work",
         "unemployed",
         "Study grant recipient",
-        "Inte i arbete"
+        "Inte i arbete",
+        "Inaktiv",
+        "Retiree",
+        "Volunteer (unpaid)",
+        "Aktivt sökande arbete",
+        "Arbetsmarknadsutbildning (AMU)",
+        "Arbetssökande (gäst)",
+        "Arbetssökande (utan bestämd anställning)",
+        "Arbetssökande inom Arbetsförmedlingen, ingen tjänst på gång",
+        "Arbetssökande som väntar på arbetsmarknadens återhämtning",
+        "Arbetssökande via Arbetsförmedlingen",
+        "Arbetssökande, ej inkompetent för arbetsmarknaden",
+        "contractor (past)",
+        "Early Retirement",
+        "Early retirement scheme",
+        "Ej i arbete",
+        "Ej i arbete (Aktivitetsstöd)",
+        "Ej i arbetsstyrkan",
+        "Engagemang i familjens verksamhet, oavlönat, flexibelt",
+        "Ensamstående arbetssökande",
+        "Full retirement",
+        "Förtroendeuppdrag i förening, utan lön, löpande",
+        "Föräldraledighet, ej arbetsaktiv",
+        "Hemhjälp (uppdragsvis, ej lönebaserat)",
+        "Hemmafru/Man",
+        "inactive",
+        "Inaktiv arbetsmarknad (0h/vecka)",
+        "Inaktiv på arbetsmarknaden",
+        "Informal unpaid work",
+        "Inga löpande arbetstimmar",
+        "Passivt engagemang i en bostadsrättsförening (utan lön, men formellt uppdrag)",
+        "Studying",
+        "Ta huvudsakligen hand om familj",
+        "Tidigare arvoderad uppdragstagare (hemsamarit på arvode)",
+        "Tidigare oavlönat arbete i hemmet som hemmafru",
+        "Tidigareanställd",
+        "Tjänstledig för omvårdnad (0 veckotimmar)",
+        "Voluntary/unpaid",
+        "volunteer",
+        "volunteer, 1-5 hours per week, ongoing",
+        "volunteer, flexible hours, variable"
       ],
       "contains": [
         "ej tillämpligt",
@@ -2823,6 +2979,19 @@
               "utan anställning",
               "no job",
               "without pay"
+            ]
+          ]
+        },
+        {
+          "all_of": [
+            [
+              "arbetslös - jobbsökare",
+              "arbetslös med jobbsök",
+              "arbetssökande (aktiv jobbsökande)",
+              "currently unemployed due to lack of job",
+              "job seeker - no current employment",
+              "job seeker on labor market program",
+              "på arbetsmarknaden och söker jobb aktivt"
             ]
           ]
         }

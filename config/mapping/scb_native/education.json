@@ -136,6 +136,15 @@
         "grundskolan)",
         "('grundskola')",
         "primary and secondary"
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              "shorter than 9 years"
+            ]
+          ]
+        }
       ]
     },
     "Pre-Secondary 9-10 yrs (ISCED 2)": {
@@ -158,7 +167,8 @@
         "Realexamen (intermediate school leaving certificate, older system)",
         "Realskola (äldre system)",
         "Grundskolexamen",
-        "Grundskoleutbildning/realexamen (9 år)"
+        "Grundskoleutbildning/realexamen (9 år)",
+        "10th grade"
       ],
       "contains": [
         "lower secondary",
@@ -233,7 +243,12 @@
         "Handelsskolutbildning",
         "Gymnasial utbildning, högst 2 år",
         "Handelsutbildning",
-        "Home economics/household school (husmodersskola)"
+        "Home economics/household school (husmodersskola)",
+        "Apprenticeship",
+        "apprenticeship_trade",
+        "Hushållsskola",
+        "Trade School Certification",
+        "Trade school diploma"
       ],
       "contains": [
         "isced 3c",
@@ -287,7 +302,9 @@
         "Adult education (voksenutbildning) diploma",
         "Baccalaureat",
         "Baccalauréat",
-        "International Baccalaureate"
+        "International Baccalaureate",
+        "UpperSecondary",
+        "UpperSecondarySchool"
       ],
       "contains": [
         "upper secondary 3",
@@ -395,7 +412,9 @@
         "Eftergymnasial utbildning, kortare än 3 år",
         "Yrkesexamen",
         "Högskoleexamen",
-        "Hogskoleexamen"
+        "Hogskoleexamen",
+        "Eftergymnasial utbildning (post-secondary, non-university)",
+        "Kort utbildning efter gymnasiet (minst 6 månader)"
       ],
       "contains": [
         "post-secondary <",
@@ -542,7 +561,24 @@
         "Juridik (juristexamen)",
         "Kompletterande högre utbildning",
         "Post-secondary technical education (3+ years)",
-        "Lärarutbildning"
+        "Lärarutbildning",
+        "Diploma i sjuksköterska",
+        "eftergymnasial_utbildning_3_ar_eller_mer",
+        "Handelshögskola",
+        "Högre studier",
+        "Högre studier (generellt)",
+        "Konstakademi",
+        "Lärarlegitimation",
+        "Lärarutbildning (basår + ämnesbehörighet)",
+        "Lärarutbildning (pedagogexamen)",
+        "Military officer training (officersutbildning)",
+        "musikhögskola",
+        "nursing education",
+        "Sjukgymnastutbildning",
+        "Socialsekreterarexamen",
+        "Specialpedagogisk utbildning",
+        "Studieutbildning (Högskola)",
+        "teaching education"
       ],
       "contains": [
         "post-secondary 3",

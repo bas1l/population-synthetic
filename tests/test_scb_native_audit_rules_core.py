@@ -317,7 +317,8 @@ FORMER_JOB_AND_LEAVE = [
     ("employment_type", "Permanent Employee (Tidigare Tjänsteman)", "Permanent Full-time"),
     # a former cue with no contract word stays a miss (the cap gate's pool must not move)
     ("employment_type", "Föräldraledighet", UNMAPPED),
-    ("employment_type", "contractor (past)", UNMAPPED),
+    # figure-6 labelling 2026-10-19: a past contract with no current work is Not Applicable
+    ("employment_type", "contractor (past)", _NA),
     # one reading per language in employment_status and income_source alike: Swedish förtidspension /
     # sjukpension = the disability benefit; English "early retirement" = old-age pension drawn early
     ("employment_status", "Förtidspensionär", "Sick Leave"),
@@ -387,7 +388,7 @@ M1_TO_M5 = [
     ("employment_type", "Student (full-time) - no weekly working hours", _NA),
     ("employment_type", "Pensionär (ej längre anställd)", _NA),
     ("employment_type", "Timanställning vid behov (behovsanställning), extraarbete vid sidan av studierna", _TP),
-    ("employment_type", "Studiejobb (max 20 timmar/vecka)", UNMAPPED),
+    ("employment_type", "Studiejobb (max 20 timmar/vecka)", _TP),  # figure-6 labelling 2026-10-19
     # M2: a retired / homemaker / job-seeker status text that itself states paid work -> Employed
     ("employment_status", "Hemarbetande konsult", "Employed"),
     ("employment_status", "pensioner with part-time work", "Employed"),

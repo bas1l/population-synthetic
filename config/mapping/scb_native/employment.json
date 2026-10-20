@@ -130,7 +130,19 @@
         "Arbetande (fulltid)",
         "I anställning",
         "Projektbaserad anställning",
-        "Vikarie"
+        "Vikarie",
+        "Anständ",
+        "anställa",
+        "fortfarande i arbete men inför pension",
+        "Frånvarande på grund av semester/ledig",
+        "Föräldraförsäkringstid",
+        "Icke varaktig sysselsatt",
+        "intern at local municipality",
+        "On sabbatical",
+        "Praktik eller yrkesintroduktion",
+        "På semester",
+        "study leave",
+        "säsongsarbete (trädgårdsarbete)"
       ],
       "contains": [
         "parental leave",
@@ -461,6 +473,15 @@
             "oavlönad",
             "unpaid"
           ]
+        },
+        {
+          "all_of": [
+            [
+              "konsult inom tidigare bransch",
+              "tidigare pensionär men arbetar fortfarande",
+              "tidigare pensionär med deltidsarbete"
+            ]
+          ]
         }
       ]
     },
@@ -495,7 +516,8 @@
         "Participant in labour market program (arbetsmarknadsåtgärd)",
         "Labor market programme via Arbetsförmedlingen",
         "Labour market programme or internship (arbetsmarknadsåtgärd/praktik via Arbetsförmedlingen)",
-        "In a labour-market programme (arbetsmarknadsåtgärd)"
+        "In a labour-market programme (arbetsmarknadsåtgärd)",
+        "Arbetstränad"
       ],
       "contains": [
         "sick leave",
@@ -547,7 +569,9 @@
         "Full-time student",
         "Part-time student",
         "Gymnasieelev",
-        "Utbildning"
+        "Utbildning",
+        "Utbildning/utveckling",
+        "Utbildning/utveckling pågår"
       ],
       "contains": [
         {
@@ -630,7 +654,8 @@
         "Pensioner",
         "Pensionär",
         "Pensionerad",
-        "Ålderspension"
+        "Ålderspension",
+        "pensjonist med extrainkomst"
       ],
       "contains": [
         "retired",
@@ -687,7 +712,9 @@
         "Sjuklön",
         "Sjukfrånvaro",
         "Långtidssjukskriven",
-        "On sick leave"
+        "On sick leave",
+        "sjukfrånvarande",
+        "Sjukledig"
       ],
       "contains": [
         "sick leave",
@@ -759,7 +786,24 @@
         "Hushållsansvarig",
         "Hemmafrånvaro",
         "Hemmafrånvarande (av val)",
-        "Informal caregiver for family member (anhörigvårdare)"
+        "Informal caregiver for family member (anhörigvårdare)",
+        "Engagerad i familjeansvar",
+        "Familjeansvarig",
+        "Försörjs av familj",
+        "Förälder/omsorgsperson",
+        "hemma med barn (föräldravård)",
+        "Hemma vid barn",
+        "Hemmaförälder/Vårdgivare",
+        "hushållsansvarig (vårdgivare)",
+        "Inaktiv",
+        "Inte i arbetskraften",
+        "not in labor force",
+        "not in labour force",
+        "Någon som tar omtag iomsorg",
+        "omsorgsgivare",
+        "omsorgsgivare för familjemedlemmar",
+        "Unpaid internship",
+        "Vård av äldre anhörig"
       ],
       "none_of": [
         "arbete inom ideell",

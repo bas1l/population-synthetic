@@ -131,7 +131,45 @@
         "Försäljning av konstnärliga verk eller produkter",
         "Tjänst",
         "Konsultuppdrag",
-        "Deltidsinkomst"
+        "Deltidsinkomst",
+        "administrative support income",
+        "arbet",
+        "Arbetstagare",
+        "Biluthyrning med förares tjänster (t.ex. flytthjälp)",
+        "Fast tjänst",
+        "Försäljning via sociala medier",
+        "Heltidsinkomst",
+        "Income from Akademiska Hus",
+        "Income from healthcare management roles",
+        "Inkomst från affärer",
+        "inkomst från deltidstjänst",
+        "Inkomst från deltidstjänst inom transportsektorn",
+        "Inkomst från försäljning av hantverk på marknad",
+        "Inkomst från försäljning av WordPress‑teman",
+        "Inkomst från konstnärligt skapande (försäljning, upphovsrätt)",
+        "Internship income",
+        "Intäkt från tjänst",
+        "Jordbruksstöd",
+        "Konstnärligt verk (försäljer konst)",
+        "Lokala anbud/kontrakt",
+        "Läroboksupphovsrätt",
+        "Management fee for leading teams",
+        "Mikroinkomst från mindre jordbruk",
+        "Part-time income",
+        "Professionell inkomst från Tech",
+        "Revenue from online ventures",
+        "Sal√°r",
+        "Sidoverksamhet",
+        "Skiftpremie från intensivvården",
+        "Statlig tjänst",
+        "Sysselsatt",
+        "Tech lead compensation",
+        "Teknisk expertisavgift",
+        "Temporary contract in public administration",
+        "Temporary IT roles through agencies",
+        "Therapy session charges",
+        "Tjänstinkomst",
+        "Uppdragsbelopp till privatpersoner"
       ],
       "contains": [
         "wage",
@@ -348,7 +386,8 @@
         "Kapitalinkomster",
         "Kapitalinkomst",
         "Aktieutdelning",
-        "Räntor och utdelningar"
+        "Räntor och utdelningar",
+        "Forsäljningsvinster från fastighet"
       ],
       "contains": [
         "capital",
@@ -437,7 +476,9 @@
         "Sjukpenning",
         "Föräldraskapspenning",
         "Arbetsförmedlingen",
-        "Aktivitetsstöd"
+        "Aktivitetsstöd",
+        "Cultural Grant Recipient",
+        "Försäkringsutbetalningar (t.ex. livförsäkring)"
       ],
       "contains": [
         "insurance",
@@ -594,7 +635,11 @@
         "Studentlån",
         "Studentfinansiering",
         "Child support",
-        "Barnbidrag"
+        "Barnbidrag",
+        "Komvux‑stöd för vidareutbildning",
+        "Studiehjälp",
+        "Studiestartsstipendium",
+        "Studiestartsstöd"
       ],
       "contains": [
         "barnbidrag",

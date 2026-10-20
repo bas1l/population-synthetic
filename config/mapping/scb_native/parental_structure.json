@@ -242,7 +242,22 @@
         "Förälder och förälder",
         "Adoptive parents",
         "Adoptivföräldrar",
-        "Adoptivfamilj"
+        "Adoptivfamilj",
+        "both",
+        "Förälder + Förälder",
+        "amma och pappa",
+        "Barn med två män som föräldrar",
+        "cohabitating_partners",
+        "cohabiting household (non-marital)",
+        "Cohabiting household (unmarried parents)",
+        "föräldrarna var gifta/sambodande",
+        "Gay male couple with legal partner",
+        "Parents living together but not legally married",
+        "Parents living together but not married",
+        "sambo_föråldrar_böda_hemma",
+        "Tvä gifna föräldrar",
+        "Tvö öforåldrar med jåmstälda roller",
+        "two male parents"
       ],
       "contains": [
         "biological parents",
@@ -369,6 +384,15 @@
         "two adoptive",
         "adoptive family",
         "adoptive_family"
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              "both parents present, extended household with grandparents"
+            ]
+          ]
+        }
       ]
     },
     "Mother and Stepparent": {
@@ -383,7 +407,8 @@
         "Mor och flera styvföräldrar över tid",
         "Mor och stefar",
         "En forfar med stegförälder",
-        "Biologisk mamma och styvpappa"
+        "Biologisk mamma och styvpappa",
+        "mother remarried"
       ],
       "contains": [
         "mother and stepfather",
@@ -507,7 +532,14 @@
         "bosatta med mamman",
         "Flicka och mamma",
         "Barn med en mor",
-        "Ogift mor med barn"
+        "Ogift mor med barn",
+        "Ensamstående kvinna",
+        "mother and aunt",
+        "Divorced mother (primary custody)",
+        "mother and aunt/uncle",
+        "mother and grandfather",
+        "mother and uncle",
+        "mother-only with other female role models"
       ],
       "contains": [
         "single mother",
@@ -685,7 +717,10 @@
         "Endast far",
         "Pappan ensam",
         "Far med barn",
-        "Föräldrahemma med pappa"
+        "Föräldrahemma med pappa",
+        "father and aunt",
+        "Father and siblings only",
+        "father and uncle/aunt"
       ],
       "contains": [
         "single father",
@@ -806,7 +841,15 @@
         "Föräldrar avlidna",
         "Blev uppfostrad av mor- eller farförälder",
         "Raised primarily by grandfather",
-        "Raised primarily by maternal grandmother"
+        "Raised primarily by maternal grandmother",
+        "Both biological parents deceased",
+        "Både mina föräldrar arbetade utomlands, jag bodde med släkten",
+        "Farbror och Farbror",
+        "Parents divorced, lived with relatives",
+        "Parents separated, lived with relatives",
+        "raised by relatives after parents' migration",
+        "single grandmother",
+        "Utvidgat familjenätverk (bo hos släkt)"
       ],
       "contains": [
         "other than parents",

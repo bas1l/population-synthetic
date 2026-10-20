@@ -119,7 +119,8 @@ Each rule follows SCB's own definition of the category; the regression cases liv
   contract value vetoes these cues and `Not Applicable`'s `all_of` needs a cue plus a contract
   word. The cues are phrases taken from the `01_Raw` pool so that text stating a current job keeps
   its contract — "efter avslutad provanställning", "Tidigare med fulltid, nu halvtidsanställd". A
-  cue with no contract word ("contractor (past)") stays unmapped. The rule reads
+  cue with no contract word stays unmapped, except the exact strings listed under `equals` from the
+  2026-10-19 labelling below ("contractor (past)" → `Not Applicable`). The rule reads
   `employment_type`'s own text only.
   Parental leave is **not** an ended job (2026-10-07; SCB BAS counts a parent on paid leave as
   employed with the job): leave from a stated contract keeps that contract ("Anställning med
@@ -337,3 +338,15 @@ Re-introducing `on_miss` on any attribute in this tier is a regression and is as
 in `tests/test_mapping_config_no_on_miss.py`. Italy (`config/mapping/istat/`) still declares it
 on two attributes; that is a separate change, since removing it there invalidates every Italian
 mapped artefact.
+
+## Figure-6 answer labelling (2026-10-19)
+
+Every answer the researcher labelled a mapping-config miss (`M`) in
+`02_Data/figure6_labelling_2026-10-19/figure6_answer_labels.xlsx` is listed as an `equals` token on
+its target value: these are the exact rejected strings, so they reach no other text. Where the target
+value's own `none_of` would veto the string (a veto applies to `equals` too), the string is admitted
+by an `all_of_rules` rule naming it instead, and the veto itself is unchanged: `employment` `Employed` (three "tidigare" strings that state current work),
+`employment_type` `Not Applicable` (seven job-seeker strings containing "job"/"jobb"), education
+ISCED 1 ("shorter than 9 years") and `parental_structure` `Natural Parents` (both parents present
+with grandparents). Answers labelled `A` or `B` stay unmapped -- including every ägarlägenhet form,
+relabelled `B` (table-scope limit, see `housing_tenure` above).

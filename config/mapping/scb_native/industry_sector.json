@@ -161,7 +161,8 @@
         "Elektroteknik",
         "Underhållsteknik",
         "Läkemedel och bioteknik",
-        "Elektroteknik och automatisering"
+        "Elektroteknik och automatisering",
+        "Luft- och rymdfart"
       ],
       "contains": [
         {
@@ -326,7 +327,8 @@
         "Transport",
         "Transport och magasinering",
         "Logistik",
-        "Kurir- och budverksamhet (matleverans)"
+        "Kurir- och budverksamhet (matleverans)",
+        "Matleveranser"
       ],
       "contains": [
         {
@@ -360,7 +362,8 @@
       "equals": [
         "Accommodation & Food Services",
         "Hotell och restaurang",
-        "Hotell- och restaurangverksamhet"
+        "Hotell- och restaurangverksamhet",
+        "Kaféer och bakelerier"
       ],
       "contains": [
         "hospitality",
@@ -497,7 +500,11 @@
         "Personaladministration",
         "Security Services",
         "Rengöring",
-        "Industrivärden"
+        "Industrivärden",
+        "Ekonomisk rådgivning",
+        "Fack, vetenskap och teknisk verksamhet",
+        "Företagstjänster (management, rådgivning etc.)",
+        "Media and entertainment law"
       ],
       "contains": [
         "finansiell",
@@ -684,7 +691,8 @@
         "Offentlig förvaltning",
         "Offentlig sektor",
         "Försvar",
-        "Public Administration/Defense"
+        "Public Administration/Defense",
+        "Arbetsmarknadsdepartementet"
       ],
       "contains": [
         "offentlig förvaltning",
@@ -868,7 +876,9 @@
         "Other Services",
         "Annan serviceverksamhet",
         "Other service activities",
-        "Hushållsarbete"
+        "Hushållsarbete",
+        "Seniorförening",
+        "Tjänstesektorn (annat)"
       ],
       "contains": [
         "kultur",
@@ -920,7 +930,12 @@
     },
     "Not Applicable": {
       "equals": [
-        "Not Applicable"
+        "Not Applicable",
+        "Ej yrkesverksam (Pension)",
+        "Hushållsarbete i eget hem (ej förvärvsarbete)",
+        "No employment",
+        "Pensionist",
+        "Saknar arbetsplats"
       ],
       "contains": [
         "not applicable",
