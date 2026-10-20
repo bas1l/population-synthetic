@@ -820,6 +820,49 @@ def holm_adjust(pvals: list[float]) -> list[float]:
     return _holm(pvals)
 
 
+def fisher_exact_test(successes_a: int, n_a: int, successes_b: int, n_b: int) -> dict[str, Any]:
+    """Two-sided Fisher exact test of ``p_a == p_b`` on a 2 x 2 table of counts.
+
+    Exact where :func:`two_proportion_test` is asymptotic, so it stays valid when a
+    group has no successes at all. Returns ``{"p_a","p_b","diff","odds_ratio","p",
+    "n_a","n_b"}`` (``odds_ratio`` the sample odds ratio, ``inf`` or ``nan`` exactly as
+    scipy reports it, which a reader reads beside ``diff``).
+
+    Raises ``ValueError`` on a non-positive denominator or a count outside ``0..n``.
+    """
+    for k, n, name in ((successes_a, n_a, "a"), (successes_b, n_b, "b")):
+        if isinstance(n, bool) or int(n) != n or n <= 0:
+            raise ValueError(f"fisher_exact_test: n_{name} must be a positive integer, got {n!r}")
+        if isinstance(k, bool) or int(k) != k or not 0 <= k <= n:
+            raise ValueError(f"fisher_exact_test: successes_{name} must lie in 0..{n}, got {k!r}")
+    result = stats.fisher_exact([[successes_a, n_a - successes_a], [successes_b, n_b - successes_b]])
+    return {
+        "p_a": successes_a / n_a, "p_b": successes_b / n_b, "diff": successes_a / n_a - successes_b / n_b,
+        "odds_ratio": float(result[0]), "p": float(result[1]), "n_a": int(n_a), "n_b": int(n_b),
+    }
+
+
+def clopper_pearson_interval(successes: int, n: int, *, ci_level: float) -> tuple[float, float]:
+    """Exact (Clopper-Pearson) central interval of a binomial proportion.
+
+    The beta-quantile form: ``lo = Beta(tail; k, n - k + 1)`` (0 when ``k = 0``) and
+    ``hi = Beta(1 - tail; k + 1, n - k)`` (1 when ``k = n``), ``tail = (1 - ci_level) / 2``.
+
+    Raises ``ValueError`` on a non-positive *n*, a count outside ``0..n`` or a
+    ``ci_level`` outside ``(0, 1)``.
+    """
+    if isinstance(n, bool) or int(n) != n or n <= 0:
+        raise ValueError(f"clopper_pearson_interval: n must be a positive integer, got {n!r}")
+    if isinstance(successes, bool) or int(successes) != successes or not 0 <= successes <= n:
+        raise ValueError(f"clopper_pearson_interval: successes must lie in 0..{n}, got {successes!r}")
+    if not 0.0 < float(ci_level) < 1.0:
+        raise ValueError(f"clopper_pearson_interval: ci_level must lie in (0, 1), got {ci_level!r}")
+    tail = (1.0 - float(ci_level)) / 2.0
+    lo = 0.0 if successes == 0 else float(stats.beta.ppf(tail, successes, n - successes + 1))
+    hi = 1.0 if successes == n else float(stats.beta.ppf(1.0 - tail, successes + 1, n - successes))
+    return lo, hi
+
+
 def icc(ratings: Sequence[Sequence[float]]) -> dict[str, Any]:
     """Intraclass correlation ICC(1,1) -- one-way random-effects, single measure.
 

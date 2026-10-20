@@ -128,6 +128,21 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
                                           test and the complete-block Friedman test with Kendall's W.
     {country}/typicality_closeness_pairs.csv  strategy pairs (paired t / Holm, Conover / Holm) and
                                           model pairs (Conover / Holm) on the complete blocks.
+    {country}/clash_analysis.csv          one row per competitor (reference last): the individuals in
+                                          each worst-clash state (none / S1 / S2 / S3), the rates
+                                          (Clopper-Pearson), the difference from the reference
+                                          (bootstrap CI), Fisher exact p + Holm and a verdict, and
+                                          the four-state TV similarity with its noise baseline. The
+                                          categories listed in worst_clash_split.yaml
+                                          clash_analysis.excluded leave numerator and denominator;
+                                          n_excluded counts them.
+    {country}/clash_analysis_pooled.csv   the rates pooled per strategy and per model, minus the
+                                          reference's, with bootstrap CIs.
+    {country}/clash_analysis_decomposition.csv  the additive model + strategy decomposition of
+                                          each decomposed rate difference (share + CI, F,
+                                          within-block permutation p).
+    {country}/clash_analysis_rank3_pairs.csv  the attribute pairs of the rank-3 clashes, counted
+                                          per individual.
 
 Two gates run before any statistic (both failure modes produce plausible-looking wrong
 numbers, so neither is a warning): a combination is consumed only if its report, its
@@ -193,6 +208,10 @@ from population_synthetic.analysis.persona_realism.config import JudgeConfig
 from population_synthetic.analysis.realism_ranking.builder import (
     TYPICALITY_STATISTICS,
     build_ranking,
+    clash_analysis_decomposition_rows,
+    clash_analysis_pooled_rows,
+    clash_analysis_rank3_pair_rows,
+    clash_analysis_rows,
     scb_contrast_rows,
     severity_driver_rows,
     severity_driver_value_rows,
@@ -750,6 +769,24 @@ def main() -> None:
             print(f"Worst-clash split CSV written to {split_csv}")
         else:
             print("No worst-clash split: stage 2 is missing for a competitor (recorded in skipped_tests).")
+
+        # The clash analysis: worst-clash states against the reference, excluded categories removed.
+        if ranking["clash_analysis"] is not None:
+            for name, flatten, grain in (
+                ("clash_analysis.csv", clash_analysis_rows, "competitor"),
+                ("clash_analysis_pooled.csv", clash_analysis_pooled_rows, "factor x level x rate"),
+                ("clash_analysis_decomposition.csv", clash_analysis_decomposition_rows, "rate x factor"),
+                ("clash_analysis_rank3_pairs.csv", clash_analysis_rank3_pair_rows, "attribute pair"),
+            ):
+                written = _write_csv(flatten(ranking), country_dir / name)
+                if written is not None:
+                    print(f"Clash-analysis CSV ({grain}) written to {written}")
+            totals = ranking["clash_analysis"]["totals"]
+            print(f"clash analysis: {totals['n']} of {totals['n_judged']} synthetic individuals analysed, "
+                  f"{totals['n_excluded']} excluded ({', '.join(ranking['clash_analysis']['excluded_categories'])}) "
+                  f"in {totals['n_combinations_with_exclusions']} combination(s)")
+        else:
+            print("No clash analysis (recorded in skipped_tests).")
 
         # Reporting-only: each competitor's impossible personas split by stage-2 class.
         stage2_csv = _write_csv(stage2_breakdown_rows(ranking), country_dir / "stage2_breakdown.csv")

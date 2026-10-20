@@ -620,8 +620,33 @@ must state the same order, the loader raises otherwise). Two pipeline states com
     raises when drawn. The yaml's `display` block, copied into the ranking block, is presentation
     only: `only_when_nonzero` (`S3`, `pipeline`: drawn and listed only when some count in the
     figure is non-zero) and `off_ladder` (C, `pipeline`: listed after the ladder, set apart).
+    Each row also carries `n_excluded_from_clash_analysis`, the individuals the clash analysis
+    below leaves out.
   A competitor without a stage-2 CSV makes both blocks null with a recorded skip when none has one,
   and raises when only some do.
+- **Clash analysis.** `clash_analysis` (module `realism_ranking/clash_analysis.py`) is the
+  manuscript's clash analysis, declared in the same yaml under `clash_analysis`: every individual in
+  one of four worst-clash states (`states`: none, S1, S2, and S3 = `r3_impossible` + unsplit `S3`),
+  except the categories listed under `excluded` (`c_scb_category_limitation`, a limitation of the
+  SCB category system, and `pipeline`, an S3 clash stage 2 classed `mapping_error` / `judge_error`,
+  an error of this pipeline rather than of the individual), which leave **numerator and
+  denominator** of every statistic in the block; `n_excluded` is published per
+  competitor (`n_judged` = `n` + `n_excluded`) and in provenance (`clash_analysis_n_excluded`,
+  `clash_analysis_excluded_categories`). Per population: the `rates` (any clash, rank 2 or 3,
+  rank 3) with Clopper-Pearson intervals; per combination and rate, the difference from the
+  reference (bootstrap CI), the two-sided Fisher exact p, Holm over the combinations and a verdict
+  at `alpha`; the four-state TV similarity with its reference self-resampling baseline at the
+  combination's own n. Across combinations: the rates pooled per strategy and per model minus the
+  reference's, the additive model + strategy decomposition of each `decomposed_rates` difference
+  (type II shares with bootstrap CIs, within-block permutation F), and the rank-3 attribute pairs
+  counted per individual (pairs of the S3 issues whose stage-2 class falls in the S3 state, so an
+  R3 individual's label-clash pairs are not counted). Resampling settings are
+  `typicality_closeness.yaml`'s. Files: `clash_analysis.csv`, `clash_analysis_pooled.csv`,
+  `clash_analysis_decomposition.csv`, `clash_analysis_rank3_pairs.csv`. The exclusion is local to
+  this block: Axis A, `can_exist`, the mixed logit, `stage2_breakdown`, the severity heatmaps,
+  drivers and pair summaries, and the typicality blocks (which leave out every first-round S3
+  individual, C included) are stage-1 views and still count C and pipeline. Null with a recorded
+  skip without the real reference or without stage 2 on every competitor.
 - **Cost.** About 2.4 times a stage-1 call each (prototype: $0.039 and about 30 s per call), but only
   on personas with an S3 clash (1-2 % of the judged ones).
 - **Regression check, not validation.** The prompt was revised against 69 hand-labelled personas

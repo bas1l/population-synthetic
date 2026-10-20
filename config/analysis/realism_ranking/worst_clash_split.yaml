@@ -15,7 +15,12 @@
 #     categories that are not a rank of it);
 #   - `s3_split` maps every stage-2 class AND both pipeline states (`unclassified`,
 #     `not_applicable_no_free_text`) to one category -- no class may fall through;
-#   - `display` lists only declared categories (`only_when_nonzero`, `off_ladder`).
+#   - `display` lists only declared categories (`only_when_nonzero`, `off_ladder`);
+#   - `clash_analysis.excluded` and the categories of `clash_analysis.states` together list
+#     every declared category exactly once, `states` holds exactly the four ranks
+#     `none`, `S1`, `S2`, `S3` (none/S1/S2 each holding only itself), every `rates` entry
+#     is a non-empty list of those ranks, `decomposed_rates` names declared rates and
+#     `alpha` lies in (0, 1).
 # Each category id must have a display label `worst_clash_<id>` in
 # config/analysis/figure_terms.yaml and a colour in analysis/utils/palette.py
 # WORST_CLASH_COLORS (checked when a figure draws it).
@@ -56,3 +61,41 @@ display:
   off_ladder:
     - "c_scb_category_limitation"
     - "pipeline"
+
+# The clash analysis (realism_ranking block `clash_analysis`, files clash_analysis*.csv):
+# the per-individual worst-clash state compared with the reference -- the rates and their
+# Clopper-Pearson intervals, the Fisher exact tests per combination (Holm), the rates pooled
+# per strategy and per model with their difference from the reference, the TV similarity of
+# the four-state distribution (with its reference self-resampling baseline) and the additive
+# model + strategy decomposition of the rate differences (within-block permutation F). Its
+# resampling settings are typicality_closeness.yaml's (one set of bootstrap replicates).
+# It changes no Axis A number, can_exist, typicality statistic or other block's test.
+clash_analysis:
+  # Removed from numerator AND denominator of every clash-analysis statistic: a category
+  # listed here leaves the individual out of its combination's n (the excluded count is
+  # published per competitor). C is a limitation of the SCB category system, not a clash of
+  # the generated individual; pipeline (stage 2 classed the S3 clash mapping_error /
+  # judge_error) is an error of this pipeline, not of the individual. The reference has no
+  # free text and so never lands in either.
+  excluded:
+    - "c_scb_category_limitation"
+    - "pipeline"
+  # The four worst-clash states of the analysis, each the categories it holds. The unsplit
+  # S3 (stage-2 call failed; the reference) stays rank 3: nothing leaves the analysis unless
+  # listed above.
+  states:
+    none: ["none"]
+    S1: ["S1"]
+    S2: ["S2"]
+    S3: ["r3_impossible", "S3"]
+  # Each rate is the share of the analysed individuals in the listed states.
+  rates:
+    any_clash: ["S1", "S2", "S3"]
+    rank_2_or_3: ["S2", "S3"]
+    rank_3: ["S3"]
+  # Rates whose difference from the reference is decomposed into model + strategy.
+  decomposed_rates:
+    - "rank_2_or_3"
+    - "rank_3"
+  # Significance level of the per-combination verdicts (lower / higher / indistinguishable).
+  alpha: 0.05

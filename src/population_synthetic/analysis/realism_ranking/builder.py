@@ -63,6 +63,12 @@ from typing import Any, Callable, Sequence
 
 import numpy as np
 
+from population_synthetic.analysis.realism_ranking.clash_analysis import (
+    CLASH_STATES,
+    ClashGroup,
+    clash_analysis,
+    clash_analysis_options,
+)
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord
 from population_synthetic.analysis.realism_ranking.typicality_closeness import (
     CLOSENESS_OUTCOMES,
@@ -119,6 +125,10 @@ __all__ = [
     "TYPICALITY_OPTION_KEYS",
     "TYPICALITY_STATISTICS",
     "build_ranking",
+    "clash_analysis_decomposition_rows",
+    "clash_analysis_pooled_rows",
+    "clash_analysis_rank3_pair_rows",
+    "clash_analysis_rows",
     "summary_rows",
     "scb_contrast_rows",
     "severity_driver_rows",
@@ -2253,7 +2263,7 @@ def worst_clash_split_options(spec: Mapping[str, Any]) -> dict[str, Any]:
     """Validate the ``worst_clash_split.yaml`` bundle (fail-fast; see that file for the rules)."""
     if not isinstance(spec, Mapping):
         raise ValueError(f"worst-clash split config must be a mapping, got {type(spec).__name__}")
-    for key in ("categories", "s3_split", "display"):
+    for key in ("categories", "s3_split", "display", "clash_analysis"):
         if key not in spec:
             raise ValueError(f"worst-clash split config is missing {key!r}")
     categories = [str(c) for c in spec["categories"]]
@@ -2287,7 +2297,50 @@ def worst_clash_split_options(spec: Mapping[str, Any]) -> dict[str, Any]:
         display[key] = ids
     if set(display["off_ladder"]) & set(_WORST_FIXED):
         raise ValueError(f"worst-clash split display.off_ladder cannot hold a ladder level {list(_WORST_FIXED)}")
-    return {"categories": categories, "s3_split": split, "display": display}
+    return {"categories": categories, "s3_split": split, "display": display,
+            "clash_analysis": clash_analysis_options(spec["clash_analysis"], categories)}
+
+
+def _persona_class_order(records: Sequence[CompetitorRecord], where: str) -> tuple[str, ...]:
+    orders = {tuple(r.provenance.get("stage2_persona_class_order") or ()) for r in records}
+    if len(orders) != 1 or not next(iter(orders)):
+        raise ValueError(f"{where}: the competitors stamp different or no persona-class orders {orders}")
+    return next(iter(orders))
+
+
+def _stage2_issues(record: CompetitorRecord) -> dict[str, list[Any]]:
+    issues: dict[str, list[Any]] = {}
+    for row in record.stage2 or ():
+        issues.setdefault(row.persona_id, []).append(row)
+    return issues
+
+
+def _worst_categories(
+    record: CompetitorRecord, options: Mapping[str, Any], order: Sequence[str]
+) -> list[tuple[str, str, str | None]]:
+    """``(persona_id, worst-clash category, stage-2 persona class or None)`` per persona, in record order.
+
+    The one placement both the split and the clash analysis read: the worst clash is the
+    per-persona ``max_severity`` over the consumed rounds (empty = no clash), and an S3
+    individual is placed by its stage-2 persona class through ``options["s3_split"]``.
+    """
+    issues = _stage2_issues(record)
+    out: list[tuple[str, str, str | None]] = []
+    for persona in record.personas:
+        worst = persona.max_severity or "none"
+        if worst != "S3":
+            if worst not in _WORST_FIXED:
+                raise ValueError(f"{record.slug} {persona.persona_id}: unknown max_severity {worst!r}")
+            out.append((persona.persona_id, worst, None))
+            continue
+        if persona.persona_id not in issues:
+            raise ValueError(
+                f"Worst-clash split: {record.slug} {persona.persona_id} has an S3 clash but no stage-2 "
+                "row; the per-persona and stage-2 CSVs describe different states of the cache."
+            )
+        cls = persona_class([row.stage2_class for row in issues[persona.persona_id]], order)
+        out.append((persona.persona_id, options["s3_split"][cls], cls))
+    return out
 
 
 def _worst_clash_split(
@@ -2314,39 +2367,24 @@ def _worst_clash_split(
                    "re-run analyze_persona_realism.py (with stage2.enabled).",
         ))
         return None
-    orders = {tuple(r.provenance.get("stage2_persona_class_order") or ()) for r in records}
-    if len(orders) != 1 or not next(iter(orders)):
-        raise ValueError(f"Worst-clash split: the competitors stamp different or no persona-class orders {orders}")
-    order = next(iter(orders))
+    order = _persona_class_order(records, "Worst-clash split")
     categories = options["categories"]
+    excluded = set(options["clash_analysis"]["excluded"])
     rows = []
     for record in records:
-        issues: dict[str, list[str]] = {}
-        for row in record.stage2 or ():
-            issues.setdefault(row.persona_id, []).append(row.stage2_class)
         counts = {c: 0 for c in categories}
         s3_classes = {c: 0 for c in STAGE2_BREAKDOWN_CLASSES}
-        for persona in record.personas:
-            worst = persona.max_severity or "none"
-            if worst != "S3":
-                if worst not in _WORST_FIXED:
-                    raise ValueError(f"{record.slug} {persona.persona_id}: unknown max_severity {worst!r}")
-                counts[worst] += 1
-                continue
-            if persona.persona_id not in issues:
-                raise ValueError(
-                    f"Worst-clash split: {record.slug} {persona.persona_id} has an S3 clash but no stage-2 "
-                    "row; the per-persona and stage-2 CSVs describe different states of the cache."
-                )
-            cls = persona_class(issues[persona.persona_id], order)
-            s3_classes[cls] += 1
-            counts[options["s3_split"][cls]] += 1
+        for _pid, category, cls in _worst_categories(record, options, order):
+            counts[category] += 1
+            if cls is not None:
+                s3_classes[cls] += 1
         rows.append({
             "slug": record.slug,
             "model": record.model,
             "strategy": record.strategy,
             "is_real_reference": record.is_real_reference,
             "n_individuals": len(record.personas),
+            "n_excluded_from_clash_analysis": sum(counts[c] for c in excluded),
             "counts": counts,
             "s3_by_stage2_class": s3_classes,
         })
@@ -2356,8 +2394,94 @@ def _worst_clash_split(
         "categories": list(categories),
         "s3_split": dict(options["s3_split"]),
         "display": {k: list(v) for k, v in options["display"].items()},
+        "clash_analysis_excluded": list(options["clash_analysis"]["excluded"]),
         "competitors": rows,
     }
+
+
+def _clash_group(
+    record: CompetitorRecord, options: Mapping[str, Any], order: Sequence[str]
+) -> ClashGroup:
+    """One competitor's analysed individuals as one-hot state rows, its exclusions and its rank-3 pairs.
+
+    A rank-3 pair is a sorted attribute pair of one of the individual's S3 clashes whose
+    stage-2 class places it in the S3 state (for the live config: ``raw_impossible``), so an
+    R3 individual's label-clash pairs are not counted as rank-3 pairs.
+    """
+    spec = options["clash_analysis"]
+    state_of = {c: state for state, members in spec["states"].items() for c in members}
+    s3_members = set(spec["states"]["S3"])
+    excluded = set(spec["excluded"])
+    issues = _stage2_issues(record)
+    rows: list[np.ndarray] = []
+    n_excluded = 0
+    pairs: dict[tuple[str, str], int] = {}
+    for pid, category, _cls in _worst_categories(record, options, order):
+        if category in excluded:
+            n_excluded += 1
+            continue
+        state = state_of[category]
+        unit = np.zeros(len(CLASH_STATES))
+        unit[CLASH_STATES.index(state)] = 1.0
+        rows.append(unit)
+        if state == "S3":
+            held = {(row.attr_a, row.attr_b) for row in issues.get(pid, ())
+                    if options["s3_split"][row.stage2_class] in s3_members}
+            for pair in held:
+                pairs[pair] = pairs.get(pair, 0) + 1
+    return ClashGroup(
+        slug=record.slug, model=record.model, strategy=record.strategy,
+        units=np.array(rows).reshape(-1, len(CLASH_STATES)), n_excluded=n_excluded, rank3_pairs=pairs,
+    )
+
+
+def _clash_analysis(
+    synthetic: Sequence[CompetitorRecord],
+    real: CompetitorRecord | None,
+    options: Mapping[str, Any] | None,
+    *,
+    resampling: Mapping[str, Any],
+    skips: list[_Skip],
+) -> dict[str, Any] | None:
+    """Adapt the records to :func:`~.clash_analysis.clash_analysis` and run it.
+
+    Needs the split options (the clash analysis is declared in the same file), stage 2 on
+    every competitor (S3 must be split before a category can be excluded) and the real
+    reference. Combinations are passed in ``_competitor_position`` order, as for the
+    closeness block.
+    """
+    if options is None:
+        skips.append(_Skip(test="clash_analysis", reason="the caller passed no worst-clash split options"))
+        return None
+    options = worst_clash_split_options(options)
+    if real is None:
+        skips.append(_Skip(test="clash_analysis",
+                           reason="no real population in the consumption set; nothing to compare with."))
+        return None
+    if not synthetic:
+        skips.append(_Skip(test="clash_analysis", reason="no synthetic combination in the consumption set."))
+        return None
+    records = [*synthetic, real]
+    if any(r.stage2 is None for r in records):
+        skips.append(_Skip(
+            test="clash_analysis",
+            reason="not every competitor carries a {combo}_stage2.csv, so S3 cannot be split and the "
+                   "excluded categories cannot be removed; re-run analyze_persona_realism.py (with stage2.enabled).",
+        ))
+        return None
+    order = _persona_class_order(records, "Clash analysis")
+    entries = _grid_entries(synthetic)
+    entries.sort(key=_competitor_position(entries))
+    groups = [_clash_group(entry["_record"], options, order) for entry in entries]
+    block, sub_skips = clash_analysis(
+        groups, _clash_group(real, options, order),
+        models=sorted({g.model for g in groups}),
+        strategies=strategy_complexity_order(sorted({g.strategy for g in groups})),
+        spec=options["clash_analysis"],
+        resampling=resampling,
+    )
+    skips.extend(_Skip(test=test, reason=reason) for test, reason in sub_skips)
+    return block
 
 
 def worst_clash_split_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2370,9 +2494,91 @@ def worst_clash_split_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
             "slug": row["slug"], "model": row["model"], "strategy": row["strategy"],
             "is_real_reference": row["is_real_reference"], "n_individuals": row["n_individuals"],
             **{f"n_{c}": row["counts"][c] for c in block["categories"]},
+            "n_excluded_from_clash_analysis": row["n_excluded_from_clash_analysis"],
         }
         for row in block["competitors"]
     ]
+
+
+def clash_analysis_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten ``clash_analysis`` into ``clash_analysis.csv`` rows: one per competitor, reference last."""
+    block = ranking.get("clash_analysis")
+    if not block:
+        return []
+    out = []
+    for row in block["competitors"]:
+        flat: dict[str, Any] = {
+            "slug": row["slug"], "model": row["model"], "strategy": row["strategy"],
+            "is_real_reference": row["is_real_reference"], "n_judged": row["n_judged"],
+            "n_excluded": row["n_excluded"], "n": row["n"],
+            **{f"n_{state}": row["counts"][state] for state in block["states"]},
+        }
+        for name in block["rates"]:
+            rate = row["rates"][name]
+            flat.update({f"{name}_count": rate["count"], f"{name}_rate": rate["rate"],
+                         f"{name}_ci_lo": rate["ci_lo"], f"{name}_ci_hi": rate["ci_hi"]})
+            vs = (row["vs_reference"] or {}).get(name) or {}
+            for key in ("diff", "diff_ci_lo", "diff_ci_hi", "p_fisher", "p_holm", "verdict"):
+                flat[f"{name}_{key}"] = vs.get(key)
+        tv = row["tv_similarity"] or {}
+        flat["tv_similarity"] = tv.get("value")
+        for key in ("ci_lo", "ci_hi", "noise_mean", "noise_bound"):
+            flat[f"tv_similarity_{key}"] = tv.get(key)
+        flat["excluded_categories"] = ";".join(block["excluded_categories"])
+        out.append(flat)
+    return out
+
+
+def clash_analysis_pooled_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the pooled rates into ``clash_analysis_pooled.csv``: one row per factor x level x rate."""
+    block = ranking.get("clash_analysis")
+    if not block:
+        return []
+    reference = next(row for row in block["competitors"] if row["is_real_reference"])
+    out = []
+    for factor, levels in block["pooled"].items():
+        for level in levels:
+            for name in block["rates"]:
+                entry = level[name]
+                out.append({
+                    "factor": factor, "level": level["level"], "rate_name": name,
+                    "n_combinations": level["n_combinations"], "n": level["n"], "n_excluded": level["n_excluded"],
+                    "count": entry["count"], "rate": entry["rate"],
+                    "reference_rate": reference["rates"][name]["rate"],
+                    "diff": entry["diff"], "diff_ci_lo": entry["diff_ci_lo"], "diff_ci_hi": entry["diff_ci_hi"],
+                })
+    return out
+
+
+def clash_analysis_decomposition_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the decomposition into ``clash_analysis_decomposition.csv``: one row per rate x factor."""
+    block = ranking.get("clash_analysis")
+    if not block:
+        return []
+    out = []
+    for name, entry in block["decomposition"].items():
+        anova = entry["anova"]
+        for factor in ("strategy", "model"):
+            factor_stats = anova["factors"][factor]
+            perm = entry["permutation"][factor]
+            share_ci = ((entry["intervals"] or {}).get(factor) or {}).get("share") or {}
+            out.append({
+                "rate_name": name, "factor": factor, "df": factor_stats["df"], "df_residual": anova["df_residual"],
+                "share": factor_stats["share"], "share_ci_lo": share_ci.get("ci_lo"),
+                "share_ci_hi": share_ci.get("ci_hi"), "F": factor_stats["F"], "p_parametric": factor_stats["p"],
+                "p_permutation": perm["p"], "permutation_iterations": perm["iterations"],
+                "share_residual": anova["share_residual"],
+            })
+    return out
+
+
+def clash_analysis_rank3_pair_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the rank-3 attribute pairs into ``clash_analysis_rank3_pairs.csv`` (most frequent first)."""
+    block = ranking.get("clash_analysis")
+    if not block:
+        return []
+    n = block["rank3_pairs"]["n_individuals"]
+    return [{**pair, "n_rank3_individuals": n} for pair in block["rank3_pairs"]["pairs"]]
 
 
 def stage2_breakdown_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2519,6 +2725,7 @@ def build_ranking(
     # Reporting-only, like the severity blocks; both append to *skips*.
     stage2 = _stage2_breakdown(records, skips)
     worst_split = _worst_clash_split(records, worst_clash_split, skips)
+    clash_block = _clash_analysis(synthetic, real, worst_clash_split, resampling=closeness, skips=skips)
 
     provenance = dict(records[0].provenance) if records else {}
     return {
@@ -2579,6 +2786,9 @@ def build_ranking(
         # Every individual at its worst clash, R3 split into impossible individual /
         # contradictory labels / pipeline by stage 2 -- the figure data. Reporting only.
         "worst_clash_split": worst_split,
+        # The clash analysis: every population's worst-clash states and rates against the
+        # reference, the excluded categories removed from numerator and denominator.
+        "clash_analysis": clash_block,
         "factor_significance": {
             "by_model": by_model,
             "by_method": by_method,
@@ -2607,6 +2817,11 @@ def build_ranking(
             "n_rounds_source": provenance.get("n_rounds_source"),
             "typicality_bands": list(typicality_bands),
             "closeness_resampling": dict(closeness),
+            # What the clash analysis left out, so its denominators are never guessed.
+            "clash_analysis_excluded_categories": (
+                None if clash_block is None else list(clash_block["excluded_categories"])
+            ),
+            "clash_analysis_n_excluded": None if clash_block is None else clash_block["totals"]["n_excluded"],
             "consumed_artifacts": [str(record.report_path) for record in records],
         },
     }
