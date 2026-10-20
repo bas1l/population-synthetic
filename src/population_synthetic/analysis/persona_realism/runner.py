@@ -358,6 +358,9 @@ def _read_cached_rounds(
     path: Path,
     *,
     expected_id: str,
+    persona: dict[str, Any],
+    analyzed_attrs: list[str],
+    judge_model: str,
     check_isolation: bool = True,
     prompt_identity: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
@@ -373,7 +376,20 @@ def _read_cached_rounds(
     so reusing them would silently mis-attribute verdicts. That raises rather than
     being repaired, because the correct repair (re-judge, or restore the matching
     cap) is a decision about cost that this layer cannot make.
+
+    The same holds for the persona's *values*: the stored ``attributes`` snapshot must
+    equal the current mapped record over ``analyzed_attrs``, resolved through the same
+    :func:`attr_value` accessor :func:`_write_persona_file` stamps it with. A persona
+    re-mapped since it was judged keeps its id but is no longer the persona the judge
+    read, so its rounds are refused -- on every path, plan-only included, because they
+    would be mis-attributed whether or not anything is judged. A missing or extra
+    snapshot key is the same refusal. ``judge_model`` must equal the configured one on
+    every path that may write: topping up under another judge would mix two judges
+    inside one persona.
     """
+    # Lazy import (mirrors _write_persona_file): keep the statistics stack off import time.
+    from population_synthetic.analysis.fidelity.evaluator import attr_value
+
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -388,6 +404,31 @@ def _read_cached_rounds(
     rounds = payload.get("rounds")
     if not isinstance(rounds, list):
         raise ValueError(f"persona cache {path} has no 'rounds' list to resume from")
+    snapshot = payload.get("attributes")
+    if not isinstance(snapshot, dict):
+        raise ValueError(f"persona cache {path} has no 'attributes' snapshot to verify the persona against")
+    current = {attr: attr_value(persona, attr) for attr in analyzed_attrs}
+    missing = sorted(set(current) - set(snapshot))
+    extra = sorted(set(snapshot) - set(current))
+    changed = {
+        attr: {"cached": snapshot[attr], "current": current[attr]}
+        for attr in analyzed_attrs
+        if attr in snapshot and snapshot[attr] != current[attr]
+    }
+    if missing or extra or changed:
+        raise ValueError(
+            f"persona cache {path} was judged against other mapped values than {expected_id!r} now "
+            f"holds (changed: {changed}; missing from the snapshot: {missing}; not on the analyzed "
+            f"axis: {extra}). The persona was re-mapped, or the analyzed axis changed, after it was "
+            "judged, so its rounds describe another persona -- re-run with --force to re-judge."
+        )
+    stored_model = payload.get("judge_model")
+    if check_isolation and stored_model != judge_model:
+        raise ValueError(
+            f"persona cache {path} was judged by judge_model={stored_model!r}, not the configured "
+            f"{judge_model!r}. It can be neither reused nor topped up without mixing judges -- "
+            "re-run with --force to re-judge."
+        )
     # ``check_isolation`` is off only for the plan-only path, which judges nothing and
     # so cannot mix regimes; every path that may write must refuse a foreign regime.
     stored_isolation = payload.get("context_isolation")
@@ -568,8 +609,9 @@ def run_combo_judgements(
         persona_file = out_dir / f"{keys[idx]}.json"
         if persona_file.exists() and not force:
             cached = _read_cached_rounds(
-                persona_file, expected_id=keys[idx], check_isolation=not plan_only,
-                prompt_identity=prompt_identity,
+                persona_file, expected_id=keys[idx], persona=population[idx],
+                analyzed_attrs=analyzed_attrs, judge_model=cfg.judge_model,
+                check_isolation=not plan_only, prompt_identity=prompt_identity,
             )
             if len(cached) >= cfg.n_rounds:
                 skipped += 1  # already at/above the target round count

@@ -816,6 +816,102 @@ def test_cached_verdicts_for_a_different_persona_raise(tmp_path):
         )
 
 
+def test_cached_verdicts_for_a_remapped_persona_raise(tmp_path):
+    """Same persona id, one mapped value changed since judging: resume refuses the cache.
+
+    A re-mapping keeps the id but changes what the judge would read; topping up (or
+    reusing) the old rounds would attribute verdicts on the old values to the new ones.
+    """
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    judged = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
+    run_combo_judgements(
+        judged, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+        dataclasses.replace(_cfg(), n_rounds=1), client_factory=_stub_factory(),
+    )
+
+    changed_attr = attrs[1]
+    remapped = [{**judged[0], changed_attr: "val_remapped"}]
+    for n_rounds in (1, 2):  # a pure reuse and a top-up are both refused
+        with pytest.raises(ValueError, match=rf"persona_00007(?s:.*){changed_attr}(?s:.*)val_remapped(?s:.*)--force"):
+            run_combo_judgements(
+                remapped, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+                dataclasses.replace(_cfg(), n_rounds=n_rounds), client_factory=_stub_factory(),
+            )
+    # The plan-only (artifact-rewrite) path refuses it too: the rounds are mis-attributed
+    # whether or not anything is judged.
+    with pytest.raises(ValueError, match="other mapped values"):
+        run_combo_judgements(
+            remapped, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+            dataclasses.replace(_cfg(), n_rounds=1), plan_only=True,
+        )
+
+
+def test_cached_snapshot_with_a_missing_or_extra_attribute_raises(tmp_path):
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
+    cfg = dataclasses.replace(_cfg(), n_rounds=1)
+    run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+                         client_factory=_stub_factory())
+    path = combo_dir / "persona_00007.json"
+    original = json.loads(path.read_text(encoding="utf-8"))
+
+    dropped = {**original, "attributes": {a: v for a, v in original["attributes"].items() if a != attrs[1]}}
+    path.write_text(json.dumps(dropped), encoding="utf-8")
+    with pytest.raises(ValueError, match=rf"missing from the snapshot: \['{attrs[1]}'\]"):
+        run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+                             client_factory=_stub_factory())
+
+    padded = {**original, "attributes": {**original["attributes"], "not_an_axis": "x"}}
+    path.write_text(json.dumps(padded), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"not on the analyzed axis: \['not_an_axis'\]"):
+        run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+                             client_factory=_stub_factory())
+
+
+def test_cached_verdicts_from_another_judge_model_raise(tmp_path):
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
+    cfg = dataclasses.replace(_cfg(), n_rounds=1)
+    run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+                         client_factory=_stub_factory())
+
+    other = dataclasses.replace(cfg, judge_model="some-other-judge")
+    with pytest.raises(ValueError, match=r"judge_model=.*not the configured 'some-other-judge'(?s:.*)--force"):
+        run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, other,
+                             client_factory=_stub_factory())
+    # --force re-judges under the configured model.
+    summary = run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, other,
+                                   force=True, client_factory=_stub_factory())
+    assert summary.written == 1
+    cache = json.loads((combo_dir / "persona_00007.json").read_text(encoding="utf-8"))
+    assert cache["judge_model"] == "some-other-judge"
+
+
+def test_unchanged_persona_resumes_and_tops_up(tmp_path):
+    """The validity checks pass a cache whose persona, judge and prompt are unchanged."""
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
+    run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+                         dataclasses.replace(_cfg(), n_rounds=1), client_factory=_stub_factory())
+
+    reuse = run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+                                 dataclasses.replace(_cfg(), n_rounds=1), client_factory=_stub_factory())
+    assert reuse.skipped == 1 and reuse.written == 0
+    top_up = run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+                                  dataclasses.replace(_cfg(), n_rounds=2), client_factory=_stub_factory())
+    assert top_up.topped_up == 1
+    cache = json.loads((combo_dir / "persona_00007.json").read_text(encoding="utf-8"))
+    assert cache["successful_rounds"] == 2
+
+
 @pytest.mark.parametrize(
     "bad_id, match",
     [

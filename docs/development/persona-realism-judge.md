@@ -737,6 +737,19 @@ later extends a run without discarding it. Each report's provenance takes both s
 caches (mixed stamps in one combination raise; a pre-stamp combination reads `null`), and
 `realism_ranking` compares both as judge-identity keys.
 
+## Persona identity and judge model
+
+Two more stamps gate resume. Every persona cache stores an `attributes` snapshot -- the analyzed
+axis resolved through `attr_value`, exactly what the judge read -- and the `judge_model`. On resume
+the snapshot must equal the current mapped record value for value: a persona re-mapped since it was
+judged keeps its id but is a different persona, so a changed value, a snapshot key missing, or a key
+no longer on the analyzed axis raises, naming the persona, the attributes and the cached vs current
+values, and points at `--force`. This check also runs under `--rewrite-artifacts`, since the rounds
+would be mis-attributed whether or not anything is judged. A cache judged by another `judge_model`
+raises the same way on every path that may write (`--rewrite-artifacts` may still read it). Stage 2
+needs no check of its own: it classifies from the stage-1 cache's snapshot, and the stage-1 gate has
+already matched that snapshot to the mapped file before stage 2 runs.
+
 ## Reliability is self-consistency, not validity
 
 The ICC / Krippendorff's α metric measures the judge's agreement **with itself** across the N rounds
