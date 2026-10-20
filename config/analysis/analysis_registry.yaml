@@ -313,10 +313,11 @@ processes:
       Publishes the validation gate's per-combination attrition: the five-stage
       funnel (generated -> raw-valid -> mapped-valid -> clean -> selected) read
       back out of population_cap/_index.json and the two validator roll-ups, plus
-      the two rates derived from it -- retention_rate (clean / generated) and
-      generation_multiplier (generated / clean, personas generated per USABLE
+      the two rates derived from it -- retention_rate (clean / raw_valid) and
+      generation_multiplier (raw_valid / clean, finished personas per USABLE
       persona, deliberately not denominated on selected, which is zero for every
-      withdrawn combination). Re-reads what the gate already wrote, performing no
+      withdrawn combination; a persona failing validate_raw is a generation
+      stopped midway and is ignored by both rates). Re-reads what the gate already wrote, performing no
       validation, no capping and no LLM work. Its row grain is EVERY combination
       the gate recorded, INCLUDING the ones the full-N rule withdrew: an excluded
       combination has no capped mirror, no capped mapped file and no

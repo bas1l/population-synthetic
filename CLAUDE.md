@@ -89,9 +89,11 @@ capped mapped file + copied real reference under `.../population_cap/_mapped/` (
 mapped-file analysis via `analysis/utils/capped_source.resolve_mapped_dir`, fail-fast, no `mapping/`
 fallback), `validation_attrition/` the gate's own report on what it discarded — per combination the
 five-stage funnel (generated -> raw-valid -> mapped-valid -> clean -> selected) read back out of
-`population_cap/_index.json` and the two validator roll-ups, plus `retention_rate` (clean/generated)
-and `generation_multiplier` (generated/clean, personas generated per *usable* persona, deliberately
-not denominated on `selected`, which is zero for every withdrawal); it validates nothing and caps
+`population_cap/_index.json` and the two validator roll-ups, plus `retention_rate` (clean/raw_valid)
+and `generation_multiplier` (raw_valid/clean, finished personas per *usable* persona, deliberately
+not denominated on `selected`, which is zero for every withdrawal; neither divides by `generated`,
+because a persona failing `validate_raw` is a generation stopped midway, an artefact of interrupting
+the run -- the `generated` count stays in the CSV for transparency only); it validates nothing and caps
 nothing, and its row grain is **every** combination the gate recorded **including the withdrawn
 ones**, which makes it the only artifact in the layer on which an excluded combination appears at
 all (one tidy CSV + JSON per country, a normalised per-combination funnel and a model × method

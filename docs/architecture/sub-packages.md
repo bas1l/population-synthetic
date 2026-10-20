@@ -112,8 +112,11 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
   five-stage per-combination funnel -- generated (`CapSummary.raw_total`, the pool globbed at cap
   time and the only observation of it independent of the validators) -> raw-valid -> mapped-valid ->
   clean -> selected -- together with the two rates derived from it: `retention_rate` (clean /
-  generated) and `generation_multiplier` (generated / clean, personas generated per *usable* persona,
+  raw_valid) and `generation_multiplier` (raw_valid / clean, finished personas per *usable* persona,
   deliberately **not** denominated on `selected`, which is zero for every withdrawn combination).
+  Neither divides by `generated`: a persona failing `validate_raw` is a generation stopped midway
+  (only `identity.partial.json`), an artefact of interrupting the run; the funnel draws the
+  finished pool and prints the unfinished count beside each bar.
   `loader.py` reads the three sources and gates on them agreeing (a missing roll-up is a skip with a
   machine-readable reason, `--strict` raises; disagreeing counts always raise, naming both files and
   the ordered re-run); `builder.py` derives both rates, returning `None` -- never `0`, never `inf` --

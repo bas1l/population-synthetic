@@ -16,14 +16,18 @@ would leave the sweep looking as though it had consisted solely of what survived
 
 Two derived rates, denominated deliberately:
 
-  retention_rate          clean / generated -- the share of a generated pool that
-                          survived both gates. Empty (never 0.0) when nothing was
-                          generated; a measured 0.0 means a pool was generated and
-                          wholly discarded, which is a finding, not an absence.
-  generation_multiplier   generated / clean -- personas generated per USABLE persona.
-                          Deliberately not generated / selected, whose denominator is
+  retention_rate          clean / raw_valid -- the share of the FINISHED pool that
+                          survived both gates. Empty (never 0.0) when nothing
+                          finished; a measured 0.0 means a finished pool was wholly
+                          discarded, which is a finding, not an absence.
+  generation_multiplier   raw_valid / clean -- finished personas per USABLE persona.
+                          Deliberately not raw_valid / selected, whose denominator is
                           zero for every withdrawn combination, i.e. undefined exactly
                           where the number matters most.
+
+  Neither rate divides by generated: a persona failing validate_raw is a generation
+  stopped midway (only identity.partial.json), an artefact of interrupting the run. The
+  generated count stays in the CSV for transparency.
 
 Outputs, per country, under the analysis-stage validation_attrition folder:
     {country}_attrition.csv     one row per combination (schema v1, 15 columns)
@@ -170,7 +174,8 @@ def _print_country_summary(document: dict) -> None:
     print("=" * 96)
     print(
         f"{document['n_combinations']} combination(s), {document['n_excluded']} withdrawn "
-        f"| pooled: {totals['generated']} generated -> {totals['clean']} clean -> "
+        f"| pooled: {totals['generated']} generated -> {totals['raw_valid']} finished -> "
+        f"{totals['clean']} clean -> "
         f"{totals['selected']} selected"
         + ("" if pooled is None else f" ({pooled * 100:.1f}% retained)")
     )

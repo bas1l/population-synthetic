@@ -8,24 +8,31 @@ visualization is a pure sink) and the CSV and the figure can never disagree.
 
 **The two rates, and why they are denominated the way they are.**
 
-``retention_rate = clean / generated``
-    The share of the generated pool that survives *both* validity gates. Undefined --
-    ``None``, an empty cell -- when nothing was generated.
+``retention_rate = clean / raw_valid``
+    The share of the **finished** pool that survives *both* validity gates. Undefined --
+    ``None``, an empty cell -- when no persona finished.
 
-``generation_multiplier = generated / clean``
-    Personas generated per *usable* persona. Deliberately **not**
-    ``generated / selected``: ``selected`` is zero for every combination the full-N
+``generation_multiplier = raw_valid / clean``
+    Finished personas per *usable* persona. Deliberately **not**
+    ``raw_valid / selected``: ``selected`` is zero for every combination the full-N
     rule withdrew, so that denominator is undefined precisely on the seven
     ``swedish_02`` combinations whose waste the artifact exists to show. Denominating
     on ``clean`` keeps the number computable exactly where it matters most, and it
     answers the question an operator actually asks -- how many personas must I generate
     to obtain one I can use -- rather than a question about the cap's ceiling.
 
+**Why ``raw_valid`` and not ``generated``.** A persona that fails the raw-completeness
+gate is, on this pipeline, a generation stopped midway (only ``identity.partial.json`` on
+disk): an artefact of interrupting the run, not an outcome of the model or the method.
+Counting it would charge a combination for when its run happened to be stopped. So no
+rate divides by ``generated``; the count is still published, beside ``raw_valid``, so the
+unfinished personas stay visible.
+
 Both are reciprocals on the same pair of counts, and both are published, because they
 are read in opposite directions: the rate is what a survival figure plots, the
 multiplier is what a cost figure multiplies by. Neither is ever ``0.0`` or infinite
-when undefined; ``0.0`` retention is a real measurement (personas were generated and
-none survived) and must stay distinguishable from an absent one.
+when undefined; ``0.0`` retention is a real measurement (personas finished and none
+survived) and must stay distinguishable from an absent one.
 
 The pooled totals in the document are sums of persona counts, which are additive, so
 the pooled rate is a legitimate count-weighted mean over the selected combinations --
@@ -56,19 +63,19 @@ __all__ = [
 PROCESS_ID = "validation_attrition"
 
 
-def retention_rate(generated: int, clean: int) -> float | None:
-    """``clean / generated``, or ``None`` when nothing was generated.
+def retention_rate(raw_valid: int, clean: int) -> float | None:
+    """``clean / raw_valid``, or ``None`` when no persona finished.
 
-    ``None`` and not ``0.0``: a zero retention rate says a pool was generated and
-    entirely discarded, which is a measurement. An empty pool supports no such claim.
+    ``None`` and not ``0.0``: a zero retention rate says a finished pool was entirely
+    discarded, which is a measurement. An empty pool supports no such claim.
     """
-    if generated == 0:
+    if raw_valid == 0:
         return None
-    return clean / generated
+    return clean / raw_valid
 
 
-def generation_multiplier(generated: int, clean: int) -> float | None:
-    """``generated / clean`` -- personas generated per usable persona; ``None`` at ``clean == 0``.
+def generation_multiplier(raw_valid: int, clean: int) -> float | None:
+    """``raw_valid / clean`` -- finished personas per usable persona; ``None`` at ``clean == 0``.
 
     ``None`` and not infinity: a combination with no usable personas has *no* finite
     cost per usable persona, and writing ``inf`` would let it be plotted, sorted and
@@ -76,7 +83,7 @@ def generation_multiplier(generated: int, clean: int) -> float | None:
     """
     if clean == 0:
         return None
-    return generated / clean
+    return raw_valid / clean
 
 
 def build_rows(records: Sequence[AttritionRecord]) -> list[AttritionRow]:
@@ -97,8 +104,8 @@ def build_rows(records: Sequence[AttritionRecord]) -> list[AttritionRow]:
             mapped_valid=record.mapped_valid,
             clean=record.clean,
             selected=record.selected,
-            retention_rate=retention_rate(record.generated, record.clean),
-            generation_multiplier=generation_multiplier(record.generated, record.clean),
+            retention_rate=retention_rate(record.raw_valid, record.clean),
+            generation_multiplier=generation_multiplier(record.raw_valid, record.clean),
             excluded=record.excluded,
             exclusion_reason=record.exclusion_reason,
             had_surplus=record.had_surplus,
@@ -133,16 +140,16 @@ def _combination_entry(row: AttritionRow) -> dict[str, Any]:
 
 def _totals(rows: Sequence[AttritionRow]) -> dict[str, Any]:
     """Pooled funnel counts and the two rates over them (see the module docstring)."""
-    generated = sum(row.generated for row in rows)
+    raw_valid = sum(row.raw_valid for row in rows)
     clean = sum(row.clean for row in rows)
     return {
-        "generated": generated,
-        "raw_valid": sum(row.raw_valid for row in rows),
+        "generated": sum(row.generated for row in rows),
+        "raw_valid": raw_valid,
         "mapped_valid": sum(row.mapped_valid for row in rows),
         "clean": clean,
         "selected": sum(row.selected for row in rows),
-        "retention_rate": retention_rate(generated, clean),
-        "generation_multiplier": generation_multiplier(generated, clean),
+        "retention_rate": retention_rate(raw_valid, clean),
+        "generation_multiplier": generation_multiplier(raw_valid, clean),
     }
 
 
@@ -180,16 +187,20 @@ def build_document(
             "generated": (
                 "persona_* directories the cap observed under 01_Raw for this combination "
                 "(CapSummary.raw_total) -- the only observation of the pool independent of "
-                "either validator"
+                "either validator. Published for transparency only: it includes generations "
+                "stopped midway, so no rate divides by it"
             ),
-            "raw_valid": "personas passing the raw-completeness gate",
+            "raw_valid": (
+                "personas passing the raw-completeness gate -- the finished pool; a persona "
+                "failing it is a generation stopped midway and is ignored by both rates"
+            ),
             "mapped_valid": "personas passing the mapped-value gate",
             "clean": "personas passing BOTH gates -- the pool the seeded cap draws from",
             "selected": "personas the cap drew; zero for every excluded combination, by design",
-            "retention_rate": "clean / generated; null when generated == 0, never 0.0",
+            "retention_rate": "clean / raw_valid; null when raw_valid == 0, never 0.0",
             "generation_multiplier": (
-                "generated / clean -- personas generated per usable persona. Not "
-                "generated / selected, which is undefined for every withdrawn combination. "
+                "raw_valid / clean -- finished personas per usable persona. Not "
+                "raw_valid / selected, which is undefined for every withdrawn combination. "
                 "Null when clean == 0, never infinite"
             ),
             "had_surplus": (
@@ -207,6 +218,7 @@ def build_document(
                 "slug": row.slug,
                 "requested_n": row.requested_n,
                 "generated": row.generated,
+                "raw_valid": row.raw_valid,
                 "clean": row.clean,
                 "reason": row.exclusion_reason,
             }

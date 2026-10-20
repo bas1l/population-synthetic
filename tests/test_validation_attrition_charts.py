@@ -103,8 +103,8 @@ def _entry(
             "clean": clean,
             "selected": selected,
         },
-        "retention_rate": None if generated == 0 else clean / generated,
-        "generation_multiplier": None if clean == 0 else generated / clean,
+        "retention_rate": None if raw_valid == 0 else clean / raw_valid,
+        "generation_multiplier": None if clean == 0 else raw_valid / clean,
         "excluded": excluded,
         "exclusion_reason": "fewer clean personas than the requested n=100" if excluded else "",
         "had_surplus": clean > 100,
@@ -113,6 +113,7 @@ def _entry(
 
 def _document(entries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     generated = sum(e["funnel"]["generated"] for e in entries)
+    raw_valid = sum(e["funnel"]["raw_valid"] for e in entries)
     clean = sum(e["funnel"]["clean"] for e in entries)
     return {
         "process": "validation_attrition",
@@ -122,12 +123,12 @@ def _document(entries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "n_excluded": sum(1 for e in entries if e["excluded"]),
         "totals": {
             "generated": generated,
-            "raw_valid": sum(e["funnel"]["raw_valid"] for e in entries),
+            "raw_valid": raw_valid,
             "mapped_valid": sum(e["funnel"]["mapped_valid"] for e in entries),
             "clean": clean,
             "selected": sum(e["funnel"]["selected"] for e in entries),
-            "retention_rate": None if generated == 0 else clean / generated,
-            "generation_multiplier": None if clean == 0 else generated / clean,
+            "retention_rate": None if raw_valid == 0 else clean / raw_valid,
+            "generation_multiplier": None if clean == 0 else raw_valid / clean,
         },
         "combinations": list(entries),
         "excluded_combinations": [
@@ -370,15 +371,26 @@ def test_missing_colour_is_the_shared_one_not_a_local_literal() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_funnel_segments_partition_the_generated_pool() -> None:
-    """The four slices are a partition, so they sum to the pool exactly."""
+def test_funnel_segments_partition_the_finished_pool() -> None:
+    """The three slices partition the finished pool; unfinished generations are not a slice."""
     entry = _entry("claude_haiku", _SIMPLE, generated=150, raw_valid=140, clean=120, selected=100)
     slices = _segment_counts(entry)
 
-    assert slices == {
-        "failed_raw": 10, "failed_mapped": 20, "clean_unselected": 20, "selected": 100,
-    }
-    assert sum(slices.values()) == 150
+    assert slices == {"failed_mapped": 20, "clean_unselected": 20, "selected": 100}
+    assert sum(slices.values()) == 140
+
+
+def test_funnel_states_the_unfinished_generations_beside_the_bar() -> None:
+    document = _document([
+        _entry("claude_haiku", _SIMPLE, generated=150, raw_valid=140, clean=112, selected=100),
+    ])
+    fig = plot_attrition_funnel(document)
+    texts = _annotations(fig.axes[0])
+
+    assert any(t.startswith("N=140") and "10 unfinished ignored" in t for t in texts)
+
+    import matplotlib.pyplot as plt
+    plt.close(fig)
 
 
 def test_funnel_segments_of_a_withdrawn_combination_never_go_negative() -> None:
@@ -422,7 +434,7 @@ def test_funnel_draws_an_empty_pool_as_a_stated_band_not_an_absent_row() -> None
     fig = plot_attrition_funnel(document)
     ax = fig.axes[0]
 
-    assert any("generated = 0" in t for t in _annotations(ax))
+    assert any("finished = 0" in t for t in _annotations(ax))
     assert any(t == "N=0" for t in _annotations(ax))
 
     import matplotlib.pyplot as plt

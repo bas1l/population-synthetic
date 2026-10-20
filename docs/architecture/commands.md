@@ -150,8 +150,9 @@ python scripts/analyze/summarize_generation_metadata.py --country swedish --verb
 # Validation attrition: what the gate discarded. Per combination, the five-stage funnel
 # (generated -> raw-valid -> mapped-valid -> clean -> selected) re-read out of
 # population_cap/_index.json + the validate_raw/validate_mapped roll-ups, plus retention_rate
-# (clean/generated) and generation_multiplier (generated/clean -- per USABLE persona, deliberately
-# not denominated on selected, which is zero for every withdrawal). Emits one tidy CSV + JSON per
+# (clean/raw_valid) and generation_multiplier (raw_valid/clean -- finished personas per USABLE
+# persona, deliberately not denominated on selected, which is zero for every withdrawal). Neither
+# divides by generated: a persona failing validate_raw is a generation stopped midway. Emits one tidy CSV + JSON per
 # country, a normalised per-combination funnel and a model x method validation-survival grid.
 # Its row grain is EVERY combination the gate recorded, INCLUDING the ones the full-N rule withdrew
 # -- a withdrawn combination has no capped mirror, no capped mapped file and no generation_metadata
