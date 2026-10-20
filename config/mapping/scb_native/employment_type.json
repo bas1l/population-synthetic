@@ -841,7 +841,9 @@
         "pre-retirement",
         "fram till pension",
         "innan pension",
-        "korttidsanställ"
+        "korttidsanställ",
+        "föräldraledig med möjlighet",
+        "föräldraledig med deltid"
       ],
       "all_of": [
         [
@@ -1373,7 +1375,14 @@
         "before retirement",
         "pre-retirement",
         "fram till pension",
-        "innan pension"
+        "innan pension",
+        "studentjobb",
+        "student job",
+        "student jobb",
+        "student assistant",
+        "studentassistent",
+        "student worker",
+        "studiassistans"
       ],
       "all_of_rules": [
         {

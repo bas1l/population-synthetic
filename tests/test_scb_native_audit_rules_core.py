@@ -312,8 +312,8 @@ FORMER_JOB_AND_LEAVE = [
     ("employment_type", "Tillsvidareanställning på 100 procent efter avslutad provanställning", "Temporary Full-time"),
     ("employment_type", "Heltidstjänst efter föräldraledighet", "Permanent Full-time"),
     ("employment_type", "Fixed-term employment, 40 hours/week (parental leave cover)", "Temporary Full-time"),
-    ("employment_type", "Föräldraledig med deltidsarbete", "Permanent Part-time"),
-    ("employment_type", "Tidigare med fulltid (35h/vecka), nu halvtidsanställd (18h/vecka)", "Permanent Full-time"),
+    # current work kept, but the stated hours (35 h, 18 h) span two bands: the band is undetermined
+    ("employment_type", "Tidigare med fulltid (35h/vecka), nu halvtidsanställd (18h/vecka)", UNMAPPED),
     ("employment_type", "Permanent Employee (Tidigare Tjänsteman)", "Permanent Full-time"),
     # a former cue with no contract word stays a miss (the cap gate's pool must not move)
     ("employment_type", "Föräldraledighet", UNMAPPED),
@@ -425,6 +425,32 @@ M1_TO_M5 = [
     ("employment_type", "Tillsvidareanställning, heltid", _PF),
 ]
 
+# 2026-10-15: student jobs, part-time parental leave and stated hours that span bands. Each string is
+# read alone. Stated hours re-band the walked value only when every stated number falls in one AKU
+# band (1-19 / 20-34 / 35+); hours spanning two bands leave the band undetermined -> __UNMAPPED__, so
+# text stating only sub-35 hours can never keep a Full-time value.
+HOURS_AND_STUDENT_JOBS = [
+    # a student-job word vetoes Temporary Full-time: korttidsanställning no longer pulls it to Full-time
+    ("employment_type", "Studentjobb, korttidsanställning", _TP),
+    ("employment_type", "Studentjobb (10-20 timmar/vecka, korttidsanställning)", UNMAPPED),
+    # part-time work on parental leave with no contract word stays unmapped (M4)
+    ("employment_type", "Föräldraledig med möjlighet till deltidsarbete", UNMAPPED),
+    ("employment_type", "Föräldraledig med deltidsarbete", UNMAPPED),
+    # hours in one band -> that band; across bands -> undetermined
+    ("employment_type", "timanställning 10-20h/vecka", UNMAPPED),
+    ("employment_type", "Timanställd, provanställning, 10–20 h/vecka", UNMAPPED),
+    ("employment_type", "Visstidsanställning, 25-30 timmar/vecka", _TP),
+    ("employment_type", "Tillsvidareanställning, deltid, 25-30 timmar/vecka", _PP),
+    ("employment_type", "Tidlös arbetsförhållande (1-35 timmar/vecka)", UNMAPPED),
+    ("employment_type", "Heltid (30-40 timmar/vecka), tillsvidare", UNMAPPED),
+    ("employment_type", "Visstidsanställning, 10-15 timmar/vecka", "Temporary Short Part-time"),
+    # unchanged: "veckotimmar" is not an hours unit the facet reads, so the walked value holds
+    ("employment_type", "Tillsvidareanställning, 40 veckotimmar", _PF),
+    ("employment_type", "Tillsvidareanställning, 40 timmar/vecka", _PF),
+    # a comparator-bound number is not banded and keeps the walked value
+    ("employment_type", "Deltidsanställning (max 20 timmar/vecka)", _PP),
+]
+
 CASES = (
     _cases("civil_status", CIVIL_FIXED, CIVIL_FALSE_ALARMS, CIVIL_DECISIONS)
     + _cases("education_level", EDUCATION_FIXED, EDUCATION_FALSE_ALARMS, EDUCATION_DECISIONS)
@@ -436,6 +462,7 @@ CASES = (
     + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in FORMER_JOB_AND_LEAVE]
     + [pytest.param(a, raw, want, id=f"{a}:{raw[:40]}") for a, raw, want in CURRENT_WORK_BEATS_STATUS]
     + [pytest.param(a, raw, want, id=f"M1-M5:{a}:{raw[:40]}") for a, raw, want in M1_TO_M5]
+    + [pytest.param(a, raw, want, id=f"hours:{a}:{raw[:40]}") for a, raw, want in HOURS_AND_STUDENT_JOBS]
 )
 
 

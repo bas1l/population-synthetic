@@ -65,9 +65,12 @@ work, unless that work is over".
 
 `employment_type`'s `synthetic` block also declares a **`numeric_facet`**: after the walk, weekly
 hours (or a percentage of a 40 h week) stated in the text re-band the walked attachment into the
-AKU agreed-hours bands 1–19 / 20–34 / 35+. A range spanning two bands or a number behind a
-comparator ("över 30") keeps the walked value and is logged as `facet_ambiguous` in the ties
-sidecar; `0 timmar` is in no band and never overrides. The attachment rules therefore carry no
+AKU agreed-hours bands 1–19 / 20–34 / 35+, so text stating only hours under 35 never keeps a
+Full-time value. Stated hours spanning two or more bands ("10-20 timmar", "1-35 timmar") leave
+the band undetermined and map to `__UNMAPPED__`; a number behind a comparator ("över 30") is not
+banded and keeps the walked value. Both are logged as `facet_ambiguous` in the ties sidecar (a
+span is not a total miss, so it does not reach the misses log); `0 timmar` is in no band and
+never overrides. The attachment rules therefore carry no
 hour tokens; `heltid` / `deltid` remain the fallback when no hours are stated. Zero stated hours
 are handled in config instead: every employed value vetoes `0 timmar` / `0 h/v` / `0 hours` (prefix
 mode keeps them off "40 timmar") and `Not Applicable` lists them.
@@ -122,8 +125,11 @@ Each rule follows SCB's own definition of the category; the regression cases liv
   employed with the job): leave from a stated contract keeps that contract ("Anställning med
   föräldraledighet (tillsvidare)" → `Permanent Full-time`); leave the text itself calls unpaid or
   jobless ("utan lön", "unpaid", "utan anställning", "no job") is `Not Applicable` through an
-  `all_of_rules` rule on it; leave with no contract word ("Föräldraledighet") stays unmapped.
-  `korttidsanställ*` is Temporary.
+  `all_of_rules` rule on it; leave with no contract word ("Föräldraledighet") stays unmapped,
+  and so does leave with part-time work but no contract word ("Föräldraledig med deltidsarbete":
+  `Permanent Part-time` vetoes `föräldraledig med deltid` / `föräldraledig med möjlighet`).
+  `korttidsanställ*` is Temporary, but a student job is Temporary Part-time: `Temporary Full-time`
+  vetoes the student-job words, so "Studentjobb (…, korttidsanställning)" is not Full-time.
   A pensioner / student / retired word beside stated current work maps to the contract, not to
   `Not Applicable` (2026-10-07): each contract value carries an `all_of_rules` rule `[Not
   Applicable's own status tokens] + [a work cue]` — `anställ*`, `employ*`, `konsult*`, `frilans`,

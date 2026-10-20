@@ -178,10 +178,12 @@ def test_ambiguous_numeric_facet_is_logged_as_tie_row():
     assert out["employment_type"] == "Permanent Part-time"           # re-banded from stated hours
     assert mapper.ties == []
     out = mapper.map_individual({"age": 30, "employment_type": "fast heltid, 30-40 timmar"}, "p2")
-    assert out["employment_type"] == "Permanent Full-time"           # straddle: walked value kept
+    assert out["employment_type"] == "__UNMAPPED__"                  # straddle: band undetermined
     (row,) = mapper.ties
     assert (row["persona_id"], row["criterion"], row["tier"]) == ("p2", "facet_ambiguous", "numeric_facet")
     assert row["candidates"] == "full | part"
+    assert row["winner"] == "__UNMAPPED__"
+    assert not [m for m in mapper.misses if m["attribute"] == "employment_type"]  # walk hit: no miss
 
 
 def test_invalid_config_raises_at_construction():

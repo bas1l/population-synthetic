@@ -186,8 +186,9 @@ whose bands overlap or whose remap target is not a value.
   attribute may override the side's list with its own `tie_break` directive.
 - `numeric_facet` -- an attribute directive that re-bands the walked value from numbers stated in
   the raw text (`extract` regexes with a `scale`, `bands`, `remap` from walked value to band
-  value); a comparator or a multi-band read leaves the walked value and is reported as
-  `facet_ambiguous`.
+  value); stated numbers spanning two or more bands leave the band undetermined and resolve to
+  `__UNMAPPED__`, a comparator-bound number is not banded and leaves the walked value; both are
+  reported as `facet_ambiguous`.
 
 With `substring` / `null` / `["priority"]` and `priority == values` the engine is exactly the
 historic first-hit-in-declared-order resolver; the global `scb` tier, `istat` and every `real`

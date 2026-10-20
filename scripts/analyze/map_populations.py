@@ -191,8 +191,8 @@ def _write_ties(path: Path, ties: list[dict[str, Any]]) -> None:
     ``candidates`` lists ``value:score:token`` for every hit, ``winner`` the value the
     ``tie_break`` criteria chose and ``criterion`` the criterion that decided it
     (``longest`` or ``priority``). Rows with ``criterion == "facet_ambiguous"`` record a
-    ``numeric_facet`` read that stated hours in several bands or behind a comparator,
-    which left the walked value unchanged.
+    ``numeric_facet`` read that stated hours in several bands (``winner`` is
+    ``__UNMAPPED__``) or behind a comparator (the walked value is kept).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="") as f:

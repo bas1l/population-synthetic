@@ -147,9 +147,14 @@ never confused with value keys because the walk is driven by ``values``):
 
   The facet runs after the primary walk. When the walked value is a ``remap`` key
   and every extracted number (both ends of a range) falls in one band, the value
-  becomes ``remap[value][band]``. A number preceded by a comparator, or numbers
-  spanning several bands, leave the walked value unchanged and are reported as
-  ``facet_ambiguous``. A number in no band (``0 timmar``) never overrides.
+  becomes ``remap[value][band]`` -- so a text whose stated numbers all sit below the
+  top band can never keep a walked top-band value. Numbers spanning several bands
+  (``10-20 timmar``, ``1-35 timmar``, ``10 h eller 40 h``) leave the band undetermined
+  and resolve to the ``UNMAPPED`` sentinel; a number preceded by a comparator is not
+  banded and, short of such a span among the other numbers, leaves the walked value
+  unchanged. Both
+  are reported as ``facet_ambiguous``. A span is not a miss: the walk hit, so
+  ``missed`` stays False. A number in no band (``0 timmar``) never overrides.
 """
 
 from __future__ import annotations
@@ -802,7 +807,8 @@ class Resolution:
     ``absent`` or ``miss``. ``candidates`` lists every value that hit in that tier
     (more than one = a tie) and ``criterion`` names the ``tie_break`` criterion
     that decided it (None without a tie). ``facet`` is None when no numeric facet
-    applies, else ``"applied"`` / ``"ambiguous"`` / ``"none"`` with the bands seen.
+    applies, else ``"applied"`` / ``"ambiguous"`` / ``"none"`` with the bands seen;
+    an ambiguous read over two or more bands carries ``value == UNMAPPED``.
     """
 
     value: str | None
@@ -1011,7 +1017,12 @@ def resolve_traced(
             facet = _compiled_facet(facet_spec, values)
             seen, ambiguous = _facet_bands(normalize(raw_value), facet)
             bands = tuple(sorted(seen))
-            if ambiguous or len(seen) > 1:
+            if len(seen) > 1:
+                # Stated hours span several bands: the band is undetermined, so the
+                # value is too -- keeping the walked band would invent one.
+                facet_state = "ambiguous"
+                value = UNMAPPED
+            elif ambiguous:
                 facet_state = "ambiguous"
             elif len(seen) == 1:
                 facet_state = "applied"

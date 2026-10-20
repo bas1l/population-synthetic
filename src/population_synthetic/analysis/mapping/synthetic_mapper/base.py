@@ -37,8 +37,10 @@ Three responsibilities remain in the mapper itself:
 - **Tie recording** -- every resolution in which more than one value hit in the
   winning tier is appended to ``self.ties`` (candidates with their scores and
   tokens, the winner, and the ``tie_break`` criterion that decided it), as is every
-  ``numeric_facet`` read left ambiguous (criterion ``facet_ambiguous``). The loader
-  writes the list to the ``{slug}.ties.csv`` sidecar.
+  ``numeric_facet`` read left ambiguous (criterion ``facet_ambiguous``). A read whose
+  stated hours span several bands carries ``winner == __UNMAPPED__``; the walk hit, so
+  that sentinel is logged here and not in :attr:`misses`. The loader writes the list
+  to the ``{slug}.ties.csv`` sidecar.
 
 The mapping directory is validated once, at construction
 (:func:`mapping_engine.validate_mappings`): a missing ``matching`` block, an unknown

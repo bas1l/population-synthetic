@@ -593,11 +593,30 @@ def test_numeric_facet_rebands(raw, expected):
     assert _r(raw, _facet_block(), _FACET_VALUES, _m("prefix")) == expected
 
 
-@pytest.mark.parametrize("raw", ["fast, 15-25 timmar", "fast, över 30 timmar", "fast, 10 h eller 40 h"])
-def test_numeric_facet_straddle_or_comparator_is_ambiguous_and_logged(raw):
+@pytest.mark.parametrize("raw, bands", [
+    ("fast, 15-25 timmar", ("part", "short")),
+    ("fast, 10 h eller 40 h", ("full", "short")),
+    ("fast, 1-35 timmar", ("full", "short")),
+    ("fast, 30-40 timmar", ("full", "part")),
+])
+def test_numeric_facet_straddle_is_unmapped_not_the_walked_band(raw, bands):
+    # Stated hours across two or more bands leave the band undetermined: the walked
+    # "Perm Full" must not survive, and no band is picked either.
     res = resolve_traced(raw, _facet_block(), _FACET_VALUES, matching=_m("prefix"), priority=_FACET_VALUES)
-    assert res.value == "Perm Full"
-    assert res.facet == "ambiguous"
+    assert res.value == UNMAPPED
+    assert (res.facet, res.facet_bands, res.walked_value) == ("ambiguous", bands, "Perm Full")
+    assert res.missed is False                      # the walk hit; the facet withheld the band
+
+
+def test_numeric_facet_comparator_keeps_walked_value():
+    res = resolve_traced("fast, över 30 timmar", _facet_block(), _FACET_VALUES, matching=_m("prefix"),
+                         priority=_FACET_VALUES)
+    assert (res.value, res.facet) == ("Perm Full", "ambiguous")
+
+
+@pytest.mark.parametrize("raw", ["fast, 15 h", "fast, 25-30 timmar", "fast, 80%", "fast, 10-15 h"])
+def test_numeric_facet_sub_35_hours_never_keep_full_time(raw):
+    assert _r(raw, _facet_block(), _FACET_VALUES, _m("prefix")) in ("Perm Part", "Perm Short")
 
 
 # --- config validation -------------------------------------------------------
