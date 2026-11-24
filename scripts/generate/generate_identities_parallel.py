@@ -2,26 +2,18 @@
 generate_identities_parallel.py -- Generate N persona identities in parallel.
 
 Usage:
-    # Via manifest (recommended):
-    python scripts/generate/generate_identities_parallel.py \
-        --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml
-
-    # Via manifest with CLI overrides:
-    python scripts/generate/generate_identities_parallel.py \
-        --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml \
-        --n 10 --workers 4
 
     # Via axis IDs (composable experiment config):
     python scripts/generate/generate_identities_parallel.py \
         --model-id claude_haiku \
-        --strategy-id all_pick \
-        --country-id swedish
+        --strategy-id all_pick_v2 \
+        --country-id swedish_02
 
     # Via axis IDs with overrides and force regeneration:
     python scripts/generate/generate_identities_parallel.py \
         --model-id ollama_llama33_70b \
         --strategy-id all_generate_evaluate_pick \
-        --country-id swedish \
+        --country-id swedish_02 \
         --n 50 \
         --workers 4 \
         --force
@@ -29,7 +21,7 @@ Usage:
     # Via explicit CLI args:
     python scripts/generate/generate_identities_parallel.py \
         --mode configurable \
-        --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json \
+        --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json \
         --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml \
         --n 100 \
         --workers 8 \
@@ -38,7 +30,7 @@ Usage:
     python scripts/generate/generate_identities_parallel.py \
         --provider claude \
         --mode configurable \
-        --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json \
+        --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json \
         --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml \
         --n 100 \
         --workers 8 \
@@ -67,7 +59,6 @@ from population_synthetic.generators.synthetic.identity_generator_configurable i
 )
 from population_synthetic.generators.synthetic.manifest_loader import (
     compose_manifest,
-    load_manifest,
     serialize_manifest,
 )
 from population_synthetic.generators.synthetic.run_fingerprint import build_run_fingerprint
@@ -413,10 +404,9 @@ def _assert_strategy_covers_country(strategy_path: Path, strategy_id: str, count
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate N persona identities in parallel")
-    parser.add_argument("--manifest", default=None, help="Path to a YAML manifest file (replaces all other arguments)")
-    parser.add_argument("--model-id", default=None, help="Axis model ID (e.g., 'claude_haiku') — mutually exclusive with --manifest")
-    parser.add_argument("--strategy-id", default=None, help="Axis strategy ID (e.g., 'all_pick') — mutually exclusive with --manifest")
-    parser.add_argument("--country-id", default=None, help="Axis country ID (e.g., 'swedish') — mutually exclusive with --manifest")
+    parser.add_argument("--model-id", default=None, help="Axis model ID (e.g., 'claude_haiku')")
+    parser.add_argument("--strategy-id", default=None, help="Axis strategy ID (e.g., 'all_pick_v2')")
+    parser.add_argument("--country-id", default=None, help="Axis country ID (e.g., 'swedish_02')")
     parser.add_argument("--mode", default=None, choices=["configurable"],
                         help="Identity generation strategy (currently only 'configurable' is supported)")
     parser.add_argument("--config", default=None, help="Flat schema / prompt config file")
@@ -525,43 +515,10 @@ def main() -> None:
         # attempt; that volume would bury the pre-flight snapshots DEBUG is for.
         logging.getLogger("urllib3").setLevel(logging.INFO)
 
-    axis_ids = [args.model_id, args.strategy_id, args.country_id]
-    if args.manifest and any(x is not None for x in axis_ids):
-        parser.error("--manifest is mutually exclusive with --model-id, --strategy-id, and --country-id")
-
     m = None
     _composed_manifest = None
 
-    if args.manifest:
-        m = load_manifest(args.manifest)
-        logger.info("Loaded manifest: %s", m.name)
-        if args.provider is None:
-            args.provider = m.provider
-        if args.model is None:
-            args.model = m.model
-        if args.mode is None:
-            args.mode = m.mode
-        if args.config is None:
-            args.config = str(m.config_path)
-        if args.strategy is None and m.strategy_path:
-            args.strategy = str(m.strategy_path)
-        if args.log_llm is None:
-            args.log_llm = m.log_llm
-        if args.n is None and m.parallel_n is not None:
-            args.n = m.parallel_n
-        if args.workers is None and m.parallel_workers is not None:
-            args.workers = m.parallel_workers
-        if args.output_dir is None and m.parallel_output_dir is not None:
-            args.output_dir = str(m.parallel_output_dir)
-        if args.base_url is None and m.base_url is not None:
-            args.base_url = m.base_url
-        if args.api_key_env is None and m.api_key_env_var is not None:
-            args.api_key_env = m.api_key_env_var
-        if not args.retry_until_success and m.retry_until_success:
-            args.retry_until_success = m.retry_until_success
-        if args.structured_output is None:
-            args.structured_output = m.structured_output
-    elif args.model_id is not None:
+    if args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
         m = compose_manifest(args.model_id, args.strategy_id, args.country_id, args.ollama_host)
@@ -617,7 +574,7 @@ def main() -> None:
     # resolved OllamaHost is reused for the parallelism warning and for provenance
     # below (resolve_host re-reads the registry on every call, so it is resolved
     # once). The axis path already resolved the same host inside compose_manifest;
-    # this also covers the --manifest and explicit-CLI paths, where nothing else
+    # this also covers the explicit-CLI path, where nothing else
     # would supply an endpoint.
     ollama_host = None
     if args.provider == "ollama":
@@ -671,11 +628,11 @@ def main() -> None:
     # cold load on the Windows host) is exactly the provenance a later timing
     # analysis needs, so it belongs in the run log rather than the console alone.
     if not args.mode or not args.config:
-        parser.error("Either --manifest or both --mode and --config are required")
+        parser.error("Both --mode and --config (or the axis ids) are required")
     if not args.n:
-        parser.error("Either --manifest (with parallel.n) or --n is required")
+        parser.error("--n is required")
     if not args.output_dir:
-        parser.error("Either --manifest (with parallel.output_dir) or --output-dir is required")
+        parser.error("--output-dir is required")
 
     if args.mode == "configurable" and not args.strategy:
         logger.error("--strategy is required for configurable mode")
@@ -805,8 +762,7 @@ def main() -> None:
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     run_metadata = {
         "name": m.name if m is not None else None,
-        "manifest": args.manifest,
-        "model_config": {
+                "model_config": {
             "provider": args.provider,
             "model": model,
             "base_url": args.base_url,

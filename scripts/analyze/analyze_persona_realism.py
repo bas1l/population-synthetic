@@ -50,11 +50,11 @@ of combination directories ONLY -- no country-level aggregate file is produced h
 
 Usage:
     python scripts/analyze/analyze_persona_realism.py
-    python scripts/analyze/analyze_persona_realism.py --country swedish
-    python scripts/analyze/analyze_persona_realism.py --slug swedish_all_pick_claude_haiku
-    python scripts/analyze/analyze_persona_realism.py --slug real_swedish
+    python scripts/analyze/analyze_persona_realism.py --country swedish_02
+    python scripts/analyze/analyze_persona_realism.py --slug swedish_02_all_pick_v2_claude_haiku
+    python scripts/analyze/analyze_persona_realism.py --slug real_swedish_02
     python scripts/analyze/analyze_persona_realism.py --model-id claude_haiku \
-        --strategy-id all_pick --country-id swedish            # GUI per_combo shape
+        --strategy-id all_pick --country-id swedish_02            # GUI per_combo shape
     python scripts/analyze/analyze_persona_realism.py --sample 50 --workers 8 --force
     python scripts/analyze/analyze_persona_realism.py --rewrite-artifacts   # no LLM calls
 

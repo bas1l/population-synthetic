@@ -3,7 +3,7 @@
 Covers ``industry_sector``, ``parental_structure``, ``socioeconomic_class`` and the small
 attributes (``biological_sex``, ``region``, ``birth_country_detail``, ``household_size``,
 ``birth_location``). Every case is a raw LLM value from the audit's curated row list
-(``docs/development/plans/pending/mapping-fixes-scb-audit.md``, Phase 2B) with the category the
+(the SCB-checked mapping audit, Phase 2B) with the category the
 SCB definition gives it:
 
 - ``*_FIXED`` -- rows that were mapped wrongly (or left unmapped) and must now resolve as the

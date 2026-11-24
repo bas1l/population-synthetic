@@ -200,7 +200,7 @@ def _population(attrs: list[str]) -> list[dict]:
 
 def test_runner_renders_the_prompt_stores_canonical_values_and_stamps_the_identity(tmp_path):
     cfg = dataclasses.replace(JudgeConfig.load(_CONFIG_DIR), n_rounds=1, workers=1)
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     seen: list[str] = []
     run_combo_judgements(_population(attrs), "combo", attrs, tmp_path, cfg,
                          client_factory=lambda: _Client(seen))
@@ -214,7 +214,7 @@ def test_runner_renders_the_prompt_stores_canonical_values_and_stamps_the_identi
 
 def test_resume_refuses_a_cache_judged_under_another_rendering(tmp_path):
     cfg = dataclasses.replace(JudgeConfig.load(_CONFIG_DIR), n_rounds=1, workers=1)
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     population = _population(attrs)
     run_combo_judgements(population, "combo", attrs, tmp_path, cfg, client_factory=lambda: _Client([]))
 

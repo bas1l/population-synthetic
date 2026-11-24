@@ -195,23 +195,23 @@ def test_persona_realism_end_to_end(tmp_path):
     unit references the other.
     """
     cfg = _cfg()
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     out_root = tmp_path / "persona_realism"
-    country_root = out_root / "swedish"          # nested one level per country
-    slug = "swedish_all_pick_claude_haiku"
+    country_root = out_root / "swedish_02"          # nested one level per country
+    slug = "swedish_02_all_pick_v2_claude_haiku"
 
     # --- real competitor ------------------------------------------------------
-    real_dir = country_root / "real_swedish"
+    real_dir = country_root / "real_swedish_02"
     real_summary = run_combo_judgements(
-        _real_population(attrs), "real_swedish", attrs, real_dir, cfg,
+        _real_population(attrs), "real_swedish_02", attrs, real_dir, cfg,
         client_factory=_stub_factory(),
     )
     assert real_summary.failed == 0
     assert real_summary.written == 3
     assert real_summary.selected_ids == ("persona_00000", "persona_00001", "persona_00002")
     real_ca = A.write_combo_artifacts(
-        real_dir, "real_swedish", cfg=cfg, dpi=80, force=True,
-        country="swedish", is_real_reference=True,
+        real_dir, "real_swedish_02", cfg=cfg, dpi=80, force=True,
+        country="swedish_02", is_real_reference=True,
         expected_ids=list(real_summary.selected_ids),
         hard_rules=(), pricing=_PRICING,
     )
@@ -226,7 +226,7 @@ def test_persona_realism_end_to_end(tmp_path):
     assert syn_summary.written == 4
     syn_ca = A.write_combo_artifacts(
         syn_dir, slug, cfg=cfg, dpi=80, force=True,
-        country="swedish", model="claude_haiku", strategy="all_pick",
+        country="swedish_02", model="claude_haiku", strategy="all_pick_v2",
         expected_ids=list(syn_summary.selected_ids),
         hard_rules=(), pricing=_PRICING,
     )
@@ -263,30 +263,30 @@ def test_persona_realism_end_to_end(tmp_path):
                                      expected_rows=combo_report["n_personas"])
     assert len(rows) == 4
     assert {r.persona_id for r in rows} == {f"persona_{i:05d}" for i in range(4)}
-    assert all(r.slug == slug and r.country == "swedish" for r in rows)
+    assert all(r.slug == slug and r.country == "swedish_02" for r in rows)
 
     # --- NO country-level aggregate is produced by this task ------------------
     for orphan in ("headline_map.png", "headline_map.svg", "realism_summary.csv",
                    "run_report.json"):
         assert not (country_root / orphan).exists(), orphan
-    assert {p.name for p in country_root.iterdir()} == {"real_swedish", slug}
+    assert {p.name for p in country_root.iterdir()} == {"real_swedish_02", slug}
 
 
 def test_runner_resumes_without_force(tmp_path):
     """A second run without ``force`` re-judges nothing (skip-if-exists cache)."""
     cfg = _cfg()
-    attrs = scheme_attributes("swedish")
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    attrs = scheme_attributes("swedish_02")
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
     population = _synthetic_population(attrs)
 
     first = run_combo_judgements(
-        population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+        population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, cfg,
         client_factory=_stub_factory(),
     )
     assert first.written == 4 and first.skipped == 0
 
     second = run_combo_judgements(
-        population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+        population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, cfg,
         client_factory=_stub_factory(),
     )
     assert second.skipped == 4 and second.requested == 0
@@ -297,15 +297,15 @@ def test_real_sample_size_override_selects_first_n_prefix(tmp_path):
     prefix, not the seeded draw), while a synthetic combo with ``sample_size=None`` judges
     all. Guards the real-reference cap wiring: real population of 5, override=2 -> only
     personas 00000, 00001 are judged (indices 0..N-1)."""
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     marker_attr = attrs[0]
     cfg = dataclasses.replace(_cfg(), sample_size=None)  # synthetic combos judge all
 
     # --- real reference: population of 5, capped to first 2 by the override -----
     real_pop = [_persona(attrs, marker_attr, f"TYP{i}", i) for i in range(5)]
-    real_dir = tmp_path / "swedish" / "real_swedish"
+    real_dir = tmp_path / "swedish_02" / "real_swedish_02"
     real_summary = run_combo_judgements(
-        real_pop, "real_swedish", attrs, real_dir, cfg,
+        real_pop, "real_swedish_02", attrs, real_dir, cfg,
         client_factory=_stub_factory(), sample_size_override=2,
     )
     assert real_summary.n_selected == 2 and real_summary.written == 2
@@ -316,9 +316,9 @@ def test_real_sample_size_override_selects_first_n_prefix(tmp_path):
         assert not (real_dir / f"persona_{idx:05d}.json").exists()
 
     # --- synthetic combo: no override, sample_size=None -> all 4 judged ---------
-    syn_dir = tmp_path / "swedish" / "swedish_all_pick_claude_haiku"
+    syn_dir = tmp_path / "swedish_02" / "swedish_02_all_pick_v2_claude_haiku"
     syn_summary = run_combo_judgements(
-        _synthetic_population(attrs), "swedish_all_pick_claude_haiku", attrs, syn_dir, cfg,
+        _synthetic_population(attrs), "swedish_02_all_pick_v2_claude_haiku", attrs, syn_dir, cfg,
         client_factory=_stub_factory(),
     )
     assert syn_summary.n_selected == 4 and syn_summary.written == 4
@@ -332,10 +332,10 @@ def test_runner_tops_up_rounds_and_appends_telemetry(tmp_path):
     pass's calls to the same ``.jsonl`` (not truncated); a third rounds=2 run skips
     everything (already at the target).
     """
-    attrs = scheme_attributes("swedish")
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    attrs = scheme_attributes("swedish_02")
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
     population = _synthetic_population(attrs)
-    label = "swedish_all_pick_claude_haiku"
+    label = "swedish_02_all_pick_v2_claude_haiku"
     base = _cfg()
     cfg1 = dataclasses.replace(base, n_rounds=1)
     cfg2 = dataclasses.replace(base, n_rounds=2)
@@ -375,9 +375,9 @@ def test_plan_only_makes_no_judge_call_even_when_rounds_would_top_up(tmp_path):
     name. An artifact rewrite must never trigger that, so the flag stops the runner
     before any call while still returning the roster the artifact layer needs.
     """
-    attrs = scheme_attributes("swedish")
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
-    label = "swedish_all_pick_claude_haiku"
+    attrs = scheme_attributes("swedish_02")
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
+    label = "swedish_02_all_pick_v2_claude_haiku"
     population = _synthetic_population(attrs)
     cfg1 = dataclasses.replace(_cfg(), n_rounds=1)
     cfg3 = dataclasses.replace(_cfg(), n_rounds=3)
@@ -409,10 +409,10 @@ def test_plan_only_makes_no_judge_call_even_when_rounds_would_top_up(tmp_path):
 
 def test_runner_force_rejudges_and_truncates_telemetry(tmp_path):
     """``force`` re-judges from scratch: verdict overwritten, telemetry truncated."""
-    attrs = scheme_attributes("swedish")
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    attrs = scheme_attributes("swedish_02")
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
     population = _synthetic_population(attrs)
-    label = "swedish_all_pick_claude_haiku"
+    label = "swedish_02_all_pick_v2_claude_haiku"
     cfg2 = dataclasses.replace(_cfg(), n_rounds=2)
     jsonl0 = combo_dir / "persona_00000.jsonl"
 
@@ -446,10 +446,10 @@ def _load_driver():
     return module
 
 
-def _combo_of(driver, label: str, *, country: str = "swedish"):
+def _combo_of(driver, label: str, *, country: str = "swedish_02"):
     """The driver's ``_Combo`` DTO for a synthetic unit (dispatch-test fixture)."""
     return driver._Combo(
-        label=label, country=country, strategy="all_pick", model="claude_haiku",
+        label=label, country=country, strategy="all_pick_v2", model="claude_haiku",
         is_real_reference=False, sample_size_override=None,
     )
 
@@ -476,8 +476,8 @@ def test_cli_combo_dispatch_tops_up_even_when_report_exists(tmp_path, monkeypatc
     driver = _load_driver()
     # Stage 2 is exercised by its own test below; here only the stage-1 dispatch is under test.
     cfg = dataclasses.replace(_cfg(), stage2_enabled=False)
-    attrs = scheme_attributes("swedish")
-    label = "swedish_all_pick_claude_haiku"
+    attrs = scheme_attributes("swedish_02")
+    label = "swedish_02_all_pick_v2_claude_haiku"
     out_dir = tmp_path / label
     out_dir.mkdir(parents=True)
     (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")  # report already exists
@@ -519,8 +519,8 @@ def test_cli_combo_dispatch_skips_rewrite_when_nothing_changed(tmp_path, monkeyp
     driver = _load_driver()
     # Stage 2 is exercised by its own test below; here only the stage-1 dispatch is under test.
     cfg = dataclasses.replace(_cfg(), stage2_enabled=False)
-    attrs = scheme_attributes("swedish")
-    label = "swedish_all_pick_claude_haiku"
+    attrs = scheme_attributes("swedish_02")
+    label = "swedish_02_all_pick_v2_claude_haiku"
     out_dir = tmp_path / label
     out_dir.mkdir(parents=True)
     (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")
@@ -572,9 +572,9 @@ def test_cli_combo_dispatch_runs_stage2_and_passes_the_raw_reader(tmp_path, monk
     stage-2 call; the real reference gets no reader."""
     driver = _load_driver()
     cfg = dataclasses.replace(_cfg(), stage2_enabled=True)
-    attrs = scheme_attributes("swedish")
-    label = "swedish_all_pick_claude_haiku"
-    out_dir = tmp_path / "03_Analysis" / "persona_realism" / "swedish" / label
+    attrs = scheme_attributes("swedish_02")
+    label = "swedish_02_all_pick_v2_claude_haiku"
+    out_dir = tmp_path / "03_Analysis" / "persona_realism" / "swedish_02" / label
     out_dir.mkdir(parents=True)
     (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")
     mirror = tmp_path / "03_Analysis" / "population_cap" / label / "persona_00000"
@@ -624,7 +624,7 @@ def test_cli_combo_dispatch_runs_stage2_and_passes_the_raw_reader(tmp_path, monk
     )
     assert calls["stage2"] == 1                      # no stage-2 call on the zero-cost path
 
-    real = driver._Combo(label="real_swedish", country="swedish", strategy="", model="",
+    real = driver._Combo(label="real_swedish_02", country="swedish_02", strategy="", model="",
                          is_real_reference=True, sample_size_override=None)
     assert driver._raw_identity_reader(real, tmp_path) is None
 
@@ -639,10 +639,10 @@ def test_write_persona_file_derives_age_group_from_raw_age(tmp_path):
     ``age``), mirroring ``prompt.render_persona_block``.
     """
     cfg = dataclasses.replace(_cfg(), n_rounds=1)
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     assert attrs[0] == "age_group"  # the axis that has no raw column
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
-    label = "swedish_all_pick_claude_haiku"
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
+    label = "swedish_02_all_pick_v2_claude_haiku"
 
     # One persona with raw integer age (42 -> "35-44") and NO pre-binned age_group,
     # every other analyzed axis present, and the stub's TYP marker on a non-age axis.
@@ -665,11 +665,11 @@ def test_write_persona_file_derives_age_group_from_raw_age(tmp_path):
 def test_failed_calls_are_distinct_from_possible(tmp_path):
     """A stub that always errors yields failed (uncached) personas, not possible ones."""
     cfg = _cfg()
-    attrs = scheme_attributes("swedish")
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    attrs = scheme_attributes("swedish_02")
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
 
     summary = run_combo_judgements(
-        _synthetic_population(attrs), "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+        _synthetic_population(attrs), "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, cfg,
         client_factory=_stub_factory(fail=True),
     )
     assert summary.written == 0
@@ -685,11 +685,11 @@ def test_runner_writes_incrementally_not_batched(tmp_path):
     so by the time persona K is judged every earlier persona's verdict file is already
     on disk -- an observation impossible under the old batched end-of-run write.
     """
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     marker_attr = attrs[0]
     cfg = dataclasses.replace(_cfg(), n_rounds=1, workers=1)
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
-    label = "swedish_all_pick_claude_haiku"
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
+    label = "swedish_02_all_pick_v2_claude_haiku"
 
     population = [_persona(attrs, marker_attr, f"TYP{i}", f"persona_{i - 1:05d}") for i in range(1, 5)]  # 4 personas
     seen_before: list[int] = []
@@ -717,11 +717,11 @@ def test_runner_failed_persona_leaves_siblings_intact(tmp_path):
     siblings are written completely and independently -- per-persona writes mean one
     persona's failure never loses another's work (the interrupt-safety property).
     """
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     marker_attr = attrs[0]
     cfg = dataclasses.replace(_cfg(), n_rounds=2, workers=2)
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
-    label = "swedish_all_pick_claude_haiku"
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
+    label = "swedish_02_all_pick_v2_claude_haiku"
 
     # Persona 2 carries FAILME; the stub raises for it on every round.
     population = [
@@ -768,9 +768,9 @@ def test_cache_is_keyed_on_persona_id_not_list_index(tmp_path):
     silently hand those rounds to whoever landed at index 2 next.
     """
     cfg = dataclasses.replace(_cfg(), n_rounds=1)
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     marker_attr = attrs[0]
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
     population = [
         _persona(attrs, marker_attr, "TYP8", "persona_00003"),
         _persona(attrs, marker_attr, "TYP5", "persona_00017"),
@@ -778,7 +778,7 @@ def test_cache_is_keyed_on_persona_id_not_list_index(tmp_path):
     ]
 
     summary = run_combo_judgements(
-        population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+        population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, cfg,
         client_factory=_stub_factory(),
     )
     assert summary.written == 3 and summary.failed == 0
@@ -799,9 +799,9 @@ def test_cached_verdicts_for_a_different_persona_raise(tmp_path):
     persona's verdicts to another, and nothing downstream could detect it.
     """
     cfg = dataclasses.replace(_cfg(), n_rounds=1)
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     marker_attr = attrs[0]
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
     combo_dir.mkdir(parents=True)
     population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
 
@@ -813,7 +813,7 @@ def test_cached_verdicts_for_a_different_persona_raise(tmp_path):
 
     with pytest.raises(ValueError, match="persona_00312"):
         run_combo_judgements(
-            population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+            population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, cfg,
             client_factory=_stub_factory(),
         )
 
@@ -824,12 +824,12 @@ def test_cached_verdicts_for_a_remapped_persona_raise(tmp_path):
     A re-mapping keeps the id but changes what the judge would read; topping up (or
     reusing) the old rounds would attribute verdicts on the old values to the new ones.
     """
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     marker_attr = attrs[0]
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
     judged = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
     run_combo_judgements(
-        judged, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+        judged, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir,
         dataclasses.replace(_cfg(), n_rounds=1), client_factory=_stub_factory(),
     )
 
@@ -838,25 +838,25 @@ def test_cached_verdicts_for_a_remapped_persona_raise(tmp_path):
     for n_rounds in (1, 2):  # a pure reuse and a top-up are both refused
         with pytest.raises(ValueError, match=rf"persona_00007(?s:.*){changed_attr}(?s:.*)val_remapped(?s:.*)--force"):
             run_combo_judgements(
-                remapped, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+                remapped, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir,
                 dataclasses.replace(_cfg(), n_rounds=n_rounds), client_factory=_stub_factory(),
             )
     # The plan-only (artifact-rewrite) path refuses it too: the rounds are mis-attributed
     # whether or not anything is judged.
     with pytest.raises(ValueError, match="other mapped values"):
         run_combo_judgements(
-            remapped, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+            remapped, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir,
             dataclasses.replace(_cfg(), n_rounds=1), plan_only=True,
         )
 
 
 def test_cached_snapshot_with_a_missing_or_extra_attribute_raises(tmp_path):
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     marker_attr = attrs[0]
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
     population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
     cfg = dataclasses.replace(_cfg(), n_rounds=1)
-    run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+    run_combo_judgements(population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, cfg,
                          client_factory=_stub_factory())
     path = combo_dir / "persona_00007.json"
     original = json.loads(path.read_text(encoding="utf-8"))
@@ -864,31 +864,31 @@ def test_cached_snapshot_with_a_missing_or_extra_attribute_raises(tmp_path):
     dropped = {**original, "attributes": {a: v for a, v in original["attributes"].items() if a != attrs[1]}}
     path.write_text(json.dumps(dropped), encoding="utf-8")
     with pytest.raises(ValueError, match=rf"missing from the snapshot: \['{attrs[1]}'\]"):
-        run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+        run_combo_judgements(population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, cfg,
                              client_factory=_stub_factory())
 
     padded = {**original, "attributes": {**original["attributes"], "not_an_axis": "x"}}
     path.write_text(json.dumps(padded), encoding="utf-8")
     with pytest.raises(ValueError, match=r"not on the analyzed axis: \['not_an_axis'\]"):
-        run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+        run_combo_judgements(population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, cfg,
                              client_factory=_stub_factory())
 
 
 def test_cached_verdicts_from_another_judge_model_raise(tmp_path):
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     marker_attr = attrs[0]
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
     population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
     cfg = dataclasses.replace(_cfg(), n_rounds=1)
-    run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+    run_combo_judgements(population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, cfg,
                          client_factory=_stub_factory())
 
     other = dataclasses.replace(cfg, judge_model="some-other-judge")
     with pytest.raises(ValueError, match=r"judge_model=.*not the configured 'some-other-judge'(?s:.*)--force"):
-        run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, other,
+        run_combo_judgements(population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, other,
                              client_factory=_stub_factory())
     # --force re-judges under the configured model.
-    summary = run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, other,
+    summary = run_combo_judgements(population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir, other,
                                    force=True, client_factory=_stub_factory())
     assert summary.written == 1
     cache = json.loads((combo_dir / "persona_00007.json").read_text(encoding="utf-8"))
@@ -897,17 +897,17 @@ def test_cached_verdicts_from_another_judge_model_raise(tmp_path):
 
 def test_unchanged_persona_resumes_and_tops_up(tmp_path):
     """The validity checks pass a cache whose persona, judge and prompt are unchanged."""
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     marker_attr = attrs[0]
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
     population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
-    run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+    run_combo_judgements(population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir,
                          dataclasses.replace(_cfg(), n_rounds=1), client_factory=_stub_factory())
 
-    reuse = run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+    reuse = run_combo_judgements(population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir,
                                  dataclasses.replace(_cfg(), n_rounds=1), client_factory=_stub_factory())
     assert reuse.skipped == 1 and reuse.written == 0
-    top_up = run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+    top_up = run_combo_judgements(population, "swedish_02_all_pick_v2_claude_haiku", attrs, combo_dir,
                                   dataclasses.replace(_cfg(), n_rounds=2), client_factory=_stub_factory())
     assert top_up.topped_up == 1
     cache = json.loads((combo_dir / "persona_00007.json").read_text(encoding="utf-8"))
@@ -926,7 +926,7 @@ def test_unchanged_persona_resumes_and_tops_up(tmp_path):
 def test_unusable_persona_id_raises(tmp_path, bad_id, match):
     """No silent fallback to the index: an id the readers could not glob fails loudly."""
     cfg = dataclasses.replace(_cfg(), n_rounds=1)
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     marker_attr = attrs[0]
     persona = _persona(attrs, marker_attr, "TYP8")
     if bad_id is not None:
@@ -934,8 +934,8 @@ def test_unusable_persona_id_raises(tmp_path, bad_id, match):
 
     with pytest.raises(ValueError, match=match):
         run_combo_judgements(
-            [persona], "swedish_all_pick_claude_haiku", attrs,
-            tmp_path / "swedish_all_pick_claude_haiku", cfg,
+            [persona], "swedish_02_all_pick_v2_claude_haiku", attrs,
+            tmp_path / "swedish_02_all_pick_v2_claude_haiku", cfg,
             client_factory=_stub_factory(),
         )
 
@@ -943,11 +943,11 @@ def test_unusable_persona_id_raises(tmp_path, bad_id, match):
 def test_integer_ids_are_normalised_to_the_persona_glob_shape(tmp_path):
     """The real reference carries integer ids; files must still match persona_[0-9]*."""
     cfg = dataclasses.replace(_cfg(), n_rounds=1)
-    attrs = scheme_attributes("swedish")
-    real_dir = tmp_path / "real_swedish"
+    attrs = scheme_attributes("swedish_02")
+    real_dir = tmp_path / "real_swedish_02"
 
     summary = run_combo_judgements(
-        _real_population(attrs), "real_swedish", attrs, real_dir, cfg,
+        _real_population(attrs), "real_swedish_02", attrs, real_dir, cfg,
         client_factory=_stub_factory(),
     )
     assert summary.written == 3
@@ -988,30 +988,30 @@ def test_enumerate_combos_separates_a_withdrawn_combo_from_an_unusable_one(tmp_p
     mapped = _mapped_dir_with(
         tmp_path,
         [
-            {"slug": "swedish_all_pick_claude_haiku", "synthetic_file": None,
+            {"slug": "swedish_02_all_pick_v2_claude_haiku", "synthetic_file": None,
              "skipped": True, "skip_reason": _WITHDRAWN_REASON},
-            {"slug": "swedish_all_pick_claude_sonnet",
-             "synthetic_file": "swedish_all_pick_claude_sonnet.json"},
+            {"slug": "swedish_02_all_pick_v2_claude_sonnet",
+             "synthetic_file": "swedish_02_all_pick_v2_claude_sonnet.json"},
         ],
-        real_country="swedish",
+        real_country="swedish_02",
     )
-    axis_ids = (["swedish"], ["all_pick"], ["claude_haiku", "claude_sonnet"])
+    axis_ids = (["swedish_02"], ["all_pick_v2"], ["claude_haiku", "claude_sonnet"])
 
     # GUI per_combo dispatch shape: the selection is exactly the withdrawn combination.
     combos, skipped, withdrawn = driver._enumerate_combos(
-        mapped, countries=["swedish"], models=["claude_haiku"], strategies=["all_pick"],
+        mapped, countries=["swedish_02"], models=["claude_haiku"], strategies=["all_pick_v2"],
         slugs=None, axis_ids=axis_ids, real_sample_size=None, include_real=True,
     )
     assert combos == []                                      # nothing to judge ...
     assert skipped == []                                     # ... and nothing went wrong
-    assert withdrawn == [("swedish_all_pick_claude_haiku", _WITHDRAWN_REASON)]
+    assert withdrawn == [("swedish_02_all_pick_v2_claude_haiku", _WITHDRAWN_REASON)]
 
     # The same withdrawal outside the selection is out of scope, not reported.
     combos, skipped, withdrawn = driver._enumerate_combos(
-        mapped, countries=["swedish"], models=["claude_sonnet"], strategies=["all_pick"],
+        mapped, countries=["swedish_02"], models=["claude_sonnet"], strategies=["all_pick_v2"],
         slugs=None, axis_ids=axis_ids, real_sample_size=None, include_real=True,
     )
-    assert [c.label for c in combos] == ["real_swedish", "swedish_all_pick_claude_sonnet"]
+    assert [c.label for c in combos] == ["real_swedish_02", "swedish_02_all_pick_v2_claude_sonnet"]
     assert (skipped, withdrawn) == ([], [])
 
 
@@ -1026,12 +1026,12 @@ def test_cli_exits_zero_when_every_selected_combination_was_withdrawn(tmp_path, 
 
     driver = _load_driver()
     _mapped_dir_with(tmp_path, [
-        {"slug": "swedish_all_pick_claude_haiku", "synthetic_file": None,
+        {"slug": "swedish_02_all_pick_v2_claude_haiku", "synthetic_file": None,
          "skipped": True, "skip_reason": _WITHDRAWN_REASON},
     ])
     monkeypatch.setattr(_sys, "argv", [
         "analyze_persona_realism.py",
-        "--model-id", "claude_haiku", "--strategy-id", "all_pick", "--country-id", "swedish",
+        "--model-id", "claude_haiku", "--strategy-id", "all_pick_v2", "--country-id", "swedish_02",
         "--output-base", str(tmp_path),
     ])
     monkeypatch.setattr(driver, "_run_one_combo", _fail_if_called)
@@ -1049,12 +1049,12 @@ def test_cli_still_errors_when_the_selection_matched_nothing(tmp_path, monkeypat
 
     driver = _load_driver()
     _mapped_dir_with(tmp_path, [
-        {"slug": "swedish_all_pick_claude_sonnet",
-         "synthetic_file": "swedish_all_pick_claude_sonnet.json"},
+        {"slug": "swedish_02_all_pick_v2_claude_sonnet",
+         "synthetic_file": "swedish_02_all_pick_v2_claude_sonnet.json"},
     ])
     monkeypatch.setattr(_sys, "argv", [
         "analyze_persona_realism.py",
-        "--model-id", "claude_haiku", "--strategy-id", "all_pick", "--country-id", "swedish",
+        "--model-id", "claude_haiku", "--strategy-id", "all_pick_v2", "--country-id", "swedish_02",
         "--output-base", str(tmp_path),
     ])
     monkeypatch.setattr(driver, "_run_one_combo", _fail_if_called)
@@ -1078,7 +1078,7 @@ def test_an_empty_verdict_cache_publishes_no_artifacts(tmp_path, monkeypatch):
     outright, since a cap re-derives every competitor from the cache this combo lacks.
     """
     driver = _load_driver()
-    label = "swedish_all_pick_claude_haiku"
+    label = "swedish_02_all_pick_v2_claude_haiku"
     out_dir = tmp_path / label
     out_dir.mkdir(parents=True)
 
@@ -1091,7 +1091,7 @@ def test_an_empty_verdict_cache_publishes_no_artifacts(tmp_path, monkeypatch):
 
     result = driver._run_one_combo(
         combo=_combo_of(driver, label), individuals=[{"a": 1}],
-        analyzed_attrs=scheme_attributes("swedish"), out_dir=out_dir, cfg=_cfg(),
+        analyzed_attrs=scheme_attributes("swedish_02"), out_dir=out_dir, cfg=_cfg(),
         dpi=80, force=False, rewrite_artifacts=True,
         hard_rules=(), pricing=_PRICING,
     )
@@ -1103,11 +1103,11 @@ def test_has_cached_verdicts_ignores_the_combo_report(tmp_path):
     """The predicate keys on the verdict-cache glob, not on 'a .json is present'."""
     from population_synthetic.analysis.persona_realism.reduce import has_cached_verdicts
 
-    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    combo_dir = tmp_path / "swedish_02_all_pick_v2_claude_haiku"
     combo_dir.mkdir()
     assert has_cached_verdicts(tmp_path / "does_not_exist") is False
     assert has_cached_verdicts(combo_dir) is False
-    (combo_dir / "swedish_all_pick_claude_haiku.json").write_text("{}", encoding="utf-8")
+    (combo_dir / "swedish_02_all_pick_v2_claude_haiku.json").write_text("{}", encoding="utf-8")
     assert has_cached_verdicts(combo_dir) is False   # the report is not a cache file
     (combo_dir / "persona_00000.json").write_text("{}", encoding="utf-8")
     assert has_cached_verdicts(combo_dir) is True
@@ -1157,10 +1157,10 @@ def _judge_through_driver(driver, monkeypatch, base, label, population, cfg, see
         persona_dir = base / "03_Analysis" / "population_cap" / label / record["id"]
         persona_dir.mkdir(parents=True, exist_ok=True)
         (persona_dir / "identity.json").write_text(json.dumps({"age": 17}), encoding="utf-8")
-    out_dir = base / "03_Analysis" / "persona_realism" / "swedish" / label
+    out_dir = base / "03_Analysis" / "persona_realism" / "swedish_02" / label
     driver._run_one_combo(
         combo=_combo_of(driver, label), individuals=population,
-        analyzed_attrs=scheme_attributes("swedish"), out_dir=out_dir, cfg=cfg, dpi=60,
+        analyzed_attrs=scheme_attributes("swedish_02"), out_dir=out_dir, cfg=cfg, dpi=60,
         hard_rules=(), pricing=_PRICING, output_base=base, **kwargs,
     )
     return out_dir
@@ -1179,8 +1179,8 @@ def test_leftover_caches_outside_the_selection_reach_no_output(tmp_path, monkeyp
     """
     driver = _load_driver()
     cfg = dataclasses.replace(_cfg(), stage2_enabled=True)
-    attrs = scheme_attributes("swedish")
-    label = "swedish_all_pick_claude_haiku"
+    attrs = scheme_attributes("swedish_02")
+    label = "swedish_02_all_pick_v2_claude_haiku"
     selection = _synthetic_population(attrs)
     leftover = _persona(attrs, attrs[0], "IMPOSSIBLE", "persona_00099")
 
@@ -1191,7 +1191,7 @@ def test_leftover_caches_outside_the_selection_reach_no_output(tmp_path, monkeyp
 
     # The earlier cap judged the leftover (stage 1 only); the re-cap dropped it.
     left_base = tmp_path / "left"
-    left_dir = left_base / "03_Analysis" / "persona_realism" / "swedish" / label
+    left_dir = left_base / "03_Analysis" / "persona_realism" / "swedish_02" / label
     run_combo_judgements([leftover], label, attrs, left_dir, cfg, client_factory=_stub_factory())
     (left_dir / "stage2").mkdir()
     (left_dir / "stage2" / "persona_00099.json").write_text(

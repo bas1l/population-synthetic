@@ -383,7 +383,7 @@ def test_build_prompts_substitutes_only_persona_block():
 # prompt.py -- real mapped record shape (raw integer age, NO age_group key)
 # --------------------------------------------------------------------------
 
-# The Sweden analyzed axis exactly as ``scheme_attributes("swedish")`` yields it:
+# The Sweden analyzed axis exactly as ``scheme_attributes("swedish_02")`` yields it:
 # it lists ``age_group`` (a derived axis), while a real mapped record stores the
 # raw integer ``age`` instead. Rendering must derive age_group on demand rather
 # than KeyError-ing on the absent ``age_group`` key.

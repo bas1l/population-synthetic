@@ -13,7 +13,7 @@ class SwedishSyntheticMapper(BaseSyntheticMapper):
     Country divergence is entirely the mapping directory
     (``config/mapping/scb_native/``): every label and keyword cascade lives there.
     This is the **native high-fidelity tier**; it must stay in sync with the
-    ``parameters.mappings`` path in ``config/synthetic/axes/countries/swedish.yaml``
+    ``parameters.mappings`` path in ``config/synthetic/axes/countries/swedish_02.yaml``
     (the single source of truth), which is asserted at scheme-load time by
     ``country_config.assert_mapping_dir_consistency``.
     """

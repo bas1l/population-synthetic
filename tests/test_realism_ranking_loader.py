@@ -51,10 +51,10 @@ from population_synthetic.analysis.utils.realism_csv import (  # noqa: E402
 )
 from population_synthetic.analysis.utils.registry import analysis_output_dir  # noqa: E402
 
-_COUNTRY = "swedish"
+_COUNTRY = "swedish_02"
 _AXIS_IDS = (
     [_COUNTRY],
-    ["all_pick", "all_pick_dag"],
+    ["all_pick_v2", "all_pick_dag_v2"],
     ["claude_haiku", "claude_sonnet"],
 )
 _PROVENANCE = {
@@ -65,7 +65,7 @@ _PROVENANCE = {
 
 
 def _persona_row(pid: str, slug: str, *, impossible: bool, typicality: float | None,
-                 model: str = "claude_haiku", strategy: str = "all_pick",
+                 model: str = "claude_haiku", strategy: str = "all_pick_v2",
                  is_real: bool = False) -> RealismPersonaRow:
     return RealismPersonaRow(
         persona_id=pid,
@@ -103,7 +103,7 @@ def _clash_row(row: RealismPersonaRow) -> RealismClashRow:
 
 
 def _write_combo(
-    base, slug, *, n_impossible=1, n_possible=3, model="claude_haiku", strategy="all_pick",
+    base, slug, *, n_impossible=1, n_possible=3, model="claude_haiku", strategy="all_pick_v2",
     is_real=False, provenance=None, report=True, personas_csv=True, clashes_csv=True,
     n_personas_override=None,
 ):
@@ -154,8 +154,8 @@ def _base(tmp_path, slugs):
     return tmp_path
 
 
-_SLUG_A = "swedish_all_pick_claude_haiku"
-_SLUG_B = "swedish_all_pick_dag_claude_sonnet"
+_SLUG_A = "swedish_02_all_pick_v2_claude_haiku"
+_SLUG_B = "swedish_02_all_pick_dag_v2_claude_sonnet"
 _REAL = f"real_{_COUNTRY}"
 
 
@@ -167,7 +167,7 @@ _REAL = f"real_{_COUNTRY}"
 def test_loads_synthetic_combinations_and_the_real_competitor(tmp_path):
     base = _base(tmp_path, [_SLUG_A, _SLUG_B])
     _write_combo(base, _SLUG_A)
-    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag")
+    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag_v2")
     _write_combo(base, _REAL, is_real=True, model="", strategy="")
 
     records, skipped = load_competitors(base, axis_ids=_AXIS_IDS)
@@ -295,7 +295,7 @@ def test_malformed_report_raises_naming_the_upstream_script(tmp_path):
 def test_heterogeneous_judge_raises_naming_the_offender(tmp_path, key, value):
     base = _base(tmp_path, [_SLUG_A, _SLUG_B])
     _write_combo(base, _SLUG_A)
-    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag",
+    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag_v2",
                  provenance={**_PROVENANCE, key: value})
     with pytest.raises(ValueError, match=_SLUG_B):
         load_competitors(base, axis_ids=_AXIS_IDS)
@@ -304,7 +304,7 @@ def test_heterogeneous_judge_raises_naming_the_offender(tmp_path, key, value):
 def test_homogeneous_set_passes_the_guard(tmp_path):
     base = _base(tmp_path, [_SLUG_A, _SLUG_B])
     _write_combo(base, _SLUG_A)
-    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag")
+    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag_v2")
     records, _ = load_competitors(base, axis_ids=_AXIS_IDS)
     assert len(records) == 2
 
@@ -358,7 +358,7 @@ def _cached_round(*, can_exist: bool, typicality: int | None, severity: str) -> 
 
 
 def _write_cached_combo(
-    base, slug, *, depth, model="claude_haiku", strategy="all_pick", is_real=False,
+    base, slug, *, depth, model="claude_haiku", strategy="all_pick_v2", is_real=False,
     cfg=None, n_impossible=1, n_possible=3,
 ):
     """Write one combination's verdict cache at *depth* rounds, then its artifacts.
@@ -427,7 +427,7 @@ def test_rounds_cap_none_yields_exactly_the_published_records(tmp_path):
     """
     base = _base(tmp_path, [_SLUG_A, _SLUG_B])
     _write_combo(base, _SLUG_A)
-    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag")
+    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag_v2")
 
     baseline, baseline_skipped = load_competitors(base, axis_ids=_AXIS_IDS)
     explicit, explicit_skipped = load_competitors(
@@ -442,7 +442,7 @@ def test_a_homogeneous_set_never_enters_the_cap_path(tmp_path):
     """Auto-derivation is a recovery step, so an agreeing set must not trigger it."""
     base = _base(tmp_path, [_SLUG_A, _SLUG_B])
     _write_combo(base, _SLUG_A)
-    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag")
+    _write_combo(base, _SLUG_B, model="claude_sonnet", strategy="all_pick_dag_v2")
 
     records, _ = load_competitors(base, axis_ids=_AXIS_IDS, judge_cfg=_judge_cfg())
 
@@ -460,7 +460,7 @@ def test_a_homogeneous_set_never_enters_the_cap_path(tmp_path):
 def test_a_round_heterogeneous_set_loads_under_a_cap_and_raises_without_one(tmp_path):
     base = _base(tmp_path, [_SLUG_A, _SLUG_B])
     _write_cached_combo(base, _SLUG_A, depth=5)
-    _write_cached_combo(base, _SLUG_B, depth=2, model="claude_sonnet", strategy="all_pick_dag")
+    _write_cached_combo(base, _SLUG_B, depth=2, model="claude_sonnet", strategy="all_pick_dag_v2")
 
     records, _ = load_competitors(base, axis_ids=_AXIS_IDS, rounds_cap=2, judge_cfg=_judge_cfg())
     assert {record.slug for record in records} == {_SLUG_A, _SLUG_B}
@@ -483,7 +483,7 @@ def test_a_differing_judge_or_prompt_still_raises_with_a_cap_active(tmp_path, ke
         template.write_text("a different prompt template", encoding="utf-8")
         odd = _judge_cfg(n_rounds=3, prompt_template=template)
     _write_cached_combo(base, _SLUG_B, depth=3, model="claude_sonnet",
-                        strategy="all_pick_dag", cfg=odd)
+                        strategy="all_pick_dag_v2", cfg=odd)
 
     with pytest.raises(ValueError, match=key):
         load_competitors(base, axis_ids=_AXIS_IDS, rounds_cap=2, judge_cfg=_judge_cfg())
@@ -598,7 +598,7 @@ def test_a_capped_record_raises_when_a_selected_persona_lost_its_cache(tmp_path)
 def test_auto_derivation_ranks_at_the_shallowest_cached_depth(tmp_path, caplog):
     base = _base(tmp_path, [_SLUG_A, _SLUG_B])
     _write_cached_combo(base, _SLUG_A, depth=5)
-    _write_cached_combo(base, _SLUG_B, depth=2, model="claude_sonnet", strategy="all_pick_dag")
+    _write_cached_combo(base, _SLUG_B, depth=2, model="claude_sonnet", strategy="all_pick_dag_v2")
 
     with caplog.at_level(logging.WARNING):
         records, _ = load_competitors(base, axis_ids=_AXIS_IDS, judge_cfg=_judge_cfg())
@@ -614,7 +614,7 @@ def test_auto_derivation_does_not_mask_a_differing_judge_model(tmp_path):
     """Differing on the judge *and* the round count is terminal, not recoverable."""
     base = _base(tmp_path, [_SLUG_A, _SLUG_B])
     _write_cached_combo(base, _SLUG_A, depth=5)
-    _write_cached_combo(base, _SLUG_B, depth=2, model="claude_sonnet", strategy="all_pick_dag",
+    _write_cached_combo(base, _SLUG_B, depth=2, model="claude_sonnet", strategy="all_pick_dag_v2",
                         cfg=_judge_cfg(n_rounds=2, judge_model="claude-haiku-4-5"))
 
     with pytest.raises(ValueError, match="judge_model"):
@@ -648,7 +648,7 @@ def test_round_scores_raise_on_a_mean_without_a_scored_round():
     row = _persona_row("persona_00000", _SLUG_A, impossible=False, typicality=7.0)
     broken = dataclasses.replace(row, typicality_rounds=(None, None))
     record = CompetitorRecord(
-        slug=_SLUG_A, country=_COUNTRY, model="claude_haiku", strategy="all_pick",
+        slug=_SLUG_A, country=_COUNTRY, model="claude_haiku", strategy="all_pick_v2",
         is_real_reference=False, n_personas=1, n_failed=0, personas=(broken,),
         impossibility={}, dispersion={}, reliability={}, provenance={},
         report_path=Path("/fake/report.json"), personas_csv_path=Path("/fake/personas.csv"),

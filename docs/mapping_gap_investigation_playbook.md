@@ -21,7 +21,7 @@ can't be resolved without *guessing* its class, leave it unmapped — it correct
 
 - **Run outputs:** `{output_base}/01_Raw/{country}_*/persona_*/identity.json`
   where `output_base` is read from `config/experiment_defaults.yaml`
-  (currently `F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data`).
+  (currently `<project-data>/02_Data`).
 - **Comparison reports:** `{output_base}/03_Analysis/{country}_*/...json` (+ CSV + chart PNGs).
 - **Extractor (generated → schema):** `src/population_synthetic/comparison/extractor.py`
   — `_extract_flat()` and the `_normalize_<attr>()` / `_normalize_<attr>_it()` helpers.
@@ -31,8 +31,6 @@ can't be resolved without *guessing* its class, leave it unmapped — it correct
 - **Harvester:** `scripts/_throwaway_harvest_unmapped.py` (Step 2 below).
 - **Comparison scripts:** `scripts/analyze/score_fidelity_sweden.py` (single run, Sweden),
   `scripts/analyze/score_fidelity_italy.py` (Italy), `scripts/analyze/score_fidelity_all.py` (batch).
-- **Worked examples / prior output:** `docs/swedish_model_state_and_mapping_2026-06-29.md`,
-  `docs/swedish_mapping_fix_2026-05-29.md`.
 
 ### How mapping works (and the two ways it silently fails)
 
@@ -57,7 +55,7 @@ reported unmapped-% is therefore a **lower bound** where it's involved.
 
 ## 1. Investigation — analyse model state & mapping gaps
 
-Goal: a report like `docs/swedish_model_state_and_mapping_2026-06-29.md`.
+Goal: a report of model x strategy coverage and the mapping gaps found.
 
 1. **Coverage:** list `{output_base}/01_Raw/{country}_*` runs; note model × strategy coverage and
    persona counts (which models are complete, thin, or un-run).
@@ -160,7 +158,7 @@ Confirm **no new** lint errors by diffing against the baseline:
 | Normalizer helpers | `_normalize_<attr>` | `_normalize_<attr>_it` |
 | Canonical label sets | `*_LABELS` | `*_LABELS_IT` |
 | Single-run compare | `scripts/analyze/score_fidelity_sweden.py` | `scripts/analyze/score_fidelity_italy.py` |
-| Batch / harvest | `--country swedish` | `--country italian` |
+| Batch / harvest | `--country swedish_02` | `--country italian` |
 
 When defining canonical-output sets (harvester, collapse checks), read the values the
 `_normalize_*` helpers actually **return** — not the `*_LABELS` input constants, whose

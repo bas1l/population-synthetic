@@ -2,7 +2,7 @@
 
 Covers ``civil_status``, ``education_level``, ``employment_status``, ``employment_type``,
 ``housing_tenure`` and ``income_source`` (Phase 2A of
-``docs/development/plans/pending/mapping-fixes-scb-audit.md``). Every case is a raw LLM value from
+the SCB-checked mapping audit). Every case is a raw LLM value from
 the audit's curated row list with the category the SCB definition gives it:
 
 - ``*_FIXED`` -- rows that were mapped wrongly (or left unmapped) and must now resolve as the

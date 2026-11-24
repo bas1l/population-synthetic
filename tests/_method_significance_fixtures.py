@@ -24,25 +24,11 @@ from population_synthetic.analysis.utils.axes import strategy_complexity_order
 
 #: The five v1 families in the config-derived complexity order -- the live Sweden axis.
 FIVE_METHODS: list[str] = strategy_complexity_order([
-    "all_generate_evaluate_random_pick",
-    "all_generate_evaluate_pick",
-    "all_generate_pick",
-    "all_pick_dag",
-    "all_pick",
-])
-
-#: Both versions of all five families: the widest method axis the sweep can produce, and
-#: the one the canvas budget is tightest on.
-TEN_METHODS: list[str] = strategy_complexity_order([
-    f"{family}{suffix}"
-    for family in (
-        "all_generate_evaluate_random_pick",
-        "all_generate_evaluate_pick",
-        "all_generate_pick",
-        "all_pick_dag",
-        "all_pick",
-    )
-    for suffix in ("", "_v2")
+    "all_generate_evaluate_random_pick_v2",
+    "all_generate_evaluate_pick_v2",
+    "all_generate_pick_v2",
+    "all_pick_dag_v2",
+    "all_pick_v2",
 ])
 
 #: Two attributes, both carrying a canonical display label.
@@ -134,7 +120,7 @@ def result(
     methods: Sequence[str],
     panels: Mapping[str, dict[str, Any]],
     *,
-    country: str = "swedish",
+    country: str = "swedish_02",
 ) -> dict[str, Any]:
     """The built analysis, reduced to the keys the pairwise grid consumes."""
     return {

@@ -37,11 +37,11 @@ MODELS = ["model_a", "model_b", "model_c", "model_d", "model_e"]
 # The five v1 families, ordered by the config-derived accessor (the same order
 # every consumer resolves; asserted against the legacy sequence in test_axes.py).
 STRATEGIES = strategy_complexity_order([
-    "all_generate_evaluate_random_pick",
-    "all_generate_evaluate_pick",
-    "all_generate_pick",
-    "all_pick_dag",
-    "all_pick",
+    "all_generate_evaluate_random_pick_v2",
+    "all_generate_evaluate_pick_v2",
+    "all_generate_pick_v2",
+    "all_pick_dag_v2",
+    "all_pick_v2",
 ])
 ATTRS = ["trend_attr", "null_attr"]
 # Config-sourced category levels per attribute (drives the method-comparison panel
@@ -80,7 +80,7 @@ def _full_grid(*, drop=None, nan_cell=None):
                 tv_by_attr[nan_cell[2]] = float("nan")
             combos.append(
                 make_combo(
-                    slug=f"swedish_{strategy}_{model}",
+                    slug=f"swedish_02_{strategy}_{model}",
                     strategy=strategy,
                     model=model,
                     tv_by_attr=tv_by_attr,
@@ -138,7 +138,7 @@ def test_builder_json_shape():
                 "method_order", "method_ranks", "attributes", "multiplicity_correction",
                 "library_versions", "skipped", "dropped_combos"):
         assert key in meta, key
-    assert meta["country"] == "swedish"
+    assert meta["country"] == "swedish_02"
     assert meta["method_order"] == STRATEGIES
     assert set(meta["library_versions"]) == {"statsmodels", "scikit_posthocs", "scipy"}
 
@@ -165,8 +165,8 @@ def test_builder_json_shape():
 def test_writers_roundtrip(tmp_path):
     result = build_method_significance(_full_grid(), ATTRS, category_values=CATEGORY_VALUES)
 
-    json_path = write_method_significance_json(result, tmp_path / "swedish_method_significance.json")
-    csv_path = write_method_significance_csv(result, tmp_path / "swedish_method_significance.csv")
+    json_path = write_method_significance_json(result, tmp_path / "swedish_02_method_significance.json")
+    csv_path = write_method_significance_csv(result, tmp_path / "swedish_02_method_significance.csv")
     assert json_path.is_file()
     assert csv_path.is_file()
 
@@ -206,8 +206,8 @@ def test_overall_mixed_logit_and_model_comparison():
 def test_absent_and_unbalanced_grid_recorded_not_imputed():
     # Drop one combo entirely, and NaN out another attribute cell.
     grid = _full_grid(
-        drop=("model_e", "all_generate_evaluate_random_pick"),
-        nan_cell=("model_a", "all_pick", "null_attr"),
+        drop=("model_e", "all_generate_evaluate_random_pick_v2"),
+        nan_cell=("model_a", "all_pick_v2", "null_attr"),
     )
     result = build_method_significance(grid, ATTRS, category_values=CATEGORY_VALUES)
 
@@ -220,7 +220,7 @@ def test_absent_and_unbalanced_grid_recorded_not_imputed():
     # Still flags the (strong) planted trend on the 4 complete models.
     assert trend["method_trend"]["p_bh"] < 0.05
 
-    # null_attr: model_a's all_pick cell is NaN -> absent, so model_a incomplete.
+    # null_attr: model_a's all_pick_v2 cell is NaN -> absent, so model_a incomplete.
     null = result["per_attribute"]["null_attr"]
     assert "model_a" in null["dropped_models"]
     assert null["absent_cells"] >= 1
@@ -234,7 +234,7 @@ def test_degenerate_single_model_records_skip_note():
     for rank, strategy in enumerate(STRATEGIES, start=1):
         combos.append(
             make_combo(
-                slug=f"swedish_{strategy}_solo",
+                slug=f"swedish_02_{strategy}_solo",
                 strategy=strategy,
                 model="solo",
                 tv_by_attr={"trend_attr": _trend_tv(0, rank), "null_attr": _null_tv(0, rank)},
@@ -255,9 +255,9 @@ def test_degenerate_single_model_records_skip_note():
 
 
 def test_multiple_countries_raises():
-    a = make_combo(slug="swedish_all_pick_model_a", strategy="all_pick", model="model_a",
-                   tv_by_attr={"trend_attr": 0.1, "null_attr": 0.2}, country="swedish")
-    b = make_combo(slug="italian_all_pick_model_a", strategy="all_pick", model="model_a",
+    a = make_combo(slug="swedish_02_all_pick_v2_model_a", strategy="all_pick_v2", model="model_a",
+                   tv_by_attr={"trend_attr": 0.1, "null_attr": 0.2}, country="swedish_02")
+    b = make_combo(slug="italian_all_pick_v2_model_a", strategy="all_pick_v2", model="model_a",
                    tv_by_attr={"trend_attr": 0.1, "null_attr": 0.2}, country="italian")
     with pytest.raises(ValueError, match="one country"):
         build_method_significance([a, b], ATTRS, category_values=CATEGORY_VALUES)
@@ -265,7 +265,7 @@ def test_multiple_countries_raises():
 
 def test_unknown_strategy_records_raise():
     """An off-axis strategy raises at method-axis resolution (never a silent drop)."""
-    off = make_combo(slug="swedish_seed_model_a", strategy="seed", model="model_a",
+    off = make_combo(slug="swedish_02_seed_model_a", strategy="seed", model="model_a",
                      tv_by_attr={"trend_attr": 0.1, "null_attr": 0.2})
     with pytest.raises(ValueError, match="Unknown strategy id"):
         build_method_significance([off], ATTRS, category_values=CATEGORY_VALUES)

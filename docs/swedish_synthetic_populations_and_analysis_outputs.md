@@ -28,7 +28,7 @@ Everything below is the concrete output of those three steps.
 
 All generated data lives **outside the git repository** (the `data/` folder is git-ignored) under a
 shared "data lake" directory, referred to in config as `output_base`
-(currently `F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data`). It has two folders that matter:
+(currently `<project-data>/02_Data`). It has two folders that matter:
 
 | Folder | Contains |
 |--------|----------|
@@ -56,7 +56,7 @@ Every person — real or synthetic — is described by the **same 15 demographic
 
 *(`age_group` is binned on the fly from a raw integer `age`.)*
 
-A single real person looks like this (from `real_swedish.json`):
+A single real person looks like this (from `real_swedish_02.json`):
 
 ```json
 { "id": 0, "age": 65, "biological_sex": "Female", "education_level": "Upper Secondary ≤ 2 yrs (ISCED 3C)",
@@ -80,7 +80,7 @@ couple of extras the pipeline does not score, e.g. `current_environment_type`,
 
 ### 4.1 The real baseline (the "ground truth")
 
-- **1 file:** `03_Analysis/mapping/real_swedish.json`
+- **1 file:** `03_Analysis/mapping/real_swedish_02.json`
 - **10,000 people**, sampled from live SCB distributions (population, education, employment,
   housing, income, region, birth country, …). Its `metadata` records exactly which SCB tables and
   classifications were used.
@@ -90,7 +90,7 @@ couple of extras the pipeline does not score, e.g. `current_environment_type`,
 ### 4.2 The synthetic populations (the "candidates")
 
 Each synthetic population is one **run** = one combination of **model × strategy**, and targets
-**100 generated personas**. Runs are named `swedish_{strategy}_{model}` and stored under
+**100 generated personas**. Runs are named `swedish_02_{strategy}_{model}` and stored under
 `01_Raw/`. There are currently **42 Swedish runs on disk**: 38 completed the full 100 personas;
 4 are partial or failed (e.g. `..._random_pick_ollama_llama33_70b` produced 0, an
 `ollama_qwen3_14b` run only 6–12, `..._ollama_lucie_7b` only 16). The 35 runs that mapped cleanly
@@ -174,8 +174,8 @@ each stage produces and what it tells you.
 Normalises every raw population (real and synthetic) onto the canonical 15-attribute schema so they
 can be compared apples-to-apples.
 
-- `real_swedish.json` — the mapped 10,000-person baseline.
-- `swedish_{strategy}_{model}.json` — one mapped synthetic population per run (**35 present**).
+- `real_swedish_02.json` — the mapped 10,000-person baseline.
+- `swedish_02_{strategy}_{model}.json` — one mapped synthetic population per run (**35 present**).
 - `_index.json` — a manifest listing every mapped target, its person count, and how many were
   skipped as unmappable.
 
@@ -199,7 +199,7 @@ Scores **one synthetic population against the real baseline**, per attribute. Ou
 
 **Batch aggregate** (when comparing all runs at once), written to `03_Analysis/fidelity/`:
 
-- `swedish_radar_grid.png` — a grid of every run's radar chart (rows = models, columns =
+- `swedish_02_radar_grid.png` — a grid of every run's radar chart (rows = models, columns =
   strategies) for at-a-glance visual comparison.
 - `comparison_summary.json` — one summary row per run (mean TV-distance, coherence score).
 
@@ -211,15 +211,15 @@ Scores **one synthetic population against the real baseline**, per attribute. Ou
 
 Consumes all the Stage-B reports and answers **"which model + strategy is best for Sweden?"**
 
-- `swedish_leaderboard.png` — horizontal bar chart ranking all combos by overall TV-similarity.
-- `swedish_heatmap.png` — combos (in rank order) × 15 attributes; each cell is the per-attribute
+- `swedish_02_leaderboard.png` — horizontal bar chart ranking all combos by overall TV-similarity.
+- `swedish_02_heatmap.png` — combos (in rank order) × 15 attributes; each cell is the per-attribute
   similarity, so you can see *where* a combo wins or loses.
-- `swedish_performance.json` — the full ranking, per-attribute scores, coherence, and statistical
+- `swedish_02_performance.json` — the full ranking, per-attribute scores, coherence, and statistical
   tests (**Kruskal–Wallis + Dunn**) checking whether model choice or strategy choice significantly
   affects quality.
-- `swedish_performance.csv` — the leaderboard as a spreadsheet (rank, model, strategy, overall
+- `swedish_02_performance.csv` — the leaderboard as a spreadsheet (rank, model, strategy, overall
   similarity, coherence, and a similarity column per attribute).
-- `swedish_by_attribute/{attribute}_bars.png` — 15 optional charts, one per attribute, comparing
+- `swedish_02_by_attribute/{attribute}_bars.png` — 15 optional charts, one per attribute, comparing
   all models × strategies on that single attribute.
 
 ### Stage D — LLM-call analytics (`summarize_generation_metadata.py`) → `03_Analysis/generation_metadata/`
@@ -246,7 +246,7 @@ significance, and deep diagnostics.
 
 The headline deliverable is the **Swedish leaderboard**. As currently generated (35 combos =
 7 models × 5 strategies, each a 100-person population vs the 10,000-person SCB baseline), the top of
-`swedish_performance.csv` reads:
+`swedish_02_performance.csv` reads:
 
 | Rank | Model | Strategy | TV-similarity | Coherence |
 |-----:|-------|----------|:-------------:|:---------:|
@@ -274,15 +274,15 @@ The headline deliverable is the **Swedish leaderboard**. As currently generated 
 
 | You want… | Look here |
 |-----------|-----------|
-| The real Swedish reference population | `03_Analysis/mapping/real_swedish.json` (10,000 people) |
-| A raw synthetic run | `01_Raw/swedish_{strategy}_{model}/persona_XXXXX/identity.json` |
-| Accuracy charts for one run | `03_Analysis/fidelity/swedish_{strategy}_{model}/` |
+| The real Swedish reference population | `03_Analysis/mapping/real_swedish_02.json` (10,000 people) |
+| A raw synthetic run | `01_Raw/swedish_02_{strategy}_{model}/persona_XXXXX/identity.json` |
+| Accuracy charts for one run | `03_Analysis/fidelity/swedish_02_{strategy}_{model}/` |
 | Accuracy numbers for one run | same folder, `{run}.json` and `{run}.csv` |
-| The overall winner ranking | `03_Analysis/model_ranking/swedish_leaderboard.png` + `swedish_performance.{json,csv}` |
-| Where each combo wins/loses | `03_Analysis/model_ranking/swedish_heatmap.png` |
+| The overall winner ranking | `03_Analysis/model_ranking/swedish_02_leaderboard.png` + `swedish_02_performance.{json,csv}` |
+| Where each combo wins/loses | `03_Analysis/model_ranking/swedish_02_heatmap.png` |
 | How the LLM behaved during generation | `03_Analysis/generation_metadata/{country}_summary.{csv,json}` + `charts/` |
 
-*(`output_base` root is currently `F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data`, configured
+*(`output_base` root is currently `<project-data>/02_Data`, configured
 in `config/synthetic/experiment_defaults.yaml`.)*
 
 ---

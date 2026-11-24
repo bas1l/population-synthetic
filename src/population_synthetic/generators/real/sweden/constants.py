@@ -23,14 +23,6 @@ EMPLOYMENT_TABLE = "AM/AM0401/AM0401A/AKURLBefAr"
 # on age x sex over the full register spectrum (employed/unemployed/students/
 # retirees/sick/others), with each status exposed as its own ContentsCode measure.
 EMPLOYMENT_BY_EDUCATION_TABLE = "AM/AM0210/AM0210D/ArRegArbStatus"
-# Phase 6 (opt-in) status<->education leg: register labour-market status x level
-# of education x sex (working-age total 20-64). Combined with ArRegArbStatus
-# under the documented odds-multiplication derivation ONLY when the merge is
-# explicitly enabled -- see docs/reference/scb-pxweb-catalog/
-# employment-status-merge-derivation.md and parse_employment_status_combined.
-# ALL-REGISTER (never the AKU survey table) so "employed" means the same thing
-# in both legs. Not fetched at all when the merge flag is off (Phase 4 default).
-EMPLOYMENT_STATUS_EDU_TABLE = "AM/AM0210/AM0210A/ArbStatusUtbM"
 INCOME_TABLE = "HE/HE0110/HE0110F/TabVX10InkStrukt"
 INCOME_SOURCE_TABLE = "HE/HE0110/HE0110F/TabVX13InkStruktN"
 # Positive income components (Inkomstkomponenter) of TabVX13InkStruktN, the share

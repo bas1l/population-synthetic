@@ -43,7 +43,7 @@ from population_synthetic.analysis.utils.realism_csv import RealismPersonaRow
 from population_synthetic.analysis.utils.stats_tests import holm_adjust
 from tests import _closeness_fixtures as golden
 
-_COUNTRY = "swedish"
+_COUNTRY = "swedish_02"
 _BOOT = {"iterations": 200, "seed": 20260723, "ci_level": 0.95}
 _PROVENANCE = {"judge_model": "claude-sonnet-5", "prompt_template_sha256": "abc", "n_rounds": 3}
 _TYPICALITY = {"statistic": "iov", "n_levels": 11, "min_n": 1, "tail_threshold": 5}
@@ -110,9 +110,9 @@ def _build(records, *, country=_COUNTRY, **kwargs):
 def _grid_fixture():
     """Two models x two strategies with the fourth cell left to the caller, plus the reference."""
     return [
-        _synthetic("claude_haiku", "all_pick", [8, 9, 9, 7, 10, 8, 9]),
-        _synthetic("claude_haiku", "all_pick_dag", [6, 7, 8, 9, 9, 5, 7]),
-        _synthetic("claude_sonnet", "all_pick", [9, 9, 10, 8, 9, 9, 7]),
+        _synthetic("claude_haiku", "all_pick_v2", [8, 9, 9, 7, 10, 8, 9]),
+        _synthetic("claude_haiku", "all_pick_dag_v2", [6, 7, 8, 9, 9, 5, 7]),
+        _synthetic("claude_sonnet", "all_pick_v2", [9, 9, 10, 8, 9, 9, 7]),
         _real([3, 4, 5, 6, 4, 2, 5, 7, 4, 3]),
     ]
 
@@ -125,11 +125,11 @@ def _grid_fixture():
 def test_round_weighted_distribution_is_hand_computable():
     """Rounds (8, 9), (9), (10, None, 10) and a non-survivor: 8 -> .5, 9 -> 1.5, 10 -> 1."""
     record = _record(
-        f"{_COUNTRY}_all_pick_claude_haiku", [(8, 9), (9,), (10, None, 10)],
-        model="claude_haiku", strategy="all_pick", impossible=1,
+        f"{_COUNTRY}_all_pick_v2_claude_haiku", [(8, 9), (9,), (10, None, 10)],
+        model="claude_haiku", strategy="all_pick_v2", impossible=1,
     )
     block = _build([record, _real([4, 5, 6])])["typicality_distribution"]
-    cell = block["grid"]["cells"]["claude_haiku"]["all_pick"]
+    cell = block["grid"]["cells"]["claude_haiku"]["all_pick_v2"]
     expected = [0.0] * 11
     expected[8], expected[9], expected[10] = 0.5, 1.5, 1.0
     assert cell["weights"] == expected
@@ -156,9 +156,9 @@ def test_one_round_per_survivor_reduces_to_the_integer_histogram():
 
 
 def test_band_shares_are_known_and_sum_to_one():
-    record = _synthetic("claude_haiku", "all_pick", [0, 4, 5, 7, 8, 10, 10, 2])
+    record = _synthetic("claude_haiku", "all_pick_v2", [0, 4, 5, 7, 8, 10, 10, 2])
     block = _build([record, _real([4, 5, 6])])["typicality_distribution"]
-    cell = block["grid"]["cells"]["claude_haiku"]["all_pick"]
+    cell = block["grid"]["cells"]["claude_haiku"]["all_pick_v2"]
     assert cell["band_shares"] == pytest.approx([3 / 8, 2 / 8, 3 / 8], abs=1e-15)
     assert sum(cell["band_shares"]) == pytest.approx(1.0, abs=1e-12)
     assert block["bands"] == {"edges": [4, 7], "labels": ["0–4", "5–7", "8–10"]}
@@ -175,34 +175,34 @@ def test_malformed_bands_raise(bands):
 
 
 def test_score_outside_the_scale_raises():
-    record = _synthetic("claude_haiku", "all_pick", [11])
+    record = _synthetic("claude_haiku", "all_pick_v2", [11])
     with pytest.raises(ValueError, match="outside"):
         _build([record, _real([4])])
 
 
 def test_withdrawn_unjudged_and_no_typicality_are_three_distinct_states():
     no_typicality = _record(
-        f"{_COUNTRY}_all_pick_dag_claude_sonnet", [], model="claude_sonnet",
-        strategy="all_pick_dag", impossible=3,
+        f"{_COUNTRY}_all_pick_dag_v2_claude_sonnet", [], model="claude_sonnet",
+        strategy="all_pick_dag_v2", impossible=3,
     )
     records = [
-        _synthetic("claude_haiku", "all_pick", [8, 9]),
-        _synthetic("claude_sonnet", "all_pick", [9, 9]),
+        _synthetic("claude_haiku", "all_pick_v2", [8, 9]),
+        _synthetic("claude_sonnet", "all_pick_v2", [9, 9]),
         no_typicality,
-        _synthetic("gpt", "all_pick_dag", [7, 8]),
+        _synthetic("gpt", "all_pick_dag_v2", [7, 8]),
         _real([4, 5]),
     ]
-    withdrawn = [f"{_COUNTRY}_all_pick_dag_claude_haiku"]
+    withdrawn = [f"{_COUNTRY}_all_pick_dag_v2_claude_haiku"]
     block = _build(records, withdrawn=withdrawn)["typicality_distribution"]
     states = block["grid"]["states"]
-    assert states["claude_haiku"]["all_pick_dag"] == "withdrawn"
-    assert states["gpt"]["all_pick"] == "unjudged"
-    assert states["claude_sonnet"]["all_pick_dag"] == "no_typicality"
-    assert states["claude_haiku"]["all_pick"] == "ok"
+    assert states["claude_haiku"]["all_pick_dag_v2"] == "withdrawn"
+    assert states["gpt"]["all_pick_v2"] == "unjudged"
+    assert states["claude_sonnet"]["all_pick_dag_v2"] == "no_typicality"
+    assert states["claude_haiku"]["all_pick_v2"] == "ok"
     assert block["withdrawn"] == withdrawn
-    assert block["unjudged"] == [f"{_COUNTRY}_all_pick_gpt"]
-    assert block["grid"]["cells"]["claude_haiku"]["all_pick_dag"] is None
-    assert block["grid"]["cells"]["claude_sonnet"]["all_pick_dag"]["distribution"] is None
+    assert block["unjudged"] == [f"{_COUNTRY}_all_pick_v2_gpt"]
+    assert block["grid"]["cells"]["claude_haiku"]["all_pick_dag_v2"] is None
+    assert block["grid"]["cells"]["claude_sonnet"]["all_pick_dag_v2"]["distribution"] is None
     # A no-typicality competitor is in the bands table, but has no distribution rows.
     ranking = _build(records, withdrawn=withdrawn)
     assert no_typicality.slug in {row["slug"] for row in typicality_band_rows(ranking)}
@@ -224,7 +224,7 @@ def _effects_fixture():
     rng = random.Random(7)
     records = []
     for m_index, model in enumerate(("claude_haiku", "claude_sonnet", "gpt")):
-        for s_index, strategy in enumerate(("all_pick", "all_pick_dag")):
+        for s_index, strategy in enumerate(("all_pick_v2", "all_pick_dag_v2")):
             centre = 5 + m_index + s_index
             scores = [min(10, max(0, centre + rng.choice((-2, -1, 0, 1, 2)))) for _ in range(12)]
             records.append(_synthetic(model, strategy, scores))
@@ -256,7 +256,7 @@ def test_model_pair_delta_follows_the_dunn_orientation():
 
 def test_vs_reference_holm_families_are_exactly_their_rows():
     records = _effects_fixture()
-    no_typicality = _record(f"{_COUNTRY}_all_pick_zeta", [], model="zeta", strategy="all_pick", impossible=2)
+    no_typicality = _record(f"{_COUNTRY}_all_pick_v2_zeta", [], model="zeta", strategy="all_pick_v2", impossible=2)
     ranking = _build([*records, no_typicality])
     families = ranking["typicality_effects"]["vs_reference"]
     combos = families["combination_vs_reference"]

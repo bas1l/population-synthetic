@@ -43,7 +43,7 @@ from population_synthetic.generators.synthetic.manifest_loader import discover_a
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 STRATEGY_DIR = PROJECT_ROOT / "config/synthetic/axes/strategies"
-SIM_CONFIG = PROJECT_ROOT / "config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json"
+SIM_CONFIG = PROJECT_ROOT / "config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json"
 OUT_DIR = Path(__file__).resolve().parent
 
 # Automatic-layout geometry, in the same units as a hand-dragged ``.layout.json``

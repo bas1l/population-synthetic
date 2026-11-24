@@ -3,7 +3,7 @@
 Goal: characterise the *distribution* of per-call input/output tokens (the doc only
 has per-strategy sums) so we can read off the maximum context size each model saw.
 
-Token source per model (mirrors swedish-token-usage-by-model.md):
+Token source per model (mirrors swedish_02-token-usage-by-model.md):
   - Ollama models  -> REAL per-call prompt_tokens/completion_tokens from logs/run_*.log
   - Claude models  -> tiktoken cl100k_base proxy over each call's prompt / raw_response
 """
@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tiktoken
 
-RAW = Path("F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data/01_Raw")
+RAW = Path("<project-data>/02_Data/01_Raw")
 OUT = Path(__file__).resolve().parent  # write figures + summary next to this script
 OUT.mkdir(parents=True, exist_ok=True)
 

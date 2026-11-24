@@ -12,8 +12,8 @@ import pytest
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
 from population_synthetic.analysis.utils.stats_tests import _holm, dunn_posthoc, summarize
 
-COUNTRIES = ["swedish", "italian"]
-STRATEGIES = ["all_pick", "all_generate_pick"]
+COUNTRIES = ["swedish_02", "italian"]
+STRATEGIES = ["all_pick_v2", "all_generate_pick_v2"]
 MODELS = ["claude_sonnet", "claude_haiku", "ollama_lucie_7b"]
 
 
@@ -89,36 +89,36 @@ def test_summarize_empty():
 # --- decompose_slug ---------------------------------------------------------
 
 def test_decompose_slug_basic():
-    assert decompose_slug("swedish_all_pick_claude_sonnet", COUNTRIES, STRATEGIES, MODELS) == (
-        "swedish", "all_pick", "claude_sonnet",
+    assert decompose_slug("swedish_02_all_pick_v2_claude_sonnet", COUNTRIES, STRATEGIES, MODELS) == (
+        "swedish_02", "all_pick_v2", "claude_sonnet",
     )
     assert decompose_slug(
-        "italian_all_generate_pick_ollama_lucie_7b", COUNTRIES, STRATEGIES, MODELS
-    ) == ("italian", "all_generate_pick", "ollama_lucie_7b")
+        "italian_all_generate_pick_v2_ollama_lucie_7b", COUNTRIES, STRATEGIES, MODELS
+    ) == ("italian", "all_generate_pick_v2", "ollama_lucie_7b")
 
 
 def test_decompose_slug_greedy_longest_model():
     # "claude_sonnet" must win over a shorter "sonnet" suffix.
     models = ["sonnet", "claude_sonnet"]
-    assert decompose_slug("swedish_all_pick_claude_sonnet", COUNTRIES, STRATEGIES, models) == (
-        "swedish", "all_pick", "claude_sonnet",
+    assert decompose_slug("swedish_02_all_pick_v2_claude_sonnet", COUNTRIES, STRATEGIES, models) == (
+        "swedish_02", "all_pick_v2", "claude_sonnet",
     )
 
 
 def test_decompose_slug_undecomposable_returns_none():
     assert decompose_slug("seed_legacy_run_42", COUNTRIES, STRATEGIES, MODELS) is None
     # Valid country + model but the middle is not a known strategy.
-    assert decompose_slug("swedish_bogus_claude_sonnet", COUNTRIES, STRATEGIES, MODELS) is None
+    assert decompose_slug("swedish_02_bogus_claude_sonnet", COUNTRIES, STRATEGIES, MODELS) is None
 
 
 def test_diagnose_slug_pinpoints_failing_axis():
     no_country = diagnose_slug("seed_legacy_run_42", COUNTRIES, STRATEGIES, MODELS)
     assert "no known country prefix" in no_country
 
-    no_model = diagnose_slug("swedish_foo_bar", COUNTRIES, STRATEGIES, MODELS)
-    assert "country 'swedish' ok" in no_model
+    no_model = diagnose_slug("swedish_02_foo_bar", COUNTRIES, STRATEGIES, MODELS)
+    assert "country 'swedish_02' ok" in no_model
     assert "no known model suffix" in no_model
 
-    bad_strategy = diagnose_slug("swedish_bogus_claude_sonnet", COUNTRIES, STRATEGIES, MODELS)
+    bad_strategy = diagnose_slug("swedish_02_bogus_claude_sonnet", COUNTRIES, STRATEGIES, MODELS)
     assert "not a known strategy" in bad_strategy
     assert "bogus" in bad_strategy

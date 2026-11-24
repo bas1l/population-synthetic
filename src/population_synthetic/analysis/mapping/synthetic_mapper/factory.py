@@ -13,8 +13,7 @@ from population_synthetic.analysis.mapping.synthetic_mapper.sweden import Swedis
 _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 
 _SYNTHETIC_MAPPERS: dict[str, type[AbstractSyntheticMapper]] = {
-    "swedish": SwedishSyntheticMapper,
-    "swedish_02": SwedishSyntheticMapper,  # guided-prompt A/B arm (simulation config 006)
+    "swedish_02": SwedishSyntheticMapper,
     "italian": ItalianSyntheticMapper,
 }
 
@@ -26,8 +25,8 @@ def _mapper_class(country: str) -> type[AbstractSyntheticMapper]:
     return cls
 
 
-def get_synthetic_mapper(country: str = "swedish", mappings_path: Path | None = None) -> AbstractSyntheticMapper:
-    """Return the synthetic mapper for *country* (``"swedish"`` or ``"italian"``).
+def get_synthetic_mapper(country: str = "swedish_02", mappings_path: Path | None = None) -> AbstractSyntheticMapper:
+    """Return the synthetic mapper for *country* (``"swedish_02"`` or ``"italian"``).
 
     The mapper loads its category mappings from *mappings_path* if given,
     otherwise from the country's default ``config/mapping/{subdir}`` directory.

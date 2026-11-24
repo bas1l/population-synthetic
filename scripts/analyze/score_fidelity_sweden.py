@@ -4,11 +4,11 @@ SCB real population (Sweden).
 
 This script performs NO mapping. It consumes the mapped files produced by the map stage
 (scripts/analyze/map_populations.py): the mapped synthetic population {mapped-dir}/{slug}.json
-and the shared mapped real population {mapped-dir}/real_swedish.json. Run map_populations.py first.
+and the shared mapped real population {mapped-dir}/real_swedish_02.json. Run map_populations.py first.
 
 Usage:
     python scripts/analyze/score_fidelity_sweden.py \\
-        --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml \\
+        --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02 \
         [--mapped-dir <dir>] \\
         [--output comparison_report.json] \\
         [--charts-dir <dir>] [--no-charts] [--radar-tv-only]
@@ -19,13 +19,13 @@ Usage:
 
     python scripts/analyze/score_fidelity_sweden.py \\
         --mapped-synthetic <dir>/seed_022_all_pick_sonnet.json \\
-        --mapped-real <dir>/real_swedish.json
+        --mapped-real <dir>/real_swedish_02.json
 
---manifest         Seed manifest YAML; derives the slug from parallel.output_dir basename.
+--model-id/--strategy-id/--country-id  Axis ids; the slug is composed from them.
 --seed-root        Pipeline seed output directory; the slug is its basename.
 --mapped-dir       Directory holding the mapped files (default: the analysis-stage mapping folder).
 --mapped-synthetic Explicit path to the mapped synthetic population JSON (overrides --mapped-dir/{slug}).
---mapped-real      Explicit path to the mapped real population JSON (overrides real_swedish.json).
+--mapped-real      Explicit path to the mapped real population JSON (overrides real_swedish_02.json).
 --output           Path for the JSON comparison report (default: analysis-stage fidelity folder, {slug}/{slug}.json).
 """
 
@@ -43,7 +43,7 @@ from population_synthetic.analysis.utils.registry import (
     resolve_output_base,
 )
 
-_COUNTRY = "swedish"
+_COUNTRY = "swedish_02"
 
 
 # ---------------------------------------------------------------------------
@@ -56,20 +56,16 @@ def build_parser() -> argparse.ArgumentParser:
         description="Compare a pre-mapped synthetic population against a pre-mapped SCB real population"
     )
     parser.add_argument(
-        "--manifest", default=None,
-        help="Seed manifest YAML; derives the slug from parallel.output_dir basename",
-    )
-    parser.add_argument(
         "--model-id", default=None,
-        help="Axis model ID (e.g., 'claude_haiku') — mutually exclusive with --manifest",
+        help="Axis model ID (e.g., 'claude_haiku')",
     )
     parser.add_argument(
         "--strategy-id", default=None,
-        help="Axis strategy ID (e.g., 'all_pick') — mutually exclusive with --manifest",
+        help="Axis strategy ID (e.g., 'all_pick_v2')",
     )
     parser.add_argument(
         "--country-id", default=None,
-        help="Axis country ID (e.g., 'swedish') — mutually exclusive with --manifest",
+        help="Axis country ID (e.g., 'swedish_02')",
     )
     parser.add_argument(
         "--seed-root", default=None,
@@ -94,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mapped-real",
         default=None,
-        help="Explicit path to the mapped real population JSON (overrides real_swedish.json).",
+        help="Explicit path to the mapped real population JSON (overrides real_swedish_02.json).",
     )
     parser.add_argument(
         "--real-label",
@@ -127,24 +123,17 @@ def resolve_slug(args: argparse.Namespace, parser: argparse.ArgumentParser):
     """Resolve the run slug (and optional manifest) from the parsed args.
 
     The slug names the mapped synthetic file ({mapped-dir}/{slug}.json). It comes from
-    --seed-root's basename, the manifest's parallel.output_dir basename, or -- when an
+    --seed-root's basename, the composed manifest's output_dir basename, or -- when an
     explicit --mapped-synthetic path is given -- that file's stem.
 
     Returns:
-        (slug, manifest) where manifest is None unless --manifest or the axis IDs were supplied.
+        (slug, manifest) where manifest is None unless the axis IDs were supplied.
     """
     axis_ids = [args.model_id, args.strategy_id, args.country_id]
-    if args.manifest and any(x is not None for x in axis_ids):
-        parser.error("--manifest is mutually exclusive with --model-id, --strategy-id, and --country-id")
 
     manifest = None
     seed_name: str | None = None
-    if args.manifest:
-        from population_synthetic.generators.synthetic.manifest_loader import load_manifest
-        manifest = load_manifest(args.manifest)
-        if manifest.parallel_output_dir is not None:
-            seed_name = manifest.parallel_output_dir.name
-    elif args.model_id is not None:
+    if args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
         from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
@@ -160,7 +149,7 @@ def resolve_slug(args: argparse.Namespace, parser: argparse.ArgumentParser):
             seed_name = Path(args.mapped_synthetic).stem
         else:
             parser.error(
-                "Cannot determine the run slug: provide --manifest, the axis IDs, --seed-root, "
+                "Cannot determine the run slug: provide the axis IDs, --seed-root, "
                 "or an explicit --mapped-synthetic path."
             )
 
@@ -171,7 +160,7 @@ def resolve_country(args: argparse.Namespace, manifest) -> str:
     """Resolve the comparison country: which real population and scheme to score against.
 
     Priority: the explicit ``--country-id`` axis value, then the country inferred from a
-    composed/loaded manifest's simulation config, else the default (``swedish``) for the
+    composed manifest's simulation config, else the default (``swedish_02``) for the
     manifest-less ``--seed-root`` / ``--mapped-*`` paths that carry no country.
     """
     if args.country_id:

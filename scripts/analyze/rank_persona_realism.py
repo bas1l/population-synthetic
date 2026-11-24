@@ -442,7 +442,7 @@ def _country_withdrawn(
 ) -> list[str]:
     """The gate's withdrawn slugs of *country*, narrowed by the same filters as the records.
 
-    Decomposed through the axis registries rather than matched on a prefix: ``swedish``
+    Decomposed through the axis registries rather than matched on a prefix: ``swedish_02``
     is a prefix of ``swedish_02``.
     """
     country_ids, strategy_ids, model_ids = axis_ids

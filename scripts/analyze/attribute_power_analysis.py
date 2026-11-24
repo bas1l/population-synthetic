@@ -24,10 +24,10 @@ pipeline.
 Examples
 --------
     # Every (non-deprecated) attribute for Sweden, consolidated report:
-    python scripts/analyze/attribute_power_analysis.py --country swedish
+    python scripts/analyze/attribute_power_analysis.py --country swedish_02
 
     # A single attribute:
-    python scripts/analyze/attribute_power_analysis.py --country swedish --attribute region
+    python scripts/analyze/attribute_power_analysis.py --country swedish_02 --attribute region
 
 Requires scipy; uses statsmodels for a GOF-power cross-check when available.
 """
@@ -313,7 +313,7 @@ def print_summary(results):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--country", default="swedish", help="country axis id (default: swedish)")
+    ap.add_argument("--country", default="swedish_02", help="country axis id (default: swedish_02)")
     ap.add_argument("--attribute", default=None, help="single attribute; omit to analyze all non-deprecated")
     ap.add_argument("--population", default=None, help="override reference population path (repo-relative or absolute)")
     ap.add_argument("--mappings", default=None, help="override mapping dir (repo-relative or absolute)")

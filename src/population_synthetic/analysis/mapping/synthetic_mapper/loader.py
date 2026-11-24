@@ -60,7 +60,7 @@ def load_synthetic_population(seed_root: Path) -> dict[str, Any]:
 
 def map_population(
     raw_pop: dict[str, Any],
-    country: str = "swedish",
+    country: str = "swedish_02",
     *,
     misses_out: list[dict[str, Any]] | None = None,
     ties_out: list[dict[str, Any]] | None = None,

@@ -100,10 +100,8 @@ def _base_dag():
 def sweden_spec():
     nodes, edges, marginals = _base_dag()
     # --- Sweden-specific conditioning, verified against sweden/sample_service.py (2026-07) ---
-    # employment_status default path is the (age x education x sex) odds-merge of two register
-    # tables (ArRegArbStatus x ArbStatusUtbM); --no-merge-status-education reverts to the
-    # (age, sex)-only ArRegArbStatus table.
-    nodes["employment"]["detail"] = "| age, education, sex (merge)"
+    # employment_status is conditioned on (age, sex) from the single register table (ArRegArbStatus).
+    nodes["employment"]["detail"] = "| age, sex"
     edges.append(("agesex", "employment", "solid"))
     # industry_sector conditions on (age_group, sex) as well as the employed gate.
     edges.append(("agesex", "industry", "age"))
@@ -132,8 +130,8 @@ def sweden_spec():
             ("SampleService", "sample_population", C_HUB),
         ],
         nodes=nodes, edges=edges, marginals=marginals,
-        notes="Most data-rich: employment_status is an (age x education x sex) two-table odds-merge "
-              "(default; --no-merge-status-education opts out), a real income_source conditional table, "
+        notes="Most data-rich: employment_status is an (age x sex) conditional from the register table, "
+              "a real income_source conditional table, "
               "and employment_type from two tables (attachment x hours). birth_location & housing_tenure "
               "are (age,sex) conditionals.",
     )

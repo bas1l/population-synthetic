@@ -39,15 +39,15 @@ expensive re-copy of a combination that still passes the rule.
 
 Usage:
     python scripts/analyze/cap_populations.py \
-        --model-id claude_haiku --strategy-id all_pick --country-id swedish --n 100
+        --model-id claude_haiku --strategy-id all_pick --country-id swedish_02 --n 100
     python scripts/analyze/cap_populations.py \
-        --model-id claude_haiku --strategy-id all_pick --country-id swedish \
+        --model-id claude_haiku --strategy-id all_pick --country-id swedish_02 \
         --n 100 --sample-seed 7 --force
     python scripts/analyze/cap_populations.py ... --n 100 --output-base /path/to/02_Data
 
 --model-id      Axis model ID (e.g., 'claude_haiku'). Required.
 --strategy-id   Axis strategy ID (e.g., 'all_pick'). Required.
---country-id    Axis country ID (e.g., 'swedish'). Required.
+--country-id    Axis country ID (e.g., 'swedish_02'). Required.
 --n             Target number of persona dirs to retain per combo (the cap). Required;
                 the task raises if missing or blank (fail-fast; N is never defaulted).
 --sample-seed   Seed for the reproducible without-replacement draw (default: 0; 0 is a
@@ -97,7 +97,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--model-id", required=True, help="Axis model ID (e.g., 'claude_haiku').")
     parser.add_argument("--strategy-id", required=True, help="Axis strategy ID (e.g., 'all_pick').")
-    parser.add_argument("--country-id", required=True, help="Axis country ID (e.g., 'swedish').")
+    parser.add_argument("--country-id", required=True, help="Axis country ID (e.g., 'swedish_02').")
     parser.add_argument(
         "--n",
         required=True,

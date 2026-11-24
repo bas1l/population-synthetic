@@ -27,5 +27,5 @@ options:
 selection:
   models: [openrouter_kimi_k3]
   strategies: [all_generate_evaluate_random_pick_v2]
-  countries: [swedish_02]   # config_006 guided-prompt A/B run; baseline uses [swedish] (config_004)
+  countries: [swedish_02]
 force: false                 # generate flows only

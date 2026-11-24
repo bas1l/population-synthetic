@@ -70,10 +70,10 @@ Outputs, per country, under the analysis-stage method_significance folder:
 
 Usage:
     python scripts/analyze/analyze_method_significance.py
-    python scripts/analyze/analyze_method_significance.py --country swedish
+    python scripts/analyze/analyze_method_significance.py --country swedish_02
     python scripts/analyze/analyze_method_significance.py --model claude_haiku --model claude_sonnet
     python scripts/analyze/analyze_method_significance.py --strategy all_pick --no-charts
-    python scripts/analyze/analyze_method_significance.py --slug swedish_all_pick_claude_haiku
+    python scripts/analyze/analyze_method_significance.py --slug swedish_02_all_pick_v2_claude_haiku
     python scripts/analyze/analyze_method_significance.py --strict --force
 
 --country       Country axis ID filter. May be repeated. Default: all countries.

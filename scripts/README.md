@@ -14,10 +14,9 @@ all real logic lives in the `population_synthetic.*` package (installed via
 | `generate_ssb_population.py` | Sample a Norwegian population from live SSB PxWebApi data |
 | `generate_istat_population.py` | Sample an Italian population from ISTAT SDMX + Eurostat |
 | `generate_real_population.py` | Dispatcher: `--source scb\|ssb` runs the matching generator above |
-| `generate_identity.py` | Generate a single LLM persona identity (manifest / axis IDs / explicit CLI) |
+| `generate_identity.py` | Generate a single LLM persona identity (axis IDs / explicit CLI) |
 | `generate_identities_parallel.py` | Generate N identities in parallel with retry rounds |
 | `extract_population_from_pipeline.py` | Extract demographic profiles from pipeline `identity.json` files into a population JSON |
-| `scheduled_generate.py` | Clock-time scheduler that launches `generate_identities_parallel.py` |
 
 ### `analyze/` — compare and evaluate
 | Script | Purpose |

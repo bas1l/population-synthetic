@@ -31,9 +31,9 @@ from population_synthetic.gui.workflow_runner import (
 )
 from population_synthetic.gui.workflow_state import TaskStatus, WorkflowState
 
-COMBO_A = ("claude_haiku", "all_pick", "swedish")
-COMBO_B = ("claude_sonnet", "all_pick", "swedish")
-COMBO_C = ("gemini_flash", "all_pick", "swedish")
+COMBO_A = ("claude_haiku", "all_pick_v2", "swedish_02")
+COMBO_B = ("claude_sonnet", "all_pick_v2", "swedish_02")
+COMBO_C = ("gemini_flash", "all_pick_v2", "swedish_02")
 
 
 def _task(script: str, dispatch: str = "per_combo", enabled: bool = True,

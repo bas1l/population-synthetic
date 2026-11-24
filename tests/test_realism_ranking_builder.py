@@ -52,7 +52,7 @@ from population_synthetic.analysis.utils.realism_csv import (  # noqa: E402
 )
 
 _BOOT = {"iterations": 200, "seed": 20260723, "ci_level": 0.95}
-_COUNTRY = "swedish"
+_COUNTRY = "swedish_02"
 _PROVENANCE = {"judge_model": "claude-sonnet-5", "prompt_template_sha256": "abc", "n_rounds": 2}
 #: The typicality axis's tunables, which the builder requires and never defaults. The
 #: floor is 1 rather than the CLI's production 30: these fixtures hold a handful of
@@ -82,7 +82,7 @@ def _row(pid, slug, *, impossible, typicality, model, strategy, is_real=False):
     )
 
 
-def _record(slug, *, n_impossible, typicalities, model="claude_haiku", strategy="all_pick",
+def _record(slug, *, n_impossible, typicalities, model="claude_haiku", strategy="all_pick_v2",
             is_real=False, dispersion=None):
     rows = [
         _row(f"persona_{i:05d}", slug, impossible=True, typicality=None,
@@ -137,25 +137,25 @@ def test_impossibility_rate_and_denominator_are_hand_computable():
 
 def test_real_population_is_ranked_like_any_other_competitor():
     """It appears in the ranking, and it can place anywhere -- including last."""
-    worst_real = _record("real_swedish", n_impossible=4, typicalities=[5.0],
+    worst_real = _record("real_swedish_02", n_impossible=4, typicalities=[5.0],
                          model="", strategy="", is_real=True)
     clean = _record("s1", n_impossible=0, typicalities=[5.0, 6.0])
     ranking = _build([clean, worst_real])
 
     ranked = ranking["axis_a"]["ranking"]
-    assert {e["slug"] for e in ranked} == {"s1", "real_swedish"}
+    assert {e["slug"] for e in ranked} == {"s1", "real_swedish_02"}
     # Ordered by rate ascending -- the real population placing LAST must be expressible.
-    assert [e["slug"] for e in ranked] == ["s1", "real_swedish"]
+    assert [e["slug"] for e in ranked] == ["s1", "real_swedish_02"]
     assert ranked[-1]["is_real_reference"] is True
     assert ranked[-1]["rate"] == pytest.approx(0.8)
 
 
 def test_real_population_placing_first_is_equally_expressible():
-    best_real = _record("real_swedish", n_impossible=0, typicalities=[5.0, 5.0],
+    best_real = _record("real_swedish_02", n_impossible=0, typicalities=[5.0, 5.0],
                         model="", strategy="", is_real=True)
     dirty = _record("s1", n_impossible=3, typicalities=[5.0])
     ranking = _build([dirty, best_real])
-    assert [e["slug"] for e in ranking["axis_a"]["ranking"]] == ["real_swedish", "s1"]
+    assert [e["slug"] for e in ranking["axis_a"]["ranking"]] == ["real_swedish_02", "s1"]
 
 
 def test_tied_rates_share_a_rank_rather_than_being_broken_arbitrarily():
@@ -179,7 +179,7 @@ def test_bootstrap_ci_is_reproducible_across_calls_with_the_same_seed():
 
 
 def test_scb_contrast_is_holm_corrected_and_carries_an_effect_size():
-    real = _record("real_swedish", n_impossible=1, typicalities=[5.0] * 9,
+    real = _record("real_swedish_02", n_impossible=1, typicalities=[5.0] * 9,
                    model="", strategy="", is_real=True)
     a = _record("s1", n_impossible=5, typicalities=[5.0] * 5)
     b = _record("s2", n_impossible=0, typicalities=[5.0] * 10, model="claude_sonnet")
@@ -210,7 +210,7 @@ def test_axis_b_distance_is_absolute_so_mode_collapse_scores_badly():
     (or if the axis were "more spread is better"), a mode-collapsed combination -- the
     documented LLM failure mode -- would look like a success.
     """
-    real = _record("real_swedish", n_impossible=0, typicalities=[5.0, 5.0],
+    real = _record("real_swedish_02", n_impossible=0, typicalities=[5.0, 5.0],
                    model="", strategy="", is_real=True,
                    dispersion={"variance": 6.0, "entropy": 2.0, "tail_coverage": 0.2})
     collapsed = _record("collapsed", n_impossible=0, typicalities=[5.0, 5.0],
@@ -230,7 +230,7 @@ def test_axis_b_distance_is_absolute_so_mode_collapse_scores_badly():
 
 
 def test_axis_b_variance_equality_test_is_present_per_competitor():
-    real = _record("real_swedish", n_impossible=0, typicalities=[5.0, 5.0, 6.0],
+    real = _record("real_swedish_02", n_impossible=0, typicalities=[5.0, 5.0, 6.0],
                    model="", strategy="", is_real=True)
     syn = _record("s1", n_impossible=0, typicalities=[1.0, 9.0, 4.0])
     ranking = _build([syn, real])
@@ -248,13 +248,13 @@ def _factor_fixture():
     """Two models x two methods, plus the real competitor."""
     records = []
     for model, base in (("claude_haiku", 3.0), ("claude_sonnet", 7.0)):
-        for strategy in ("all_pick", "all_pick_dag"):
+        for strategy in ("all_pick_v2", "all_pick_dag_v2"):
             records.append(_record(
-                f"swedish_{strategy}_{model}", n_impossible=1,
+                f"swedish_02_{strategy}_{model}", n_impossible=1,
                 typicalities=[base, base + 1, base + 2, base - 1],
                 model=model, strategy=strategy,
             ))
-    records.append(_record("real_swedish", n_impossible=0, typicalities=[5.0, 5.0, 6.0],
+    records.append(_record("real_swedish_02", n_impossible=0, typicalities=[5.0, 5.0, 6.0],
                            model="", strategy="", is_real=True))
     return records
 
@@ -279,7 +279,7 @@ def test_kruskal_and_dunn_are_holm_corrected():
 def test_single_factor_level_is_skipped_with_a_reason_not_a_nan():
     records = [
         _record("s1", n_impossible=1, typicalities=[5.0, 6.0]),
-        _record("s2", n_impossible=1, typicalities=[5.0, 6.0], strategy="all_pick_dag"),
+        _record("s2", n_impossible=1, typicalities=[5.0, 6.0], strategy="all_pick_dag_v2"),
     ]  # one model level only
     ranking = _build(records)
     assert ranking["factor_significance"]["by_model"]["kruskal"] is None
@@ -313,13 +313,13 @@ def test_mixed_logit_fits_on_a_full_design_or_records_why_not():
 
 
 def test_ranking_records_every_mandatory_honesty_field():
-    ranking = _build(_factor_fixture(), skipped_combinations=[("swedish_x_y", "no report")])
+    ranking = _build(_factor_fixture(), skipped_combinations=[("swedish_02_x_y", "no report")])
     assert ranking["axis_a"]["correction"] == "holm"
     assert [c["id"] for c in ranking["caveats"]] == [c["id"] for c in CAVEATS]
     assert {c["id"] for c in ranking["caveats"]} == {
         "pseudo_replication", "single_run_per_combination"
     }
-    assert ranking["skipped_combinations"] == [{"slug": "swedish_x_y", "reason": "no report"}]
+    assert ranking["skipped_combinations"] == [{"slug": "swedish_02_x_y", "reason": "no report"}]
     prov = ranking["provenance"]
     assert prov["bootstrap_seed"] == _BOOT["seed"]
     assert set(prov["library_versions"]) == {"numpy", "scipy", "statsmodels", "scikit_posthocs"}
@@ -354,7 +354,7 @@ def test_every_competitor_impossible_free_still_ranks_without_dividing_by_zero()
 
 def test_combination_with_no_successful_persona_has_no_rate_and_ranks_last():
     empty = CompetitorRecord(
-        slug="dead", country=_COUNTRY, model="claude_haiku", strategy="all_pick",
+        slug="dead", country=_COUNTRY, model="claude_haiku", strategy="all_pick_v2",
         is_real_reference=False, n_personas=0, n_failed=7, personas=(),
         impossibility={"rate": None}, dispersion={}, reliability={},
         provenance=dict(_PROVENANCE), report_path="/fake/dead.json",
@@ -405,12 +405,12 @@ def test_grid_places_each_combination_at_its_model_method_coordinate():
     ranking = _build(_factor_fixture())
     grid = ranking["axis_a"]["grid"]
     assert grid["models"] == ["claude_haiku", "claude_sonnet"]
-    assert grid["methods"] == ["all_pick", "all_pick_dag"]
+    assert grid["methods"] == ["all_pick_v2", "all_pick_dag_v2"]
     for model in grid["models"]:
         for method in grid["methods"]:
             cell = grid["cells"][model][method]
             assert cell is not None, (model, method)
-            assert cell["slug"] == f"swedish_{method}_{model}"
+            assert cell["slug"] == f"swedish_02_{method}_{model}"
             assert cell["denominator"] == 5          # 1 impossible + 4 possible
             assert cell["rate"] == pytest.approx(1 / 5)
 
@@ -418,9 +418,9 @@ def test_grid_places_each_combination_at_its_model_method_coordinate():
 def _complexity_fixture():
     """Three methods whose complexity order and alphabetical order genuinely differ."""
     return [
-        _record(f"swedish_{strategy}_claude_haiku", n_impossible=1,
+        _record(f"swedish_02_{strategy}_claude_haiku", n_impossible=1,
                 typicalities=[5.0, 6.0, 7.0, 8.0], model="claude_haiku", strategy=strategy)
-        for strategy in ("all_pick", "all_generate_pick", "all_pick_dag")
+        for strategy in ("all_pick_v2", "all_generate_pick_v2", "all_pick_dag_v2")
     ]
 
 
@@ -428,11 +428,11 @@ def test_method_axis_is_ordered_by_complexity_not_alphabetically():
     """Every grid this task emits reads simplest-method-first, like the rest of the layer.
 
     Alphabetical is not a harmless second convention on this axis: `all_generate_*` sorts
-    ahead of `all_pick*`, so it very nearly inverts the complexity order and puts the most
+    ahead of `all_pick_v2*`, so it very nearly inverts the complexity order and puts the most
     elaborate method leftmost -- while the fidelity, model-ranking and method-significance
     figures beside it put the simplest one there.
     """
-    expected = ["all_pick", "all_pick_dag", "all_generate_pick"]
+    expected = ["all_pick_v2", "all_pick_dag_v2", "all_generate_pick_v2"]
     ranking = _build(_complexity_fixture())
 
     assert ranking["axis_a"]["grid"]["methods"] == expected
@@ -447,7 +447,7 @@ def test_method_factor_lists_its_levels_in_complexity_order():
     """The factor block's group listing follows the same axis its heatmaps do."""
     ranking = _build(_complexity_fixture())
     assert list(ranking["factor_significance"]["by_method"]["groups"]) == [
-        "all_pick", "all_pick_dag", "all_generate_pick"]
+        "all_pick_v2", "all_pick_dag_v2", "all_generate_pick_v2"]
     # The model factor has no declared order and stays alphabetical.
     by_model = _build(_factor_fixture())["factor_significance"]["by_model"]["groups"]
     assert list(by_model) == sorted(by_model)
@@ -456,8 +456,8 @@ def test_method_factor_lists_its_levels_in_complexity_order():
 def test_an_unknown_method_raises_rather_than_sorting_last():
     """An axis-naming drift must not hide behind a plausible-looking chart."""
     records = [
-        _record("swedish_all_pick_claude_haiku", n_impossible=1, typicalities=[5.0, 6.0]),
-        _record("swedish_not_a_strategy_claude_haiku", n_impossible=1, typicalities=[5.0, 6.0],
+        _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=1, typicalities=[5.0, 6.0]),
+        _record("swedish_02_not_a_strategy_claude_haiku", n_impossible=1, typicalities=[5.0, 6.0],
                 strategy="not_a_strategy"),
     ]
     with pytest.raises(ValueError, match="not_a_strategy"):
@@ -485,35 +485,35 @@ def test_unjudged_pair_is_none_not_zero():
     zero would report a combination nobody judged as the most coherent in the sweep.
     """
     records = [
-        _record("swedish_all_pick_claude_haiku", n_impossible=1, typicalities=[5.0, 6.0],
-                model="claude_haiku", strategy="all_pick"),
-        _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0, typicalities=[5.0, 6.0],
-                model="claude_sonnet", strategy="all_pick_dag"),
+        _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=1, typicalities=[5.0, 6.0],
+                model="claude_haiku", strategy="all_pick_v2"),
+        _record("swedish_02_all_pick_dag_v2_claude_sonnet", n_impossible=0, typicalities=[5.0, 6.0],
+                model="claude_sonnet", strategy="all_pick_dag_v2"),
     ]  # the other two corners of the 2x2 were never judged
     grid = _build(records)["axis_a"]["grid"]
 
-    assert grid["cells"]["claude_haiku"]["all_pick_dag"] is None
-    assert grid["cells"]["claude_sonnet"]["all_pick"] is None
+    assert grid["cells"]["claude_haiku"]["all_pick_dag_v2"] is None
+    assert grid["cells"]["claude_sonnet"]["all_pick_v2"] is None
     # ... and the judged corners are present, one of them with a genuine 0.0.
-    assert grid["cells"]["claude_haiku"]["all_pick"]["rate"] == pytest.approx(1 / 3)
-    assert grid["cells"]["claude_sonnet"]["all_pick_dag"]["rate"] == pytest.approx(0.0)
+    assert grid["cells"]["claude_haiku"]["all_pick_v2"]["rate"] == pytest.approx(1 / 3)
+    assert grid["cells"]["claude_sonnet"]["all_pick_dag_v2"]["rate"] == pytest.approx(0.0)
     assert "NOT an impossibility rate of zero" in grid["note"]
 
 
 def test_real_population_is_carried_separately_and_is_not_a_grid_cell():
     ranking = _build(_factor_fixture())
     grid = ranking["axis_a"]["grid"]
-    assert grid["real"]["slug"] == "real_swedish"
+    assert grid["real"]["slug"] == "real_swedish_02"
     assert grid["real"]["rate"] == pytest.approx(0.0)
     assert grid["real"]["denominator"] == 3
     # It has no model/method, so it must not appear anywhere in the grid proper.
     assert "" not in grid["models"] and "" not in grid["methods"]
-    assert "real_swedish" not in grid["models"]
+    assert "real_swedish_02" not in grid["models"]
     slugs = {
         cell["slug"]
         for row in grid["cells"].values() for cell in row.values() if cell is not None
     }
-    assert "real_swedish" not in slugs
+    assert "real_swedish_02" not in slugs
 
 
 def test_grid_real_is_none_without_a_real_competitor_and_the_heatmap_still_renders():
@@ -528,7 +528,7 @@ def test_heatmap_raises_rather_than_emitting_an_empty_figure():
         # A real strategy id: the method axis is resolved through the strategy config, so
         # an invented one would raise in the builder and this test would pass on the wrong
         # exception -- it is about the *chart* refusing to draw an empty grid.
-        slug="dead", country=_COUNTRY, model="m", strategy="all_pick", is_real_reference=False,
+        slug="dead", country=_COUNTRY, model="m", strategy="all_pick_v2", is_real_reference=False,
         n_personas=0, n_failed=1, personas=(), impossibility={"rate": None},
         dispersion={}, reliability={}, provenance=dict(_PROVENANCE),
         report_path="/fake/dead.json", personas_csv_path="/fake/dead_personas.csv",
@@ -539,14 +539,14 @@ def test_heatmap_raises_rather_than_emitting_an_empty_figure():
 
 def test_duplicate_grid_coordinate_raises_naming_both_slugs():
     """Slugs are unique by construction, so a duplicate cell means a corrupt input."""
-    a = _record("swedish_all_pick_claude_haiku", n_impossible=1, typicalities=[5.0])
-    b = _record("swedish_all_pick_claude_haiku_copy", n_impossible=0, typicalities=[5.0])
+    a = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=1, typicalities=[5.0])
+    b = _record("swedish_02_all_pick_v2_claude_haiku_copy", n_impossible=0, typicalities=[5.0])
     with pytest.raises(ValueError, match="same grid cell"):
         _build([a, b])
 
 
 def test_synthetic_competitor_without_a_coordinate_raises():
-    orphan = _record("swedish_orphan", n_impossible=1, typicalities=[5.0],
+    orphan = _record("swedish_02_orphan", n_impossible=1, typicalities=[5.0],
                      model="", strategy="")
     with pytest.raises(ValueError, match="missing its model/method coordinate"):
         _build([orphan])
@@ -569,14 +569,14 @@ def _with_severities(record, per_persona):
 
 def _severity_fixture():
     """Four personas per combination, with a deliberate S3+S2 double-carrier."""
-    a = _record("swedish_all_pick_claude_haiku", n_impossible=1, typicalities=[5.0] * 3,
-                model="claude_haiku", strategy="all_pick")
+    a = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=1, typicalities=[5.0] * 3,
+                model="claude_haiku", strategy="all_pick_v2")
     # persona 0 carries an S3 AND an S2; persona 1 carries an S1; personas 2-3 are clean.
     a = _with_severities(a, [(0, 1, 1), (1, 0, 0), (0, 0, 0), (0, 0, 0)])
-    b = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0, typicalities=[5.0] * 4,
-                model="claude_sonnet", strategy="all_pick_dag")
+    b = _record("swedish_02_all_pick_dag_v2_claude_sonnet", n_impossible=0, typicalities=[5.0] * 4,
+                model="claude_sonnet", strategy="all_pick_dag_v2")
     b = _with_severities(b, [(0, 0, 0)] * 4)
-    real = _record("real_swedish", n_impossible=0, typicalities=[5.0] * 4,
+    real = _record("real_swedish_02", n_impossible=0, typicalities=[5.0] * 4,
                    model="", strategy="", is_real=True)
     real = _with_severities(real, [(1, 0, 0), (0, 1, 0), (0, 0, 0), (0, 0, 0)])
     return [a, b, real]
@@ -592,20 +592,20 @@ def test_severity_levels_are_counted_independently_not_as_a_partition():
     ranking = _build(_severity_fixture())
     levels = ranking["severity"]["levels"]
 
-    s3 = levels["S3"]["grid"]["cells"]["claude_haiku"]["all_pick"]
-    s2 = levels["S2"]["grid"]["cells"]["claude_haiku"]["all_pick"]
+    s3 = levels["S3"]["grid"]["cells"]["claude_haiku"]["all_pick_v2"]
+    s2 = levels["S2"]["grid"]["cells"]["claude_haiku"]["all_pick_v2"]
     # One of four personas carries an S3; the SAME persona also carries an S2.
     assert s3["affected"] == 1 and s3["rate"] == pytest.approx(0.25) and s3["denominator"] == 4
     assert s2["affected"] == 1 and s2["rate"] == pytest.approx(0.25) and s2["denominator"] == 4
 
-    s1 = levels["S1"]["grid"]["cells"]["claude_haiku"]["all_pick"]
+    s1 = levels["S1"]["grid"]["cells"]["claude_haiku"]["all_pick_v2"]
     assert s1["affected"] == 1 and s1["rate"] == pytest.approx(0.25)
 
 
 def test_persona_with_no_clash_appears_in_no_severity_grid():
     ranking = _build(_severity_fixture())
     for level in ("S1", "S2", "S3"):
-        cell = ranking["severity"]["levels"][level]["grid"]["cells"]["claude_sonnet"]["all_pick_dag"]
+        cell = ranking["severity"]["levels"][level]["grid"]["cells"]["claude_sonnet"]["all_pick_dag_v2"]
         assert cell["affected"] == 0
         assert cell["rate"] == pytest.approx(0.0)   # a real, measured zero
         assert cell["denominator"] == 4
@@ -615,8 +615,8 @@ def test_severity_grid_unjudged_pair_is_none_not_zero():
     ranking = _build(_severity_fixture())
     for level in ("S1", "S2", "S3"):
         cells = ranking["severity"]["levels"][level]["grid"]["cells"]
-        assert cells["claude_haiku"]["all_pick_dag"] is None
-        assert cells["claude_sonnet"]["all_pick"] is None
+        assert cells["claude_haiku"]["all_pick_dag_v2"] is None
+        assert cells["claude_sonnet"]["all_pick_v2"] is None
         assert f"NOT an {level} prevalence of zero" in \
             ranking["severity"]["levels"][level]["grid"]["note"]
 
@@ -625,9 +625,9 @@ def test_severity_real_population_is_a_separate_entry_not_a_grid_cell():
     ranking = _build(_severity_fixture())
     for level, expected in (("S1", 0.25), ("S2", 0.25), ("S3", 0.0)):
         grid = ranking["severity"]["levels"][level]["grid"]
-        assert grid["real"]["slug"] == "real_swedish"
+        assert grid["real"]["slug"] == "real_swedish_02"
         assert grid["real"]["rate"] == pytest.approx(expected)
-        assert "real_swedish" not in grid["models"]
+        assert "real_swedish_02" not in grid["models"]
 
 
 def test_s1_is_declared_not_penalised_while_s2_and_s3_are():
@@ -661,7 +661,7 @@ def test_severity_charts_render_and_raise_on_an_empty_ranking():
         # A real strategy id: the method axis is resolved through the strategy config, so
         # an invented one would raise in the builder and this test would pass on the wrong
         # exception -- it is about the *chart* refusing to draw an empty grid.
-        slug="dead", country=_COUNTRY, model="m", strategy="all_pick", is_real_reference=False,
+        slug="dead", country=_COUNTRY, model="m", strategy="all_pick_v2", is_real_reference=False,
         n_personas=0, n_failed=1, personas=(), impossibility={"rate": None},
         dispersion={}, reliability={}, provenance=dict(_PROVENANCE),
         report_path="/fake/dead.json", personas_csv_path="/fake/dead_personas.csv",
@@ -677,7 +677,7 @@ def test_charts_raise_rather_than_emitting_an_empty_figure():
         # A real strategy id: the method axis is resolved through the strategy config, so
         # an invented one would raise in the builder and this test would pass on the wrong
         # exception -- it is about the *chart* refusing to draw an empty grid.
-        slug="dead", country=_COUNTRY, model="m", strategy="all_pick", is_real_reference=False,
+        slug="dead", country=_COUNTRY, model="m", strategy="all_pick_v2", is_real_reference=False,
         n_personas=0, n_failed=1, personas=(), impossibility={"rate": None},
         dispersion={}, reliability={}, provenance=dict(_PROVENANCE),
         report_path="/fake/dead.json", personas_csv_path="/fake/dead_personas.csv",
@@ -742,8 +742,8 @@ def _driver_fixture():
     household_size`` in persona 0 alone. Its S2 clash sits on persona 3, so the two
     levels do not partition the personas.
     """
-    a = _record("swedish_all_pick_claude_haiku", n_impossible=1, typicalities=[5.0] * 3,
-                model="claude_haiku", strategy="all_pick")
+    a = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=1, typicalities=[5.0] * 3,
+                model="claude_haiku", strategy="all_pick_v2")
     a = _with_clashes(a, [
         _clash(a, 0, _AGE_EDU, ("16-19", "Doctorate"), "S3"),
         _clash(a, 0, _AGE_EDU, ("16-19", "Doctorate"), "S3", round_index=1),
@@ -752,10 +752,10 @@ def _driver_fixture():
         _clash(a, 0, _CIVIL_HOUSEHOLD, ("Married", "1"), "S3"),
         _clash(a, 3, _EMPLOYMENT, ("Student", "Permanent Full-time"), "S2"),
     ])
-    b = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0, typicalities=[5.0] * 4,
-                model="claude_sonnet", strategy="all_pick_dag")
+    b = _record("swedish_02_all_pick_dag_v2_claude_sonnet", n_impossible=0, typicalities=[5.0] * 4,
+                model="claude_sonnet", strategy="all_pick_dag_v2")
     b = _with_clashes(b, [])
-    real = _record("real_swedish", n_impossible=0, typicalities=[5.0] * 4,
+    real = _record("real_swedish_02", n_impossible=0, typicalities=[5.0] * 4,
                    model="", strategy="", is_real=True)
     real = _with_clashes(real, [
         _clash(real, 0, ("civil_status", "housing_tenure"), ("Married", "Rented"), "S1"),
@@ -764,7 +764,7 @@ def _driver_fixture():
     return [a, b, real]
 
 
-def _cell(ranking, level, model="claude_haiku", method="all_pick"):
+def _cell(ranking, level, model="claude_haiku", method="all_pick_v2"):
     return ranking["severity_drivers"]["levels"][level]["grid"]["cells"][model][method]
 
 
@@ -825,7 +825,7 @@ def test_driver_denominators_equal_the_severity_grid_cell_denominators():
 
 def test_tie_break_is_total_so_equal_counts_always_rank_in_the_same_order():
     """Two pairs at the same count must not swap between runs, or ranks are noise."""
-    record = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[5.0] * 2)
+    record = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=0, typicalities=[5.0] * 2)
     rows = [
         _clash(record, 0, ("zebra_axis", "zulu_axis"), ("x", "y"), "S3"),
         _clash(record, 1, ("zebra_axis", "zulu_axis"), ("x", "y"), "S3"),
@@ -866,7 +866,7 @@ def test_degenerate_driver_bounds_raise_rather_than_emitting_an_empty_table(kwar
 
 
 def test_a_cell_every_persona_shares_a_clash_in_reaches_prevalence_one():
-    record = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[5.0] * 3)
+    record = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=0, typicalities=[5.0] * 3)
     record = _with_clashes(record, [
         _clash(record, i, _EMPLOYMENT, ("Student", "Permanent Full-time"), "S3")
         for i in range(3)
@@ -878,7 +878,7 @@ def test_a_cell_every_persona_shares_a_clash_in_reaches_prevalence_one():
 
 def test_a_clash_free_cell_has_an_empty_driver_list_and_no_skip():
     ranking = _build(_driver_fixture())
-    cell = _cell(ranking, "S3", model="claude_sonnet", method="all_pick_dag")
+    cell = _cell(ranking, "S3", model="claude_sonnet", method="all_pick_dag_v2")
     assert cell["drivers"] == []
     assert cell["affected"] == 0 and cell["denominator"] == 4
     assert not [s for s in ranking["skipped_tests"] if s["test"].startswith("severity_drivers")]
@@ -888,25 +888,25 @@ def test_unjudged_pair_is_none_in_the_driver_grid_not_an_empty_driver_list():
     """An empty list means "judged, nothing drove it"; None means "never judged"."""
     ranking = _build(_driver_fixture())
     cells = ranking["severity_drivers"]["levels"]["S3"]["grid"]["cells"]
-    assert cells["claude_haiku"]["all_pick_dag"] is None
-    assert cells["claude_sonnet"]["all_pick"] is None
+    assert cells["claude_haiku"]["all_pick_dag_v2"] is None
+    assert cells["claude_sonnet"]["all_pick_v2"] is None
 
 
 def test_a_cell_whose_clash_rows_are_missing_records_a_skip_not_a_silent_zero():
     """Personas declaring a clash with no per-clash row cannot be attributed."""
-    record = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[5.0] * 2)
+    record = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=0, typicalities=[5.0] * 2)
     record = _with_severities(record, [(0, 0, 1), (0, 0, 0)])   # counts, but no clash rows
     ranking = _build([record])
     cell = _cell(ranking, "S3")
     assert cell["affected"] == 1 and cell["drivers"] == []
     reasons = {s["test"]: s["reason"] for s in ranking["skipped_tests"]}
-    assert "severity_drivers[S3][swedish_all_pick_claude_haiku]" in reasons
-    assert "--rewrite-artifacts" in reasons["severity_drivers[S3][swedish_all_pick_claude_haiku]"]
+    assert "severity_drivers[S3][swedish_02_all_pick_v2_claude_haiku]" in reasons
+    assert "--rewrite-artifacts" in reasons["severity_drivers[S3][swedish_02_all_pick_v2_claude_haiku]"]
 
 
 def test_unresolved_clashes_count_at_the_pair_grain_and_are_absent_from_the_values():
     """The pair is known and the clash is real; only its category values are not."""
-    record = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[5.0] * 2)
+    record = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=0, typicalities=[5.0] * 2)
     record = _with_clashes(record, [
         _clash(record, 0, _AGE_EDU, ("", ""), "S3", unresolved=True),
         _clash(record, 1, _AGE_EDU, ("16-19", "Doctorate"), "S3"),
@@ -965,7 +965,7 @@ def test_driver_rows_carry_the_denominator_the_penalised_flag_and_the_counting_u
         assert "do not sum" in row["non_additive"]
     top = rows[0]
     assert (top["slug"], top["rank"], top["attr_a"]) == (
-        "swedish_all_pick_claude_haiku", 1, "age_group")
+        "swedish_02_all_pick_v2_claude_haiku", 1, "age_group")
     assert top["prevalence"] == pytest.approx(3 / 4)
 
 
@@ -1039,7 +1039,7 @@ def test_driver_row_order_is_total_and_deterministic():
 def test_driver_ranks_stay_within_their_level_and_are_not_renumbered():
     """A rank-1 S2 driver and a rank-1 S3 driver are both rank 1 in the merged table."""
     rows = severity_driver_rows(_build(_driver_fixture()))
-    haiku = [row for row in rows if row["slug"] == "swedish_all_pick_claude_haiku"]
+    haiku = [row for row in rows if row["slug"] == "swedish_02_all_pick_v2_claude_haiku"]
     by_level = {}
     for row in haiku:
         by_level.setdefault(row["severity"], []).append(row["rank"])
@@ -1051,7 +1051,7 @@ def test_the_real_population_appears_in_the_driver_tables_as_an_ordinary_competi
     pair_rows = severity_driver_rows(ranking)
     value_rows = severity_driver_value_rows(ranking)
     real_pairs = [row for row in pair_rows if row["is_real_reference"]]
-    assert [(row["slug"], row["severity"]) for row in real_pairs] == [("real_swedish", "S1")]
+    assert [(row["slug"], row["severity"]) for row in real_pairs] == [("real_swedish_02", "S1")]
     assert real_pairs[0]["n_personas"] == 2 and real_pairs[0]["denominator"] == 4
     assert real_pairs[0]["model"] == "" and real_pairs[0]["strategy"] == ""
     assert any(row["is_real_reference"] and row["value_b"] == "Rented" for row in value_rows)
@@ -1094,7 +1094,7 @@ def test_pair_summary_counts_personas_not_clash_rows_and_pools_the_denominator()
 
     assert summary["denominator"] == 8
     assert summary["n_synthetic_competitors"] == 2
-    assert summary["real_slug"] == "real_swedish" and summary["real_denominator"] == 4
+    assert summary["real_slug"] == "real_swedish_02" and summary["real_denominator"] == 4
     assert [(p["attr_a"], p["attr_b"], p["n_personas"]) for p in summary["pairs"]] == [
         ("age_group", "education_level", 3),
         ("civil_status", "household_size", 1),
@@ -1140,15 +1140,15 @@ def _tied_fixture():
     A tie is what makes the declared tie-break observable: without one the order is a
     function of the counts alone and the name ordering is never exercised.
     """
-    a = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[5.0] * 3,
-                model="claude_haiku", strategy="all_pick")
+    a = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=0, typicalities=[5.0] * 3,
+                model="claude_haiku", strategy="all_pick_v2")
     a = _with_clashes(a, [
         _clash(a, 0, ("civil_status", "household_size"), ("Married", "1"), "S2"),
         _clash(a, 1, ("age_group", "housing_tenure"), ("16-19", "Owned"), "S2"),
         _clash(a, 2, ("age_group", "education_level"), ("16-19", "Doctorate"), "S2"),
     ])
-    b = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0, typicalities=[5.0] * 3,
-                model="claude_sonnet", strategy="all_pick_dag")
+    b = _record("swedish_02_all_pick_dag_v2_claude_sonnet", n_impossible=0, typicalities=[5.0] * 3,
+                model="claude_sonnet", strategy="all_pick_dag_v2")
     b = _with_clashes(b, [
         _clash(b, 0, ("age_group", "employment_status"), ("16-19", "Retired"), "S2"),
     ])
@@ -1256,21 +1256,21 @@ def _typicality_fixture():
     cutpoint at 0.5, so IOV 1.0. The pair is exactly the separation the statistic was
     chosen for: a location or order-blind summary scores the two splits identically.
     """
-    a = _record("swedish_all_pick_claude_haiku", n_impossible=2,
+    a = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=2,
                 typicalities=[9.0, 9.0, 10.0, 10.0],
-                model="claude_haiku", strategy="all_pick")
-    b = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
+                model="claude_haiku", strategy="all_pick_v2")
+    b = _record("swedish_02_all_pick_dag_v2_claude_sonnet", n_impossible=0,
                 typicalities=[0.0, 0.0, 10.0, 10.0],
-                model="claude_sonnet", strategy="all_pick_dag")
+                model="claude_sonnet", strategy="all_pick_dag_v2")
     return [a, b]
 
 
 def _real_record(typicalities):
-    return _record("real_swedish", n_impossible=0, typicalities=typicalities,
+    return _record("real_swedish_02", n_impossible=0, typicalities=typicalities,
                    model="", strategy="", is_real=True)
 
 
-def _typ(ranking, model="claude_haiku", method="all_pick"):
+def _typ(ranking, model="claude_haiku", method="all_pick_v2"):
     return ranking["typicality"]["grid"]["cells"][model][method]
 
 
@@ -1282,14 +1282,14 @@ def test_typicality_denominator_is_the_typicality_base_not_the_persona_count():
     spread in the sweep by the impossibility rate.
     """
     ranking = _build(_typicality_fixture())
-    a, b = _typ(ranking), _typ(ranking, "claude_sonnet", "all_pick_dag")
+    a, b = _typ(ranking), _typ(ranking, "claude_sonnet", "all_pick_dag_v2")
 
     assert a["value"] == pytest.approx(0.1)
     assert a["denominator"] == 4 and a["n_personas"] == 6
     assert b["value"] == pytest.approx(1.0)
     assert b["denominator"] == b["n_personas"] == 4
     # ... while Axis A ranks A over all six personas, which is the point of the two names.
-    assert ranking["axis_a"]["grid"]["cells"]["claude_haiku"]["all_pick"]["denominator"] == 6
+    assert ranking["axis_a"]["grid"]["cells"]["claude_haiku"]["all_pick_v2"]["denominator"] == 6
     # {9,10} vs {0,10}: the collapse distinction an order-blind summary cannot draw.
     assert a["value"] < b["value"]
     # The base is the one the factor tests consume -- one source, so they cannot disagree.
@@ -1304,11 +1304,11 @@ def test_a_fully_collapsed_competitor_is_zero_with_a_flagged_boundary_interval()
     merely inaccurate, so the interval is reported as degenerate instead of being
     smoothed into one that looks trustworthy.
     """
-    collapsed = _record("swedish_all_pick_claude_haiku", n_impossible=0,
+    collapsed = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=0,
                         typicalities=[9.0] * 5)
-    spread = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
+    spread = _record("swedish_02_all_pick_dag_v2_claude_sonnet", n_impossible=0,
                      typicalities=[2.0, 4.0, 6.0, 8.0, 9.0],
-                     model="claude_sonnet", strategy="all_pick_dag")
+                     model="claude_sonnet", strategy="all_pick_dag_v2")
     ranking = _build([collapsed, spread])
 
     cell = _typ(ranking)
@@ -1319,18 +1319,18 @@ def test_a_fully_collapsed_competitor_is_zero_with_a_flagged_boundary_interval()
     assert "inconsistent" in ranking["typicality"]["boundary_note"]
 
     # An interior cell with a genuine interval must not inherit the flag.
-    interior = _typ(ranking, "claude_sonnet", "all_pick_dag")
+    interior = _typ(ranking, "claude_sonnet", "all_pick_dag_v2")
     assert interior["boundary"] is False
     assert interior["ci_lo"] < interior["value"] < interior["ci_hi"]
 
 
 def _powered_fixture():
     """One competitor below a floor of three typicality-bearing personas, one above."""
-    small = _record("swedish_all_pick_claude_haiku", n_impossible=1,
-                    typicalities=[3.0, 7.0], model="claude_haiku", strategy="all_pick")
-    large = _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
+    small = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=1,
+                    typicalities=[3.0, 7.0], model="claude_haiku", strategy="all_pick_v2")
+    large = _record("swedish_02_all_pick_dag_v2_claude_sonnet", n_impossible=0,
                     typicalities=[3.0] * 3 + [7.0] * 3,
-                    model="claude_sonnet", strategy="all_pick_dag")
+                    model="claude_sonnet", strategy="all_pick_dag_v2")
     return [small, large]
 
 
@@ -1339,7 +1339,7 @@ def test_under_powered_cell_is_flagged_and_counted_rather_than_silently_dropped(
     ranking = _build(_powered_fixture(), typicality={**_TYPICALITY, "min_n": 3})
     block = ranking["typicality"]
     small = _typ(ranking)
-    large = _typ(ranking, "claude_sonnet", "all_pick_dag")
+    large = _typ(ranking, "claude_sonnet", "all_pick_dag_v2")
 
     assert small["under_powered"] is True and small["status"] == "under_powered"
     assert small["value"] is not None, "an under-powered cell is published, not dropped"
@@ -1350,15 +1350,15 @@ def test_under_powered_cell_is_flagged_and_counted_rather_than_silently_dropped(
     assert "too few personas" in block["under_powered_policy"]
 
     # Distinct from an unjudged pair, which claims nothing was measured at all.
-    assert block["grid"]["cells"]["claude_haiku"]["all_pick_dag"] is None
-    assert block["grid"]["cells"]["claude_sonnet"]["all_pick"] is None
+    assert block["grid"]["cells"]["claude_haiku"]["all_pick_dag_v2"] is None
+    assert block["grid"]["cells"]["claude_sonnet"]["all_pick_v2"] is None
     assert block["excluded"]["cells_unjudged"] == 2
     assert "NOT a value of zero" in block["grid"]["note"]
 
 
 def test_a_competitor_with_no_typicality_is_null_and_never_zero():
     """Every persona judged impossible: nothing was measured, and 0.0 is a measurement."""
-    dead = _record("swedish_all_pick_claude_haiku", n_impossible=3, typicalities=[])
+    dead = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=3, typicalities=[])
     ranking = _build([dead])
     cell = _typ(ranking)
 
@@ -1368,8 +1368,8 @@ def test_a_competitor_with_no_typicality_is_null_and_never_zero():
     assert cell["under_powered"] is False
     assert cell["histogram"] is None and cell["tail_proportion"] is None
     reasons = {s["test"]: s["reason"] for s in ranking["skipped_tests"]}
-    assert "typicality[swedish_all_pick_claude_haiku]" in reasons
-    assert "undefined" in reasons["typicality[swedish_all_pick_claude_haiku]"]
+    assert "typicality[swedish_02_all_pick_v2_claude_haiku]" in reasons
+    assert "undefined" in reasons["typicality[swedish_02_all_pick_v2_claude_haiku]"]
     excluded = ranking["typicality"]["excluded"]
     assert excluded["competitors_without_typicality"] == 1
     assert excluded["personas_without_a_typicality"] == 3
@@ -1377,7 +1377,7 @@ def test_a_competitor_with_no_typicality_is_null_and_never_zero():
 
 def test_a_single_persona_competitor_is_defined_with_a_degenerate_interval():
     """n = 1 must produce a number and an honest zero-width interval, not a crash."""
-    lone = _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[7.0])
+    lone = _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=0, typicalities=[7.0])
     cell = _typ(_build([lone]))
     assert cell["denominator"] == 1
     assert cell["value"] == 0.0            # one persona cannot be dispersed
@@ -1396,7 +1396,7 @@ def test_histogram_bins_sum_to_the_typicality_denominator():
     by_slug: dict[str, list] = {}
     for row in rows:
         by_slug.setdefault(row["slug"], []).append(row)
-    assert set(by_slug) == {"swedish_all_pick_claude_haiku", "swedish_all_pick_dag_claude_sonnet"}
+    assert set(by_slug) == {"swedish_02_all_pick_v2_claude_haiku", "swedish_02_all_pick_dag_v2_claude_sonnet"}
     for group in by_slug.values():
         # The full scale, including the levels nobody scored -- a gap would read as absent.
         assert [row["level"] for row in group] == list(range(_TYPICALITY["n_levels"]))
@@ -1411,7 +1411,7 @@ def test_tail_column_is_a_proportion_with_a_wilson_interval_over_the_same_base()
     block = ranking["typicality"]
     assert block["tail_threshold"] == 5
 
-    spread = _typ(ranking, "claude_sonnet", "all_pick_dag")      # {0, 0, 10, 10}
+    spread = _typ(ranking, "claude_sonnet", "all_pick_dag_v2")      # {0, 0, 10, 10}
     assert spread["tail_count"] == 2 and spread["tail_proportion"] == pytest.approx(0.5)
     assert 0.0 < spread["tail_ci_lo"] < 0.5 < spread["tail_ci_hi"] < 1.0
 
@@ -1425,12 +1425,12 @@ def test_reference_value_is_the_real_populations_own_statistic_or_null_with_a_re
     """The reference is read from the document, never assumed and never a literal."""
     records = _typicality_fixture() + [_real_record([9.0, 9.0, 10.0, 10.0])]
     block = _build(records)["typicality"]
-    assert block["reference_slug"] == "real_swedish"
+    assert block["reference_slug"] == "real_swedish_02"
     assert block["reference_value"] == pytest.approx(0.1)
     assert block["reference_value"] == block["grid"]["real"]["value"]
     assert "colourbar rule" in block["reference_note"]
     # It is an ordinary competitor: no grid coordinate, no privilege in any cell.
-    assert "real_swedish" not in block["grid"]["models"]
+    assert "real_swedish_02" not in block["grid"]["models"]
 
     without = _build(_typicality_fixture())["typicality"]
     assert without["reference_slug"] is None and without["reference_value"] is None
@@ -1535,9 +1535,9 @@ def test_typicality_rows_are_ordered_by_method_then_model_with_the_real_populati
     rows = typicality_summary_rows(ranking)
 
     assert [row["strategy"] for row in rows] == [
-        "all_pick", "all_pick_dag", "all_generate_pick", ""]
+        "all_pick_v2", "all_pick_dag_v2", "all_generate_pick_v2", ""]
     assert rows[-1]["is_real_reference"] is True
-    assert rows[-1]["slug"] == "real_swedish"
+    assert rows[-1]["slug"] == "real_swedish_02"
     # Every row carries the same columns, so the file is a rectangle.
     keys = list(rows[0])
     assert keys[:4] == ["slug", "model", "strategy", "is_real_reference"]
@@ -1570,20 +1570,20 @@ def test_competitor_order_changes_no_emitted_typicality_byte():
 def _four_state_fixture():
     """One grid carrying all four states the typicality heatmap must tell apart.
 
-    ``claude_haiku x all_pick`` has four typicality-bearing personas (under-powered at a
-    floor of five), ``claude_sonnet x all_pick_dag`` five (powered), ``claude_haiku x
-    all_pick_dag`` was judged but every persona is impossible (no typicality), and
-    ``claude_sonnet x all_pick`` is unjudged -- it exists only as the rectangle's hole.
+    ``claude_haiku x all_pick_v2`` has four typicality-bearing personas (under-powered at a
+    floor of five), ``claude_sonnet x all_pick_dag_v2`` five (powered), ``claude_haiku x
+    all_pick_dag_v2`` was judged but every persona is impossible (no typicality), and
+    ``claude_sonnet x all_pick_v2`` is unjudged -- it exists only as the rectangle's hole.
     """
     return [
-        _record("swedish_all_pick_claude_haiku", n_impossible=2,
+        _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=2,
                 typicalities=[9.0, 9.0, 10.0, 10.0],
-                model="claude_haiku", strategy="all_pick"),
-        _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
+                model="claude_haiku", strategy="all_pick_v2"),
+        _record("swedish_02_all_pick_dag_v2_claude_sonnet", n_impossible=0,
                 typicalities=[0.0, 0.0, 10.0, 10.0, 10.0],
-                model="claude_sonnet", strategy="all_pick_dag"),
-        _record("swedish_all_pick_dag_claude_haiku", n_impossible=3, typicalities=[],
-                model="claude_haiku", strategy="all_pick_dag"),
+                model="claude_sonnet", strategy="all_pick_dag_v2"),
+        _record("swedish_02_all_pick_dag_v2_claude_haiku", n_impossible=3, typicalities=[],
+                model="claude_haiku", strategy="all_pick_dag_v2"),
         _real_record([4.0, 4.0, 5.0, 6.0, 7.0]),
     ]
 
@@ -1614,11 +1614,11 @@ def test_typicality_heatmap_renders_a_populated_cell_as_a_value_not_as_missing()
     fig = plot_typicality_heatmap(ranking, variant=TYPICALITY_VARIANT_WITH_COUNTS)
     text = _figure_text(fig)
 
-    assert "0.100" in text and "n=4" in text   # haiku x all_pick, hand-computed in Phase 2
+    assert "0.100" in text and "n=4" in text   # haiku x all_pick_v2, hand-computed in Phase 2
     assert "n/a" not in text
     # The four states are four different marks, and each says which it is.
-    assert text.count("not judged") == 1               # sonnet x all_pick
-    assert "no typicality\nof 3 personas" in text      # haiku x all_pick_dag
+    assert text.count("not judged") == 1               # sonnet x all_pick_v2
+    assert "no typicality\nof 3 personas" in text      # haiku x all_pick_dag_v2
     assert "real population" in text
 
 
@@ -1688,9 +1688,9 @@ def test_typicality_heatmap_drops_the_reference_marking_when_there_is_no_referen
 def test_typicality_heatmap_survives_a_zero_width_range():
     """Every competitor at the statistic's floor: a ramp, not a division by zero."""
     identical = [
-        _record("swedish_all_pick_claude_haiku", n_impossible=0, typicalities=[3.0, 3.0]),
-        _record("swedish_all_pick_dag_claude_sonnet", n_impossible=0,
-                typicalities=[3.0, 3.0], model="claude_sonnet", strategy="all_pick_dag"),
+        _record("swedish_02_all_pick_v2_claude_haiku", n_impossible=0, typicalities=[3.0, 3.0]),
+        _record("swedish_02_all_pick_dag_v2_claude_sonnet", n_impossible=0,
+                typicalities=[3.0, 3.0], model="claude_sonnet", strategy="all_pick_dag_v2"),
         _real_record([3.0, 3.0]),
     ]
     ranking = _build(identical)
@@ -1774,7 +1774,7 @@ def test_typicality_by_method_marks_an_under_powered_competitor_without_dropping
 
 def test_typicality_figures_raise_rather_than_emitting_an_empty_one():
     """Nothing measurable is a raise, matching every sibling chart in this module."""
-    dead = _build([_record("swedish_all_pick_claude_haiku", n_impossible=3, typicalities=[])])
+    dead = _build([_record("swedish_02_all_pick_v2_claude_haiku", n_impossible=3, typicalities=[])])
     for plot in (plot_typicality_heatmap, plot_typicality_by_method):
         with pytest.raises(ValueError, match="defined typicality statistic"):
             plot(dead)
@@ -1800,7 +1800,7 @@ def test_a_grid_of_nothing_but_under_powered_cells_still_renders():
     """
     ranking = _build(_four_state_fixture(), typicality={**_TYPICALITY, "min_n": 50})
     grid = ranking["typicality"]["grid"]
-    cells = [_typ(ranking), _typ(ranking, "claude_sonnet", "all_pick_dag"), grid["real"]]
+    cells = [_typ(ranking), _typ(ranking, "claude_sonnet", "all_pick_dag_v2"), grid["real"]]
     assert all(cell["under_powered"] for cell in cells)
 
     fig = plot_typicality_heatmap(ranking, variant=TYPICALITY_VARIANT_WITH_COUNTS)
@@ -1814,7 +1814,7 @@ def test_a_grid_of_nothing_but_under_powered_cells_still_renders():
 
 def test_a_single_competitor_renders_on_both_figures():
     """n = 1 competitor: a degenerate CI, and ramp limits that are still valid."""
-    lone = _build([_record("swedish_all_pick_claude_haiku", n_impossible=0,
+    lone = _build([_record("swedish_02_all_pick_v2_claude_haiku", n_impossible=0,
                            typicalities=[2.0, 4.0, 6.0])])
     vmin, vmax = plot_typicality_heatmap(lone).axes[0].images[0].get_clim()
     assert vmin < vmax

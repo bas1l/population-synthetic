@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-02
 
-Token counts are sourced from [swedish-token-usage-by-model.md](swedish-token-usage-by-model.md);
+Token counts are sourced from [swedish_02-token-usage-by-model.md](swedish_02-token-usage-by-model.md);
 per-model API pricing (with provider source links) is in the
 [Prices used](#prices-used-per-1m-tokens-usd-standard-synchronous-rate-as-of-2026-07-02) table below.
 
@@ -161,7 +161,7 @@ order-of-magnitude, not a quote.
   `all_generate_evaluate_pick`, priciest cell)
 
 Cost projection built on the token counts in
-[swedish-token-usage-by-model.md](swedish-token-usage-by-model.md), priced at **current (2026-07-02)
+[swedish_02-token-usage-by-model.md](swedish_02-token-usage-by-model.md), priced at **current (2026-07-02)
 standard synchronous API rates** — not batch, not cached. This is a *what-would-it-cost* projection,
 not a bill: no run in that doc was actually paid for at these rates (the Claude rows used the `claude`
 CLI's own auth, the Ollama rows ran on local/self-hosted hardware for free).
