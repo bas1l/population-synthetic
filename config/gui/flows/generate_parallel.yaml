@@ -2,7 +2,7 @@
 # options keys are CLI flag names; the GUI turns them into per-combo CLI args
 # (the script does NOT read this file).
 options:
-  n: 600                     # --n
+  n: 160                     # --n
   workers: 64                # --workers (applies to cloud combos; Ollama combos self-tune below)
   ollama-host: windows_4070tis # --ollama-host: which Ollama endpoint serves the run. Host ids are
                              #   declared in config/synthetic/ollama_hosts.yaml (the dropdown is
@@ -25,7 +25,7 @@ options:
                              #   (bad key, model not pulled) still aborts on the first
                              #   occurrence rather than consuming the budget.
 selection:
-  models: [openrouter_qwen35_flash]
+  models: [openrouter_kimi_k3]
   strategies: [all_generate_evaluate_random_pick_v2]
   countries: [swedish_02]   # config_006 guided-prompt A/B run; baseline uses [swedish] (config_004)
 force: false                 # generate flows only

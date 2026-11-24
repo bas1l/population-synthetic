@@ -307,7 +307,7 @@ presentation module: it computes a ranking, so it sits beside `cap_index.py`.
 
 **Decision 5: naming, blocks and versions.**
 - The figure stem is `typicality_distribution_by_model_strategy`. It matches the file already
-  staged in the manuscript's `figures selection/` folder, so a later `figure_selection.yaml` entry
+  staged in the manuscript's `figures_selection/` folder, so a later `figure_selection.yaml` entry
   needs no restaging. It uses "strategy", while its sibling `typicality_by_method` uses "method".
   That inconsistency is accepted: it does not conflict with any mechanical rule, `as_generated/`
   needs only a unique basename (it is), and the manuscript's T1.2 rule already accepts mixed
@@ -1016,7 +1016,7 @@ were left alone; the edge is pinned in `tests/test_workflow_state.py`.
 - `.claude/skills/centred-heatmap/SKILL.md` (model order and hosting derivation)
 - Manuscript `TERMINOLOGY-RULES.md` T1 (individual, strategy) in
   `.../Manuscripts/40_llm-population-fidelity-benchmark/`; the staged figure
-  `figures selection/typicality_distribution_by_model_strategy.{png,svg,eps}`
+  `figures_selection/typicality_distribution_by_model_strategy.{png,svg,eps}`
 - Tomczak, M. & Tomczak, E. (2014) on ε² for Kruskal-Wallis; Romano et al. (2006) on the
   magnitude thresholds of Cliff's δ
 

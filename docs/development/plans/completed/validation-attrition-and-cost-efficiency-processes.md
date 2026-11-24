@@ -32,7 +32,7 @@ staged figure.
 
 ## Problem Statement
 
-Every other figure in `figures selection` is refreshed by copying an artifact some analysis process
+Every other figure in `figures_selection` is refreshed by copying an artifact some analysis process
 wrote. F05 and F26 cannot be, because no process writes them:
 
 - **Attrition is invisible.** `validate_raw` and `validate_mapped` each compute `pass_rate_pct`
@@ -681,13 +681,13 @@ dependent without re-running anything.
 
 - [x] 6.1 — `CLAUDE.md`: both processes in the analysis-layer paragraph and the DAG description.
 - [x] 6.2 — `docs/architecture/sub-packages.md` + `commands.md`.
-- [x] 6.3 — Update the manuscript folder's `figures selection/SOURCES.md` to move F05 and F26 from
+- [x] 6.3 — Update the manuscript folder's `figures_selection/SOURCES.md` to move F05 and F26 from
       "hand-made" to the pipeline-backed table, with their new source paths.
 
 **Files Modified:** `CLAUDE.md`, `docs/architecture/sub-packages.md`,
 `docs/architecture/commands.md`, the new ADR
 `docs/development/decisions/2026-08-20-cost-denominator-and-reconstructed-join-key.md`, and — outside
-the repository — `.../40_llm-population-fidelity-benchmark/figures selection/SOURCES.md`.
+the repository — `.../40_llm-population-fidelity-benchmark/figures_selection/SOURCES.md`.
 **Dependencies:** Phase 5.
 
 #### 6.1-6.3 result — what the docs now say
@@ -796,7 +796,7 @@ replaced with outright exclusion. It is adjacent to, but not part of, this featu
       (rather than adding a slug column upstream), and the cost-denominator choice
       (`05` §9: record context / decision / consequences).
       *(`docs/development/decisions/2026-08-20-cost-denominator-and-reconstructed-join-key.md`.)*
-- [x] `figures selection/SOURCES.md` in the manuscript folder. *(Provenance only — restaging the
+- [x] `figures_selection/SOURCES.md` in the manuscript folder. *(Provenance only — restaging the
       PNGs themselves stays the separate operator copy step this plan scoped out.)*
 
 ---
