@@ -7,7 +7,7 @@ This is a plain record of two things noticed while running the Swedish analysis
 pipeline. It exists so the next person starts from the same facts. It intentionally
 does **not** recommend any change.
 
-Data root: `F:\liu-onedrive-nospecial-carac\_Teams\Gauss\02_Data`
+Data root: `<project-data>\02_Data`
 
 ---
 
@@ -37,12 +37,12 @@ Notes on what was seen:
 - The shortfall tracks the strategy: the `all_generate_evaluate_*` /
   `all_generate_pick` strategies show many folders without `identity.json`; the plain
   `all_pick` strategy shows none missing (100/100).
-- Example of a folder that has it — `population_cap/swedish_all_generate_evaluate_pick_claude_haiku/persona_00001/`
+- Example of a folder that has it — `population_cap/swedish_02_all_generate_evaluate_pick_v2_claude_haiku/persona_00001/`
   contains `identity.json` and `llm_interactions.jsonl`. Other sibling folders in the
   same combo contain only `llm_interactions.jsonl`.
 
 Where this surfaces in the console output:
-- Mapping line, e.g. `... swedish_all_generate_evaluate_pick_claude_haiku.json (n=48, skipped=0)`
+- Mapping line, e.g. `... swedish_02_all_generate_evaluate_pick_v2_claude_haiku.json (n=48, skipped=0)`
 - Persona-realism line, e.g. `combo ... judged: written=48 ... (new rounds ok=144 ...)`
   (144 = 48 personas × 3 rounds).
 

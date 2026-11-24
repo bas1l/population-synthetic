@@ -186,26 +186,10 @@ Config-only, zero `.py` edits:
 
 The new id appears automatically in `--ollama-host` choices and in the GUI dropdown.
 
-## Using a model in a seed manifest
+## Using a model
 
-Set `model_config.model` to the client tag. The frozen
-`config/synthetic/manifests/identity_manifest_0NN_*.yaml` seed manifests are historical records
-of past runs and still carry their own `base_url`; new work should use the axis path
-(`--model-id` / `--strategy-id` / `--country-id`) plus `--ollama-host` instead.
-
-```yaml
-model_config:
-  provider: "ollama"
-  model: "llama3.1:8b-instruct-q4_K_M"
-```
-
-## Seed manifest index by model
-
-| Manifests | Model |
-|-----------|-------|
-| 034–038 | `llama3.3:70b-instruct-q4_K_M` |
-| 039–043 | `llama3.2:3b-instruct-q4_K_M` |
-| 044–048 | `llama3.1:8b-instruct-q4_K_M` |
+Set the `model` of the model axis file to the client tag, for example
+`llama3.1:8b-instruct-q4_K_M`, and select it with `--model-id` plus `--ollama-host`.
 
 ## See also
 

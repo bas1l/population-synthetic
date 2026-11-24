@@ -158,7 +158,7 @@ Confirm **no new** lint errors by diffing against the baseline:
 | Normalizer helpers | `_normalize_<attr>` | `_normalize_<attr>_it` |
 | Canonical label sets | `*_LABELS` | `*_LABELS_IT` |
 | Single-run compare | `scripts/analyze/score_fidelity_sweden.py` | `scripts/analyze/score_fidelity_italy.py` |
-| Batch / harvest | `--country swedish` | `--country italian` |
+| Batch / harvest | `--country swedish_02` | `--country italian` |
 
 When defining canonical-output sets (harvester, collapse checks), read the values the
 `_normalize_*` helpers actually **return** — not the `*_LABELS` input constants, whose

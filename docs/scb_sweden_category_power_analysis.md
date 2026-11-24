@@ -19,7 +19,7 @@ below is driven by that category's share `p_min`.
 
 The "true" probabilities `p_i` are estimated empirically by tallying each attribute over the n=10,000
 reference population (the canonical SCB-sampled reference wired into
-`config/synthetic/axes/countries/swedish.yaml`). Both the population file and the mapping directory
+`config/synthetic/axes/countries/swedish_02.yaml`). Both the population file and the mapping directory
 are resolved from that axis YAML — nothing is hardcoded. Three families of thresholds are computed:
 
 1. **Per-category estimation precision** — Wald `N = z² · p(1−p) / E²`, single and Bonferroni-simultaneous across the K categories.
@@ -101,10 +101,10 @@ individuals, so N is computed on the n = 7,524 employed subset.
 
 ```bash
 # All non-deprecated attributes for Sweden:
-python scripts/analyze/attribute_power_analysis.py --country swedish
+python scripts/analyze/attribute_power_analysis.py --country swedish_02
 
 # A single attribute, with a coarser target effect size and stricter power:
-python scripts/analyze/attribute_power_analysis.py --country swedish --attribute region \
+python scripts/analyze/attribute_power_analysis.py --country swedish_02 --attribute region \
     --effect-sizes 0.05 0.1 --powers 0.95
 ```
 

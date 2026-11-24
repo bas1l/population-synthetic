@@ -221,7 +221,6 @@ Filter contract at `_scheme_from_index` (~line 313):
 - Memory: `project-birth-field-realism-discrepancy.md` (defect classes, gate mechanics)
 - Chokepoint: `src/population_synthetic/analysis/fidelity/scheme.py:308-345`
 - Gate/output: `src/population_synthetic/generators/real/sweden/sample_service.py:255-292`
-- Related plan: `docs/development/plans/active/scb-source-improvements-implementation.md`
 
 ---
 

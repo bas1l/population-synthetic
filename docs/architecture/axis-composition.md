@@ -4,9 +4,9 @@
 > [Comparison & mapping](comparison-mapping.md) · [Design principles](design-principles.md) ·
 > **Axis composition** · [Configuration](configuration.md) · [Commands](commands.md)
 
-How identity generation is configured via three orthogonal axes instead of a monolithic manifest.
+How identity generation is configured via three orthogonal axes instead of a monolithic configuration file.
 
-Identity generation can be configured via three orthogonal axes instead of a monolithic manifest.
+Identity generation can be configured via three orthogonal axes instead of a monolithic configuration file.
 `compose_manifest` in `src/population_synthetic/generators/synthetic/manifest_loader.py` merges YAML from four
 layers:
 
@@ -28,8 +28,8 @@ strategy yaml when a node is dragged; it is git-ignored and per-user, and both t
 diagram renderer fall back to an automatic layout when it is absent.
 
 The output slug is `{country_id}_{strategy_id}_{model_id}`, and the run directory is
-`{output_base}/01_Raw/{slug}/`. Use `--model-id`, `--strategy-id`, `--country-id` CLI flags instead
-of `--manifest` to invoke this path.
+`{output_base}/01_Raw/{slug}/`. Use `--model-id`, `--strategy-id`, `--country-id` CLI flags to
+invoke this path.
 
 ### Run directory layout
 
@@ -120,7 +120,7 @@ counts:
 
 | Country | Required raw keys | `birth_location` required? | v2 valid? |
 |---------|-------------------|----------------------------|-----------|
-| `swedish` / `swedish_02` | 14 | No (deprecated for Sweden) | Yes -- Sweden's 14 keys are exactly the v2 category set |
+| `swedish_02` / `swedish_02` | 14 | No (deprecated for Sweden) | Yes -- Sweden's 14 keys are exactly the v2 category set |
 | `italian` | 14 | **Yes** (nothing deprecated for Italy) | No |
 
 The guard is `scripts/generate/generate_identities_parallel.py::_assert_strategy_covers_country`. It
@@ -131,7 +131,7 @@ rather than in `manifest_loader.compose_manifest` because the requirement is an 
 into `generators/` would both invert the layer dependency and close an import cycle, and re-reading
 `_index.json` there would be a third copy of the deprecation-subtraction logic. Consequently the
 guard covers the **axis-composition path only** (`--model-id` / `--strategy-id` / `--country-id`);
-`--manifest` and explicit `--config` / `--strategy` paths carry no country id and are not checked.
+Explicit `--config` / `--strategy` paths carry no country id and are not checked.
 
 ## Decision record: strategy v2 (SCB chain alignment), 2026-07-28
 
@@ -159,7 +159,7 @@ because of the determinism fix below.
 
 **Decision 2 -- v1↔v2 comparison is valid only over the 14 shared scored axes.** The scored axis set
 is untouched by this change: no mapping `_index.json`, per-attribute JSON, `refine_from` wiring or
-fidelity config was modified, and `load_scheme("swedish").attributes` still returns 14 attributes,
+fidelity config was modified, and `load_scheme("swedish_02").attributes` still returns 14 attributes,
 byte-identical before and after. The two arms are therefore directly comparable on fidelity, TV
 similarity and every per-axis statistic. They are **not** comparable on anything whose denominator is
 the generated category count (17 vs 14) -- raw completeness rates, per-persona LLM-call counts, token
@@ -268,10 +268,7 @@ fail-fast in both directions:
 must **display** an unsupported pair rather than fail on it (the GUI summary panel renders an
 em dash). Both route through the same lookup, so they can never disagree.
 
-Non-Ollama model axes keep the scalar `workers`, and the frozen
-`config/synthetic/manifests/identity_manifest_0NN_*.yaml` seed manifests keep theirs too — they
-are historical records of runs that already happened on one machine, and `load_manifest` (the
-file path, not the axis path) reads that scalar unchanged.
+Non-Ollama model axes keep the scalar `workers`.
 
 ## See also
 

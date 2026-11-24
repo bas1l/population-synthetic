@@ -1,6 +1,6 @@
 # Audit: code, configs and docs that exist only for older dataset versions
 
-Date: 2026-11-24. Branch: `chore/latest-dataset-only` (off `dev`).
+Date: 2026-11-24. Final state on branch `chore/latest-dataset-only`.
 
 The latest dataset is:
 
@@ -12,52 +12,58 @@ The latest dataset is:
   (`all_pick_v2`, `all_pick_dag_v2`, `all_generate_pick_v2`, `all_generate_evaluate_pick_v2`,
   `all_generate_evaluate_random_pick_v2`) and the 58 populations in `population_cap/_mapped`.
 
-Decision per item: **delete**, **simplify** (the ref-v3 behaviour becomes the only behaviour),
-**keep (generic)**, or **deferred** (needs the author's decision, not applied on this branch).
+Everything below was applied; nothing from the earlier deferred list remains open except the
+points under "Open".
 
-## Applied
+## Removed or rewritten
 
-| # | Item | Decision | What changed |
-|---|---|---|---|
-| 1 | `--no-merge-status-education` CLI option and the `merge_status_education` parameter of `FetchService.load_all`, `SampleService.sample_one`, `SampleService.sample_population` | simplify | Option and parameter removed; the single-table register path is the only path. |
-| 2 | Merge code: `FetchService.fetch_employment_status`, the merge block of `sweden/parsers.py` (odds-multiplication, `parse_employment_status_combined` and helpers, about 330 lines), merge constants in `sweden/constants.py`, `PopulationDistributions.employment_status_by_edu` | delete | Removed. `ArbStatusUtbM` is no longer fetched. |
-| 3 | Tests of the merge (`_combine_status_3cat`, `_expand_nilf`, end-to-end merge parser test and its fixtures) and the `employment_status_by_edu=None` fixture argument | delete | Covered only the deleted behaviour. |
-| 4 | `scripts/generate/generate_scb_population.py` defaults (n = 100, random seed) | simplify | Defaults are n = 10,000 and seed 42, so a plain run reproduces ref-v3. |
-| 5 | `scripts/dev/draw_generation_dags.py`, `scripts/dev/embed_population_in_explorer.py` | simplify | Stop referring to the merge; employment is `(age, sex)`. |
-| 6 | `config/synthetic/axes/countries/swedish.yaml` (earlier country axis: config 004, October reference) | simplify | Retargeted to config 006 and the ref-v3 reference, so it is an alias of `swedish_02`. It cannot be deleted yet: about 190 tests use the id `swedish` as the generic Swedish country id (see Deferred). |
-| 7 | `config/synthetic/axes/countries/swedish_02.yaml` reference path (October 2026 file name) | simplify | Points to `scb_population_n10000_seed42_ref-v3.json`. |
-| 8 | `swedish_02.README.md` (A/B arm against the baseline) | simplify | Rewritten to describe the one axis. |
-| 9 | `simulation_config_003_swedish_flat.json`, `simulation_config_004_swedish_generative.json` (earlier prompts) | delete | Every reference now names config 006; its README is rewritten without the baseline comparison. |
-| 10 | 39 frozen seed manifests `config/synthetic/manifests/identity_manifest_0NN_*.yaml` (earlier runs on config 004 and v1 strategies; contained machine paths) | delete | Removed. |
-| 11 | `docs/reference/scb-pxweb-catalog/employment-status-merge-derivation.md` | delete | Spec of deleted code; links in the catalog README and `scb-source-audit.md` reworded. |
-| 12 | `docs/swedish_mapping_fix_2026-05-29.md`, `swedish_mapping_fix_2026-06-29.md`, `swedish_model_state_and_mapping_2026-06-29.md`, `swedish_persona_matrix_2026-05-29.md` | delete | Dated snapshots of earlier runs and mapping states. Links from the playbook removed. |
-| 13 | `income-source-student-65plus-fallback.md`, `docs/architecture/diagrams/real/README.md`, a comment in `sample_service.py` | simplify | Reworded: no "merge ON/OFF" case. |
-| 14 | `README.md`, `CLAUDE.md`, `docs/architecture/commands.md` | simplify | Generator defaults, `swedish_02`, `*_v2` strategies, no manifests, no config 004. |
-| 15 | `scripts/dev/audit_persona_realism.py`, `docs/scb_sweden_category_power_analysis.md` reference file name (July merge reference) | simplify | Name points to the ref-v3 file. The numbers inside the power-analysis document were computed on the July reference and are not recomputed. |
+| # | Item | Action |
+|---|---|---|
+| 1 | Status-by-education merge: `fetch_employment_status`, the merge block of `sweden/parsers.py`, merge constants, `employment_status_by_edu`, the `merge_status_education` parameters and the `--no-merge-status-education` option, with 4 tests | deleted; the register table is the only path |
+| 2 | `generate_scb_population.py` defaults | n = 10,000 and seed 42, so a plain run reproduces ref-v3 |
+| 3 | The five v1 strategy YAMLs (`all_pick`, `all_pick_dag`, `all_generate_pick`, `all_generate_evaluate_pick`, `all_generate_evaluate_random_pick`) and their v1 diagrams | deleted; tests point at the `*_v2` configs; the strategy-diagram set was regenerated for the five `*_v2` strategies |
+| 4 | Country id `swedish` (axis alias, mapper-factory key, CLI defaults, about 190 tests) | removed; `swedish_02` is the only Swedish id; slugs read `swedish_02_<strategy>_<model>`; mapped reference `real_swedish_02` |
+| 5 | `--manifest` mode of `generate_identity.py`, `generate_identities_parallel.py`, `score_fidelity_sweden.py`, `score_fidelity_italy.py`; `load_manifest`; `scheduled_generate.py` (launched a deleted manifest); the manifest form of `comparison_targets.yaml` (now `{model_id, strategy_id, country_id}` entries) | deleted, with docs |
+| 6 | 39 frozen seed manifests, simulation configs 003 and 004 | deleted; config 006 is the only Swedish simulation config |
+| 7 | Sweden generation explorer (3 MB page embedding the July merge snapshot), `embed_population_in_explorer.py`, `render_persona_dags.py` (a port of the explorer's JavaScript) | deleted; no cheap current equivalent, so none was regenerated |
+| 8 | `sweden_generation_dag.{dot,svg,png}` and the Norway and Italy DAG files | regenerated by `scripts/dev/draw_generation_dags.py` (employment is `(age, sex)`) |
+| 9 | Plans that describe the merge, the earlier reference or the manifest mode: `scb-employment-education-correlation`, `scb-source-improvements-implementation`, `sweden-employment-status-by-age`, `add-llama32-manifests`, `compare-pipeline-manifest-support`, `household-size-persons-unit`, `mapping-fixes-scb-audit`, `scb-population-attribute-source-audit`, `plan-backlog-organisation` | removed from the tree (history keeps them); links in docs and test docstrings reworded |
+| 10 | Dated snapshot docs of earlier runs (`swedish_mapping_fix_*`, `swedish_model_state_and_mapping_*`, `swedish_persona_matrix_*`, `swedish-token-usage-by-model`), the merge specification | deleted |
+| 11 | Manuscript folder name in `config/analysis/figure_selection.yaml` | removed |
+| 12 | `README.md`, `CLAUDE.md`, architecture docs, `scripts/README.md` | describe only the latest dataset and pipeline |
+
+## Tests rewritten or removed
+
+- Country and strategy ids in about 110 files switched to `swedish_02` and the `*_v2` ids.
+- `test_strategy_v2.py`: the v1-sibling comparisons removed.
+- `test_strategy_ordering.py`: the order anchor is the five `*_v2` ids; fixture ids no longer carry a v1 name.
+- `test_method_significance_charts.py` and its fixtures: the ten-method (both versions) cases removed.
+- `test_axis_facet_defaults.py` and `test_axis_version_filter.py`: 5 tests that need two live strategy versions removed.
+- Merge tests removed (item 1).
 
 ## Kept (generic)
 
-- Norway (SSB) and Italy (ISTAT) generators, mappers, tests and docs.
-- Strategy family and `version` machinery (`_families.yaml`, version sort and filter): it is how
-  `*_v2` strategies are selected; it is not tied to one dataset.
-- Mapper and scoring factories keyed by country type (`swedish`, `swedish_02` aliases).
-- The `real_swedish` labels in test fixtures (arbitrary labels, not data).
-- The `scripts/analyze/*` pipeline stages, the GUI and the analysis packages.
-- `docs/development/decisions/*` (dated decision records, not instructions).
+Norway (SSB) and Italy (ISTAT) generators, mappers and docs; the strategy family and `version`
+machinery (a later version needs no code change); the GUI version filter (it has one version
+now); `compose_manifest` and `manifest_snapshot.yaml` (the axis composition path, a different
+thing from the removed `--manifest` mode); the SCB catalog docs that describe the `ArbStatusUtbM`
+table as a table SCB publishes.
 
-## Deferred: needs the author's decision
+## Leftover grep, with the reason for each hit
 
-| Item | Why not applied | Suggested action |
+| Pattern | Hits | Reason |
 |---|---|---|
-| The five v1 strategy YAMLs (`all_pick`, `all_pick_dag`, `all_generate_pick`, `all_generate_evaluate_pick`, `all_generate_evaluate_random_pick`) | Used as fixtures by `test_identity_generator_configurable`, `test_identity_generator_resume`, `test_ollama_preflight_cli`, `test_prompt_stability`, `test_axis_version_filter` and others; the version-filter tests need a v1 to filter. | Separate branch: migrate those tests to `*_v2`, then delete the v1 files. |
-| `--manifest` mode (`load_manifest`, `generate_identity*.py`, `score_fidelity_sweden.py`, `score_fidelity_italy.py`) and the frozen-manifest section of `docs/architecture/axis-composition.md` | Removing the mode touches four CLIs and their tests. The manifests it loaded are deleted (item 10). | Remove the mode in one follow-up. |
-| `docs/architecture/sweden-generation-explorer/` (3 MB page embedding the 2026-07-16 merge snapshot; `data.js` and `catalog-view.js` describe the merge) and `sweden_generation_dag.{dot,svg,png}` | Generated artefacts; regeneration needs the page's JS reworked. `embed_population_in_explorer.py` no longer produces the merge field, so the page would lose its education selector. | Regenerate the DAG files from `draw_generation_dags.py`; delete or rework the explorer. |
-| Completed plans that describe the merge or the October reference (for example `scb-source-improvements-implementation.md`, `sweden-employment-status-by-age.md`) and pending plans naming the July reference file (`mapping-fixes-scb-audit.md`, `household-size-persons-unit.md`) | Historical plan records; deleting breaks links from other plans. | Archive or delete in bulk after the author has read them. |
-| Figure-builder prototypes in `scripts/analyze/figures/fig2` that keep switches for earlier panel wording (`INCOME_MODE`, `REFV3_REGION_L2`) | Layout options of a gallery, not data paths. | Delete the unused options when the figures are final. |
-| Alias axis `swedish.yaml` | About 190 tests (ranking charts, realism, significance, strategy v2 and others) name the country id `swedish`. | Rename the id to `swedish_02` in those tests, then delete the alias. |
-| `config/gui/flows` default strategy selection | The test `test_flow_default_selects_exactly_the_highest_version_strategies` fails before and after this branch. | Review with the GUI owner. |
+| `merge_status_education` | none | |
+| `ArbStatusUtbM` | 4 docs in `docs/reference/scb-pxweb-catalog/` | They describe the SCB table (its dimensions and a query trap) and, in `scb-source-audit.md`, the audit's discussion of a merge that the generator does not do. Source-catalog reference, not pipeline. |
+| `real_swedish_01`, `swedish_01` | none | |
+| `_v1` | `fresh_process_per_call_v1` (a context-isolation marker of the Claude CLI client), `test_realism_csv` (a CSV schema version), 3 completed plans on strategy v2 | Unrelated to the dataset (client and file-format versions), or plan history. |
+| `old reference` | 1 plan note (about an LLM-judge cache) and generic text-metric literature | Unrelated. |
+| `2026-10-20 results` | none | |
+| `manifest` | `compose_manifest`, `ManifestConfig`, `manifest_snapshot.yaml`, `manifest_loader.py` and docs about them | Axis composition path. No `--manifest` option, `load_manifest` or seed manifest remains. |
 
-## Counts
+## Open
 
-Applied: delete 6 groups (items 2, 3, 9, 10, 11, 12), simplify 9 groups (items 1, 4, 5, 6, 7, 8, 13, 14, 15),
-kept-generic 6 groups, deferred 7.
+- Italian runs: every strategy now omits `birth_location`, which the Italian scheme still requires, so the country guard rejects all Italian combinations. Italy generators and scoring stay; generating Italian LLM populations needs a strategy that includes `birth_location`.
+- `docs/claims/_style.yaml` lists absolute machine paths of the manuscript folder under `figure_roots`; `docs/development/figure-conventions.md`, `manuscript-motivation-map.md`, `.gitignore` and two plan files name the manuscript folder. Not changed (outside the seven items); reported for the author.
+- The numbers inside `docs/scb_sweden_category_power_analysis.md` were computed on the July reference and are not recomputed.
+- Pre-existing test failures (before and after): `test_extractor_characterization` (3, missing `expected_extractor.json`), `test_palette` (1), `test_flow_default_selects_exactly_the_highest_version_strategies` (1; the flow selects one strategy).

@@ -1,6 +1,6 @@
 # SCB source audit — best PxWeb table per population attribute
 
-Outcome of the [attribute source-audit plan](../../development/plans/pending/scb-population-attribute-source-audit.md):
+Outcome of the attribute source audit:
 a verified pass over the SCB PxWeb source of **every one of the 15 population attributes** the
 Swedish generator samples. For each, we found the best public table, and **confirmed it with a live
 query** — not just metadata presence (see the ["present ≠ cross-tabulable" trap](./scb-pxweb-data-model.md#5-the-critical-trap-present-in-metadata--cross-tabulable)).
@@ -18,8 +18,7 @@ query** — not just metadata presence (see the ["present ≠ cross-tabulable" t
 **6 of 15 attributes have an actionable improvement; 9 are already on the best available source.**
 
 > **Implementation status (2026-07-15).** All 6 improvements are now **implemented** on
-> `feature/scb-source-improvements` (Phases 1–4 of the
-> [implementation plan](../../development/plans/active/scb-source-improvements-implementation.md)):
+> (Phases 1–4):
 > education_level + socioeconomic_class (Phase 1), birth_location (Phase 2), industry_sector +
 > housing_tenure (Phase 3), employment_status (Phase 4). Each switched source has a parser unit test
 > over a recorded json-stat2 fixture (`tests/test_sweden_parsers.py`, Phase 5.2). The generator
@@ -149,5 +148,4 @@ public-API sourcing model. Not pursued.
 ## See also
 - [`scb-pxweb-data-model.md`](./scb-pxweb-data-model.md) — why SCB data is shaped this way
 - [`scb-am-uf-catalog.html`](./scb-am-uf-catalog.html) — searchable table inventory (AM+UF)
-- Plan: [`scb-population-attribute-source-audit.md`](../../development/plans/pending/scb-population-attribute-source-audit.md)
 - Wiring today: `src/population_synthetic/generators/real/sweden/{fetch_service.py,constants.py}`

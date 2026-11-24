@@ -26,13 +26,13 @@ python scripts/generate/generate_ssb_population.py --n 1000 --seed 42 --output s
 # Generate Italian population from live ISTAT/Eurostat data
 python scripts/generate/generate_istat_population.py --n 1000 --seed 42 --output istat_pop.json
 
-# Generate a persona identity via manifest (recommended)
+# Generate a persona identity via axis ids
 python scripts/generate/generate_identity.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02
 
-# Generate N identities in parallel via manifest
+# Generate N identities in parallel via axis ids
 python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02
 
-# Generate N identities via manifest with CLI overrides
+# Generate N identities via axis ids with CLI overrides
 python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02 --n 10 --workers 4
 
 # Generate a persona identity via explicit CLI args (Gemini, requires GEMINI_API_KEY)
@@ -68,7 +68,7 @@ python scripts/analyze/cap_populations.py --model-id claude_haiku --strategy-id 
 python scripts/analyze/map_populations.py
 python scripts/analyze/map_populations.py --targets config/analysis/comparison_targets.yaml
 
-# Compare pipeline output against the SCB real population (consumes pre-mapped files; via manifest)
+# Compare pipeline output against the SCB real population (consumes pre-mapped files; via axis ids)
 python scripts/analyze/score_fidelity_sweden.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02
 
 # Compare pipeline output against the SCB real population (explicit mapped-file paths)
@@ -184,7 +184,7 @@ python scripts/analyze/analyze_cost_efficiency.py --country swedish_02 --no-char
 # repeatable; run once with broad filters (CLI batch) to put every combo on one headline map -- the
 # GUI per_combo dispatch judges ONE combo per node run.
 python scripts/analyze/analyze_persona_realism.py --country swedish_02
-python scripts/analyze/analyze_persona_realism.py --slug swedish_all_pick_claude_sonnet --sample 200 --force
+python scripts/analyze/analyze_persona_realism.py --slug swedish_02_all_pick_v2_claude_sonnet --sample 200 --force
 # --rounds overrides the judge rounds per persona (default 3); --judge-model picks a model_options
 # entry; --workers sets the fan-out width; --output-base/--dpi as usual
 python scripts/analyze/analyze_persona_realism.py --country swedish_02 --rounds 5 --judge-model claude-sonnet-5 --workers 8

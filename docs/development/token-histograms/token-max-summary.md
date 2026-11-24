@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-02
 
-Companion to [`swedish-token-usage-by-model.md`](../swedish-token-usage-by-model.md), which
+Companion to [`swedish_02-token-usage-by-model.md`](../swedish_02-token-usage-by-model.md), which
 records only per-strategy **sums**. This file characterises the per-call **distribution** so the
 maximum context size can be read off directly. One histogram figure per model
 (`tokens_<model>.png`, a grid of methods × [input, output]); regenerate with
@@ -18,7 +18,7 @@ maximum context size can be read off directly. One histogram figure per model
   output maxima are lower bounds on what the model would have produced.
 - Claude `Src=EST` input counts see only the logged `prompt` field; the `claude` CLI's
   system-prompt / tool overhead is not captured, so real Claude input tokens are higher than shown.
-- `swedish_all_generate_evaluate_random_pick_ollama_llama33_70b` had neither logged tokens nor
+- `swedish_02_all_generate_evaluate_random_pick_v2_ollama_llama33_70b` had neither logged tokens nor
   persona JSONL, so it is absent.
 
 **Headline:** the largest single prompt observed anywhere is **~2,659 input tokens**
