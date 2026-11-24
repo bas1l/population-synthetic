@@ -12,7 +12,10 @@ distribution, and the age-group one iterated a ``set``, so its result depended
 on ``PYTHONHASHSEED``. The only cross-cell substitutions are the declared AKU
 age proxies for employment_type, built once in the fetch layer
 (``constants.AKU_ATTACHMENT_AGE_LABEL_MAP`` / ``EMPLOYMENT_TYPE_AGE_PROXIES``)
-and recorded in the output provenance.
+and recorded in the output provenance, and the declared income_source fallback for
+students aged 65 and over (``_INCOME_SOURCE_AGE_FALLBACK``: the income table has no
+student cell above 64, so those individuals use the students' 55-64 income-source mix;
+documented in ``docs/reference/scb-pxweb-catalog/income-source-student-65plus-fallback.md``).
 """
 from __future__ import annotations
 
@@ -59,6 +62,24 @@ _SWEDEN_LABELS: set[str] = {
     "Sverige", "Sweden",
     "Born in Sweden", "born in Sweden",
     "Födda i Sverige", "födda i Sverige",
+}
+
+
+# Declared fallback for income_source cells the SCB table (TabVX13InkStruktN) does not
+# deliver. The table has no "students" cell for the 65-79 and 80- bands, but the
+# single-table (merge OFF) employment_status distribution still gives students aged 65
+# and over a small non-zero share (about 0.1% of those ages, i.e. about 10 of 10,000
+# individuals). Without a rule the sampler would raise for them. Rule, applied ONLY for
+# the (income employment category, pipeline age group) pairs listed here: use the same
+# category's mix for the nearest lower pipeline age group that has a cell, here the 55-64
+# group (income band 50-64). It is an assumption, not an SCB figure; it is explicit so the
+# choice stays visible and testable. Every other missing cell still raises (fail-fast).
+# The unemployed 75-85 cell (band 80-) is also absent from the table, but the single-table
+# employment distribution gives unemployed individuals aged 65 and over probability exactly
+# 0, so it is never drawn and needs no entry.
+_INCOME_SOURCE_AGE_FALLBACK: dict[tuple[str, str], str] = {
+    ("students", "65-74"): "55-64",
+    ("students", "75-85"): "55-64",
 }
 
 
@@ -182,6 +203,10 @@ class SampleService:
         if not matched_emp_dist:
             raise ValueError(f"No income_source distribution for employment={inc_emp_key!r}")
         inc_age_key = _resolve_inc_age_key(age_group, matched_emp_dist)
+        if inc_age_key is None:
+            fallback_group = _INCOME_SOURCE_AGE_FALLBACK.get((inc_emp_key, age_group))
+            if fallback_group is not None:
+                inc_age_key = _resolve_inc_age_key(fallback_group, matched_emp_dist)
         if inc_age_key is None:
             raise ValueError(
                 f"No income_source distribution for cell (employment={inc_emp_key!r}, "

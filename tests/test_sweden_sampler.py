@@ -183,3 +183,62 @@ def test_region_by_age_sex_is_required():
     dist = dataclasses.replace(make_distributions(), region_by_age_sex=None)
     with pytest.raises(ValueError, match="region"):
         SampleService.sample_one(dist, np.random.default_rng(0), 0)
+
+
+# --- income_source fallback for students aged 65 and over (declared nearest-lower-band rule) ---
+
+def _students_only(missing_age_keys: set[str]) -> PopulationDistributions:
+    """Everyone is a student; the students' 55-64 mix is distinctive, listed bands removed."""
+    base = make_distributions()
+    income = {k: dict(v) for k, v in base.income_source_by_employment_age.items()}
+    income[("students", "50-64")] = {"general allowance": 1.0}
+    income = {k: v for k, v in income.items() if not (k[0] == "students" and k[1] in missing_age_keys)}
+    return dataclasses.replace(
+        base,
+        income_source_by_employment_age=income,
+        employment_by_sex_education=_cells({"Student": 1.0}),
+    )
+
+
+@pytest.mark.parametrize("age", [65, 70, 74, 75, 80, 85])
+def test_students_aged_65_plus_use_the_55_64_student_income_mix(age):
+    dist = dataclasses.replace(_students_only({"65-79", "80-"}), age_sex={(age, "men"): 1.0})
+    for seed in range(20):
+        ind = SampleService.sample_one(dist, np.random.default_rng(seed), 0)
+        assert ind["employment_status"]["label"] == "Student"
+        assert ind["income_source"]["label"] == "general allowance"
+
+
+def test_student_income_fallback_does_not_override_a_delivered_cell():
+    # If the table does deliver the 65-79 student cell, that cell is used, not the 55-64 mix.
+    dist = _students_only({"80-"})
+    income = dict(dist.income_source_by_employment_age)
+    income[("students", "65-79")] = {"pensions": 1.0}
+    dist = dataclasses.replace(dist, income_source_by_employment_age=income, age_sex={(70, "men"): 1.0})
+    ind = SampleService.sample_one(dist, np.random.default_rng(0), 0)
+    assert ind["income_source"]["label"] == "pensions"
+
+
+def test_income_fallback_is_limited_to_the_declared_pairs():
+    # A student aged 40 with no 30-49 cell still raises: the rule covers students 65+ only.
+    dist = dataclasses.replace(_students_only({"30-49"}), age_sex={(40, "men"): 1.0})
+    with pytest.raises(ValueError, match="age_group='35-44'"):
+        SampleService.sample_one(dist, np.random.default_rng(0), 0)
+    # Another status aged 70 with no 65-79 cell still raises.
+    base = make_distributions()
+    income = {k: v for k, v in base.income_source_by_employment_age.items()
+              if not (k[0] == "retired" and k[1] == "65-79")}
+    dist = dataclasses.replace(
+        base,
+        income_source_by_employment_age=income,
+        employment_by_sex_education=_cells({"Retired": 1.0}),
+        age_sex={(70, "men"): 1.0},
+    )
+    with pytest.raises(ValueError, match="age_group='65-74'"):
+        SampleService.sample_one(dist, np.random.default_rng(0), 0)
+
+
+def test_student_income_fallback_raises_when_the_55_64_source_cell_is_missing():
+    dist = dataclasses.replace(_students_only({"50-64", "65-79", "80-"}), age_sex={(70, "men"): 1.0})
+    with pytest.raises(ValueError, match="age_group='65-74'"):
+        SampleService.sample_one(dist, np.random.default_rng(0), 0)
