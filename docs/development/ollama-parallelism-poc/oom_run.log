@@ -82,4 +82,4 @@
 === qwen2.5:72b-instruct-q4_K_M (rec=1) ===
   np=1: FAIL HTTP 500: {"error":"timed out waiting for llama runner to start - progress 0.00 - "}
 
-Done in 8762s -> F:\GitHub\clinical_projects\population-synthetic\docs\development\ollama-parallelism-poc\oom_results.json
+Done in 8762s -> <repo>\docs\development\ollama-parallelism-poc\oom_results.json

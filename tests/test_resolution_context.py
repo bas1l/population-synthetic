@@ -42,7 +42,7 @@ from population_synthetic.generators.synthetic.resolution_context import (
 
 # Excerpted from `persona_00458/llm_interactions.jsonl`, call_index 1
 # (category "age", step "distribution", 2026-08-04T10:31:07) of
-# F:\liu-onedrive-nospecial-carac\_Teams\Gauss\02_Data\01_Raw\
+# <project-data>\02_Data\01_Raw\
 #   swedish_02_all_generate_evaluate_random_pick_v2_openrouter_qwen35_flash
 # The recorded response is 11 593 characters of near-identical restatement; the
 # repetition is dropped here and the four features that made it fail are kept

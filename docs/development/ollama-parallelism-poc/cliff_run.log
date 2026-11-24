@@ -75,4 +75,4 @@
 === qwen2.5:72b-instruct-q4_K_M  grid=[1] ===
   np=1: load FAIL 500 Server Error: Internal Server Error for url: http://192.168.0.19:11434/api/chat
 
-Done -> F:\GitHub\clinical_projects\population-synthetic\docs\development\ollama-parallelism-poc\cliff_results.json
+Done -> <repo>\docs\development\ollama-parallelism-poc\cliff_results.json

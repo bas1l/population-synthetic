@@ -351,7 +351,7 @@ The entire change is internal to `src/population_synth/clients/claude_code_clien
 
 - Superseded plan: `docs/development/plans/active/claude-code-client-persistent-stream.md` (Phase 1–3 checkboxes are misleading — the persistent code was deleted)
 - Debug docs (superseded conclusion): `docs/development/debug/claude-code-client-stream-json-debug-2026-05-19.md`, `docs/development/debug/claude-code-client-protocol-findings-2026-05-19.md`
-- Analysis triggering the retry: `C:\Users\basil\.claude\plans\analyse-the-current-active-virtual-thacker.md`
+- Analysis triggering the retry: `<home>\.claude\plans\analyse-the-current-active-virtual-thacker.md`
 - Anthropic Python Agent SDK (primary source for stdin shape + flags): https://github.com/anthropics/claude-agent-sdk-python — `src/claude_agent_sdk/_internal/client.py` (`_process_query_inner`), `src/claude_agent_sdk/_internal/transport/subprocess_cli.py`
 - Claude Code headless docs: https://code.claude.com/docs/en/headless
 - Open Anthropic docs issue (acknowledges stdin schema is undocumented): https://github.com/anthropics/claude-code/issues/24594

@@ -34,7 +34,7 @@ The audit document `docs/audit_scb_comparison_api_rooting_2026-05-11.md` already
 1. Strip all four forbidden pattern classes from `simulation_config_004_swedish_generative.json` (Tier 4 strip — see Technical Design).
 2. Audit the other three identity prompt files (`_001`, `_002_swedish`, `_003_swedish_flat`) and confirm cleanliness; document the audit result in the plan's completion note.
 3. Add a residual-pattern guard (a `Grep` invocation documented here) so future edits can self-check.
-4. Persist the rule as a feedback memory at `C:\Users\basil\.claude\projects\F--GitHub-anxiety-synthetic\memory\feedback_no_statistics_in_prompts.md` so future sessions respect it without restatement.
+4. Persist the rule as a feedback memory at `<home>\.claude\projects\<claude-project-dir>\memory\feedback_no_statistics_in_prompts.md` so future sessions respect it without restatement.
 
 ### Out of Scope
 
@@ -136,12 +136,12 @@ config/assets/identity/
 **Started:** 2026-05-11
 **Completed:** 2026-05-11
 
-- [x] Task 1.1 — Create `C:\Users\basil\.claude\projects\F--GitHub-anxiety-synthetic\memory\feedback_no_statistics_in_prompts.md` with the wording in the appendix.
-- [x] Task 1.2 — Add a single-line index entry to `C:\Users\basil\.claude\projects\F--GitHub-anxiety-synthetic\memory\MEMORY.md`: `- [No statistics in LLM prompts](feedback_no_statistics_in_prompts.md) — Strip numbers, prevalence words, country comparisons, and coherence correlations from prompt category descriptions`.
+- [x] Task 1.1 — Create `<home>\.claude\projects\<claude-project-dir>\memory\feedback_no_statistics_in_prompts.md` with the wording in the appendix.
+- [x] Task 1.2 — Add a single-line index entry to `<home>\.claude\projects\<claude-project-dir>\memory\MEMORY.md`: `- [No statistics in LLM prompts](feedback_no_statistics_in_prompts.md) — Strip numbers, prevalence words, country comparisons, and coherence correlations from prompt category descriptions`.
 
 **Files Modified:**
-- `C:\Users\basil\.claude\projects\F--GitHub-anxiety-synthetic\memory\feedback_no_statistics_in_prompts.md` *(new)*
-- `C:\Users\basil\.claude\projects\F--GitHub-anxiety-synthetic\memory\MEMORY.md` *(add 1 line)*
+- `<home>\.claude\projects\<claude-project-dir>\memory\feedback_no_statistics_in_prompts.md` *(new)*
+- `<home>\.claude\projects\<claude-project-dir>\memory\MEMORY.md` *(add 1 line)*
 
 **Dependencies:** None.
 

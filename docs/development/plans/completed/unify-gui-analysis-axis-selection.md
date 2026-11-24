@@ -286,7 +286,7 @@ Pure additive/config change on a feature branch; no data migrations.
 
 ## References
 
-- Scratch plan: `C:\Users\basil\.claude\plans\analyse-the-gui-analysis-delightful-trinket.md`
+- Scratch plan: `<home>\.claude\plans\analyse-the-gui-analysis-delightful-trinket.md`
 - Related (parallel, not superseded): `docs/development/plans/pending/gui-v2-flow-runner.md`
 - Two-stage map→compare design: `docs/scb_population_and_comparison.md`,
   `docs/architecture/comparison-mapping.md`

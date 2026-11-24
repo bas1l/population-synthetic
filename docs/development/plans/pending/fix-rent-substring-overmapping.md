@@ -293,7 +293,7 @@ same-session remediation of tokens this plan has not measured.
 ## Implementation Plan
 
 Every command below runs in the **popsynth** environment:
-`D:\Programming\anaconda3\envs\popsynth\python.exe`. `regress.py` and `substring.py` exceed the
+`<conda>\envs\popsynth\python.exe`. `regress.py` and `substring.py` exceed the
 120 s default and **must be backgrounded**; both print progress to stderr. Reports go to the
 scratchpad or an explicit `--report` path; raw values are read with `Read`, never echoed to the
 console (Windows cp1252 will raise mid-report on the Swedish, CJK and Arabic values present).

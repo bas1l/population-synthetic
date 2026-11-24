@@ -56,8 +56,8 @@ qualifier_order: [established, strong, moderate, weak, conjectural]
 # figure that resolves in none of these raises with the roots listed.
 figure_roots:
   - "docs/claims/diagrams"
-  - "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/04_Dissemination/Manuscripts/40_llm-population-fidelity-benchmark/2026-07-02_TMLR/figures"
-  - "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/04_Dissemination/Manuscripts/40_llm-population-fidelity-benchmark/figures"
+  - "<manuscript-folder>/2026-07-02_TMLR/figures"
+  - "<manuscript-folder>/figures"
 
 layout:
   # Left-to-right, leaves on the left and the root on the right. Bottom-up matches

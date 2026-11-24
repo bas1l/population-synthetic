@@ -12,7 +12,7 @@
 
 Build a **new, parallel PyQt5 GUI** (`src/population_synthetic/gui_v2/`) modelled
 on the reference *AnalysisRunnerGUI* in
-`F:\GitHub\touch_projects\social-touch-semi-controlled-analysis`. It adopts that
+`<github>\touch_projects\social-touch-semi-controlled-analysis`. It adopts that
 GUI's cleaner idioms — a two-tier config (a menu YAML of flows + one **editable,
 round-trip** config YAML per flow) and a **shape-dispatching options editor** —
 while keeping the existing `src/population_synthetic/gui/` launcher **fully
@@ -744,9 +744,9 @@ states.
 
 ## References
 
-- Draft/scratch plans: `C:\Users\basil\.claude\plans\analyse-how-the-gui-luminous-grove.md`,
-  `C:\Users\basil\.claude\plans\analyse-how-the-project-purring-canyon.md` (workflow amendment)
-- Reference GUI: `F:\GitHub\touch_projects\social-touch-semi-controlled-analysis`
+- Draft/scratch plans: `<home>\.claude\plans\analyse-how-the-gui-luminous-grove.md`,
+  `<home>\.claude\plans\analyse-how-the-project-purring-canyon.md` (workflow amendment)
+- Reference GUI: `<github>\touch_projects\social-touch-semi-controlled-analysis`
   (`src/utils/gui/analysis_runner_gui/`, `src/utils/pipeline/dag_config_model.py`,
   `src/_vendor/_vendor_pipeline_config_manager.py` `DagConfigHandler`,
   `src/_vendor/_vendor_task_executor.py`, `src/analysis/pipeline/stage_runner.py`,

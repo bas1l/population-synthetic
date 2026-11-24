@@ -225,7 +225,7 @@ No data migrations, no schema changes to existing outputs.
 
 ## References
 
-- Research summary: `C:\Users\basil\.claude\plans\analyse-how-claude-and-enchanted-gadget.md`
+- Research summary: `<home>\.claude\plans\analyse-how-claude-and-enchanted-gadget.md`
 - Existing Ollama client (closest analogue): `src/population_synth/clients/ollama_client.py`
 - LLM Protocol: `src/population_synth/clients/llm_protocol.py`
 - Manifest loader: `src/population_synth/identity/manifest_loader.py`

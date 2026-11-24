@@ -87,7 +87,7 @@ Each private function: `_plot_<name>(metrics: dict, output_dir: Path) -> Path | 
 ## Config: `config/analyze_defaults.yaml`
 
 ```yaml
-output_base: "F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data"
+output_base: "<project-data>/02_Data"
 analytics:
   analysis_subdir: "03_Analysis"
   task_subdir: "llm_metrics"        # master folder; slug subfolders nested inside
@@ -264,7 +264,7 @@ follow-ups, not yet started:
 - **Branch:** `feature/run-analytics-preprocessor` (base `dev`). Work is
   **uncommitted**.
 - **Output tree (not in repo):** `output_base` =
-  `F:/liu-onedrive-nospecial-carac/_Teams/Gauss/02_Data`. Runs in `01_Raw/{slug}`,
+  `<project-data>/02_Data`. Runs in `01_Raw/{slug}`,
   analytics in `03_Analysis/llm_metrics/{slug}/`, comparison in
   `03_Analysis/llm_metrics/_comparison/`. Config: `config/analyze_defaults.yaml`.
 - **Re-run from scratch:** `python scripts/analyze_run.py --all` then

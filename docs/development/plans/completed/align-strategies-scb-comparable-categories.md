@@ -167,4 +167,4 @@ All changes are to data files (JSON + YAML). Rollback via `git checkout` on the 
 ## References
 
 - Comparison extractor: `src/population_synth/comparison/extractor.py` (lines 1263–1476 for flat extraction)
-- Approved design notes: `C:\Users\basil\.claude\plans\i-want-to-generate-mellow-wave.md`
+- Approved design notes: `<home>\.claude\plans\i-want-to-generate-mellow-wave.md`

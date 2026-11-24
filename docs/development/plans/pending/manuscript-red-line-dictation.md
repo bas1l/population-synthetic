@@ -107,7 +107,7 @@ layer is ever wrong.
 | LaTeX sources | `automated/2026-07-02_TMLR/sections/*.tex` | `/sync-manuscript` | be touched by this plan |
 
 Full folder path (no-special-character alias, use in commands):
-`F:\liu-onedrive-nospecial-carac\_Teams\Gauss\04_Dissemination\Manuscripts\40_llm-population-fidelity-benchmark\`
+`<manuscript-folder>\`
 
 ---
 

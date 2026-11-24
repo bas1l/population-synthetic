@@ -229,7 +229,7 @@ The change is self-contained to the socioeconomic-class fetch / parse / sample p
 
 ## References
 
-- Investigation memo: `C:\Users\basil\.claude\plans\investigate-the-scb02-socioeconomic-cosmic-gosling.md`
+- Investigation memo: `<home>\.claude\plans\investigate-the-scb02-socioeconomic-cosmic-gosling.md`
 - SCB table: `HE/HE0110/HE0110A/SamForvInk1` — <https://www.statistikdatabasen.scb.se/pxweb/en/ssd/START__HE__HE0110__HE0110A/SamForvInk1/>
 - SSB table: `06655` — <https://www.ssb.no/en/statbank/table/06655>, metadata: <https://data.ssb.no/api/pxwebapi/v2-beta/tables/06655>
 - Eurostat AROP glossary: <https://ec.europa.eu/eurostat/statistics-explained/index.php?title=Glossary:At-risk-of-poverty_rate>

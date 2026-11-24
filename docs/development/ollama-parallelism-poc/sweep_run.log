@@ -159,4 +159,4 @@ Plan: 11 models, 30 (model,np) reconfigures, 90 result rows (3 profiles each).
 [ 22111s] reconfigure qwen2.5:72b-instruct-q4_K_M np=1 ...
   !! warm-up failed: 500 Server Error: Internal Server Error for url: http://192.168.0.19:11434/api/chat — skipping (model,np)
 
-Done in 22716s. Rows in F:\GitHub\clinical_projects\population-synthetic\docs\development\ollama-parallelism-poc\sweep_results.jsonl
+Done in 22716s. Rows in <repo>\docs\development\ollama-parallelism-poc\sweep_results.jsonl

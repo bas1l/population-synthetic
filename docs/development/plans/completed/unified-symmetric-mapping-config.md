@@ -400,7 +400,7 @@ and `config/mapping/istat/{ethnicity,urbanization,id,income_source}.json`.
 
 ## References
 
-- Approved scratch plan: `C:\Users\basil\.claude\plans\we-need-to-plan-adaptive-allen.md`
+- Approved scratch plan: `<home>\.claude\plans\we-need-to-plan-adaptive-allen.md`
 - Related design doc: `docs/database_mapper_philosophy.md`
 - Prior mapper refactors: `docs/development/plans/completed/refactor-synthetic-mapper-config-driven.md`,
   `docs/development/plans/completed/reference-mapper-fully-field-agnostic.md`
