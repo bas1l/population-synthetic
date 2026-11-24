@@ -2,7 +2,7 @@
 map_populations.py -- Standalone mapping stage of the comparison pipeline.
 
 Reads an explicit targets list (config/analysis/comparison_targets.yaml) naming the
-per-run manifests we consider complete, and writes mapped population files under the
+(model, strategy, country) runs we consider complete, and writes mapped population files under the
 analysis-stage mapping folder (resolved via the analysis registry):
 
     mapping/
@@ -47,7 +47,6 @@ from population_synthetic.analysis.mapping.synthetic_mapper import (
     map_population as map_synthetic,
 )
 from population_synthetic.analysis.utils.country_config import (
-    infer_country,
     known_country_ids,
     mappings_for_country,
     real_for_country,
@@ -56,7 +55,7 @@ from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
     resolve_output_base,
 )
-from population_synthetic.generators.synthetic.manifest_loader import compose_manifest, load_manifest
+from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
 
 _DEFAULT_TARGETS = PROJECT_ROOT / "config" / "analysis" / "comparison_targets.yaml"
 
@@ -73,7 +72,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--targets",
         default=None,
-        help="Targets YAML listing the manifests to map (batch mode). "
+        help="Targets YAML listing the (model, strategy, country) runs to map (batch mode). "
         f"Defaults to {_DEFAULT_TARGETS.name} when no axis IDs are given; "
         "mutually exclusive with --model-id/--strategy-id/--country-id.",
     )
@@ -86,12 +85,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--strategy-id",
         default=None,
-        help="Axis strategy ID (e.g., 'all_pick') — axis single-target mode.",
+        help="Axis strategy ID (e.g., 'all_pick_v2') — axis single-target mode.",
     )
     parser.add_argument(
         "--country-id",
         default=None,
-        help="Axis country ID (e.g., 'swedish') — axis single-target mode.",
+        help="Axis country ID (e.g., 'swedish_02') — axis single-target mode.",
     )
     parser.add_argument(
         "--force",
@@ -107,12 +106,8 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_targets(targets_path: Path) -> list[dict[str, Any]]:
-    """Parse the targets YAML into a list of {manifest_path, country} dicts.
-
-    Accepts both the plain-string form (country inferred later) and the mapping
-    form ``{manifest: <path>, country: <id>}`` (explicit country override).
-    """
+def _load_targets(targets_path: Path) -> list[dict[str, str]]:
+    """Parse the targets YAML into a list of {model_id, strategy_id, country_id} dicts."""
     if not targets_path.exists():
         print(f"ERROR: targets file not found: {targets_path}", file=sys.stderr)
         sys.exit(1)
@@ -125,32 +120,18 @@ def _load_targets(targets_path: Path) -> list[dict[str, Any]]:
         print(f"ERROR: no 'targets' list in {targets_path}", file=sys.stderr)
         sys.exit(1)
 
-    parsed: list[dict[str, Any]] = []
+    parsed: list[dict[str, str]] = []
     for entry in raw_targets:
-        if isinstance(entry, str):
-            parsed.append({"manifest": entry, "country": None})
-        elif isinstance(entry, dict):
-            manifest = entry.get("manifest")
-            if not manifest:
-                raise ValueError(f"Target mapping entry missing 'manifest': {entry!r}")
-            parsed.append({"manifest": manifest, "country": entry.get("country")})
-        else:
-            raise ValueError(
-                f"Target entry must be a string or a mapping, got {type(entry).__name__}: {entry!r}"
-            )
+        if not isinstance(entry, dict):
+            raise ValueError(f"Target entry must be a mapping, got {type(entry).__name__}: {entry!r}")
+        missing = [k for k in ("model_id", "strategy_id", "country_id") if not entry.get(k)]
+        if missing:
+            raise ValueError(f"Target entry missing {missing}: {entry!r}")
+        country = entry["country_id"]
+        if country not in known_country_ids():
+            raise ValueError(f"Unknown country {country!r} in target {entry!r}: valid ids are {sorted(known_country_ids())}.")
+        parsed.append({k: entry[k] for k in ("model_id", "strategy_id", "country_id")})
     return parsed
-
-
-def _resolve_country(manifest, override: str | None, manifest_path: Path) -> str:
-    """Resolve the country for a target: explicit override or inferred from config."""
-    if override is not None:
-        if override not in known_country_ids():
-            raise ValueError(
-                f"Unknown country {override!r} for target {manifest_path}: "
-                f"valid ids are {sorted(known_country_ids())}."
-            )
-        return override
-    return infer_country(manifest.config_path)
 
 
 def _write_json(path: Path, data: Any) -> None:
@@ -385,16 +366,17 @@ def main() -> None:
     index_entries: list[dict[str, Any]] = []
 
     for target in targets:
-        manifest_rel = target["manifest"]
-        manifest_path = (PROJECT_ROOT / manifest_rel).resolve()
-
-        manifest = load_manifest(manifest_path)
-        country = _resolve_country(manifest, target["country"], manifest_path)
+        country = target["country_id"]
+        manifest = compose_manifest(target["model_id"], target["strategy_id"], country)
 
         # parallel_output_dir is only the canonical naming source; personas are read from
         # 01_Raw/{slug} inside _map_one_target, not from this path.
         raw_naming_dir = manifest.parallel_output_dir
-        slug = raw_naming_dir.name if raw_naming_dir is not None else manifest_path.stem
+        slug = (
+            raw_naming_dir.name
+            if raw_naming_dir is not None
+            else f"{country}_{target['strategy_id']}_{target['model_id']}"
+        )
 
         entry = _map_one_target(
             manifest, country, slug, output_base, mapped_dir, real_files, force=args.force

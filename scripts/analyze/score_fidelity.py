@@ -4,15 +4,15 @@ score_fidelity.py -- Statistical comparison of two demographic population files.
 Two invocation modes:
 
 Positional-file mode (raw files, mapped on the fly)
-    python scripts/analyze/score_fidelity.py <pop_a.json> <pop_b.json> --country swedish \
+    python scripts/analyze/score_fidelity.py <pop_a.json> <pop_b.json> --country swedish_02 \
         [--output <report.json>]
 
     pop_a is the real population (treated as "expected" for chi-squared).
     pop_b is the population to evaluate (treated as "observed").
 
 Slug mode (exactly two pre-mapped pipelines)
-    python scripts/analyze/score_fidelity.py --slug swedish_all_pick_claude_haiku \
-        --slug swedish_all_pick_gemini_flash
+    python scripts/analyze/score_fidelity.py --slug swedish_02_all_pick_v2_claude_haiku \
+        --slug swedish_02_all_pick_v2_gemini_flash
 
     Each --slug loads the mapped {slug}.json from the analysis-stage mapping folder (already
     mapped by scripts/analyze/map_populations.py; resolved via the analysis registry). The
@@ -131,7 +131,7 @@ def main() -> None:
     parser.add_argument(
         "--country",
         default=None,
-        choices=("swedish", "italian"),
+        choices=("swedish_02", "italian"),
         help="Country whose comparison scheme (config/mapping/{scb,istat}) defines the "
              "axis and category sets. Required for positional-file mode; derived from the "
              "slugs in --slug mode.",

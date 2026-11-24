@@ -28,13 +28,13 @@ know how any metric, cost, or significance value is computed.
 
 Usage:
     python scripts/analyze/summarize_generation_metadata.py
-    python scripts/analyze/summarize_generation_metadata.py --country swedish
+    python scripts/analyze/summarize_generation_metadata.py --country swedish_02
     python scripts/analyze/summarize_generation_metadata.py --model claude_haiku --model gemini_flash
     python scripts/analyze/summarize_generation_metadata.py --strategy all_pick --no-charts
-    python scripts/analyze/summarize_generation_metadata.py --slug swedish_all_pick_claude_haiku
+    python scripts/analyze/summarize_generation_metadata.py --slug swedish_02_all_pick_v2_claude_haiku
     python scripts/analyze/summarize_generation_metadata.py --force --strict
-    python scripts/analyze/summarize_generation_metadata.py --country swedish --metrics cost total_tokens
-    python scripts/analyze/summarize_generation_metadata.py --slug swedish_all_pick_claude_haiku --verbose
+    python scripts/analyze/summarize_generation_metadata.py --country swedish_02 --metrics cost total_tokens
+    python scripts/analyze/summarize_generation_metadata.py --slug swedish_02_all_pick_v2_claude_haiku --verbose
 
 --country       Country axis ID filter. May be repeated. Default: all countries.
 --model         Model axis ID filter. May be repeated. Default: all models.

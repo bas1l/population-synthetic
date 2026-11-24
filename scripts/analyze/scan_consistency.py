@@ -12,9 +12,9 @@ performs NO mapping -- run map_populations.py first.
 
 Usage:
     python scripts/analyze/scan_consistency.py
-    python scripts/analyze/scan_consistency.py --country swedish
-    python scripts/analyze/scan_consistency.py --slug swedish_all_pick_claude_sonnet
-    python scripts/analyze/scan_consistency.py --slug swedish_all_pick_claude_sonnet --no-charts
+    python scripts/analyze/scan_consistency.py --country swedish_02
+    python scripts/analyze/scan_consistency.py --slug swedish_02_all_pick_v2_claude_sonnet
+    python scripts/analyze/scan_consistency.py --slug swedish_02_all_pick_v2_claude_sonnet --no-charts
     python scripts/analyze/scan_consistency.py --force
 
 --country      Country axis ID filter (default: all countries in the mapped index). May be repeated.

@@ -8,7 +8,7 @@ and the shared mapped real population {mapped-dir}/real_italian.json. Run map_po
 
 Usage:
     python scripts/analyze/score_fidelity_italy.py \\
-        --manifest config/synthetic/manifests/identity_manifest_xxx.yaml \\
+        --model-id claude_haiku --strategy-id all_pick_v2 --country-id italian \\
         [--mapped-dir <dir>] \\
         [--output comparison_report.json] \\
         [--charts-dir <dir>] [--no-charts] [--radar-tv-only]
@@ -21,7 +21,7 @@ Usage:
         --mapped-synthetic <dir>/<slug>.json \\
         --mapped-real <dir>/real_italian.json
 
---manifest         Seed manifest YAML; derives the slug from parallel.output_dir basename.
+--model-id/--strategy-id/--country-id  Axis ids; the slug is composed from them.
 --seed-root        Pipeline seed output directory; the slug is its basename.
 --mapped-dir       Directory holding the mapped files (default: the analysis-stage mapping folder).
 --mapped-synthetic Explicit path to the mapped synthetic population JSON (overrides --mapped-dir/{slug}).
@@ -68,20 +68,16 @@ def main() -> None:
         description="Compare a pre-mapped synthetic population against a pre-mapped ISTAT real population"
     )
     parser.add_argument(
-        "--manifest", default=None,
-        help="Seed manifest YAML; derives the slug from parallel.output_dir basename",
-    )
-    parser.add_argument(
         "--model-id", default=None,
-        help="Axis model ID (e.g., 'claude_haiku') -- mutually exclusive with --manifest",
+        help="Axis model ID (e.g., 'claude_haiku')",
     )
     parser.add_argument(
         "--strategy-id", default=None,
-        help="Axis strategy ID (e.g., 'all_pick') -- mutually exclusive with --manifest",
+        help="Axis strategy ID (e.g., 'all_pick_v2')",
     )
     parser.add_argument(
         "--country-id", default=None,
-        help="Axis country ID (e.g., 'italian') -- mutually exclusive with --manifest",
+        help="Axis country ID (e.g., 'italian')",
     )
     parser.add_argument(
         "--seed-root", default=None,
@@ -135,17 +131,10 @@ def main() -> None:
     args = parser.parse_args()
 
     axis_ids = [args.model_id, args.strategy_id, args.country_id]
-    if args.manifest and any(x is not None for x in axis_ids):
-        parser.error("--manifest is mutually exclusive with --model-id, --strategy-id, and --country-id")
 
     manifest = None
     seed_name: str | None = None
-    if args.manifest:
-        from population_synthetic.generators.synthetic.manifest_loader import load_manifest
-        manifest = load_manifest(args.manifest)
-        if manifest.parallel_output_dir is not None:
-            seed_name = manifest.parallel_output_dir.name
-    elif args.model_id is not None:
+    if args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
         from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
@@ -161,7 +150,7 @@ def main() -> None:
             seed_name = Path(args.mapped_synthetic).stem
         else:
             parser.error(
-                "Cannot determine the run slug: provide --manifest, the axis IDs, --seed-root, "
+                "Cannot determine the run slug: provide the axis IDs, --seed-root, "
                 "or an explicit --mapped-synthetic path."
             )
     slug = seed_name

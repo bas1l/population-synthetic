@@ -13,11 +13,11 @@ for manuscript reference figures and per-category proportion tables independent 
 any model/strategy comparison.
 
 Usage:
-    python scripts/analyze/analyze_real_population_stats.py --country-id swedish
-    python scripts/analyze/analyze_real_population_stats.py --country-id swedish --country-id italian
-    python scripts/analyze/analyze_real_population_stats.py --country-id swedish --force
-    python scripts/analyze/analyze_real_population_stats.py --country-id swedish --dpi 600
-    python scripts/analyze/analyze_real_population_stats.py --country-id swedish --no-charts
+    python scripts/analyze/analyze_real_population_stats.py --country-id swedish_02
+    python scripts/analyze/analyze_real_population_stats.py --country-id swedish_02 --country-id italian
+    python scripts/analyze/analyze_real_population_stats.py --country-id swedish_02 --force
+    python scripts/analyze/analyze_real_population_stats.py --country-id swedish_02 --dpi 600
+    python scripts/analyze/analyze_real_population_stats.py --country-id swedish_02 --no-charts
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ def _parse_args() -> argparse.Namespace:
         action="append",
         default=None,
         metavar="COUNTRY_ID",
-        help="Country axis ID to analyze (e.g. 'swedish'). May be repeated. "
+        help="Country axis ID to analyze (e.g. 'swedish_02'). May be repeated. "
         "Default: every known country id.",
     )
     parser.add_argument(

@@ -9,12 +9,12 @@ map_populations.py first.
 
 Usage:
     python scripts/analyze/score_fidelity_all.py
-    python scripts/analyze/score_fidelity_all.py --country swedish
-    python scripts/analyze/score_fidelity_all.py --country swedish --country italian
+    python scripts/analyze/score_fidelity_all.py --country swedish_02
+    python scripts/analyze/score_fidelity_all.py --country swedish_02 --country italian
     python scripts/analyze/score_fidelity_all.py --model claude_haiku --model gemini_flash
     python scripts/analyze/score_fidelity_all.py --strategy all_pick --no-charts
     python scripts/analyze/score_fidelity_all.py --model claude_haiku --strategy all_pick --radar-tv-only
-    python scripts/analyze/score_fidelity_all.py --slug swedish_all_pick_claude_haiku
+    python scripts/analyze/score_fidelity_all.py --slug swedish_02_all_pick_v2_claude_haiku
     python scripts/analyze/score_fidelity_all.py --n-synthetic 100 --sample-seed 0
     python scripts/analyze/score_fidelity_all.py --force
 

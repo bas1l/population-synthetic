@@ -37,11 +37,11 @@ Outputs, per country, under the analysis-stage model_ranking folder:
 
 Usage:
     python scripts/analyze/rank_models.py
-    python scripts/analyze/rank_models.py --country swedish
+    python scripts/analyze/rank_models.py --country swedish_02
     python scripts/analyze/rank_models.py --model claude_haiku --model gemini_flash
     python scripts/analyze/rank_models.py --strategy all_pick --no-charts
-    python scripts/analyze/rank_models.py --slug swedish_all_pick_claude_haiku \
-        --slug swedish_all_pick_gemini_flash
+    python scripts/analyze/rank_models.py --slug swedish_02_all_pick_v2_claude_haiku \
+        --slug swedish_02_all_pick_v2_gemini_flash
     python scripts/analyze/rank_models.py --per-attribute-charts --strict
     python scripts/analyze/rank_models.py --force
 
