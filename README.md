@@ -45,8 +45,8 @@ Requires Python 3.10+.
 ### Generate a population from national statistics data
 
 ```bash
-# Sweden (SCB PxWeb API)
-python scripts/generate/generate_scb_population.py --n 1000 --seed 42 --output scb_pop.json
+# Sweden (SCB PxWeb API): the defaults (n = 10000, seed 42) reproduce the reference population
+python scripts/generate/generate_scb_population.py
 
 # Norway (SSB PxWebApi v2)
 python scripts/generate/generate_ssb_population.py --n 1000 --seed 42 --output ssb_pop.json
@@ -59,34 +59,22 @@ Each script fetches live demographic distributions from the relevant public API,
 
 ### Generate a persona identity
 
-Via a manifest (recommended -- bundles provider, model, mode, config, and strategy):
-
-```bash
-python scripts/generate/generate_identity.py --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml
-```
-
-Generate N identities in parallel via a manifest:
-
-```bash
-python scripts/generate/generate_identities_parallel.py --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml --n 10 --workers 4
-```
-
 Via explicit CLI args:
 
 ```bash
 # Gemini (requires GEMINI_API_KEY)
 python scripts/generate/generate_identity.py --provider gemini --mode configurable \
-    --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json
+    --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json
 
 # Claude CLI (requires `claude` on PATH; no extra API key)
 python scripts/generate/generate_identity.py --provider claude --model sonnet --mode configurable \
-    --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json
+    --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json
 ```
 
 Via axis composition (model x strategy x country; see [Axis Composition](#axis-composition)):
 
 ```bash
-python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id swedish
+python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02
 ```
 
 Modes:
@@ -99,18 +87,15 @@ Modes:
 # Compare two population files
 python scripts/analyze/score_fidelity.py pop_a.json pop_b.json --output report.json
 
-# Compare pipeline output against an SCB reference (via manifest)
-python scripts/analyze/score_fidelity_sweden.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
-
 # Compare pipeline output against an SCB reference (via explicit path)
 python scripts/analyze/score_fidelity_sweden.py --seed-root path/to/pipeline_output/ \
-    --reference scb_population.json --output comparison_report.json
+    --reference scb_population_n10000_seed42_ref-v3.json --output comparison_report.json
 
 # Compare pipeline output against an ISTAT reference (Italy)
 python scripts/analyze/score_fidelity_italy.py --model-id claude_haiku --strategy-id all_pick --country-id italian
 
 # Compare every model x strategy x country combination against country references (batch)
-python scripts/analyze/score_fidelity_all.py --country swedish --country italian
+python scripts/analyze/score_fidelity_all.py --country swedish_02 --country italian
 ```
 
 Comparison produces per-field chi-squared tests, total variation distances, similarity scores, a bar chart per demographic attribute, a radar chart, a JSON report, and a CSV marginals summary.
@@ -128,10 +113,10 @@ python scripts/generate/extract_population_from_pipeline.py \
 # The single LLM-metrics task: one command over {output_base}/01_Raw/ emits one enriched
 # per-country summary (cost, means +/- spread, distribution, cross-factor significance, and
 # deep per-combo diagnostics) as {country}_summary.{csv,json} + charts/.
-python scripts/analyze/summarize_generation_metadata.py --country swedish
+python scripts/analyze/summarize_generation_metadata.py --country swedish_02
 
 # Print per-combo deep diagnostics and restrict the comparison to a metric subset
-python scripts/analyze/summarize_generation_metadata.py --country swedish --verbose --metrics time cost
+python scripts/analyze/summarize_generation_metadata.py --country swedish_02 --verbose --metrics time cost
 ```
 
 ### Launch the GUI
@@ -211,11 +196,10 @@ Identity generation can be configured via three orthogonal axes instead of a mon
 3. `config/synthetic/axes/strategies/{strategy_id}.yaml` -- generation strategy (`all_pick`, `all_generate_pick`, ...); each yaml carries the full `categories` DAG inline (single source of truth, no separate `strategy_defs/` json)
 4. `config/synthetic/axes/countries/{country_id}.yaml` -- simulation config and reference population
 
-The output slug is `{country_id}_{strategy_id}_{model_id}`, and the run directory is `{output_base}/01_Raw/{slug}/`. Use `--model-id`, `--strategy-id`, `--country-id` instead of `--manifest` to invoke this path.
+The output slug is `{country_id}_{strategy_id}_{model_id}`, and the run directory is `{output_base}/01_Raw/{slug}/`. Use `--model-id`, `--strategy-id`, `--country-id` to invoke this path.
 
 ## Configuration
 
-- **Seed manifests:** `config/synthetic/manifests/` -- YAML bundles of all identity-generation settings, loaded via `--manifest`
 - **Simulation configs:** `config/synthetic/simulation_configs/` (configurable mode); strategy definitions live in `config/synthetic/axes/strategies/`
 - **Axis configs:** `config/synthetic/axes/models/`, `config/synthetic/axes/strategies/`, `config/synthetic/axes/countries/`
 - **API response caches (git-ignored):** `config/database/caches/scb/`, `config/database/caches/ssb/`, `config/database/caches/eurostat/`, `config/database/caches/istat/`

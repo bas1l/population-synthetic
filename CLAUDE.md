@@ -21,14 +21,14 @@ pip install -e ".[dev]"          # editable install + dev tools; add ".[gui]" fo
 pip install -e ".[analysis]"     # optional: scikit-learn backend for the C2ST multivariate metric (MMD fallback otherwise)
 
 # Generate a Swedish population from live SCB data
-python scripts/generate/generate_scb_population.py --n 1000 --seed 42 --output scb_pop.json
+python scripts/generate/generate_scb_population.py   # defaults: n = 10000, seed 42 = the reference population
 
 # Generate identities via axis composition (model × strategy × country)
-python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id swedish
+python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02
 
 # Fidelity scoring is two-stage: MAP first, then SCORE (scoring consumes the pre-mapped files)
 python scripts/analyze/map_populations.py
-python scripts/analyze/score_fidelity_sweden.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
+python scripts/analyze/score_fidelity_sweden.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02
 
 python -m population_synthetic.gui.main   # GUI: config-driven Flow Runner (requires ".[gui]")
 ruff check src/                       # lint (line-length 120, rules E/F/W/I)

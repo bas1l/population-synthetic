@@ -1,6 +1,6 @@
 # Income source for students aged 65 and over (declared fallback)
 
-Status: implemented in the reference-v3 worktree, November 2026.
+Status: implemented (reference ref-v3).
 
 ## Gap
 
@@ -11,12 +11,10 @@ income age bands 20-29, 30-49 and 50-64. It has none for 65-79 and 80-.
 The employment-status distribution that the sampler draws from decides whether an
 individual can reach that gap:
 
-- With the status-by-education merge ON (`ArbStatusUtbM`) nobody aged 65 or over becomes a
-  student, so the gap is never hit.
-- With the merge OFF (`--no-merge-status-education`, the single register table
-  `ArRegArbStatus`) students aged 65 to 85 have probability 0.09 to 0.14% per (age group,
-  sex) cell, about 2.7 of 10,000 individuals aged 18 to 85 in expectation (5 in the seed-42
-  redraw). The sampler used to stop with `ValueError: No income_source distribution for
+- The sampler draws employment status from the single register table `ArRegArbStatus`,
+  where students aged 65 to 85 have probability 0.09 to 0.14% per (age group, sex) cell,
+  about 2.7 of 10,000 individuals aged 18 to 85 in expectation (5 in the seed-42 draw).
+  Without the fallback below, the sampler stops with `ValueError: No income_source distribution for
   cell (employment='students', age_group='65-74')` (and `'75-85'`).
 
 ## Rule
@@ -35,8 +33,7 @@ mix at 55-64 is a stand-in for a group SCB does not report separately.
 
 ## Unemployed aged 80 and over
 
-The same table has no "unemployed" cell for band 80- (ages 75-85). The merge-OFF
-employment distribution gives "Unemployed" probability exactly 0.0 at 65-74 and 75-85 for
+The same table has no "unemployed" cell for band 80- (ages 75-85). The employment distribution gives "Unemployed" probability exactly 0.0 at 65-74 and 75-85 for
 both sexes, so the generator never draws that cell and no entry is needed. If a future SCB
 vintage makes that probability positive, the sampler raises again (fail-fast) and the pair
 must be added here with its own decision.

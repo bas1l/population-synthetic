@@ -42,9 +42,8 @@ Two stacked parts:
 
 ## Key cross-country differences captured
 
-- **Sweden** is the data-richest: `employment_status` is an `(age × education × sex)`
-  odds-merge of two register tables (`ArRegArbStatus × ArbStatusUtbM`, on by default;
-  `--no-merge-status-education` reverts to the `(age, sex)`-only table); a real
+- **Sweden** is the data-richest: `employment_status` is an `(age × sex)`
+  conditional from the register table `ArRegArbStatus`; a real
   `income_source` conditional table; and `employment_type` built from two tables
   (attachment × hours) at true `(age, sex)` cells. `birth_location` and `housing_tenure`
   are `(age, sex)` conditionals (not marginals).

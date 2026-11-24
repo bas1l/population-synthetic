@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-17
 **Script:** [`scripts/analyze/attribute_power_analysis.py`](../scripts/analyze/attribute_power_analysis.py)
-**Reference population:** `data/scb_api/scb_population_n10000_seed42_merge-status-edu_2026-07-16.json` (n = 10,000)
+**Reference population:** `data/scb_api/scb_population_n10000_seed42_ref-v3.json` (n = 10,000)
 **Mapping tier:** `config/mapping/scb_native` (`birth_location` skipped — deprecated from analysis, see
 [`config/mapping/scb_native/README.md`](../config/mapping/scb_native/README.md))
 
