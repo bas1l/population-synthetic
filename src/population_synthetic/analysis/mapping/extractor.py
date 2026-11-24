@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # Public API
 # ---------------------------------------------------------------------------
 
-def extract_individual(identity_path: Path, country: str = "swedish") -> dict[str, Any] | None:
+def extract_individual(identity_path: Path, country: str = "swedish_02") -> dict[str, Any] | None:
     """Read an identity.json file, auto-detect format, and return a flat attribute dict.
 
     Returns None if the file cannot be read or the persona is critically incomplete.
@@ -53,7 +53,7 @@ def extract_individual(identity_path: Path, country: str = "swedish") -> dict[st
     return {"id": persona_id, **attrs}
 
 
-def extract_population(seed_root: Path, country: str = "swedish") -> dict[str, Any]:
+def extract_population(seed_root: Path, country: str = "swedish_02") -> dict[str, Any]:
     """Load pipeline identities from disk and map them to the canonical schema.
 
     Convenience wrapper over ``load_synthetic_population`` + ``map_population``; the

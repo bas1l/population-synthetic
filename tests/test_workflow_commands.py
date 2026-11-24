@@ -20,7 +20,7 @@ from population_synthetic.gui.workflow_config_model import WorkflowConfigModel
 
 SCRIPT = Path("scripts/analyze/map_populations.py")
 COMBOS = [
-    ("claude_haiku", "all_pick", "swedish"),
+    ("claude_haiku", "all_pick_v2", "swedish_02"),
     ("gemini_flash", "free_gen", "norwegian"),
 ]
 OPTIONS = {
@@ -42,8 +42,8 @@ def test_per_combo_one_vector_per_combo_with_force():
     assert cmds[0] == [
         sys.executable, str(SCRIPT),
         "--model-id", "claude_haiku",
-        "--strategy-id", "all_pick",
-        "--country-id", "swedish",
+        "--strategy-id", "all_pick_v2",
+        "--country-id", "swedish_02",
         "--force",
         "--n", "5",
         "--verbose",
@@ -117,7 +117,7 @@ def test_slugs_single_vector_one_slug_per_combo():
     # Slug format is {country}_{strategy}_{model} (axis_slug).
     assert cmd == [
         sys.executable, str(SCRIPT),
-        "--slug", "swedish_all_pick_claude_haiku",
+        "--slug", "swedish_02_all_pick_v2_claude_haiku",
         "--slug", "norwegian_free_gen_gemini_flash",
         "--no-charts",
     ]
@@ -199,8 +199,8 @@ tasks:
 
 selection:
   models:     [claude_haiku]
-  strategies: [all_pick]
-  countries:  [swedish]
+  strategies: [all_pick_v2]
+  countries:  [swedish_02]
 """
 
 
@@ -248,8 +248,8 @@ def test_get_task_meta_unregistered_task_raises(tmp_path):
         "    depends_on: []\n"
         "selection:\n"
         "  models: [claude_haiku]\n"
-        "  strategies: [all_pick]\n"
-        "  countries: [swedish]\n",
+        "  strategies: [all_pick_v2]\n"
+        "  countries: [swedish_02]\n",
         encoding="utf-8",
     )
     model = WorkflowConfigModel(path)

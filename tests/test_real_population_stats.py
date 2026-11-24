@@ -280,46 +280,46 @@ SCRIPT = Path("scripts/analyze/analyze_real_population_stats.py")
 
 def test_build_per_country_cmds_dedupes_3x2_combos_to_one_country():
     combos = [
-        (model, strategy, "swedish")
+        (model, strategy, "swedish_02")
         for model in ("claude_haiku", "claude_sonnet", "gemini_flash")
-        for strategy in ("all_pick", "free_gen")
+        for strategy in ("all_pick_v2", "free_gen")
     ]
     cmds = build_per_country_cmds(SCRIPT, combos, force=False, options={})
 
     assert len(cmds) == 1
     cmd = cmds[0]
-    assert cmd == [sys.executable, str(SCRIPT), "--country-id", "swedish"]
+    assert cmd == [sys.executable, str(SCRIPT), "--country-id", "swedish_02"]
     assert "--model-id" not in cmd
     assert "--strategy-id" not in cmd
 
 
 def test_build_per_country_cmds_two_countries_first_seen_order():
     combos = [
-        ("claude_haiku", "all_pick", "swedish"),
-        ("claude_haiku", "all_pick", "italian"),
-        ("gemini_flash", "free_gen", "swedish"),
+        ("claude_haiku", "all_pick_v2", "swedish_02"),
+        ("claude_haiku", "all_pick_v2", "italian"),
+        ("gemini_flash", "free_gen", "swedish_02"),
     ]
     cmds = build_per_country_cmds(SCRIPT, combos, force=False, options={})
 
     assert len(cmds) == 2
-    assert cmds[0] == [sys.executable, str(SCRIPT), "--country-id", "swedish"]
+    assert cmds[0] == [sys.executable, str(SCRIPT), "--country-id", "swedish_02"]
     assert cmds[1] == [sys.executable, str(SCRIPT), "--country-id", "italian"]
 
 
 def test_build_per_country_cmds_force_appends_flag():
-    combos = [("claude_haiku", "all_pick", "swedish")]
+    combos = [("claude_haiku", "all_pick_v2", "swedish_02")]
     cmds = build_per_country_cmds(SCRIPT, combos, force=True, options={})
     assert "--force" in cmds[0]
 
 
 def test_build_per_country_cmds_without_force_omits_flag():
-    combos = [("claude_haiku", "all_pick", "swedish")]
+    combos = [("claude_haiku", "all_pick_v2", "swedish_02")]
     cmds = build_per_country_cmds(SCRIPT, combos, force=False, options={})
     assert "--force" not in cmds[0]
 
 
 def test_build_per_country_cmds_option_args_translate_correctly():
-    combos = [("claude_haiku", "all_pick", "swedish")]
+    combos = [("claude_haiku", "all_pick_v2", "swedish_02")]
     options = {"dpi": 300, "no-charts": True, "output-base": None, "verbose": False}
     cmds = build_per_country_cmds(SCRIPT, combos, force=False, options=options)
     cmd = cmds[0]

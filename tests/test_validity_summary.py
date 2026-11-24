@@ -35,7 +35,7 @@ def test_upsert_creates_replaces_and_sorts(tmp_path: Path):
 
 def test_raw_summary_row_flags_issues_and_rate():
     summary = ValidateRawSummary(
-        slug="swedish_all_pick_claude_haiku",
+        slug="swedish_02_all_pick_v2_claude_haiku",
         n=100,
         passed=80,
         failed=20,
@@ -44,7 +44,7 @@ def test_raw_summary_row_flags_issues_and_rate():
         csv_path="x",
     )
     row = raw_summary_row(summary)
-    assert row == ("swedish_all_pick_claude_haiku", True, 100, 80, 20, 5, 14, 80.0)
+    assert row == ("swedish_02_all_pick_v2_claude_haiku", True, 100, 80, 20, 5, 14, 80.0)
     assert RAW_HEADER == (
         "slug",
         "has_issues",
@@ -65,7 +65,7 @@ def test_raw_summary_row_carries_denominator_next_to_rate():
     """
     sweden = raw_summary_row(
         ValidateRawSummary(
-            slug="swedish_x", n=10, passed=10, failed=0, missing_identity=0,
+            slug="swedish_02_x", n=10, passed=10, failed=0, missing_identity=0,
             n_expected_keys=14, csv_path="x",
         )
     )

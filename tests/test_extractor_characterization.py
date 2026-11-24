@@ -22,7 +22,7 @@ _FIXTURE_ROOT = Path(__file__).parent / "data" / "extractor"
 _EXPECTED_PATH = _FIXTURE_ROOT / "expected_extractor.json"
 
 _CASES = [
-    ("persona_flat_se", "swedish"),
+    ("persona_flat_se", "swedish_02"),
     ("persona_flat_it", "italian"),
 ]
 
@@ -39,7 +39,7 @@ def test_extract_individual_matches_golden(persona: str, country: str):
 
 
 def test_extract_population_swedish_collects_individuals():
-    pop = extract_population(_FIXTURE_ROOT, country="swedish")
+    pop = extract_population(_FIXTURE_ROOT, country="swedish_02")
     ids = {ind["id"] for ind in pop["individuals"]}
     # The flat Swedish fixture extracts cleanly; the narrative fixture is absent
     # (narrative identities now warn-and-skip, returning None).

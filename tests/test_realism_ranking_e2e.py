@@ -65,7 +65,7 @@ from population_synthetic.analysis.utils.registry import analysis_output_dir  # 
 from tests.test_persona_realism_smoke import _stub_factory  # noqa: E402
 
 _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
-_COUNTRY = "swedish"
+_COUNTRY = "swedish_02"
 _PRICING = PricingTable(
     rates={"claude-sonnet-5": (3.0, 15.0), "claude-fable-5": (10.0, 50.0),
            "claude-opus-4-8": (5.0, 25.0), "claude-haiku-4-5": (1.0, 5.0)},
@@ -75,14 +75,14 @@ _PRICING = PricingTable(
 # Three synthetic combinations spanning two models x two methods, so the factor tests
 # have >=2 levels on each axis, plus the real competitor.
 _COMBOS = [
-    ("swedish_all_pick_claude_haiku", "claude_haiku", "all_pick", 1),
-    ("swedish_all_pick_claude_sonnet", "claude_sonnet", "all_pick", 0),
-    ("swedish_all_pick_dag_claude_haiku", "claude_haiku", "all_pick_dag", 2),
+    ("swedish_02_all_pick_v2_claude_haiku", "claude_haiku", "all_pick_v2", 1),
+    ("swedish_02_all_pick_v2_claude_sonnet", "claude_sonnet", "all_pick_v2", 0),
+    ("swedish_02_all_pick_dag_v2_claude_haiku", "claude_haiku", "all_pick_dag_v2", 2),
 ]
-_AXIS_IDS = ([_COUNTRY], ["all_pick", "all_pick_dag"], ["claude_haiku", "claude_sonnet"])
+_AXIS_IDS = ([_COUNTRY], ["all_pick_v2", "all_pick_dag_v2"], ["claude_haiku", "claude_sonnet"])
 #: The fourth cell of the 2 x 2 grid, withdrawn by the population gate: it has no
 #: individuals, so it is never judged and must be drawn crossed out, not as unjudged.
-_WITHDRAWN = "swedish_all_pick_dag_claude_sonnet"
+_WITHDRAWN = "swedish_02_all_pick_dag_v2_claude_sonnet"
 
 
 def _cfg() -> JudgeConfig:
@@ -337,7 +337,7 @@ def test_ranking_emits_the_two_severity_driver_tables(judged_base, tmp_path):
     # personas of one combination are the cell it drove.
     pair_rows = severity_driver_rows(ranking)
     s3 = [row for row in pair_rows
-          if row["severity"] == "S3" and row["slug"] == "swedish_all_pick_dag_claude_haiku"]
+          if row["severity"] == "S3" and row["slug"] == "swedish_02_all_pick_dag_v2_claude_haiku"]
     assert [(row["attr_a"], row["attr_b"], row["n_personas"]) for row in s3] == [
         ("age_group", "education_level", 2)
     ]
@@ -653,7 +653,7 @@ def test_the_driver_script_writes_the_typicality_blocks_byte_stably(judged_base)
 
     distribution = ranking["typicality_distribution"]
     assert distribution["withdrawn"] == [_WITHDRAWN]
-    assert distribution["grid"]["states"]["claude_sonnet"]["all_pick_dag"] == "withdrawn"
+    assert distribution["grid"]["states"]["claude_sonnet"]["all_pick_dag_v2"] == "withdrawn"
     assert distribution["bands"]["edges"] == [4, 7]
     assert ranking["provenance"]["typicality_bands"] == [4, 7]
     # The closeness settings are the config's, stamped verbatim.

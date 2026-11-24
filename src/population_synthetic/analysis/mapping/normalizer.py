@@ -20,7 +20,7 @@ from population_synthetic.analysis.mapping.real_mapper.raw_format import is_raw_
 __all__ = ["load_mappings", "is_raw_format", "normalize_raw_to_schema", "normalize_if_raw"]
 
 
-def normalize_raw_to_schema(records: list[dict], mappings: dict, country: str = "swedish") -> list[dict]:
+def normalize_raw_to_schema(records: list[dict], mappings: dict, country: str = "swedish_02") -> list[dict]:
     """Convert raw-format records to flat schema strings using a pre-loaded *mappings* dict."""
     mapper = build_real_mapper(country, mappings)
     return [mapper.normalize_individual(rec) for rec in records]
@@ -30,7 +30,7 @@ def normalize_if_raw(
     pop: dict,
     mappings: dict,
     mappings_path: Path | None = None,
-    country: str = "swedish",
+    country: str = "swedish_02",
 ) -> dict:
     """Return a copy of pop with individuals normalized if raw-format, else return pop unchanged.
 
@@ -43,7 +43,7 @@ def normalize_if_raw(
     mappings_path : Path | None
         If provided, *overrides* ``mappings`` by loading from this path.
     country : str
-        ``"swedish"`` (default) or ``"italian"`` -- controls birth-location
+        ``"swedish_02"`` (default) or ``"italian"`` -- controls birth-location
         detection and other country-specific normalisation logic.
     """
     if mappings_path is not None:

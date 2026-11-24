@@ -21,8 +21,8 @@ from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED
 from population_synthetic.analysis.utils.validity_csv import read_passed_ids
 from population_synthetic.analysis.validate_mapped import validate_mapped_combo
 
-_SLUG = "swedish_all_pick_claude_haiku"
-_COUNTRY = "swedish"
+_SLUG = "swedish_02_all_pick_v2_claude_haiku"
+_COUNTRY = "swedish_02"
 
 
 def _write_mapped_file(path: Path, individuals: list[dict]) -> None:
@@ -101,18 +101,18 @@ def test_validate_mapped_combo_exempts_deprecated_attribute_per_country(tmp_path
          "birth_location": UNMAPPED},
     ]
 
-    swedish_file = tmp_path / "mapping" / "swedish.json"
-    _write_mapped_file(swedish_file, individuals)
-    swedish = validate_mapped_combo(
-        _SLUG, swedish_file, tmp_path / "out_swedish.csv", "swedish"
+    swedish_02_file = tmp_path / "mapping" / "swedish_02.json"
+    _write_mapped_file(swedish_02_file, individuals)
+    swedish_02 = validate_mapped_combo(
+        _SLUG, swedish_02_file, tmp_path / "out_swedish.csv", "swedish_02"
     )
-    assert swedish["passed"] == 1
-    assert swedish["failed"] == 0
+    assert swedish_02["passed"] == 1
+    assert swedish_02["failed"] == 0
 
     italian_file = tmp_path / "mapping" / "italian.json"
     _write_mapped_file(italian_file, individuals)
     italian = validate_mapped_combo(
-        "italian_all_pick_claude_haiku", italian_file, tmp_path / "out_italian.csv", "italian"
+        "italian_all_pick_v2_claude_haiku", italian_file, tmp_path / "out_italian.csv", "italian"
     )
     assert italian["passed"] == 0
     assert italian["failed"] == 1

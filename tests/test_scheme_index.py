@@ -50,7 +50,7 @@ def _write_country(
         )
 
 
-def _load(directory, country="swedish"):
+def _load(directory, country="swedish_02"):
     """Load a scheme from a fixture dir, pointing at its ``_analysis.json``."""
     return load_scheme(country, mappings_path=directory, analysis_path=directory / _ANALYSIS_FILENAME)
 
@@ -205,7 +205,7 @@ def test_legacy_scheme_json_still_read_when_no_index(tmp_path):
         "coherence_attributes": [],
     }
     (tmp_path / "_scheme.json").write_text(json.dumps(legacy), encoding="utf-8")
-    scheme = load_scheme("swedish", mappings_path=tmp_path)
+    scheme = load_scheme("swedish_02", mappings_path=tmp_path)
     assert scheme.attributes == ["biological_sex"]
     assert scheme.categories["biological_sex"] == ["Male", "Female"]
     assert scheme.coherence_threshold == 0.001

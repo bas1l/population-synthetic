@@ -262,7 +262,7 @@ def test_bad_alpha_raises(alpha):
 # Builder wiring                                                              #
 # --------------------------------------------------------------------------- #
 
-_BUILDER_METHODS = ["all_pick", "all_pick_dag", "all_generate_pick"]
+_BUILDER_METHODS = ["all_pick_v2", "all_pick_dag_v2", "all_generate_pick_v2"]
 
 
 def _combos(n_models: int):
@@ -270,7 +270,7 @@ def _combos(n_models: int):
     for m in range(n_models):
         for r, strategy in enumerate(_BUILDER_METHODS):
             tv = round(0.3 - 0.05 * r + 0.01 * ((m * 7 + r * 3) % 5), 4)
-            combos.append(make_combo(slug=f"swedish_{strategy}_model_{m}", strategy=strategy,
+            combos.append(make_combo(slug=f"swedish_02_{strategy}_model_{m}", strategy=strategy,
                                      model=f"model_{m}", tv_by_attr={"attr": tv}))
     return combos
 

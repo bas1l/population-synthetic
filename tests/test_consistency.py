@@ -32,21 +32,21 @@ from population_synthetic.analysis.consistency.rules import (
 
 def test_load_rules_missing_file_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
-        load_rules("swedish", config_path=tmp_path / "does_not_exist.yaml")
+        load_rules("swedish_02", config_path=tmp_path / "does_not_exist.yaml")
 
 
 def test_load_rules_empty_rules_raises(tmp_path):
     path = tmp_path / "empty.yaml"
     path.write_text(yaml.safe_dump({"rules": []}), encoding="utf-8")
     with pytest.raises(ValueError, match="non-empty"):
-        load_rules("swedish", config_path=path)
+        load_rules("swedish_02", config_path=path)
 
 
 def test_load_rules_missing_rules_key_raises(tmp_path):
     path = tmp_path / "no_rules_key.yaml"
     path.write_text(yaml.safe_dump({"description": "no rules here"}), encoding="utf-8")
     with pytest.raises(KeyError):
-        load_rules("swedish", config_path=path)
+        load_rules("swedish_02", config_path=path)
 
 
 def test_load_rules_unknown_attribute_raises(tmp_path):
@@ -65,7 +65,7 @@ def test_load_rules_unknown_attribute_raises(tmp_path):
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="unknown attribute"):
-        load_rules("swedish", config_path=path)
+        load_rules("swedish_02", config_path=path)
 
 
 @pytest.mark.parametrize(
@@ -95,7 +95,7 @@ def test_load_rules_malformed_predicate_raises(tmp_path, when_block):
         encoding="utf-8",
     )
     with pytest.raises(ValueError):
-        load_rules("swedish", config_path=path)
+        load_rules("swedish_02", config_path=path)
 
 
 def test_load_rules_underscored_label_raises(tmp_path):
@@ -115,12 +115,12 @@ def test_load_rules_underscored_label_raises(tmp_path):
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="underscore"):
-        load_rules("swedish", config_path=path)
+        load_rules("swedish_02", config_path=path)
 
 
 def test_every_shipped_rule_declares_a_readable_label():
     """The live config, not a fixture: a rule added without a label must fail here."""
-    for rule in load_rules("swedish"):
+    for rule in load_rules("swedish_02"):
         assert rule.label
         assert "_" not in rule.label
         assert rule.label != rule.id
@@ -142,7 +142,7 @@ def test_load_rules_invalid_severity_raises(tmp_path):
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="severity"):
-        load_rules("swedish", config_path=path)
+        load_rules("swedish_02", config_path=path)
 
 
 def test_load_rules_duplicate_id_raises(tmp_path):
@@ -157,11 +157,11 @@ def test_load_rules_duplicate_id_raises(tmp_path):
     path = tmp_path / "dup.yaml"
     path.write_text(yaml.safe_dump({"rules": [rule, dict(rule)]}), encoding="utf-8")
     with pytest.raises(ValueError, match="duplicate"):
-        load_rules("swedish", config_path=path)
+        load_rules("swedish_02", config_path=path)
 
 
 def test_load_rules_seed_config_loads_expected_rules():
-    rules = load_rules("swedish")
+    rules = load_rules("swedish_02")
     ids = {rule.id for rule in rules}
     assert ids == {"young_retiree", "minor_married"}
     for rule in rules:
@@ -178,7 +178,7 @@ def _rule_by_id(rules, rule_id):
 
 
 def test_young_retiree_trips_on_young_retired_individual():
-    rules = load_rules("swedish")
+    rules = load_rules("swedish_02")
     young_retiree = _rule_by_id(rules, "young_retiree")
 
     assert is_violation({"age": 25, "employment_status": "Retired"}, young_retiree) is True
@@ -188,7 +188,7 @@ def test_young_retiree_trips_on_young_retired_individual():
 
 
 def test_minor_married_trips_on_underage_married_individual():
-    rules = load_rules("swedish")
+    rules = load_rules("swedish_02")
     minor_married = _rule_by_id(rules, "minor_married")
 
     assert is_violation({"age": 15, "civil_status": "Married"}, minor_married) is True
@@ -272,7 +272,7 @@ def test_scan_population_counts_and_rates():
     ]
     rules = (_young_retiree_rule(),)
 
-    report = scan_population(individuals, rules, population="mini", country="swedish")
+    report = scan_population(individuals, rules, population="mini", country="swedish_02")
 
     assert report.n_individuals == 4
     assert len(report.results) == 1
@@ -288,7 +288,7 @@ def test_scan_population_caps_examples():
     individuals = [{"id": i, "age": 20, "employment_status": "retired"} for i in range(10)]
     rules = (_young_retiree_rule(),)
 
-    report = scan_population(individuals, rules, population="mini", country="swedish", max_examples=3)
+    report = scan_population(individuals, rules, population="mini", country="swedish_02", max_examples=3)
 
     result = report.results[0]
     assert result.n_violations == 10
@@ -297,7 +297,7 @@ def test_scan_population_caps_examples():
 
 
 def test_scan_population_empty_population_yields_nan_rate():
-    report = scan_population([], (_young_retiree_rule(),), population="empty", country="swedish")
+    report = scan_population([], (_young_retiree_rule(),), population="empty", country="swedish_02")
 
     assert report.n_individuals == 0
     result = report.results[0]
@@ -310,7 +310,7 @@ def test_scan_population_never_mutates_input():
     individuals = [{"id": 0, "age": 25, "employment_status": "retired"}]
     snapshot = [dict(ind) for ind in individuals]
 
-    scan_population(individuals, (_young_retiree_rule(),), population="mini", country="swedish")
+    scan_population(individuals, (_young_retiree_rule(),), population="mini", country="swedish_02")
 
     assert individuals == snapshot
 
@@ -334,7 +334,7 @@ def _summary_rows(country: str):
         scan_population(individuals, rules, population=population, country=country)
         for population in (
             f"real_{country}",
-            axis_slug("claude_haiku", "all_pick", country),
+            axis_slug("claude_haiku", "all_pick_v2", country),
         )
     ])
 

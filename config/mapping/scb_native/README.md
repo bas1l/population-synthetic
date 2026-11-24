@@ -244,7 +244,7 @@ until the global tier is formalised as a native → global overlay:
 `socioeconomic_class`, `region`, `civil_status`, `housing_tenure`, `household_size`,
 `income_source`, `birth_country_detail`.
 
-Since the SCB-checked audit (`docs/development/plans/pending/mapping-fixes-scb-audit.md`) these
+Since the SCB-checked audit these
 files are **no longer verbatim copies**: the native synthetic blocks are written for this tier's
 `prefix` / negation / `longest` matching and carry the audit's rule changes and the birth-region
 rename, while `config/mapping/scb/` keeps the historic behaviour-preserving matching and rules.

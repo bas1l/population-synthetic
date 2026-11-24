@@ -231,10 +231,10 @@ def _model_ranking_figures():
     # so the rows carry a combination label and the columns a method letter -- the two
     # places an id used to reach the canvas.
     result = _result([
-        ("claude_haiku", "all_pick", 0.90, 100),
-        ("claude_haiku", "all_generate_pick", 0.80, 100),
-        ("openrouter_kimi_k3", "all_pick", 0.85, 100),
-        ("openrouter_kimi_k3", "all_generate_pick", 0.95, 100),
+        ("claude_haiku", "all_pick_v2", 0.90, 100),
+        ("claude_haiku", "all_generate_pick_v2", 0.80, 100),
+        ("openrouter_kimi_k3", "all_pick_v2", 0.85, 100),
+        ("openrouter_kimi_k3", "all_generate_pick_v2", 0.95, 100),
     ])
     for fn_name in ("plot_performance_heatmap", "plot_performance_leaderboard"):
         fn = getattr(mod, fn_name)
@@ -268,10 +268,10 @@ def _generation_metadata_figures():
         }
 
     comparison = build_summary_comparison([
-        _combo("claude_haiku", "all_pick", samples(3.0, 100.0)),
-        _combo("claude_haiku", "all_generate_pick", samples(5.0, 200.0)),
-        _combo("openrouter_kimi_k3", "all_pick", samples(4.0, 150.0)),
-        _combo("openrouter_kimi_k3", "all_generate_pick", samples(6.0, 250.0)),
+        _combo("claude_haiku", "all_pick_v2", samples(3.0, 100.0)),
+        _combo("claude_haiku", "all_generate_pick_v2", samples(5.0, 200.0)),
+        _combo("openrouter_kimi_k3", "all_pick_v2", samples(4.0, 150.0)),
+        _combo("openrouter_kimi_k3", "all_generate_pick_v2", samples(6.0, 250.0)),
     ])
 
     captured: list = []

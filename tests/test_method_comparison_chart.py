@@ -42,11 +42,11 @@ MODELS = [
 # The five v1 families, ordered by the config-derived accessor (the same order
 # every consumer resolves; asserted against the legacy sequence in test_axes.py).
 STRATEGIES = strategy_complexity_order([
-    "all_generate_evaluate_random_pick",
-    "all_generate_evaluate_pick",
-    "all_generate_pick",
-    "all_pick_dag",
-    "all_pick",
+    "all_generate_evaluate_random_pick_v2",
+    "all_generate_evaluate_pick_v2",
+    "all_generate_pick_v2",
+    "all_pick_dag_v2",
+    "all_pick_v2",
 ])
 #: One attribute carrying a monotone method trend and one a level shift. Which
 #: canonical attribute plays which role is arbitrary -- the numbers below decide it.
@@ -72,7 +72,7 @@ def _full_grid(models=MODELS):
     for m_idx, model in enumerate(models):
         for rank, strategy in enumerate(STRATEGIES, start=1):
             combos.append(make_combo(
-                slug=f"swedish_{strategy}_{model}", strategy=strategy, model=model,
+                slug=f"swedish_02_{strategy}_{model}", strategy=strategy, model=model,
                 tv_by_attr={TREND_ATTR: _trend_tv(m_idx, rank),
                             SHIFT_ATTR: _shift_tv(m_idx, rank)},
             ))
@@ -135,7 +135,7 @@ def test_grid_returns_png_and_svg(tmp_path):
     result = build_method_significance(_full_grid(), ATTRS,
                                        category_values=CATEGORY_VALUES,
                                        comparison_config=load_comparison_config())
-    out = plot_method_comparison(result, tmp_path / "swedish_method_comparison.png")
+    out = plot_method_comparison(result, tmp_path / "swedish_02_method_comparison.png")
     assert out is not None
     assert out.suffix == ".png"
     assert out.is_file()
@@ -147,7 +147,7 @@ def test_overall_only_renders_single_panel(tmp_path):
                                        category_values=CATEGORY_VALUES,
                                        comparison_config=load_comparison_config())
     out = plot_method_comparison(
-        result, tmp_path / "swedish_method_comparison_overall.png", overall_only=True
+        result, tmp_path / "swedish_02_method_comparison_overall.png", overall_only=True
     )
     assert out is not None and out.is_file()
     assert out.with_suffix(".svg").is_file()
@@ -180,7 +180,7 @@ def _crafted_result(*, pairwise_p, n_category_values, pairs_mode="significant-on
     overall = dict(panel)
     overall.pop("n_category_values")
     return {
-        "metadata": {"country": "swedish"},
+        "metadata": {"country": "swedish_02"},
         "method_comparison": {
             "response": "tv_similarity",
             "methods": methods,

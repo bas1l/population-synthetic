@@ -50,27 +50,27 @@ from tests._performance_fixtures import ATTRIBUTES, make_combo
 
 
 def _grid():
-    """2 models x 2 strategies; all_pick strictly better than all_generate_pick.
+    """2 models x 2 strategies; all_pick_v2 strictly better than all_generate_pick_v2.
 
-    Under STRATEGY_COMPLEXITY_ORDER (all_pick before all_generate_pick) all_pick
+    Under STRATEGY_COMPLEXITY_ORDER (all_pick_v2 before all_generate_pick_v2) all_pick_v2
     is both the higher-scoring and the simpler strategy -> global-best.
     """
     return [
         make_combo(
-            slug="swedish_all_pick_claude_haiku", strategy="all_pick", model="claude_haiku",
+            slug="swedish_02_all_pick_v2_claude_haiku", strategy="all_pick_v2", model="claude_haiku",
             tv_by_attr={"age_group": 0.1, "biological_sex": 0.1, "education_level": 0.1},
         ),
         make_combo(
-            slug="swedish_all_pick_gemini_flash", strategy="all_pick", model="gemini_flash",
+            slug="swedish_02_all_pick_v2_gemini_flash", strategy="all_pick_v2", model="gemini_flash",
             tv_by_attr={"age_group": 0.3, "biological_sex": 0.3, "education_level": 0.3},
         ),
         make_combo(
-            slug="swedish_all_generate_pick_claude_haiku", strategy="all_generate_pick",
+            slug="swedish_02_all_generate_pick_v2_claude_haiku", strategy="all_generate_pick_v2",
             model="claude_haiku",
             tv_by_attr={"age_group": 0.2, "biological_sex": 0.2, "education_level": 0.2},
         ),
         make_combo(
-            slug="swedish_all_generate_pick_gemini_flash", strategy="all_generate_pick",
+            slug="swedish_02_all_generate_pick_v2_gemini_flash", strategy="all_generate_pick_v2",
             model="gemini_flash",
             tv_by_attr={"age_group": 0.4, "biological_sex": 0.4, "education_level": 0.4},
         ),
@@ -141,10 +141,10 @@ def _boxed_cells(ax) -> set[tuple[int, int]]:
 
 def test_model_table_writes_png_and_svg(tmp_path):
     result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
-    out = plot_model_fidelity_table(result, tmp_path / "swedish_models_table.png")
+    out = plot_model_fidelity_table(result, tmp_path / "swedish_02_models_table.png")
 
     assert out is not None
-    assert out == tmp_path / "swedish_models_table.png"
+    assert out == tmp_path / "swedish_02_models_table.png"
     assert out.exists()
     assert out.with_suffix(".svg").exists()
 
@@ -154,7 +154,7 @@ def test_model_table_title_cites_global_best_strategy(tmp_path):
     result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
     cells = result["methods_matrix"]["cells"]
     expected = max(cells, key=lambda s: cells[s]["overall"])
-    assert expected == "all_pick"
+    assert expected == "all_pick_v2"
 
     out, ax = _render(plot_model_fidelity_table, result, tmp_path / "t.png")
 
@@ -168,7 +168,7 @@ def test_model_table_one_row_per_model_at_best_strategy(tmp_path):
     out, ax = _render(plot_model_fidelity_table, result, tmp_path / "m.png")
 
     assert out is not None
-    # 2 models both present at all_pick -> 2 rows; y ticks reflect them, Overall-sorted.
+    # 2 models both present at all_pick_v2 -> 2 rows; y ticks reflect them, Overall-sorted.
     labels = [t.get_text() for t in ax.get_yticklabels()]
     # haiku 0.9 overall > flash 0.7; the ticks carry display names, never the ids.
     display = model_labels(["claude_haiku", "gemini_flash"])
@@ -178,21 +178,21 @@ def test_model_table_one_row_per_model_at_best_strategy(tmp_path):
 def test_model_missing_at_best_strategy_is_omitted(tmp_path, capsys):
     """A model with no combo at the global-best strategy is dropped (and reported)."""
     combos = [
-        # all_pick present only for haiku; flash only appears at all_generate_pick.
+        # all_pick_v2 present only for haiku; flash only appears at all_generate_pick_v2.
         make_combo(
-            slug="swedish_all_pick_claude_haiku", strategy="all_pick", model="claude_haiku",
+            slug="swedish_02_all_pick_v2_claude_haiku", strategy="all_pick_v2", model="claude_haiku",
             tv_by_attr={a: 0.1 for a in ATTRIBUTES},
         ),
         make_combo(
-            slug="swedish_all_generate_pick_claude_haiku", strategy="all_generate_pick",
+            slug="swedish_02_all_generate_pick_v2_claude_haiku", strategy="all_generate_pick_v2",
             model="claude_haiku", tv_by_attr={a: 0.5 for a in ATTRIBUTES},
         ),
         make_combo(
-            slug="swedish_all_generate_pick_gemini_flash", strategy="all_generate_pick",
+            slug="swedish_02_all_generate_pick_v2_gemini_flash", strategy="all_generate_pick_v2",
             model="gemini_flash", tv_by_attr={a: 0.6 for a in ATTRIBUTES},
         ),
     ]
-    # all_pick overall (0.9) > all_generate_pick overall mean (0.45) -> all_pick global-best.
+    # all_pick_v2 overall (0.9) > all_generate_pick_v2 overall mean (0.45) -> all_pick_v2 global-best.
     result = build_performance_comparison(
         combos, ATTRIBUTES, model_hosting={"claude_haiku": "hosted", "gemini_flash": "local"}
     )
@@ -200,22 +200,22 @@ def test_model_missing_at_best_strategy_is_omitted(tmp_path, capsys):
 
     assert out is not None
     labels = [t.get_text() for t in ax.get_yticklabels()]
-    # gemini_flash dropped (no all_pick combo).
+    # gemini_flash dropped (no all_pick_v2 combo).
     assert labels == [model_labels(["claude_haiku"])["claude_haiku"]]
     assert "gemini_flash" in capsys.readouterr().out  # reported, not silent
 
 
 def test_method_table_writes_both_formats_and_is_sorted(tmp_path):
     result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
-    out, ax = _render(plot_method_fidelity_table, result, tmp_path / "swedish_methods_table.png")
+    out, ax = _render(plot_method_fidelity_table, result, tmp_path / "swedish_02_methods_table.png")
 
     assert out is not None
     assert out.exists()
     assert out.with_suffix(".svg").exists()
 
     labels = [t.get_text() for t in ax.get_yticklabels()]
-    # 2 strategies, Overall-sorted: all_pick (0.8) above all_generate_pick (0.7).
-    assert labels == [strategy_label("all_pick"), strategy_label("all_generate_pick")]
+    # 2 strategies, Overall-sorted: all_pick_v2 (0.8) above all_generate_pick_v2 (0.7).
+    assert labels == [strategy_label("all_pick_v2"), strategy_label("all_generate_pick_v2")]
 
 
 def test_model_table_none_on_empty_attributes(tmp_path):
@@ -233,11 +233,11 @@ def test_model_table_none_on_missing_methods_matrix(tmp_path):
 def test_method_table_none_on_all_nan(tmp_path):
     combos = [
         make_combo(
-            slug="swedish_all_pick_claude_haiku", strategy="all_pick", model="claude_haiku",
+            slug="swedish_02_all_pick_v2_claude_haiku", strategy="all_pick_v2", model="claude_haiku",
             tv_by_attr={a: float("nan") for a in ATTRIBUTES},
         ),
         make_combo(
-            slug="swedish_all_pick_gemini_flash", strategy="all_pick", model="gemini_flash",
+            slug="swedish_02_all_pick_v2_gemini_flash", strategy="all_pick_v2", model="gemini_flash",
             tv_by_attr={a: float("nan") for a in ATTRIBUTES},
         ),
     ]
@@ -314,7 +314,7 @@ def test_method_table_columns_are_attributes_plus_overall(tmp_path):
 def test_model_table_grid_values_and_annotations(tmp_path):
     """Cell values, their percentage annotations, and the best-cell marking.
 
-    ``_grid()`` at the global-best strategy ``all_pick``: claude_haiku scores 0.9
+    ``_grid()`` at the global-best strategy ``all_pick_v2``: claude_haiku scores 0.9
     on every axis (and overall), gemini_flash 0.7 -- so every column's best cell
     is row 0, and the annotations are the values rescaled to one-decimal percent.
     """
@@ -341,8 +341,8 @@ def test_model_table_grid_values_and_annotations(tmp_path):
 def test_method_table_grid_values_and_annotations(tmp_path):
     """Same grid/annotation/best-cell contract for the methods table.
 
-    Cells are the mean over models: all_pick (0.9, 0.7) -> 0.8,
-    all_generate_pick (0.8, 0.6) -> 0.7, on every axis and overall.
+    Cells are the mean over models: all_pick_v2 (0.9, 0.7) -> 0.8,
+    all_generate_pick_v2 (0.8, 0.6) -> 0.7, on every axis and overall.
     """
     result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
     out, ax = _render(plot_method_fidelity_table, result, tmp_path / "m.png")
@@ -393,7 +393,7 @@ def test_categories_on_top_places_exactly_the_given_labels():
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    labels = ["all_pick", "all_generate_pick", "all_pick_dag"]
+    labels = ["all_pick_v2", "all_generate_pick_v2", "all_pick_dag_v2"]
     fig, ax = plt.subplots()
     try:
         categories_on_top(ax, labels)
@@ -481,10 +481,10 @@ def _row_count(content: str) -> int:
 
 def test_model_latex_snippet_shape(tmp_path):
     result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
-    out = write_model_fidelity_latex(result, tmp_path / "swedish_models_table.tex")
+    out = write_model_fidelity_latex(result, tmp_path / "swedish_02_models_table.tex")
 
     assert out is not None
-    assert out == tmp_path / "swedish_models_table.tex"
+    assert out == tmp_path / "swedish_02_models_table.tex"
     assert out.exists()
     content = out.read_text(encoding="utf-8")
     assert content.strip()  # non-empty
@@ -508,7 +508,7 @@ def test_model_latex_snippet_shape(tmp_path):
 
 def test_method_latex_snippet_shape(tmp_path):
     result = build_performance_comparison(_grid(), ATTRIBUTES, model_hosting=_HOSTING)
-    out = write_method_fidelity_latex(result, tmp_path / "swedish_methods_table.tex")
+    out = write_method_fidelity_latex(result, tmp_path / "swedish_02_methods_table.tex")
 
     assert out is not None
     assert out.exists()
@@ -522,7 +522,7 @@ def test_method_latex_snippet_shape(tmp_path):
     # Values are shown as percentages (0--100, one decimal); the caption notes the unit.
     assert "TV-similarity, %" in content
     assert re.search(r"\\textbf\{\d+\.\d\}", content)  # best-per-column bold, percentage form
-    # all_pick wins every column (mean 0.80 -> 80.0%) -> bold.
+    # all_pick_v2 wins every column (mean 0.80 -> 80.0%) -> bold.
     assert "\\textbf{80.0}" in content
     # One body row per strategy.
     assert _row_count(content) == 2
@@ -531,11 +531,11 @@ def test_method_latex_snippet_shape(tmp_path):
 def test_latex_emitters_none_on_all_nan(tmp_path):
     combos = [
         make_combo(
-            slug="swedish_all_pick_claude_haiku", strategy="all_pick", model="claude_haiku",
+            slug="swedish_02_all_pick_v2_claude_haiku", strategy="all_pick_v2", model="claude_haiku",
             tv_by_attr={a: float("nan") for a in ATTRIBUTES},
         ),
         make_combo(
-            slug="swedish_all_pick_gemini_flash", strategy="all_pick", model="gemini_flash",
+            slug="swedish_02_all_pick_v2_gemini_flash", strategy="all_pick_v2", model="gemini_flash",
             tv_by_attr={a: float("nan") for a in ATTRIBUTES},
         ),
     ]

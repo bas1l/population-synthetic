@@ -28,8 +28,8 @@ from population_synthetic.analysis.utils.registry import analysis_output_dir
 # A cap other than the production 100, so a literal threshold cannot pass by coincidence.
 REQUESTED_N = 40
 
-SLUG_A = "swedish_all_pick_claude_haiku"
-SLUG_B = "swedish_all_generate_pick_gemini_flash"
+SLUG_A = "swedish_02_all_pick_v2_claude_haiku"
+SLUG_B = "swedish_02_all_generate_pick_v2_gemini_flash"
 
 
 def _stage_dir(output_base: Path) -> Path:
@@ -48,7 +48,7 @@ def _entry(slug: str, requested_n: int = REQUESTED_N, *, excluded: bool = False)
     """A cap-index record shaped like the ``CapSummary`` the gate writes."""
     return {
         "slug": slug,
-        "country": "swedish",
+        "country": "swedish_02",
         "requested_n": requested_n,
         "raw_passed": requested_n,
         "mapped_passed": requested_n,
@@ -58,7 +58,7 @@ def _entry(slug: str, requested_n: int = REQUESTED_N, *, excluded: bool = False)
         "selected_ids": [],
         "truncated": False,
         "synthetic_file": f"{slug}.json",
-        "real_file": "real_swedish.json",
+        "real_file": "real_swedish_02.json",
         "mapped_n": requested_n,
         "excluded": excluded,
         "exclusion_reason": "fewer than requested_n clean personas" if excluded else None,

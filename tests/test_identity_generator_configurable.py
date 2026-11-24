@@ -1,8 +1,8 @@
 """Unit tests for ``IdentityGeneratorConfigurable`` context handling and DAG order.
 
 Covers the strategy-level ``context`` mode wired through ``_load_strategy`` and
-``generate_identity``: the ``all_pick`` context-free baseline (``context: none``),
-the ``all_pick_dag`` regression guard (still accumulates cumulative context), and
+``generate_identity``: the ``all_pick_v2`` context-free baseline (``context: none``),
+the ``all_pick_dag_v2`` regression guard (still accumulates cumulative context), and
 the fail-fast validation on an unrecognised ``context`` value.
 
 Also covers ``_build_dag`` determinism: the resolved category order must be a pure
@@ -38,8 +38,8 @@ from population_synthetic.generators.synthetic.resolution_context import Resolut
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STRATEGY_DIR = _REPO_ROOT / "config" / "synthetic" / "axes" / "strategies"
-_ALL_PICK = _STRATEGY_DIR / "all_pick.yaml"
-_ALL_PICK_DAG = _STRATEGY_DIR / "all_pick_dag.yaml"
+_ALL_PICK = _STRATEGY_DIR / "all_pick_v2.yaml"
+_ALL_PICK_DAG = _STRATEGY_DIR / "all_pick_dag_v2.yaml"
 
 # The empty-branch sentinel emitted by ``_build_context_block`` when no prior
 # attributes are visible. Under ``context: none`` every prompt must carry it.
@@ -127,7 +127,7 @@ def _run(tmp_path: Path, strategy_path: Path) -> RecordingGenerator:
 
 
 # ---------------------------------------------------------------------------
-# all_pick -- context-free baseline (context: none)
+# all_pick_v2 -- context-free baseline (context: none)
 # ---------------------------------------------------------------------------
 
 
@@ -156,7 +156,7 @@ def test_all_pick_returns_full_persona(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# all_pick_dag -- regression guard (cumulative context retained)
+# all_pick_dag_v2 -- regression guard (cumulative context retained)
 # ---------------------------------------------------------------------------
 
 
@@ -167,7 +167,7 @@ def test_all_pick_dag_still_leaks_context(tmp_path):
 
     # ``civil_status`` depends_on [age, biological_sex]; both resolve first, so
     # its prompt must carry their resolved values (proves other strategies are
-    # untouched by the all_pick fix).
+    # untouched by the all_pick_v2 fix).
     civil_prompt = prompts_by_cat["civil_status"]
     assert f"age: age{_VALUE_MARKER}" in civil_prompt
     assert f"biological_sex: biological_sex{_VALUE_MARKER}" in civil_prompt
@@ -199,7 +199,7 @@ def test_load_strategy_absent_key_defaults_to_cumulative(tmp_path):
     path = tmp_path / "no_context.yaml"
     path.write_text(
         yaml.safe_dump({
-            "family": "all_pick",
+            "family": "all_pick_v2",
             "version": 1,
             "categories": {"age": {"method": "pick", "depends_on": []}},
         }),
@@ -216,7 +216,7 @@ def test_load_strategy_bogus_context_raises(tmp_path):
     path.write_text(
         yaml.safe_dump({
             "context": "bogus",
-            "family": "all_pick",
+            "family": "all_pick_v2",
             "version": 1,
             "categories": {"age": {"method": "pick", "depends_on": []}},
         }),
@@ -234,7 +234,7 @@ def test_load_strategy_bogus_context_raises(tmp_path):
 
 def _write_strategy(path, **overrides):
     doc = {
-        "family": "all_pick",
+        "family": "all_pick_v2",
         "version": 1,
         "categories": {"age": {"method": "pick", "depends_on": []}},
     }
@@ -402,8 +402,8 @@ def test_resolved_order_matches_generation_order(tmp_path):
 # select-step prompt: generate_evaluate_pick shows weights, generate_pick does not
 # ---------------------------------------------------------------------------
 
-_ALL_GENERATE_PICK = _STRATEGY_DIR / "all_generate_pick.yaml"
-_ALL_GENERATE_EVALUATE_PICK = _STRATEGY_DIR / "all_generate_evaluate_pick.yaml"
+_ALL_GENERATE_PICK = _STRATEGY_DIR / "all_generate_pick_v2.yaml"
+_ALL_GENERATE_EVALUATE_PICK = _STRATEGY_DIR / "all_generate_evaluate_pick_v2.yaml"
 
 
 class WeightedRecordingContext(RecordingContext):

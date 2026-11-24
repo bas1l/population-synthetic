@@ -36,7 +36,7 @@ from population_synthetic.analysis.validation_attrition.loader import (
     AttritionSources,
 )
 
-_COUNTRY = "swedish"
+_COUNTRY = "swedish_02"
 
 
 def _record(
@@ -52,7 +52,7 @@ def _record(
     exclusion_reason: str = "",
     had_surplus: bool = True,
     model: str = "claude_haiku",
-    strategy: str = "all_pick",
+    strategy: str = "all_pick_v2",
 ) -> AttritionRecord:
     """One loaded record. The two intermediate gate counts default to the funnel bounds."""
     return AttritionRecord(
@@ -83,10 +83,10 @@ def _sources(tmp_path: Path) -> AttritionSources:
 def _row(**overrides: object) -> AttritionRow:
     """A complete row; ``overrides`` replaces named fields."""
     base = dict(
-        slug=f"{_COUNTRY}_all_pick_claude_haiku",
+        slug=f"{_COUNTRY}_all_pick_v2_claude_haiku",
         country=_COUNTRY,
         model="claude_haiku",
-        strategy="all_pick",
+        strategy="all_pick_v2",
         requested_n=100,
         generated=150,
         raw_valid=150,
@@ -194,22 +194,22 @@ def test_unfinished_generations_are_ignored_by_both_rates() -> None:
 def test_rows_are_sorted_by_slug() -> None:
     """Sorted, not index-ordered, so two runs write byte-identical files."""
     records = [
-        _record("swedish_z", generated=150, clean=120),
-        _record("swedish_a", generated=150, clean=120),
+        _record("swedish_02_z", generated=150, clean=120),
+        _record("swedish_02_a", generated=150, clean=120),
     ]
 
-    assert [row.slug for row in build_rows(records)] == ["swedish_a", "swedish_z"]
+    assert [row.slug for row in build_rows(records)] == ["swedish_02_a", "swedish_02_z"]
 
 
 def test_every_loaded_field_reaches_the_row() -> None:
     record = _record(
         "s", generated=549, raw_valid=488, mapped_valid=132, clean=132,
-        selected=100, model="gemini_flash", strategy="all_generate_pick",
+        selected=100, model="gemini_flash", strategy="all_generate_pick_v2",
     )
 
     (row,) = build_rows([record])
 
-    assert (row.model, row.strategy) == ("gemini_flash", "all_generate_pick")
+    assert (row.model, row.strategy) == ("gemini_flash", "all_generate_pick_v2")
     assert (row.generated, row.raw_valid, row.mapped_valid, row.clean) == (549, 488, 132, 132)
 
 
@@ -221,9 +221,9 @@ def test_every_loaded_field_reaches_the_row() -> None:
 def test_document_reports_withdrawals_separately(tmp_path: Path) -> None:
     """The only artifact where a withdrawn combination appears; it appears twice."""
     records = [
-        _record("swedish_a", generated=150, clean=120),
+        _record("swedish_02_a", generated=150, clean=120),
         _record(
-            "swedish_b", generated=150, mapped_valid=9, clean=9, selected=0,
+            "swedish_02_b", generated=150, mapped_valid=9, clean=9, selected=0,
             excluded=True, exclusion_reason="only 9 clean persona(s)", had_surplus=False,
         ),
     ]
@@ -232,7 +232,7 @@ def test_document_reports_withdrawals_separately(tmp_path: Path) -> None:
 
     assert document["n_combinations"] == 2
     assert document["n_excluded"] == 1
-    assert [e["slug"] for e in document["excluded_combinations"]] == ["swedish_b"]
+    assert [e["slug"] for e in document["excluded_combinations"]] == ["swedish_02_b"]
     assert document["excluded_combinations"][0]["reason"] == "only 9 clean persona(s)"
     assert [c["excluded"] for c in document["combinations"]] == [False, True]
 
@@ -240,8 +240,8 @@ def test_document_reports_withdrawals_separately(tmp_path: Path) -> None:
 def test_document_totals_pool_the_counts_not_the_rates(tmp_path: Path) -> None:
     """A pooled rate is a count-weighted mean, not the mean of two per-combo rates."""
     records = [
-        _record("swedish_a", generated=100, clean=100),
-        _record("swedish_b", generated=900, clean=100),
+        _record("swedish_02_a", generated=100, clean=100),
+        _record("swedish_02_b", generated=900, clean=100),
     ]
 
     totals = build_document(records, country=_COUNTRY, skipped=[], sources=_sources(tmp_path))["totals"]
@@ -257,14 +257,14 @@ def test_document_carries_skips_and_source_paths(tmp_path: Path) -> None:
     sources = _sources(tmp_path)
 
     document = build_document(
-        [_record("swedish_a", generated=150, clean=120)],
+        [_record("swedish_02_a", generated=150, clean=120)],
         country=_COUNTRY,
-        skipped=[("swedish_b", "no row in validate_mapped/_summary.csv")],
+        skipped=[("swedish_02_b", "no row in validate_mapped/_summary.csv")],
         sources=sources,
     )
 
     assert document["skipped_combinations"] == [
-        {"slug": "swedish_b", "reason": "no row in validate_mapped/_summary.csv"}
+        {"slug": "swedish_02_b", "reason": "no row in validate_mapped/_summary.csv"}
     ]
     assert document["provenance"]["consumed_artifacts"] == [
         str(sources.cap_index),
@@ -276,7 +276,7 @@ def test_document_carries_skips_and_source_paths(tmp_path: Path) -> None:
 
 def test_document_carries_no_timestamp(tmp_path: Path) -> None:
     """Byte-reproducible for a fixed input; the driver stamps a time if it wants one."""
-    records = [_record("swedish_a", generated=150, clean=120)]
+    records = [_record("swedish_02_a", generated=150, clean=120)]
     sources = _sources(tmp_path)
 
     first = build_document(records, country=_COUNTRY, skipped=[], sources=sources)
@@ -300,9 +300,9 @@ def test_fieldnames_follow_the_dataclass_field_order() -> None:
 def test_round_trip_preserves_every_typed_cell(tmp_path: Path) -> None:
     rows = [
         _row(),
-        _row(slug="swedish_b", excluded=True, exclusion_reason="only 9 clean", had_surplus=False),
+        _row(slug="swedish_02_b", excluded=True, exclusion_reason="only 9 clean", had_surplus=False),
     ]
-    path = tmp_path / "swedish_attrition.csv"
+    path = tmp_path / "swedish_02_attrition.csv"
 
     write_attrition_csv(rows, path)
 
@@ -311,7 +311,7 @@ def test_round_trip_preserves_every_typed_cell(tmp_path: Path) -> None:
 
 def test_an_undefined_rate_round_trips_as_none_never_zero(tmp_path: Path) -> None:
     """The load-bearing cell: an empty rate must not come back as the lowest value."""
-    path = tmp_path / "swedish_attrition.csv"
+    path = tmp_path / "swedish_02_attrition.csv"
     write_attrition_csv([_row(retention_rate=None, generation_multiplier=None)], path)
 
     assert path.read_text(encoding="utf-8").splitlines()[1].count(",,") >= 1
@@ -322,8 +322,8 @@ def test_an_undefined_rate_round_trips_as_none_never_zero(tmp_path: Path) -> Non
 
 def test_writing_twice_is_indistinguishable_from_writing_once(tmp_path: Path) -> None:
     """``write_rows`` truncates, so the artifact is idempotent."""
-    path = tmp_path / "swedish_attrition.csv"
-    rows = build_rows([_record("swedish_a", generated=150, clean=120)])
+    path = tmp_path / "swedish_02_attrition.csv"
+    rows = build_rows([_record("swedish_02_a", generated=150, clean=120)])
 
     write_attrition_csv(rows, path)
     first = path.read_bytes()
@@ -334,7 +334,7 @@ def test_writing_twice_is_indistinguishable_from_writing_once(tmp_path: Path) ->
 
 def test_a_file_missing_a_column_raises_naming_the_remedy(tmp_path: Path) -> None:
     """A tolerated v0 file would report every new column as absent or zero."""
-    path = tmp_path / "swedish_attrition.csv"
+    path = tmp_path / "swedish_02_attrition.csv"
     write_attrition_csv([_row()], path)
     lines = path.read_text(encoding="utf-8").splitlines()
     kept = [i for i, name in enumerate(FIELDNAMES) if name != "excluded"]
@@ -352,7 +352,7 @@ def test_a_file_missing_a_column_raises_naming_the_remedy(tmp_path: Path) -> Non
 
 def test_a_row_count_disagreement_raises(tmp_path: Path) -> None:
     """The CSV and the gate index must describe the same set of combinations."""
-    path = tmp_path / "swedish_attrition.csv"
+    path = tmp_path / "swedish_02_attrition.csv"
     write_attrition_csv([_row()], path)
 
     with pytest.raises(ValueError, match="holds 1 combination row"):
@@ -360,7 +360,7 @@ def test_a_row_count_disagreement_raises(tmp_path: Path) -> None:
 
 
 def test_a_malformed_count_cell_raises_naming_the_column(tmp_path: Path) -> None:
-    path = tmp_path / "swedish_attrition.csv"
+    path = tmp_path / "swedish_02_attrition.csv"
     write_attrition_csv([_row()], path)
     path.write_text(
         path.read_text(encoding="utf-8").replace(",150,", ",one-fifty,", 1), encoding="utf-8"

@@ -23,7 +23,7 @@ from population_synthetic.analysis.utils.registry import analysis_output_dir
 ATTRIBUTES = ["age_group", "biological_sex", "education_level"]
 
 # (country_ids, strategy_ids, model_ids) registries for decompose_slug.
-AXIS_IDS = (["swedish"], ["all_pick", "all_generate_pick"], ["claude_haiku", "gemini_flash"])
+AXIS_IDS = (["swedish_02"], ["all_pick_v2", "all_generate_pick_v2"], ["claude_haiku", "gemini_flash"])
 
 
 def make_report(
@@ -106,7 +106,7 @@ def make_combo(
     strategy: str,
     model: str,
     tv_by_attr: dict[str, float],
-    country: str = "swedish",
+    country: str = "swedish_02",
     coherence_score: float = 0.9,
     n_synth: int = 100,
     c2st_auc: float | None = None,

@@ -299,7 +299,7 @@ def test_age_binning_feeds_coherence_and_joint():
 
 
 def test_load_scheme_is_country_specific():
-    sv = load_scheme("swedish")
+    sv = load_scheme("swedish_02")
     it = load_scheme("italian")
     # Italy has no income-source field in its database; Sweden does.
     assert "income_source" in sv.attributes

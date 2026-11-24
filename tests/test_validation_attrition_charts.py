@@ -59,11 +59,11 @@ from population_synthetic.analysis.validation_attrition.loader import (  # noqa:
     SUMMARY_FILENAME,
 )
 
-_COUNTRY = "swedish"
+_COUNTRY = "swedish_02"
 _SCRIPT = PROJECT_ROOT / "scripts" / "analyze" / "analyze_validation_attrition.py"
 
 # Two real strategy ids, in the config-derived order the columns must follow.
-_METHODS = strategy_complexity_order(["all_pick", "all_generate_pick"])
+_METHODS = strategy_complexity_order(["all_pick_v2", "all_generate_pick_v2"])
 _SIMPLE, _COMPLEX = _METHODS
 
 _RAW_HEADER = (

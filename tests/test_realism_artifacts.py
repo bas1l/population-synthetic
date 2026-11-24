@@ -323,7 +323,7 @@ def test_personas_csv_row_count_matches_report_n_personas(tmp_path):
     out_dir = _seed_combo_dir(tmp_path)
     A.write_combo_artifacts(
         out_dir, "combo_x", cfg=_cfg(), dpi=80, force=True,
-        country="swedish", model="claude_haiku", strategy="all_pick",
+        country="swedish_02", model="claude_haiku", strategy="all_pick_v2",
         hard_rules=(), pricing=_PRICING,
     )
     report = json.loads((out_dir / "combo_x.json").read_text(encoding="utf-8"))
@@ -345,10 +345,10 @@ def test_personas_csv_row_count_matches_report_n_personas(tmp_path):
 def test_personas_csv_marks_the_real_competitor_without_model_or_strategy(tmp_path):
     out_dir = _seed_combo_dir(tmp_path)
     A.write_combo_artifacts(
-        out_dir, "real_swedish", cfg=_cfg(), dpi=80, force=True,
-        country="swedish", is_real_reference=True, hard_rules=(), pricing=_PRICING,
+        out_dir, "real_swedish_02", cfg=_cfg(), dpi=80, force=True,
+        country="swedish_02", is_real_reference=True, hard_rules=(), pricing=_PRICING,
     )
-    rows = read_realism_personas_csv(out_dir / "real_swedish_personas.csv")
+    rows = read_realism_personas_csv(out_dir / "real_swedish_02_personas.csv")
     assert rows and all(r.is_real_reference for r in rows)
     assert all(r.model == "" and r.strategy == "" for r in rows)
 

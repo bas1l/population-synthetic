@@ -24,7 +24,7 @@ from population_synthetic.analysis.fidelity.charts import (
 from population_synthetic.analysis.utils.style import MAX_HEIGHT, MAX_WIDTH
 from tests._performance_fixtures import ATTRIBUTES, make_multivariate, make_report
 
-_PREFIX = "swedish_all_pick_x"
+_PREFIX = "swedish_02_all_pick_v2_x"
 
 _JF_PAIRS = [
     {"attr_x": "age_group", "attr_y": "biological_sex",
@@ -238,7 +238,7 @@ def _production_scheme():
     from population_synthetic.analysis.fidelity.scheme import load_scheme
     from population_synthetic.analysis.utils.country_config import mappings_for_country
 
-    return load_scheme("swedish", mappings_path=mappings_for_country("swedish"))
+    return load_scheme("swedish_02", mappings_path=mappings_for_country("swedish_02"))
 
 
 def _population(scheme, *, n: int = 40) -> dict:

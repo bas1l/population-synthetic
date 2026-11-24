@@ -24,10 +24,10 @@ def test_association_heatmap_renders(tmp_path):
         {"age_group": 0.1, "biological_sex": 0.2, "education_level": 0.3},
         multivariate=make_multivariate(),
     )
-    out = plot_association_heatmap(report, tmp_path, prefix="swedish_all_pick_x", attributes=ATTRIBUTES)
+    out = plot_association_heatmap(report, tmp_path, prefix="swedish_02_all_pick_v2_x", attributes=ATTRIBUTES)
     assert out is not None
     assert out.is_file()
-    assert out.name == "swedish_all_pick_x_association_heatmap.png"
+    assert out.name == "swedish_02_all_pick_v2_x_association_heatmap.png"
 
 
 def test_association_heatmap_none_without_block(tmp_path):
@@ -40,13 +40,13 @@ def test_association_heatmap_none_without_block(tmp_path):
 def _built(with_multivariate: bool):
     combos = [
         make_combo(
-            slug="swedish_all_pick_claude_haiku", strategy="all_pick", model="claude_haiku",
+            slug="swedish_02_all_pick_v2_claude_haiku", strategy="all_pick_v2", model="claude_haiku",
             tv_by_attr={"age_group": 0.1, "biological_sex": 0.1, "education_level": 0.1},
             c2st_auc=0.60 if with_multivariate else None,
             mean_delta_v=0.08 if with_multivariate else None,
         ),
         make_combo(
-            slug="swedish_all_generate_pick_gemini_flash", strategy="all_generate_pick",
+            slug="swedish_02_all_generate_pick_v2_gemini_flash", strategy="all_generate_pick_v2",
             model="gemini_flash",
             tv_by_attr={"age_group": 0.3, "biological_sex": 0.3, "education_level": 0.3},
             c2st_auc=0.85 if with_multivariate else None,
@@ -58,14 +58,14 @@ def _built(with_multivariate: bool):
 
 def test_c2st_scatter_renders(tmp_path):
     result = _built(with_multivariate=True)
-    out = plot_c2st_vs_tv(result, tmp_path / "swedish_c2st_vs_tv.png")
+    out = plot_c2st_vs_tv(result, tmp_path / "swedish_02_c2st_vs_tv.png")
     assert out is not None
     assert out.is_file()
 
 
 def test_c2st_scatter_none_when_no_auc(tmp_path):
     result = _built(with_multivariate=False)
-    assert plot_c2st_vs_tv(result, tmp_path / "swedish_c2st_vs_tv.png") is None
+    assert plot_c2st_vs_tv(result, tmp_path / "swedish_02_c2st_vs_tv.png") is None
 
 
 # --- builder surfaces the optional columns; ranking unchanged -----------------
@@ -73,25 +73,25 @@ def test_c2st_scatter_none_when_no_auc(tmp_path):
 def test_builder_csv_carries_multivariate_columns(tmp_path):
     result = _built(with_multivariate=True)
     # Ranking is still TV-driven: haiku (better marginals) ranks first.
-    assert result["ranking"][0] == "swedish_all_pick_claude_haiku"
-    assert result["combos"]["swedish_all_pick_claude_haiku"]["multivariate"] == {
+    assert result["ranking"][0] == "swedish_02_all_pick_v2_claude_haiku"
+    assert result["combos"]["swedish_02_all_pick_v2_claude_haiku"]["multivariate"] == {
         "c2st_auc": 0.60,
         "mean_delta_v": 0.08,
     }
 
-    csv_path = write_performance_csv(result, tmp_path / "swedish_performance.csv")
+    csv_path = write_performance_csv(result, tmp_path / "swedish_02_performance.csv")
     with open(csv_path, newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
     assert "c2st_auc" in rows[0]
     assert "mean_delta_v" in rows[0]
-    top = next(r for r in rows if r["slug"] == "swedish_all_pick_claude_haiku")
+    top = next(r for r in rows if r["slug"] == "swedish_02_all_pick_v2_claude_haiku")
     assert float(top["c2st_auc"]) == 0.60
     assert float(top["mean_delta_v"]) == 0.08
 
 
 def test_builder_csv_blank_when_multivariate_absent(tmp_path):
     result = _built(with_multivariate=False)
-    csv_path = write_performance_csv(result, tmp_path / "swedish_performance.csv")
+    csv_path = write_performance_csv(result, tmp_path / "swedish_02_performance.csv")
     with open(csv_path, newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
     # None -> empty CSV cell, no crash.

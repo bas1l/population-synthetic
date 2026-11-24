@@ -277,11 +277,11 @@ def _load_analysis_config(
 
 
 def load_scheme(
-    country: str = "swedish",
+    country: str = "swedish_02",
     mappings_path: Path | None = None,
     analysis_path: Path | None = None,
 ) -> ComparisonScheme:
-    """Load the comparison scheme for *country* (``"swedish"`` or ``"italian"``).
+    """Load the comparison scheme for *country* (``"swedish_02"`` or ``"italian"``).
 
     The scored marginal axis is sourced from the mapping config: the ``_index.json``
     master supplies the in-scope attributes (ordered) and each per-attribute file's

@@ -23,10 +23,10 @@ from population_synthetic.analysis.utils.realism_csv import (
 def _row(**overrides) -> RealismPersonaRow:
     base = dict(
         persona_id="persona_00000",
-        slug="swedish_all_pick_claude_haiku",
-        country="swedish",
+        slug="swedish_02_all_pick_v2_claude_haiku",
+        country="swedish_02",
         model="claude_haiku",
-        strategy="all_pick",
+        strategy="all_pick_v2",
         is_real_reference=False,
         n_rounds_attempted=3,
         n_rounds_successful=2,

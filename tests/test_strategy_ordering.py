@@ -4,8 +4,8 @@ The strategy axis used to be a hardcoded Python list; it is now derived from
 ``config/synthetic/axes/strategies/_families.yaml`` (family rank) plus each
 strategy YAML's ``family`` / ``version``. Three properties are load-bearing:
 
-* **the legacy sequence is preserved** -- with only the five v1 ids present the
-  order must equal the old constant exactly, or the manuscript's global-best-strategy
+* **the sequence is preserved** -- with the five strategy ids present the
+  order must equal the family sequence exactly, or the manuscript's global-best-strategy
   tie-break (ties prefer the *simpler* strategy) silently moves a published result;
 * **the order is total** -- every pair compares, so the tie-break is decidable;
 * **the resolution fails loudly** -- an unknown id or family raises rather than
@@ -28,37 +28,39 @@ from population_synthetic.analysis.utils.axes import (
 )
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
-# The order the removed ``STRATEGY_COMPLEXITY_ORDER`` constant declared. Frozen here
-# on purpose: this literal is the regression anchor, not a second source of truth.
-LEGACY_ORDER = [
+# The five families, simplest first. Frozen here on purpose: this literal is the
+# regression anchor, not a second source of truth. STRATEGY_ORDER is the same order as
+# the selectable strategy ids.
+FAMILY_ORDER = [
     "all_pick",
     "all_pick_dag",
     "all_generate_pick",
     "all_generate_evaluate_pick",
     "all_generate_evaluate_random_pick",
 ]
+STRATEGY_ORDER = [f"{family}_v2" for family in FAMILY_ORDER]
 
 
 # --------------------------------------------------------------------------- #
-# Regression: the v1-only order is byte-identical to the legacy constant        #
+# Regression: the strategy order follows the family sequence                   #
 # --------------------------------------------------------------------------- #
 
 
-def test_v1_only_order_equals_the_legacy_sequence():
-    assert strategy_complexity_order(LEGACY_ORDER) == LEGACY_ORDER
+def test_strategy_order_equals_the_family_sequence():
+    assert strategy_complexity_order(STRATEGY_ORDER) == STRATEGY_ORDER
 
 
-def test_v1_only_order_is_independent_of_input_order():
+def test_strategy_order_is_independent_of_input_order():
     """Input permutation must not survive into the output (it is a sort, not a filter)."""
-    assert strategy_complexity_order(list(reversed(LEGACY_ORDER))) == LEGACY_ORDER
-    assert strategy_complexity_order(sorted(LEGACY_ORDER)) == LEGACY_ORDER
+    assert strategy_complexity_order(list(reversed(STRATEGY_ORDER))) == STRATEGY_ORDER
+    assert strategy_complexity_order(sorted(STRATEGY_ORDER)) == STRATEGY_ORDER
 
 
-def test_discovered_strategy_axis_orders_to_the_legacy_sequence():
-    """Whatever the axis currently declares, the v1 families keep the locked order."""
+def test_discovered_strategy_axis_orders_to_the_family_sequence():
+    """Whatever the axis currently declares, the families keep the locked order."""
     discovered = [d["id"] for d in discover_axis_values("strategies")]
     ordered = strategy_complexity_order(discovered)
-    assert [s for s in ordered if s in LEGACY_ORDER] == LEGACY_ORDER
+    assert ordered == STRATEGY_ORDER
 
 
 # --------------------------------------------------------------------------- #
@@ -78,9 +80,9 @@ def test_order_is_total_over_the_declared_axis():
 
 
 def test_duplicate_ids_are_collapsed():
-    assert strategy_complexity_order(["all_pick_dag", "all_pick", "all_pick"]) == [
-        "all_pick",
-        "all_pick_dag",
+    assert strategy_complexity_order(["all_pick_dag_v2", "all_pick_v2", "all_pick_v2"]) == [
+        "all_pick_v2",
+        "all_pick_dag_v2",
     ]
 
 
@@ -89,12 +91,12 @@ def test_duplicate_ids_are_collapsed():
 # --------------------------------------------------------------------------- #
 
 
-def test_family_index_declares_the_five_v1_families_simplest_first():
-    assert load_family_order() == LEGACY_ORDER
+def test_family_index_declares_the_five_families_simplest_first():
+    assert load_family_order() == FAMILY_ORDER
 
 
-def test_v1_strategies_declare_version_one():
-    assert strategy_versions(LEGACY_ORDER) == dict.fromkeys(LEGACY_ORDER, 1)
+def test_strategies_declare_version_two():
+    assert strategy_versions(STRATEGY_ORDER) == dict.fromkeys(STRATEGY_ORDER, 2)
 
 
 def _fixture_dir(tmp_path, families, strategies):
@@ -113,29 +115,29 @@ def test_version_sorts_after_family_rank(tmp_path):
         tmp_path,
         ["simple", "complex"],
         {
-            "simple_v1": {"family": "simple", "version": 1},
-            "simple_v2": {"family": "simple", "version": 2},
-            "complex_v1": {"family": "complex", "version": 1},
+            "simple_first": {"family": "simple", "version": 1},
+            "simple_second": {"family": "simple", "version": 2},
+            "complex_first": {"family": "complex", "version": 1},
         },
     )
     assert strategy_complexity_order(
-        ["complex_v1", "simple_v2", "simple_v1"], strategies_dir=directory
-    ) == ["simple_v1", "simple_v2", "complex_v1"]
+        ["complex_first", "simple_second", "simple_first"], strategies_dir=directory
+    ) == ["simple_first", "simple_second", "complex_first"]
 
 
 def test_version_ten_sorts_after_version_two(tmp_path):
-    """Versions compare as integers, not as strings (v10 must not precede v2)."""
+    """Versions compare as integers, not as strings (ten must not precede two)."""
     directory = _fixture_dir(
         tmp_path,
         ["fam"],
         {
-            "fam_v2": {"family": "fam", "version": 2},
-            "fam_v10": {"family": "fam", "version": 10},
+            "fam_two": {"family": "fam", "version": 2},
+            "fam_ten": {"family": "fam", "version": 10},
         },
     )
-    assert strategy_complexity_order(["fam_v10", "fam_v2"], strategies_dir=directory) == [
-        "fam_v2",
-        "fam_v10",
+    assert strategy_complexity_order(["fam_ten", "fam_two"], strategies_dir=directory) == [
+        "fam_two",
+        "fam_ten",
     ]
 
 

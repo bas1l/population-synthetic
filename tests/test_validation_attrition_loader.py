@@ -36,14 +36,14 @@ from population_synthetic.analysis.validation_attrition.loader import (
     resolve_sources,
 )
 
-_COUNTRY = "swedish"
+_COUNTRY = "swedish_02"
 _AXIS_IDS = (
     [_COUNTRY],
-    ["all_pick", "all_generate_pick"],
+    ["all_pick_v2", "all_generate_pick_v2"],
     ["claude_haiku", "gemini_flash"],
 )
-_HEALTHY = f"{_COUNTRY}_all_pick_claude_haiku"
-_WITHDRAWN = f"{_COUNTRY}_all_generate_pick_gemini_flash"
+_HEALTHY = f"{_COUNTRY}_all_pick_v2_claude_haiku"
+_WITHDRAWN = f"{_COUNTRY}_all_generate_pick_v2_gemini_flash"
 
 # Header prefixes of the two validator roll-ups, as their producers declare them in
 # ``validate_{raw,mapped}/validate.py::SUMMARY_HEADER``. The loader reads a subset of
@@ -208,7 +208,7 @@ def test_axis_identity_is_decomposed_from_the_slug(tmp_path: Path) -> None:
 
     (record,), _ = _load(tmp_path)
 
-    assert (record.country, record.strategy, record.model) == (_COUNTRY, "all_pick", "claude_haiku")
+    assert (record.country, record.strategy, record.model) == (_COUNTRY, "all_pick_v2", "claude_haiku")
 
 
 def test_truncated_is_renamed_to_had_surplus(tmp_path: Path) -> None:
