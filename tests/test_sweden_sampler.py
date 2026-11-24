@@ -60,7 +60,6 @@ def make_distributions() -> PopulationDistributions:
         birth_country_detail=_cells({"Finland": 0.5, "Iraq": 0.5}),
         ethnicity_map={},
         tables_used=(),
-        employment_status_by_edu=None,
     )
 
 

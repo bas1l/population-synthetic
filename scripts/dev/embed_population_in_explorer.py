@@ -78,8 +78,8 @@ DIST_SCHEMA: dict[str, dict] = {
     "agesex": {"field": "age_sex_group", "kind": "hub", "parents": [], "gate": None},
     "education": {"field": "education_by_age", "kind": "conditional",
                   "parents": ["age_group", "sex"], "gate": None},
-    "employment": {"field": "employment_status_by_edu", "kind": "conditional",
-                   "parents": ["age_group", "education", "sex"], "gate": None},
+    "employment": {"field": "employment_by_sex_education", "kind": "conditional",
+                   "parents": ["age_group", "sex"], "gate": None},
     "industry": {"field": "industry_sector", "kind": "conditional",
                  "parents": ["age_group", "sex"], "gate": "employed"},
     "emptype": {"field": "employment_type_by_age", "kind": "conditional",
@@ -204,10 +204,8 @@ def build_dist_payload() -> tuple[str, dict]:
     from population_synthetic.generators.real.sweden import sample_service as ss
     from population_synthetic.generators.real.sweden.fetch_service import FetchService
 
-    # merge_status_education=True is the DEFAULT generation path: employment_status is
-    # conditioned on age x education x sex via the two-register odds-multiplication merge,
-    # so d.employment_status_by_edu is populated. Reads config/database/caches/scb, no network.
-    d = FetchService.load_all(SCBPxWebClient(), merge_status_education=True)
+    # Reads config/database/caches/scb, no network.
+    d = FetchService.load_all(SCBPxWebClient())
 
     # age_sex is {(age_int, sex) -> P}; aggregate single years into the 7 pipeline
     # groups for a compact hub display ({"<group>|<sex>" -> P}, 14 rows).
@@ -233,11 +231,6 @@ def build_dist_payload() -> tuple[str, dict]:
     conditional = {
         "education_by_age": _conv_conditional(d.education_by_age),
         "employment_by_sex_education": employment_flat,
-        # DEFAULT path: employment_status merged onto (age_group, education, sex) via the
-        # ArRegArbStatus x ArbStatusUtbM odds-multiplication. 112 fully-covered cells
-        # (7 age x 8 casefolded ISCED97 edu x 2 sex). The age x sex field above is retained
-        # as the sampler's fallback leg.
-        "employment_status_by_edu": _conv_conditional(d.employment_status_by_edu),
         "employment_type_by_age": _conv_conditional(d.employment_type_by_age),
         "income_source_by_employment_age": _conv_conditional(d.income_source_by_employment_age),
         "socioeconomic": _conv_conditional(d.socioeconomic),

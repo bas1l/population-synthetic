@@ -39,12 +39,6 @@ class PopulationDistributions:
     birth_country_detail: dict[tuple[str, str], dict[str, float]]
     ethnicity_map: dict[str, str]
     tables_used: tuple[str, ...]
-    # Sweden Phase-6 opt-in only: the two-table employment_status MERGE result,
-    # keyed by (age_group, education_label_casefold, sex) -> {status: prob}. None
-    # when the merge is off (the default) -- Step 3 then uses the age x sex path
-    # (employment_by_sex_education) unchanged. Optional so Norway/Italy and the
-    # single-table Sweden path construct the dataclass without it.
-    employment_status_by_edu: dict[tuple[str, str, str], dict[str, float]] | None = None
     # Sweden only: county distribution within each (age_group, sex) cell, from the same
     # table as ``region``. When set, the sampler draws a person's county from their own
     # cell (like every other conditioned attribute); ``region`` stays the national

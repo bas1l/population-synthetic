@@ -40,7 +40,7 @@ MODEL = "deepseek-r1:14b"
 OTHER_MODEL = "mistral-nemo:12b"
 WORKERS = 6
 
-CONFIG = PROJECT_ROOT / "config" / "synthetic" / "simulation_configs" / "simulation_config_004_swedish_generative.json"
+CONFIG = PROJECT_ROOT / "config" / "synthetic" / "simulation_configs" / "simulation_config_006_swedish_generative_guided.json"
 STRATEGY = PROJECT_ROOT / "config" / "synthetic" / "axes" / "strategies" / "all_pick.yaml"
 
 _driver: Any = None

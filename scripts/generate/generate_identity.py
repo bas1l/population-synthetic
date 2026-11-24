@@ -15,14 +15,14 @@ Usage:
     # Via explicit CLI args:
     python scripts/generate/generate_identity.py \\
         --mode configurable \\
-        --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json \\
+        --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json \\
         --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml \\
         [--output identity.json]
 
     python scripts/generate/generate_identity.py \\
         --provider claude \\
         --mode configurable \\
-        --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json \\
+        --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json \\
         --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml
 
 Modes:
@@ -68,7 +68,7 @@ def main() -> None:
         epilog=(
             "Examples:\n"
             "  python scripts/generate/generate_identity.py --mode configurable \\\n"
-            "      --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json\n"
+            "      --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json\n"
         ),
     )
     parser.add_argument(

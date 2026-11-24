@@ -18,22 +18,9 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a synthetic Swedish population from SCB data")
-    parser.add_argument("--n", type=int, default=100, help="Number of individuals to generate")
+    parser.add_argument("--n", type=int, default=10000, help="Number of individuals to generate")
     parser.add_argument("--output", type=str, default="data/scb_api/scb_population.json", help="Output file path")
-    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
-    parser.add_argument(
-        "--no-merge-status-education",
-        dest="merge_status_education",
-        action="store_false",
-        help=(
-            "Opt OUT of the default employment_status two-table merge. By DEFAULT the "
-            "generator conditions employment_status on (age x education x sex) by merging "
-            "two REGISTER tables via the documented odds-multiplication derivation "
-            "(assumes no status x age x education interaction). Pass this flag to fall "
-            "back to the single-table (age x sex) register path instead."
-        ),
-    )
-    parser.set_defaults(merge_status_education=True)
+    parser.add_argument("--seed", type=int, default=42, help="Random seed (default 42, the seed of the reference population)")
     parser.add_argument(
         "--cache-ttl-days",
         type=int,
@@ -47,22 +34,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.seed is None:
-        args.seed = int(np.random.SeedSequence().entropy & 0xFFFFFFFF)
     logger.info("Seed: %d", args.seed)
 
     client = SCBPxWebClient() if args.cache_ttl_days is None else SCBPxWebClient(cache_ttl_days=args.cache_ttl_days)
-    distributions = FetchService.load_all(client, merge_status_education=args.merge_status_education)
-    if args.merge_status_education:
-        logger.info(
-            "employment_status two-table MERGE enabled (all-register; assumes no "
-            "status x age x education interaction) -- see the merge spec"
-        )
-
+    distributions = FetchService.load_all(client)
     rng = np.random.default_rng(args.seed)
-    individuals = SampleService.sample_population(
-        distributions, rng, args.n, merge_status_education=args.merge_status_education
-    )
+    individuals = SampleService.sample_population(distributions, rng, args.n)
 
     _TABLE_CLASSIFICATION_MAP: dict[str, dict[str, str]] = {
         "BE/BE0101/BE0101A/BefolkningNy": {

@@ -171,7 +171,7 @@ def infer_country(config_path: str | Path) -> str:
     """Infer the country id from a simulation-config path.
 
     Manifests carry no explicit country; it is implicit in the simulation-config
-    filename (e.g. ``simulation_config_004_swedish_generative.json`` -> ``swedish``,
+    filename (e.g. ``simulation_config_006_swedish_generative_guided.json`` -> ``swedish``,
     ``simulation_config_005_italian_generative.json`` -> ``italian``). This matches
     the known country ids (derived from the country axis YAMLs) against the config
     stem.
