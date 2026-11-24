@@ -45,3 +45,8 @@ class PopulationDistributions:
     # (employment_by_sex_education) unchanged. Optional so Norway/Italy and the
     # single-table Sweden path construct the dataclass without it.
     employment_status_by_edu: dict[tuple[str, str, str], dict[str, float]] | None = None
+    # Sweden only: county distribution within each (age_group, sex) cell, from the same
+    # table as ``region``. When set, the sampler draws a person's county from their own
+    # cell (like every other conditioned attribute); ``region`` stays the national
+    # marginal. None for Norway/Italy, which keep drawing from ``region``.
+    region_by_age_sex: dict[tuple[str, str], dict[str, float]] | None = None

@@ -602,6 +602,51 @@ def test_scb_native_mapping_resolves_every_income_component(sweden_mapper):
     assert out["income_source"] == "Housing Allowance"
 
 
+def _region_raw():
+    """Tiny json-stat2 county x age x sex table: 2 counties, ages 20/30, 2 sexes."""
+    return {
+        "dimension": {
+            "Region": {"category": {"label": {"01": "Stockholm county", "12": "Skåne county"}}},
+            "Alder": {"category": {"label": {"20": "20 years", "30": "30 years"}}},
+            "Kon": {"category": {"label": {"1": "men", "2": "women"}}},
+        },
+        # order: region, age, sex
+        "value": [10, 20, 30, 40, 50, 60, 70, 80],
+    }
+
+
+def test_parse_region_by_age_sex_conditions_on_the_cell():
+    cells = P.parse_region_by_age_sex(_region_raw(), age_group_map={})
+    # 20 years -> 18-24, 30 years -> 25-34
+    assert set(cells) == {("18-24", "men"), ("18-24", "women"), ("25-34", "men"), ("25-34", "women")}
+    assert cells[("18-24", "men")] == {"Stockholm county": 10 / 60, "Skåne county": 50 / 60}
+    assert cells[("25-34", "women")] == {"Stockholm county": 40 / 120, "Skåne county": 80 / 120}
+    assert all(abs(sum(d.values()) - 1.0) < 1e-12 for d in cells.values())
+
+
+def test_parse_region_by_age_sex_mixes_back_to_the_national_marginal():
+    raw = _region_raw()
+    cells = P.parse_region_by_age_sex(raw, age_group_map={})
+    weights = {(ag, sx): sum(raw["value"][i] for i in idx)
+               for (ag, sx), idx in {("18-24", "men"): (0, 4), ("18-24", "women"): (1, 5),
+                                     ("25-34", "men"): (2, 6), ("25-34", "women"): (3, 7)}.items()}
+    total = sum(weights.values())
+    mix: dict[str, float] = {}
+    for cell, dist in cells.items():
+        for county, p in dist.items():
+            mix[county] = mix.get(county, 0.0) + p * weights[cell] / total
+    marginal = P.parse_region(raw)
+    assert mix.keys() == marginal.keys()
+    assert all(abs(mix[k] - marginal[k]) < 1e-12 for k in marginal)
+
+
+def test_parse_region_by_age_sex_rejects_an_empty_cell():
+    raw = _region_raw()
+    raw["value"] = [0, 20, 30, 40, 0, 60, 70, 80]  # (18-24, men) has no population
+    with pytest.raises(ValueError, match="no population"):
+        P.parse_region_by_age_sex(raw, age_group_map={})
+
+
 def test_aku_attachment_age_label_map_accepts_hyphen_and_en_dash():
     # SCB switched the AKU band label from "15-24 years" to an en dash spelling; both must
     # resolve to the 18-24 pipeline group or the employment_type table loses that cell.

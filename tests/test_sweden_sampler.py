@@ -48,6 +48,7 @@ def make_distributions() -> PopulationDistributions:
                                             "Retired": 0.1, "Sick Leave": 0.05, "Other": 0.05}),
         birth_location=_cells({"Sweden": 0.8, "EU": 0.1, "Outside EU": 0.1}),
         region={"Stockholm county": 0.5, "Skåne county": 0.5},
+        region_by_age_sex=_cells({"Stockholm county": 0.5, "Skåne county": 0.5}),
         socioeconomic=_cells({"Poverty": 0.2, "Working Class": 0.3, "Middle Class": 0.4, "Wealthy": 0.1}),
         parental_structure={"Both parents": 0.7, "Single mother": 0.3},
         civil_status_by_age_sex=_cells({"single": 0.5, "married": 0.4, "divorced": 0.1}),
@@ -84,6 +85,7 @@ _SEX_CONDITIONED_TABLES = (
     "employment_type_by_age",
     "housing_tenure",
     "birth_country_detail",
+    "region_by_age_sex",
 )
 
 
@@ -157,3 +159,27 @@ def test_sampling_is_identical_across_hash_seeds():
     b = _sample_under_hashseed("1")
     assert json.loads(a), "subprocess produced no population"
     assert a == b
+
+
+def test_region_is_drawn_from_the_individuals_own_age_sex_cell():
+    # Region used to be one national marginal; it now follows (age_group, sex) like the
+    # other conditioned attributes. Give two cells disjoint county sets and check that
+    # every individual in the cell draws only from that cell's counties.
+    base = make_distributions()
+    cells = dict(base.region_by_age_sex)
+    cells[("35-44", "men")] = {"Stockholm county": 1.0}
+    cells[("65-74", "women")] = {"Skåne county": 1.0}
+    dist = dataclasses.replace(base, region_by_age_sex=cells)
+    for age, sex, expected in ((40, "men", "Stockholm county"), (70, "women", "Skåne county")):
+        one = dataclasses.replace(dist, age_sex={(age, sex): 1.0})
+        regions = {
+            SampleService.sample_one(one, np.random.default_rng(seed), 0)["region"]["label"]
+            for seed in range(30)
+        }
+        assert regions == {expected}
+
+
+def test_region_by_age_sex_is_required():
+    dist = dataclasses.replace(make_distributions(), region_by_age_sex=None)
+    with pytest.raises(ValueError, match="region"):
+        SampleService.sample_one(dist, np.random.default_rng(0), 0)

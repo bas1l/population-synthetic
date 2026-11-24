@@ -123,10 +123,12 @@ class SampleService:
         is_employed = employment_status_label in _EMPLOYED_STATUSES
 
         # Step 4: birth_location -- conditional on (age_group, sex_label);
-        #         region + parental_structure marginal; socioeconomic conditional
+        #         region conditional on (age_group, sex_label); parental_structure
+        #         marginal; socioeconomic conditional
         bl_dist = _require_cell(distributions.birth_location, cell, "birth_location")
         birth_location_label = sample_from(rng, bl_dist)
-        region_label = sample_from(rng, distributions.region)
+        region_dist = _require_cell(distributions.region_by_age_sex or {}, cell, "region")
+        region_label = sample_from(rng, region_dist)
         parental_structure_label = sample_from(rng, distributions.parental_structure)
 
         se_dist = _require_cell(distributions.socioeconomic, cell, "socioeconomic")

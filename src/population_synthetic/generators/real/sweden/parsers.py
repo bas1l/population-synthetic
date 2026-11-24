@@ -691,6 +691,48 @@ def parse_region(raw: dict) -> dict[str, float]:
     return {k: v / grand_total for k, v in counts.items()}
 
 
+def parse_region_by_age_sex(
+    raw: dict, age_group_map: dict
+) -> dict[tuple[str, str], dict[str, float]]:
+    """County distribution per (age_group, sex) cell from the same table as ``parse_region``.
+
+    ``parse_region`` sums the Alder and Kon axes away; this keeps them, folding the
+    single-year ages into the pipeline age groups, so a person's county can be drawn
+    conditional on the (age_group, sex) already drawn for them. Both functions read
+    the same cells, so mixing these cell distributions over the table's own
+    (age_group, sex) composition gives back ``parse_region`` exactly.
+    """
+    dims = raw.get("dimension", {})
+    values = raw.get("value", [])
+
+    region_labels_raw = list(dims["Region"]["category"]["label"].values())
+    age_labels_raw = list(dims["Alder"]["category"]["label"].values())
+    sex_labels_raw = list(dims["Kon"]["category"]["label"].values())
+    n_age = len(age_labels_raw)
+    n_sex = len(sex_labels_raw)
+
+    counts: dict[tuple[str, str], dict[str, float]] = {}
+    for ri, region_raw in enumerate(region_labels_raw):
+        for ai, age_raw in enumerate(age_labels_raw):
+            age_group = resolve_age_group(age_raw, age_group_map)
+            if age_group not in VALID_AGE_GROUPS:
+                continue
+            for si, sex in enumerate(sex_labels_raw):
+                idx = ri * n_age * n_sex + ai * n_sex + si
+                v = float(values[idx] or 0) if idx < len(values) else 0.0
+                cell = counts.setdefault((age_group, sex), {})
+                cell[region_raw] = cell.get(region_raw, 0.0) + v
+
+    if not counts:
+        raise ValueError("No region-by-age-sex data parsed from response")
+    for key, dist in counts.items():
+        total = sum(dist.values())
+        if total <= 0.0:
+            raise ValueError(f"Region distribution for cell {key!r} has no population")
+        counts[key] = {k: v / total for k, v in dist.items()}
+    return counts
+
+
 def parse_urbanization_by_county(raw: dict, region_label_map: dict) -> dict[str, float]:
     dims = raw.get("dimension", {})
     values = raw.get("value", [])
