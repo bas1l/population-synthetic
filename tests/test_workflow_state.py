@@ -157,11 +157,13 @@ def test_shipped_workflow_ordering():
     # The cross-combination ranking consumes the per-combination judge output, so it
     # can never be scheduled before it.
     assert order.index("persona_realism") < order.index("realism_ranking")
+    # ... and orders the typicality distribution grid's columns by model_ranking's output.
+    assert order.index("model_ranking") < order.index("realism_ranking")
     # The attrition report re-reads the gate's own records, so it hangs off the gate's
     # last node like every other leaf rather than off an analysis process.
     assert order.index("population_cap") < order.index("validation_attrition")
-    # The cost join has three declared upstreams and is the only analysis node that
-    # depends on more than one; it can never be scheduled before any of them.
+    # The cost join has three declared upstreams; it can never be scheduled before any
+    # of them.
     assert order.index("model_ranking") < order.index("cost_efficiency")
     assert order.index("generation_metadata") < order.index("cost_efficiency")
     assert order.index("validation_attrition") < order.index("cost_efficiency")

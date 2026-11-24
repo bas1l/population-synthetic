@@ -7,6 +7,14 @@
     "Sick Leave",
     "Other"
   ],
+  "priority": [
+    "Employed",
+    "Unemployed",
+    "Student",
+    "Retired",
+    "Sick Leave",
+    "Other"
+  ],
   "real": {
     "Employed": {
       "equals": [
@@ -57,6 +65,9 @@
     }
   },
   "synthetic": {
+    "tie_break": [
+      "priority"
+    ],
     "Employed": {
       "equals": [
         "Employed",
@@ -119,7 +130,19 @@
         "Arbetande (fulltid)",
         "I anställning",
         "Projektbaserad anställning",
-        "Vikarie"
+        "Vikarie",
+        "Anständ",
+        "anställa",
+        "fortfarande i arbete men inför pension",
+        "Frånvarande på grund av semester/ledig",
+        "Föräldraförsäkringstid",
+        "Icke varaktig sysselsatt",
+        "intern at local municipality",
+        "On sabbatical",
+        "Praktik eller yrkesintroduktion",
+        "På semester",
+        "study leave",
+        "säsongsarbete (trädgårdsarbete)"
       ],
       "contains": [
         "parental leave",
@@ -132,22 +155,34 @@
         "employ",
         "working",
         "worker",
-        "job",
-        "anställd",
+        {
+          "token": "job",
+          "mode": "substring"
+        },
+        {
+          "token": "anställd",
+          "mode": "substring"
+        },
         "heltid",
         "deltid",
         "tillsvidare",
         "sysselsatt",
         "förvärvsarbetande",
         "yrkesverksam",
-        "arbetar",
+        {
+          "token": "arbetar",
+          "mode": "substring"
+        },
         "full time",
         "part time",
         "selvständig",
         "self-employ",
         "freelanc",
         "egenföretag",
-        "företagare",
+        {
+          "token": "företagare",
+          "mode": "substring"
+        },
         "frilans",
         "eget företag",
         "näringsidkare",
@@ -158,12 +193,304 @@
         "lönearbetande",
         "kok",
         "praktikant",
-        "uppdragstagare"
+        "uppdragstagare",
+        "arbetande",
+        "anstalld",
+        "ansättn",
+        "ansettning",
+        "angeställ",
+        "manager",
+        "chef",
+        {
+          "token": "lärare",
+          "mode": "substring"
+        },
+        "lärar",
+        "teacher",
+        "lecturer",
+        "nurse",
+        {
+          "token": "sjuksköterska",
+          "mode": "substring"
+        },
+        {
+          "token": "läkare",
+          "mode": "substring"
+        },
+        {
+          "token": "ingenjör",
+          "mode": "substring"
+        },
+        "engineer",
+        "developer",
+        {
+          "token": "utvecklare",
+          "mode": "substring"
+        },
+        {
+          "token": "utveggler",
+          "mode": "substring"
+        },
+        {
+          "token": "specialist",
+          "mode": "substring"
+        },
+        {
+          "token": "konsult",
+          "mode": "substring"
+        },
+        {
+          "token": "anställning",
+          "mode": "substring"
+        },
+        "consultant",
+        "contractor",
+        "entrepreneur",
+        "permitter",
+        "temporarily laid off",
+        "temporary layoff",
+        "temporarily absent",
+        "tillfälligt frånvarande",
+        "ledig från arbete",
+        "fulltid",
+        "full-time",
+        "full tid",
+        "fullt anställ",
+        "parttime",
+        "halvtid",
+        "lärling",
+        "apprentic",
+        "trainee",
+        "arbetstagare",
+        "arbetsgivare",
+        "arbetsliv",
+        "timanställ",
+        "visstid",
+        "tidsbegränsad",
+        "tillfällig",
+        "frilån",
+        "selvbedrift",
+        "egen räkning",
+        "egen firma",
+        "näringsverksamhet",
+        "gig-",
+        {
+          "token": "direktör",
+          "mode": "substring"
+        },
+        "professional",
+        "analyst",
+        "researcher",
+        {
+          "token": "omsorgspersonal",
+          "mode": "substring"
+        },
+        {
+          "token": "vårdpersonal",
+          "mode": "substring"
+        },
+        "undervisande personal",
+        "phd candidate",
+        "occupied",
+        "fast tjänst",
+        "privatpraktis",
+        "förlagd",
+        "förvaltare",
+        "mentor",
+        "hemtjänst",
+        "distansarbet",
+        "pågår arbete",
+        "arbete i",
+        "full-time work",
+        "part-time arbete",
+        "semiretir",
+        "inployed",
+        "ämployed",
+        "att work",
+        {
+          "token": "arbetsmand",
+          "mode": "substring"
+        },
+        "arbetsman",
+        {
+          "token": "arbeiter",
+          "mode": "substring"
+        },
+        "lönarbet",
+        "konsulent",
+        "extraarbete",
+        "hushållerska",
+        "arbetstid",
+        "arbetspass",
+        "arbetsmarknaden från",
+        "arbetstagarroll"
+      ],
+      "none_of": [
+        "job seek",
+        "jobseek",
+        "job-seek",
+        "job_seek",
+        "job search",
+        "jobbsök",
+        "söker jobb",
+        "sökande jobb",
+        "seeking",
+        "arbetslös",
+        "arbetssök",
+        "tidigare",
+        "före detta",
+        "former ",
+        "previously",
+        "(ej aktiv)",
+        "neet",
+        "aldrig yrkesverksam",
+        "heltidspension",
+        "heltidsförälder",
+        "homemaker",
+        "hemarbetare",
+        "hemarbetande på heltid",
+        "hemarbetande (heltid",
+        "hemarbetande, heltid",
+        "volontär",
+        "frivillig",
+        "on full-time sick leave",
+        "sjukskriven på heltid",
+        "avslutad arbetsliv",
+        "från arbetslivet",
+        "handarbete",
+        "vårdas",
+        "pensionär (fulltid",
+        "sökande efter",
+        "between jobs",
+        "laid off (in",
+        "utanför arbetskraften",
+        "lärlingsutbildning",
+        {
+          "token": "fulltidsarbetslös",
+          "mode": "word"
+        }
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              {
+                "token": "pension",
+                "mode": "substring"
+              },
+              "retire",
+              "semi-retire",
+              {
+                "token": "hemarbetande",
+                "mode": "substring"
+              },
+              "hemmafru",
+              "homemaker",
+              {
+                "token": "arbetssök",
+                "mode": "substring"
+              },
+              {
+                "token": "arbetslös",
+                "mode": "substring"
+              },
+              "unemploy",
+              "jobseek",
+              "job seek"
+            ],
+            [
+              {
+                "token": "konsult",
+                "mode": "substring"
+              },
+              {
+                "token": "lönearbet",
+                "mode": "substring"
+              },
+              "arbetar",
+              "working",
+              "works",
+              "part-time",
+              "part time",
+              "reduced hours",
+              "deltid",
+              {
+                "token": "deltidsjobb",
+                "mode": "substring"
+              },
+              {
+                "token": "deltidsarbet",
+                "mode": "substring"
+              },
+              {
+                "token": "deltidsanställ",
+                "mode": "substring"
+              },
+              {
+                "token": "deltidstjänst",
+                "mode": "substring"
+              },
+              {
+                "token": "extraarbet",
+                "mode": "substring"
+              },
+              "extrajobb",
+              "employed",
+              "lönarbet"
+            ]
+          ],
+          "none_of": [
+            "tidigare",
+            "före detta",
+            "former",
+            "previous",
+            "f.d.",
+            "avslutad",
+            "avslutat",
+            "avveckl",
+            "no longer",
+            "ej längre",
+            "inte längre",
+            "söker",
+            "sökande efter",
+            "seeking",
+            "looking for",
+            "jobbsök",
+            "inför pension",
+            {
+              "token": "fulltidsarbetslös",
+              "mode": "word"
+            },
+            "arbetar inte",
+            "not working",
+            "frivillig",
+            {
+              "token": "volontär",
+              "mode": "substring"
+            },
+            "volunteer",
+            "ideell",
+            "oavlönad",
+            "unpaid"
+          ]
+        },
+        {
+          "all_of": [
+            [
+              "konsult inom tidigare bransch",
+              "tidigare pensionär men arbetar fortfarande",
+              "tidigare pensionär med deltidsarbete"
+            ]
+          ]
+        }
       ]
     },
     "Unemployed": {
       "none_of": [
-        "sjukskriv",
+        {
+          "token": "sjukskriv",
+          "mode": "substring"
+        },
         "sjukpenning",
         "sjuklön",
         "sjukfrånvaro",
@@ -171,7 +498,10 @@
         "sick_leave",
         "on sick",
         "long-term sick",
-        "long term sick"
+        "long term sick",
+        "not seeking",
+        "ej arbetslös",
+        "hemvårdare/hemsamarit"
       ],
       "equals": [
         "Unemployed",
@@ -181,19 +511,13 @@
         "Sjukskriven",
         "Arbetstränade",
         "Arbetsträning",
-        "Hemma med barn",
-        "hemma",
-        "Husmor",
-        "Hushållsansvarig",
-        "Hemmafrånvaro",
-        "Hemmafrånvarande (av val)",
         "Arbetsmarknadsåtgärd/praktik via Arbetsförmedlingen",
         "Deltar i arbetsmarknadsåtgärd",
         "Participant in labour market program (arbetsmarknadsåtgärd)",
-        "Informal caregiver for family member (anhörigvårdare)",
         "Labor market programme via Arbetsförmedlingen",
         "Labour market programme or internship (arbetsmarknadsåtgärd/praktik via Arbetsförmedlingen)",
-        "In a labour-market programme (arbetsmarknadsåtgärd)"
+        "In a labour-market programme (arbetsmarknadsåtgärd)",
+        "Arbetstränad"
       ],
       "contains": [
         "sick leave",
@@ -207,17 +531,35 @@
         "seeking",
         "arbetssökande",
         "arbetslos",
-        "arbetslös",
+        {
+          "token": "arbetslös",
+          "mode": "substring"
+        },
         "arbetsträning",
         "arbetstränade",
         "a-kassa",
         "försörjning",
-        "hemmafru",
-        "homemaker",
-        "hemmaman",
-        "hemarbetande",
-        "hemvårdare",
-        "arbetsmarknadsåtgärd"
+        "arbetsmarknadsåtgärd",
+        "job seek",
+        "jobseek",
+        "job_seek",
+        "jobbsök",
+        "söker jobb",
+        "sökande jobb",
+        "sökande efter jobb",
+        "job search",
+        "between jobs",
+        "laid off",
+        "looking for work",
+        "arbets sökande",
+        "aktivitetsstöd",
+        "etableringsprogram",
+        "arbetsförmedlingen",
+        "sökande arbete",
+        "ej iarbete",
+        "arbetsmarknadsinsats",
+        "a-kasse",
+        "aktivitetsprogram"
       ]
     },
     "Student": {
@@ -226,16 +568,84 @@
         "Studerande",
         "Full-time student",
         "Part-time student",
-        "Gymnasieelev"
+        "Gymnasieelev",
+        "Utbildning",
+        "Utbildning/utveckling",
+        "Utbildning/utveckling pågår"
       ],
       "contains": [
-        "student",
-        "studerande",
+        {
+          "token": "student",
+          "mode": "substring"
+        },
+        {
+          "token": "studerande",
+          "mode": "substring"
+        },
         "studerar",
-        "studier",
+        {
+          "token": "studier",
+          "mode": "substring"
+        },
         "studying",
         "studies",
-        "pupil"
+        "pupil",
+        "vocational training",
+        "studium",
+        "utbildningsaktivitet",
+        "vidareutbildning",
+        "yrkesutbildning påbörjad",
+        "lärlingsutbildning",
+        "elev"
+      ],
+      "all_of": [
+        [
+          {
+            "token": "stud",
+            "mode": "substring"
+          },
+          "elev"
+        ],
+        [
+          "heltid",
+          "full time",
+          "full-time",
+          "full_time",
+          "deltid",
+          "part-time",
+          "not employed",
+          "not working",
+          "utan arbete",
+          "ingen anställning",
+          "förvärvsarbet"
+        ]
+      ],
+      "none_of": [
+        "arbetar",
+        "arbete ",
+        "extraarbete",
+        " arbetande",
+        "and employed",
+        "och anställd",
+        "employed (part",
+        "and working",
+        "med anställning",
+        "med arbete",
+        {
+          "token": "jobb",
+          "mode": "substring"
+        },
+        "job ",
+        "deltidsarbet",
+        "deltidsanställ",
+        "deltidstjänst",
+        "extrajobb",
+        "employed part",
+        "part-time job",
+        "part-time employ",
+        "with part-time",
+        "heltidsanställd",
+        "förlovad med"
       ]
     },
     "Retired": {
@@ -244,12 +654,53 @@
         "Pensioner",
         "Pensionär",
         "Pensionerad",
-        "Ålderspension"
+        "Ålderspension",
+        "pensjonist med extrainkomst"
       ],
       "contains": [
         "retired",
-        "pension",
-        "retire"
+        {
+          "token": "pension",
+          "mode": "substring"
+        },
+        "retire",
+        "退休",
+        "äldreomsorg",
+        "äldrebidrag",
+        "ej i arbetsför ålder"
+      ],
+      "all_of": [
+        [
+          "pension",
+          "retired"
+        ],
+        [
+          "tidigare",
+          "före detta",
+          "former",
+          "previously",
+          "(pension",
+          "pensionering",
+          "aldrig yrkesverksam",
+          "icke förvärvsarbet"
+        ]
+      ],
+      "none_of": [
+        "förtidspens",
+        "sjukpens",
+        "disability",
+        "sjukersättning",
+        "aktivitetsersättning",
+        "efterlevande",
+        "inför pension",
+        "arbetar fortfarande",
+        "arbetar sporadiskt",
+        "men arbetar",
+        "deltidsarbet",
+        "deltidsanställ",
+        "deltidstjänst",
+        "deltidsjobb",
+        "extraarbet"
       ]
     },
     "Sick Leave": {
@@ -261,7 +712,9 @@
         "Sjuklön",
         "Sjukfrånvaro",
         "Långtidssjukskriven",
-        "On sick leave"
+        "On sick leave",
+        "sjukfrånvarande",
+        "Sjukledig"
       ],
       "contains": [
         "sick leave",
@@ -269,20 +722,92 @@
         "on sick",
         "long-term sick",
         "long term sick",
-        "sjukskriv",
+        {
+          "token": "sjukskriv",
+          "mode": "substring"
+        },
         "sjukpenning",
         "sjuklön",
         "sjukfrånvaro",
-        "långtidssjuk"
+        "långtidssjuk",
+        "förtidspens",
+        "sjukpens",
+        "disability",
+        "disabled",
+        "sjukersättning",
+        "aktivitetsersättning",
+        "sickness compensation",
+        "activity compensation",
+        "ej arbetsför",
+        "on_disability"
       ]
     },
     "Other": {
       "contains": [
         "frivillig",
-        "volontär",
+        {
+          "token": "volontär",
+          "mode": "substring"
+        },
         "volunteer",
         "ideell",
-        "föreningsverksamhet"
+        "föreningsverksamhet",
+        "hemmafru",
+        "homemaker",
+        "hemmaman",
+        "hemarbetande",
+        "hemvårdare",
+        "hemarbetare",
+        "caregiver",
+        "vård av anhörig",
+        "vårdar anhörig",
+        "anhörigvård",
+        "släktingvård",
+        "oavlönad",
+        "tar hand om familjen",
+        "hemmasittare",
+        "ej arbetsaktiv",
+        "ekonomiskt oberoende",
+        "livsförsörjs av föräldrar",
+        "ingen aktivitet",
+        "övrig",
+        "annat",
+        "efterlevandepension",
+        "utanför arbetskraften",
+        "heltidsförälder",
+        "stay-at-home",
+        "not seeking",
+        "hemmakar"
+      ],
+      "equals": [
+        "Hemma med barn",
+        "hemma",
+        "Husmor",
+        "Hushållsansvarig",
+        "Hemmafrånvaro",
+        "Hemmafrånvarande (av val)",
+        "Informal caregiver for family member (anhörigvårdare)",
+        "Engagerad i familjeansvar",
+        "Familjeansvarig",
+        "Försörjs av familj",
+        "Förälder/omsorgsperson",
+        "hemma med barn (föräldravård)",
+        "Hemma vid barn",
+        "Hemmaförälder/Vårdgivare",
+        "hushållsansvarig (vårdgivare)",
+        "Inaktiv",
+        "Inte i arbetskraften",
+        "not in labor force",
+        "not in labour force",
+        "Någon som tar omtag iomsorg",
+        "omsorgsgivare",
+        "omsorgsgivare för familjemedlemmar",
+        "Unpaid internship",
+        "Vård av äldre anhörig"
+      ],
+      "none_of": [
+        "arbete inom ideell",
+        "arbetande i ideell"
       ]
     }
   }

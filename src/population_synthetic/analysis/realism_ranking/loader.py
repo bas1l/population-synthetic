@@ -14,7 +14,10 @@ artifacts -- see :func:`load_competitors`. That path reads the verdict caches th
 ``persona_realism``'s own pure reducers and re-runs its own statistics function, so it
 adds no second implementation of any published number; what it does not do is read the
 two tidy CSVs, whose row grain (a persona's votes already summed over *all* its cached
-rounds) cannot express a cap.
+rounds) cannot express a cap. It reads the caches of the **selected** personas only --
+the roster the judge drew from the capped mapped population, re-derived here through
+``persona_realism``'s own selection rule -- so a leftover cache file of a persona an
+earlier cap selected is ignored, exactly as the producer ignores it.
 
 Two gates run before any statistic is computed, because both failure modes produce
 numbers that look perfectly reasonable and are wrong:
@@ -29,11 +32,13 @@ silently ranked, because a combination missing half its personas would simply ap
 to have an unusually clean impossibility rate.
 
 **Homogeneity.** Every consumed combination must share the same ``judge_model``,
-``prompt_template_sha256`` and ``n_rounds``. Ranking units judged by different judges,
-prompts, or round counts measures the judges, not the units. The identity is read from
+``prompt_template_sha256``, ``persona_rendering_sha256`` (the judge-facing category
+rendering), ``context_isolation`` (the judge-call regime) and
+``n_rounds``. Ranking units judged by different judges, prompts, call-isolation regimes
+or round counts measures the judges, not the units. The identity is read from
 each report's stamped ``provenance`` block -- what was actually used -- and never from
 the config as it currently stands, which may have moved on since. Under a round cap
-the third key is not dropped but *changed in kind*: the set is held to one consumed
+the ``n_rounds`` key is not dropped but *changed in kind*: the set is held to one consumed
 round count by construction, so ``n_rounds`` becomes a **capacity** requirement (every
 persona of every competitor must hold at least N cached rounds) instead of an equality.
 The first two keys are never relaxed -- no cap can repair a different judge or prompt.
@@ -57,7 +62,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from population_synthetic.analysis.persona_realism.artifacts import combo_clash_rows, persona_rows
+from population_synthetic.analysis.persona_realism.artifacts import (
+    combo_clash_rows,
+    log_leftover_persona_files,
+    persona_rows,
+)
 from population_synthetic.analysis.persona_realism.config import JudgeConfig
 from population_synthetic.analysis.persona_realism.reduce import (
     LoadedPersona,
@@ -65,6 +74,7 @@ from population_synthetic.analysis.persona_realism.reduce import (
     reduce_combo,
     reduce_persona,
 )
+from population_synthetic.analysis.persona_realism.selection import selected_persona_ids
 from population_synthetic.analysis.persona_realism.stats import compute_realism_stats
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
 from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
@@ -77,6 +87,11 @@ from population_synthetic.analysis.utils.realism_csv import (
     SEVERITY_LEVELS,
     RealismPersonaRow,
     read_realism_personas_csv,
+)
+from population_synthetic.analysis.utils.realism_stage2_csv import (
+    Stage2IssueRow,
+    read_stage2_issues_csv,
+    reconcile_with_clashes,
 )
 from population_synthetic.analysis.utils.registry import analysis_output_dir
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
@@ -98,7 +113,18 @@ ROUND_COUNT_KEY = "n_rounds"
 
 #: The provenance fields that must agree across the whole consumption set. Each one
 #: changes what the judge measured, so a mismatch makes the units incomparable.
-JUDGE_IDENTITY_KEYS: tuple[str, ...] = ("judge_model", "prompt_template_sha256", ROUND_COUNT_KEY)
+#: ``context_isolation`` is the judge-call regime read from the verdict caches: a
+#: report judged under the old shared-conversation regime (``untagged_shared_conversation``,
+#: or no key at all on a report written before the field existed) can never be ranked
+#: beside one whose every call was an independent conversation.
+#: ``persona_rendering_sha256`` is the hash of the judge-facing category rendering
+#: (``judge.yaml`` ``persona_rendering``): the same template shown different category
+#: labels is a different prompt. A report predating the stamp carries none (``None``),
+#: which never equals a real hash.
+JUDGE_IDENTITY_KEYS: tuple[str, ...] = (
+    "judge_model", "prompt_template_sha256", "persona_rendering_sha256", "context_isolation",
+    ROUND_COUNT_KEY,
+)
 
 #: The subset compared when a round cap is active -- derived from the full tuple rather
 #: than restated, so the two can never list different judge fields. The cap already
@@ -156,6 +182,11 @@ class CompetitorRecord:
     report_path: Path
     personas_csv_path: Path
     clashes: tuple[RealismClashRow, ...] = ()
+    #: The stage-2 rows (one per S3 clash) from ``{combo}_stage2.csv``, reconciled
+    #: against the S3 rows of ``clashes``; ``None`` when the file is absent (the
+    #: combination was judged before stage 2 existed). Reporting-only: nothing in
+    #: Axis A, Axis B or a test reads it.
+    stage2: tuple[Stage2IssueRow, ...] | None = None
 
     @property
     def impossible_indicators(self) -> tuple[int, ...]:
@@ -179,6 +210,34 @@ class CompetitorRecord:
             for row in self.personas
             if row.can_exist_majority and row.typicality_mean is not None
         )
+
+    @property
+    def typicality_round_scores(self) -> tuple[tuple[int, ...], ...]:
+        """Per-persona scored rounds, over exactly the personas of :attr:`typicality_means`.
+
+        One tuple per survivor (a majority-possible persona with a non-null mean), in the
+        same order, holding the non-``None`` entries of its ``typicality_rounds`` -- a round
+        judged impossible carries no score. Under a round cap these are the scored rounds
+        among the first N, because the capped loader rebuilds the rows from the trimmed
+        cache. The mean of each tuple is that persona's ``typicality_mean``.
+
+        Raises ``ValueError`` when a survivor carries a mean but no scored round: the two
+        columns would then describe different judgements of one persona.
+        """
+        scores: list[tuple[int, ...]] = []
+        for row in self.personas:
+            if not (row.can_exist_majority and row.typicality_mean is not None):
+                continue
+            scored = tuple(t for t in row.typicality_rounds if t is not None)
+            if not scored:
+                raise ValueError(
+                    f"Persona {row.persona_id!r} of {self.slug!r} carries typicality_mean="
+                    f"{row.typicality_mean} but no scored round in typicality_rounds; the "
+                    "per-persona CSV is internally inconsistent -- re-run "
+                    "scripts/analyze/analyze_persona_realism.py --rewrite-artifacts."
+                )
+            scores.append(scored)
+        return tuple(scores)
 
 
 def _judge_identity(provenance: dict[str, Any], keys: tuple[str, ...] = JUDGE_IDENTITY_KEYS) -> tuple[Any, ...]:
@@ -286,6 +345,8 @@ def _load_one(
         expected_counts_source=personas_csv_path,
     )
 
+    stage2 = _read_stage2(combo_dir, label, clashes, rounds_cap=None)
+
     return CompetitorRecord(
         slug=label,
         country=country,
@@ -304,7 +365,37 @@ def _load_one(
         report_path=report_path,
         personas_csv_path=personas_csv_path,
         clashes=tuple(clashes),
+        stage2=stage2,
     )
+
+
+def _read_stage2(
+    combo_dir: Path,
+    label: str,
+    clashes: list[RealismClashRow] | tuple[RealismClashRow, ...],
+    *,
+    rounds_cap: int | None,
+) -> tuple[Stage2IssueRow, ...] | None:
+    """Read ``{label}_stage2.csv`` (``None`` when absent), cap it, and reconcile it.
+
+    Under a round cap only the rows of the first *rounds_cap* rounds are kept -- the
+    file is keyed by the same 0-based round index as the verdict cache, so the trim is
+    exact. The kept rows must name exactly the S3 clashes of *clashes* (which, under a
+    cap, were themselves rebuilt from the trimmed cache), or the two describe different
+    states of the cache and this raises.
+    """
+    path = combo_dir / f"{label}_stage2.csv"
+    if not path.is_file():
+        return None
+    rows = read_stage2_issues_csv(path)
+    if rounds_cap is not None:
+        rows = [row for row in rows if row.round_index < rounds_cap]
+    reconcile_with_clashes(
+        rows,
+        ((c.persona_id, c.round_index, c.attr_a, c.attr_b) for c in clashes if c.severity == "S3"),
+        label=str(path),
+    )
+    return tuple(rows)
 
 
 # --------------------------------------------------------------------------- #
@@ -312,16 +403,44 @@ def _load_one(
 # --------------------------------------------------------------------------- #
 
 
-def _present_personas(combo_dir: Path, label: str) -> list[LoadedPersona]:
-    """The combination's cached personas in persona-id order (fail-fast when empty).
+def _selected_ids(mapped_dir: Path, label: str, *, is_real_reference: bool, judge_cfg: JudgeConfig) -> list[str]:
+    """The roster the judge selected for *label*, from the capped mapped population.
 
-    The verdict cache is read exclusively through ``persona_realism``'s own loader, so
-    this package never learns the cache's file layout beyond the directory holding it.
-    An empty cache raises rather than yielding an empty competitor: the report the
-    caller just read says this combination was judged, so an empty cache means the two
-    disagree -- and a rate over a base of zero would still rank.
+    The same source and the same rule as the judge (``persona_realism.selection``): the
+    seeded ``sample_size`` draw for a synthetic combination, the ``real_sample_size``
+    first-N prefix for the real competitor. A missing mapped file raises -- the report
+    says the combination was judged, so its population must exist.
     """
-    loaded = load_combo_verdicts(combo_dir)
+    path = mapped_dir / f"{label}.json"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Combination {label!r} has a published report but no capped mapped population at "
+            f"{path}; the round cap re-derives the judged persona set from it. Re-run "
+            "population_cap, or drop the cap to consume the published artifacts as they stand."
+        )
+    with open(path, "r", encoding="utf-8") as fh:
+        individuals = json.load(fh).get("individuals")
+    if not isinstance(individuals, list):
+        raise ValueError(f"Mapped population {path} has no 'individuals' list")
+    override = judge_cfg.real_sample_size if is_real_reference else None
+    return list(selected_persona_ids(individuals, label, judge_cfg, sample_size_override=override))
+
+
+def _present_personas(
+    combo_dir: Path, label: str, selected_ids: list[str], *, log_leftovers: bool = False,
+) -> tuple[list[LoadedPersona], int]:
+    """The selected personas' caches in persona-id order, plus the count without one.
+
+    The verdict cache is read exclusively through ``persona_realism``'s own loader and
+    only for the roster (*selected_ids*), so this package never learns the cache's file
+    layout beyond the directory holding it, and a leftover file of an unselected persona
+    is never read. An empty cache raises rather than yielding an empty competitor: the
+    report the caller just read says this combination was judged, so an empty cache
+    means the two disagree -- and a rate over a base of zero would still rank.
+    """
+    if log_leftovers:
+        log_leftover_persona_files(combo_dir, label, selected_ids, logger=_LOGGER)
+    loaded = load_combo_verdicts(combo_dir, expected_ids=selected_ids)
     present = [lp for lp in loaded.values() if lp is not None]
     if not present:
         raise ValueError(
@@ -330,7 +449,7 @@ def _present_personas(combo_dir: Path, label: str) -> list[LoadedPersona]:
             "cache; re-judge the combination with scripts/analyze/analyze_persona_realism.py, "
             "or drop the cap to consume the published artifacts as they stand."
         )
-    return present
+    return present, len(loaded) - len(present)
 
 
 def _trim_to_cap(persona: LoadedPersona, rounds_cap: int, *, label: str) -> LoadedPersona:
@@ -369,6 +488,7 @@ def _load_one_capped(
     rounds_cap: int,
     judge_cfg: JudgeConfig,
     n_rounds_source: str,
+    mapped_dir: Path,
 ) -> CompetitorRecord | str:
     """Rebuild one competitor from its verdict cache over the first *rounds_cap* rounds.
 
@@ -392,16 +512,19 @@ def _load_one_capped(
         return "no combination report (judge has not completed this combination)"
 
     report = _read_report(report_path)
-    trimmed = [_trim_to_cap(lp, rounds_cap, label=label) for lp in _present_personas(combo_dir, label)]
+    selected = _selected_ids(mapped_dir, label, is_real_reference=is_real_reference, judge_cfg=judge_cfg)
+    present, n_uncached = _present_personas(combo_dir, label, selected, log_leftovers=True)
+    trimmed = [_trim_to_cap(lp, rounds_cap, label=label) for lp in present]
 
     n_personas = int(report["n_personas"])
-    if len(trimmed) != n_personas:
+    if len(trimmed) != n_personas or n_uncached != int(report.get("n_failed", 0)):
         raise ValueError(
-            f"Combination {label!r} caches {len(trimmed)} persona(s) but its report "
-            f"{report_path} declares n_personas={n_personas}. The published artifacts "
-            "describe a different state of the cache than the round cap would re-reduce; "
-            "re-run scripts/analyze/analyze_persona_realism.py --rewrite-artifacts for "
-            "this combination."
+            f"Combination {label!r} caches {len(trimmed)} of its {len(selected)} selected "
+            f"persona(s) ({n_uncached} without a cache) but its report {report_path} declares "
+            f"n_personas={n_personas}, n_failed={report.get('n_failed', 0)}. The published "
+            "artifacts describe a different state of the cache or of the capped selection than "
+            "the round cap would re-reduce; re-run scripts/analyze/analyze_persona_realism.py "
+            "--rewrite-artifacts for this combination."
         )
 
     reduced = {lp.persona_id: reduce_persona(lp.rounds, persona_id=lp.persona_id) for lp in trimmed}
@@ -451,6 +574,7 @@ def _load_one_capped(
         # downstream messages point at the file a reader would inspect.
         personas_csv_path=combo_dir / f"{label}_personas.csv",
         clashes=tuple(clashes),
+        stage2=_read_stage2(combo_dir, label, clashes, rounds_cap=rounds_cap),
     )
 
 
@@ -478,27 +602,30 @@ def _assert_homogeneous(records: list[CompetitorRecord], *, cap_active: bool) ->
             raise ValueError(
                 f"Heterogeneous judge across the consumption set: {record.slug!r} differs "
                 f"from {baseline.slug!r} ({'; '.join(differing)}). Ranking combinations "
-                "judged by different judges, prompts, or round counts measures the judges, "
-                "not the combinations. Re-judge the odd combination(s) under one "
+                "judged by different judges, prompts, call-isolation regimes or round counts "
+                "measures the judges, not the combinations. Re-judge the odd combination(s) under one "
                 "configuration, or narrow the selection with --slug / --model / --strategy."
             )
 
 
-def _probe_cached_depths(records: list[CompetitorRecord]) -> dict[str, int]:
-    """Each competitor's shallowest cached persona, keyed by slug.
+def _probe_cached_depths(
+    records: list[CompetitorRecord], *, mapped_dir: Path, judge_cfg: JudgeConfig,
+) -> dict[str, int]:
+    """Each competitor's shallowest cached selected persona, keyed by slug.
 
     Reads the **verdict caches**, never ``provenance.n_rounds``: that field is the
     round count the judge was *configured* for, which sits above what a part-way
     topped-up cache actually holds. A depth derived from the target would then fail
     the very capacity check it was derived to satisfy.
     """
-    return {
-        record.slug: min(
-            len(persona.rounds)
-            for persona in _present_personas(record.report_path.parent, record.slug)
+    depths: dict[str, int] = {}
+    for record in records:
+        selected = _selected_ids(
+            mapped_dir, record.slug, is_real_reference=record.is_real_reference, judge_cfg=judge_cfg,
         )
-        for record in records
-    }
+        present, _ = _present_personas(record.report_path.parent, record.slug, selected)
+        depths[record.slug] = min(len(persona.rounds) for persona in present)
+    return depths
 
 
 def _load_competitor(
@@ -512,6 +639,7 @@ def _load_competitor(
     rounds_cap: int | None,
     judge_cfg: JudgeConfig | None,
     n_rounds_source: str,
+    mapped_dir: Path,
 ) -> CompetitorRecord | str:
     """Route one competitor to the published-artifact path or the round-cap path."""
     if rounds_cap is None:
@@ -529,6 +657,7 @@ def _load_competitor(
         combo_dir, label, country=country, model=model,
         strategy=strategy, is_real_reference=is_real_reference,
         rounds_cap=rounds_cap, judge_cfg=judge_cfg, n_rounds_source=n_rounds_source,
+        mapped_dir=mapped_dir,
     )
 
 
@@ -604,6 +733,7 @@ def _load_all(
             judge_root / country / slug, slug,
             country=country, model=model, strategy=strategy, is_real_reference=False,
             rounds_cap=rounds_cap, judge_cfg=judge_cfg, n_rounds_source=n_rounds_source,
+            mapped_dir=mapped_dir,
         )
         if isinstance(loaded, str):
             if strict:
@@ -625,6 +755,7 @@ def _load_all(
             judge_root / country / label, label,
             country=country, model="", strategy="", is_real_reference=True,
             rounds_cap=rounds_cap, judge_cfg=judge_cfg, n_rounds_source=n_rounds_source,
+            mapped_dir=mapped_dir,
         )
         if isinstance(loaded, str):
             if strict:
@@ -715,7 +846,9 @@ def load_competitors(
     if rounds_cap is not None:
         _assert_homogeneous(records, cap_active=True)
     elif judge_cfg is not None and _identity_mismatches(records) == {ROUND_COUNT_KEY}:
-        depths = _probe_cached_depths(records)
+        depths = _probe_cached_depths(
+            records, mapped_dir=resolve_mapped_dir(Path(output_base)), judge_cfg=judge_cfg,
+        )
         derived = min(depths.values())
         trimmed = sorted(slug for slug, depth in depths.items() if depth > derived)
         _LOGGER.warning(

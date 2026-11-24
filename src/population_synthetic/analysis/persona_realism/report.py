@@ -60,6 +60,7 @@ def write_combo_report(
     validation: dict[str, Any] | None,
     provenance: dict[str, Any],
     pricing: dict[str, Any],
+    stage2: dict[str, Any] | None = None,
 ) -> Path:
     """Write one combination's realism JSON report to *path*.
 
@@ -67,7 +68,9 @@ def write_combo_report(
     ``dispersion``/``reliability`` fields are already plain dicts). ``clash_taxonomy``
     is the caller's serialisable clash list (``[{pair, severity, n_personas}]``).
     ``validation`` is the hard-rules validation block (``None`` when no rules were
-    evaluated). All meta blocks are written verbatim.
+    evaluated). ``stage2`` is the reporting-only stage-2 classification block (class
+    counts, the impossible personas by class, stage-2 cost); omitted when ``None``. All
+    meta blocks are written verbatim.
     """
     stats_dict = asdict(stats)
     payload = {
@@ -86,4 +89,6 @@ def write_combo_report(
         "pricing": pricing,
         "provenance": provenance,
     }
+    if stage2 is not None:
+        payload["stage2"] = stage2
     return _dump(payload, path)

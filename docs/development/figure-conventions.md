@@ -95,7 +95,8 @@ worth failing on.
 
 **The fixed-canvas mode.** `save_figure(fig, path, fixed_canvas=True)` writes the figure at its own
 size instead of the tight box (`bbox_inches=None`). It exists for a figure laid out in absolute
-points to an exact size — today the reference-method gain forest at `TEXT_WIDTH` × `STRIP_HEIGHT`.
+points to an exact size — today the reference-method gain forest at `TEXT_WIDTH` × `STRIP_HEIGHT`
+and the typicality distribution grid at `TEXT_WIDTH` wide.
 The tight box is built from text *layout* boxes, and a rotated multi-line tick label's layout box
 is wider than its ink, so the tight crop wrote that 150 pt strip 156 pt tall although nothing was
 drawn past its edge. Nothing can grow in fixed mode to hold an overflowing artist, so the mode adds
@@ -193,6 +194,57 @@ Annotation colour needs no adjustment for the change. `palette.text_color_on` as
 what it actually painted and picks white or black by WCAG relative luminance, so the two dark rungs
 take white text and the three light ones black, without a threshold tuned to any one ramp.
 
+### Severity categories take the Okabe–Ito set
+
+The clash severities and the worst-clash-per-individual categories are **categories**, not
+magnitudes, so they do not come from the ramp. Their one home is `palette.SEVERITY_SERIES` (the
+three judge levels, severest first) and `palette.WORST_CLASH_COLORS` (the worst-clash ids of
+`config/analysis/realism_ranking/worst_clash_split.yaml`, read through `palette.worst_clash_color`,
+which raises on an unknown id). Both are drawn from the Okabe–Ito colour-blind-safe set (Wong 2011):
+
+| Category | Display label | Colour |
+|----------|---------------|--------|
+| `none` | no clash | light grey `#E4E4E4` |
+| `S1` | R1: unusual | sky blue `#56B4E9` |
+| `S2` | R2: implausible | orange `#E69F00` |
+| `r3_impossible` | R3: impossible (and the unsplit R3 of the published figure) | vermillion `#D55E00` |
+| `S3` | R3: not split (the reference, a failed stage-2 call) | blue `#0072B2` |
+| `c_scb_category_limitation` | C: SCB category limitation | reddish purple `#CC79A7` |
+| `pipeline` | pipeline | bluish green `#009E73` |
+
+Why this assignment:
+
+- **Ordinal, not just distinct.** None → R1 → R2 → R3 runs grey → cool → warm → dark warm, so the
+  levels read as increasing seriousness. C is **not a rank**: a clash stage 2 traces to the SCB
+  category system itself, not to the generation, so its code is not an R and it is not drawn as a
+  step of the ladder; it keeps the reddish purple because the colour was CVD-checked in this set.
+  The unsplit R3 and `pipeline` are likewise *outside* the run: "not split" is a missing
+  classification and `pipeline` an artefact, neither a degree of severity.
+- **Order and presence in a legend.** The legend lists the ladder (R1, R2, R3, then R3 not split),
+  then a small gap, then the categories `display.off_ladder` in `worst_clash_split.yaml` names (C,
+  then pipeline). The categories `display.only_when_nonzero` names (`S3` not split, `pipeline`) are
+  drawn and listed only when some count the figure is given is non-zero; otherwise they are omitted
+  entirely. Both are presentation decisions on finished counts: the chart reads the two lists from
+  the block and checks the counts it was handed, computing nothing.
+- **Distinct under colour-vision deficiency.** (Measured when R3 and C were named R3a and R3b; the
+  colours are unchanged.) The earlier set (grey R1, two near reds for R3 and C,
+  a violet `pipeline`) put R1 next to the "no clash" grey and fell to CIEDE2000 5.3 between R2 and
+  C under simulated tritanopia. Simulated with Machado et al. (2009) at full severity, the minimum
+  CIEDE2000 over every pair of the seven categories is now 22.2 (normal vision), 12.5
+  (deuteranopia), 12.2 (protanopia) and 10.9 (tritanopia, R2 vs C). The weakest pair under
+  red–green deficiency is R2 vs R3 (orange vs vermillion), which still
+  differs by 15 to 19 L* units under every simulation and so survives as a lightness step.
+- **No yellow, no black.** Okabe–Ito yellow `#F0E442` vanishes as a thin bar or as count text on
+  white. Black was rejected for the unsplit R3 because it merges with the reference step outline
+  drawn over the bars.
+
+Count text printed in a category colour on white is the weak point of any light categorical set:
+R1 and R2 reach only about 2.3:1 WCAG contrast, so such numbers stay bold and are never the only
+carrier of the value.
+
+The **per-level severity prevalence heatmaps** are unaffected: they plot a rate and stay on the house
+ramp (`inferno`) like every other heatmap.
+
 ---
 
 ## Labelling conventions
@@ -218,6 +270,23 @@ into its label fails there rather than on a published axis. A **scanned populati
 the slug against the *declared* axis ids rather than splitting on `_`, because both strategy and
 model ids contain underscores of their own and a naive split produces a plausible wrong pair in
 silence.
+
+### Manuscript-controlled words come from config
+
+Some words a figure prints are neither an axis id nor an attribute, and the manuscript still decides
+them: its `TERMINOLOGY-RULES.md` (rule T1) names the members of a population *individuals* and the
+generation methods *strategies* in published artwork, and calls the real population *the reference*
+rather than by its agency. The repository's own dialect is the opposite — code identifiers, CSV
+columns and JSON keys say `persona` and `method`, and T1 does not cover them — so a word typed into a
+chart module would be the repository's word. These words therefore live in
+`config/analysis/figure_terms.yaml` under `terms:` and are read at render time by
+`labels.figure_term(key)`, which raises on a missing file, an unknown key, an empty value or an
+underscored one. Changing a word is a one-line edit to that file.
+
+The agency's short name (`SCB`, `ISTAT`) is still held per country, as `display.reference_source` in
+the country axis YAML, and read by `labels.reference_source(country_id)`, which raises when it is
+absent. It is provenance, never the figure-facing label. Today only the typicality distribution grid
+reads `figure_term`; the existing method keys still print "Methods:".
 
 ### Sentence case, proper nouns preserved
 
@@ -446,6 +515,67 @@ bit-identical on that category, detected generically — and the block carries t
 category for whoever writes the caption. The builder states the fact it can see, never its cause:
 why two methods coincide needs the mapped populations, which the builder does not read.
 
+### The typicality distribution grid: glyphs, not tiles
+
+`realism_ranking`'s `typicality_distribution_by_model_strategy` shows every combination's whole
+typicality distribution, eleven score levels, and a cell that has to carry a distribution cannot be
+one colour. So it is not a heatmap: each cell is its own small axes holding a mini histogram, drawn
+through the presentation layer's eighth module, `analysis/utils/glyph_grid.py`. That module is the
+sibling of `grids.py`, not its replacement — it paints no raster image, so `grids.py` stays the one
+`imshow` call site — and like the rest of the layer it computes nothing: it validates that every set
+of bar heights and every share triple sums to 1 within 1e-9 and raises otherwise, and never
+normalises.
+
+**Orientation.** Strategies run down the rows in complexity order and models across the columns in
+`model_ranking`'s published order, resolved at the CLI edge through
+`utils/model_order.ranked_grid_columns` so that this figure and the `model_ranking` figures agree on
+which model comes first. The model names are set vertically (90°) in a fixed top block above the
+grid and tinted by hosting class (`palette.HOST_COLORS`, legend words from
+`table_style.HOST_LABELS`); a label longer than that block raises rather than being clipped.
+
+**The canvas is fixed, in points.** `glyph_grid.PointCanvas` builds a figure of an exact size and
+places axes and text by point coordinates; this one is always 456 pt wide and is written in
+fixed-canvas mode. The cell side is 26.5 pt when twelve models fit, shrinks to fit the width when
+more do, and raises below 18 pt, where the 8 pt labels no longer fit. The height follows from the
+rows, the cell side and the bottom block — 280.5 pt on the live 12 × 5 grid, one legend row taller
+when "not judged" or "no typicality" entries push the legend past six.
+
+**What each cell draws.**
+
+| Cell state | Drawing |
+|---|---|
+| `ok` | a mini histogram, bars coloured by score level, the reference's distribution as a step outline over it |
+| `withdrawn` (the validation gate excluded the combination) | crossed out with two grey diagonals — never dropped |
+| `unjudged` (not yet judged) | a grey cell, the "not judged" state of every other grid in the process |
+| `no_typicality` (judged, no survivor) | an empty frame with a centred en dash |
+
+The legend lists "not judged" and "no typicality" only when such a cell is drawn.
+
+**Bar heights are √-scaled, and the figure says so.** A distribution concentrated on two levels
+would otherwise flatten every other bar to nothing. The scale is a coordinate transform, like a log
+axis, and changes no value; the note under the grid states it. The bar colours are the steps of a
+stepped colourbar over `palette.heatmap_levels`, so a level is read off one ordered ramp and the
+colourbar is the key to it.
+
+**The reference is drawn three ways**: as the outline in every cell, as its own detached column to
+the right of the grid, and as a star in each ternary. Its label is `figure_term("reference")`.
+
+**One ternary per strategy row.** Each triangle places every combination of that strategy at its
+three band shares (from `--typicality-bands`, 0–4 / 5–7 / 8–10 by default), host-tinted, with the
+reference's star and a guide at half the mass in the top band. Each corner is labelled once, not on
+every triangle: the top corner on the first row, the two base corners on the last. Overlapping dots
+are not jittered, because jitter moves data; the exact shares are in `typicality_bands.csv`.
+
+**Marker halo at 0.3 pt.** The points carry a 0.3 pt `SURFACE` edge (`glyph_grid.MARKER_EDGE_WIDTH`),
+not the 0.25 pt of the approved prototype: the publisher requires strokes above 0.25 pt
+(`MIN_STROKE_PT`).
+
+**Words.** The strategy key prints `figure_term("strategy_key_title")` ("Strategies:") with the
+lines from `labels.method_key_lines`, em dash kept, continuation lines hung under the first by the
+measured width of the title. The triangle note is assembled from `figure_term("individuals")` and
+the band labels in the data block. `glyph_grid` rejects any displayed string containing an
+underscore.
+
 ---
 
 ## Publishing: how a figure reaches `04_Figures`
@@ -534,7 +664,9 @@ deliverable.
   `Manuscripts/40_llm-population-fidelity-benchmark/`
 - Crameri, Shephard and Heron (2020), *Nature Communications* 11:5444 — colour in science
   communication
-- Wong (2011), *Nature Methods* 8:441 — colourblind-safe categorical palettes
+- Wong (2011), *Nature Methods* 8:441 — colourblind-safe categorical palettes (the Okabe–Ito set)
+- Machado, Oliveira and Fernandes (2009), *IEEE TVCG* 15(6):1291 — the colour-vision-deficiency
+  simulation used to check the severity palette
 - WCAG 2 contrast ratios — the relative-luminance crossover `palette.text_color_for_rgb` uses
 - [`decisions/2026-08-12-self-contained-typicality-axis.md`](decisions/2026-08-12-self-contained-typicality-axis.md)
   — the sequential-ramp-only decision

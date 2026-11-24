@@ -5,8 +5,9 @@ The population-cap task runs last of the validation gate (``validate_raw`` -> ``
 ``{output_base}/03_Analysis/population_cap/``:
 
 - the **capped persona-dir mirror** -- one ``{slug}/`` combo dir of selected raw
-  ``persona_*`` directories (identity + telemetry). Its sole consumer is
-  ``generation_metadata``, which globs each combo's ``persona_*`` telemetry.
+  ``persona_*`` directories (identity + telemetry). Its consumers are
+  ``generation_metadata``, which globs each combo's ``persona_*`` telemetry, and
+  ``persona_realism``'s stage 2, which reads a capped persona's raw ``identity.json``.
 - the **capped mapped dir** ``_mapped/`` -- the capped ``{slug}.json`` mapped populations
   (plus the copied ``real_{country}.json`` and an ``_index.json``). Every mapped-file
   consumer (fidelity, multivariate, consistency, pairwise, real_population_stats,

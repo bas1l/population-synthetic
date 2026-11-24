@@ -63,6 +63,7 @@ def map_population(
     country: str = "swedish",
     *,
     misses_out: list[dict[str, Any]] | None = None,
+    ties_out: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Map a raw pipeline population to the canonical schema for *country*.
 
@@ -73,7 +74,8 @@ def map_population(
     When *misses_out* is given, the mapper's total-miss log is extended onto it. The
     returned payload is unchanged either way -- the miss log is a diagnostic sidecar,
     deliberately kept out of the mapped population file so every downstream reader of
-    that file keeps its existing shape.
+    that file keeps its existing shape. *ties_out* is the same for the mapper's tie /
+    ambiguous-facet log (:attr:`BaseSyntheticMapper.ties`).
     """
     mapper: BaseSyntheticMapper = get_synthetic_mapper(country)
     individuals: list[dict[str, Any]] = []
@@ -89,6 +91,8 @@ def map_population(
 
     if misses_out is not None:
         misses_out.extend(mapper.misses)
+    if ties_out is not None:
+        ties_out.extend(mapper.ties)
 
     if skipped:
         print(f"WARNING: Skipped {skipped} persona(s) due to errors or missing data", file=sys.stderr)

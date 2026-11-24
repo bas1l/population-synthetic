@@ -8,6 +8,15 @@
     "6 persons",
     "7+ persons"
   ],
+  "priority": [
+    "1 person",
+    "2 persons",
+    "3 persons",
+    "4 persons",
+    "5 persons",
+    "6 persons",
+    "7+ persons"
+  ],
   "real": {
     "1 person": {
       "equals": [
@@ -80,8 +89,7 @@
           "ensamboende",
           "single parent",
           "single mother",
-          "single father",
-          "with parents"
+          "single father"
         ],
         [
           "ett barn",
@@ -91,12 +99,10 @@
         ]
       ],
       "equals": [
-        "2 persons",
-        "With parents (2)"
+        "2 persons"
       ],
       "contains": [
-        "with parents (2)",
-        "med föräldrar (2)"
+        "2 personer"
       ],
       "int": [
         2
@@ -105,21 +111,38 @@
     "3 persons": {
       "int": [
         3
+      ],
+      "equals": [
+        "With parents (2)"
+      ],
+      "contains": [
+        "with parents (2)",
+        "med föräldrar (2)",
+        "3 personer"
       ]
     },
     "4 persons": {
       "int": [
         4
+      ],
+      "contains": [
+        "4 personer"
       ]
     },
     "5 persons": {
       "int": [
         5
+      ],
+      "contains": [
+        "5 personer"
       ]
     },
     "6 persons": {
       "int": [
         6
+      ],
+      "contains": [
+        "6 personer"
       ]
     },
     "7+ persons": {

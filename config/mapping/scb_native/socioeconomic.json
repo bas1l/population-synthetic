@@ -5,6 +5,12 @@
     "Middle Class",
     "Wealthy"
   ],
+  "priority": [
+    "Poverty",
+    "Working Class",
+    "Middle Class",
+    "Wealthy"
+  ],
   "real": {
     "Poverty": {
       "equals": [
@@ -48,14 +54,16 @@
         "Låginkomst",
         "Prekariat",
         "Fattig",
-        "Lågklass",
         "Socioekonomisk underklass",
         "Underklassen",
         "Arbetande fattig",
         "Lägre inkomstskikt",
         "Lägre inkomstskikt i storstadsregion",
         "Låg individuell inkomst",
-        "Marginalized labor-market participant"
+        "Marginalized labor-market participant",
+        "Arbetskraft i prekariatet",
+        "Basic pension-dependent elderly household",
+        "Hushållsklass: Låg"
       ],
       "contains": [
         "poverty",
@@ -75,6 +83,52 @@
         "basso reddito",
         "classe bassa",
         "marginalizzat"
+      ],
+      "all_of": [
+        [
+          "ekonomiskt utsatt",
+          "ekonomisk utsatthet",
+          "socioekonomiskt utsatt",
+          "socialt utsatt",
+          "särskilt utsatt",
+          "bidragsberoende",
+          "biståndsberoende",
+          "försörjningsstöd",
+          "försörjningsberoende",
+          "stödberoende",
+          "beroende av offentliga stöd",
+          "med bidrag",
+          "marginaliserad",
+          "marginalklass",
+          "marginalized",
+          "vulnerable",
+          "disadvantaged",
+          "welfare-dependent",
+          "sårbar",
+          "minimiökonomi",
+          "fattigpensionär",
+          "at-risk-of-poverty",
+          "grundtrygghet",
+          "economy-vulnerable",
+          "låginkomst",
+          "låg inkomst",
+          "lägre inkomst",
+          "low income",
+          "low-income",
+          "lower income",
+          "lower-income",
+          "lower_income",
+          "låginkommen",
+          "lågt hushållsinkomst",
+          "låg individuell inkomst",
+          "underklass",
+          "underclass",
+          "låg pension",
+          "låglön",
+          "låg lön",
+          "lågt betald",
+          "lågavlönad"
+        ]
       ]
     },
     "Working Class": {
@@ -99,16 +153,43 @@
         "Lower socioeconomic class",
         "Arbetande klass",
         "Skilled manual worker class",
-        "Lägre klass"
+        "Lägre klass",
+        "Lägre medelklass",
+        "Nedre medelklass",
+        "Blåkrag",
+        "Arbetsfolk",
+        "Arbetskarl",
+        "arbetskraftsklass",
+        "Blåkrage",
+        "Den arbetande klassen",
+        "Ensamstående förälder med låg ekonomisk marginal",
+        "Icke-kvalificerad arbetare",
+        "Inkomstsvag",
+        "Labor Class",
+        "Labouring Class",
+        "Precär försörjning",
+        "Prekär",
+        "Production worker socioeconomic group",
+        "Retired working-class pensioner",
+        "Serviceindustrins arbetande klass",
+        "Skicklig arbetskraft",
+        "Unskilled manual worker",
+        "Working-class retiree on housing supplement"
       ],
       "contains": [
         "working class",
         "lower class",
         "blue collar",
         "blue-collar",
-        "arbetarklass",
+        {
+          "token": "arbetarklass",
+          "mode": "substring"
+        },
         "arbetsklass",
-        "arbetar",
+        {
+          "token": "arbetar",
+          "mode": "substring"
+        },
         "lägre medelklass",
         "nedre mellanklass",
         "skilled worker",
@@ -127,15 +208,40 @@
         "ceto medio-bass",
         "ceto medio bass",
         "classe subaltern",
-        "student",
-        "studerande"
+        "lower middle",
+        "lower-middle",
+        "medium-low",
+        "lägre/middlet"
+      ],
+      "all_of": [
+        [
+          "modest",
+          "moderate",
+          "måttlig",
+          "lower class",
+          "lower_class",
+          "lägre klass",
+          "lägre socioekonomisk",
+          "lägre_socioekonomisk",
+          "låg socioekonomisk",
+          "lower socioeconomic",
+          "låg ses",
+          "low ses",
+          "lågklass",
+          "begränsad ekonomi",
+          "begränsad egen ekonomi",
+          "ekonomiskt pressad",
+          "ekonomisk press",
+          "pressad ekonomi",
+          "ekonomiskt svag",
+          "svag ekonomi",
+          "blygsam"
+        ]
       ]
     },
     "Middle Class": {
       "equals": [
         "Middle Class",
-        "Lägre medelklass",
-        "Nedre medelklass",
         "Medelklass",
         "Övre medelklass",
         "Högre medelklass",
@@ -206,6 +312,7 @@
         "Mittelklasse",
         "Mitten",
         "pensioner class",
+        "Pensionärsklass",
         "Teknisk specialistklass",
         "Intermediate non-manual employee",
         "Småföretagarklass",
@@ -216,27 +323,48 @@
         "Academic-intellectual class",
         "Lower salaried public-sector employee class",
         "Public sector salaried employee",
-        "Technical specialist class"
+        "Technical specialist class",
+        "medium",
+        "Comfortable",
+        "Entreprenörsklass",
+        "Forskningselit",
+        "Konsumtionsklass medel",
+        "Mellanhög inkomst",
+        "Mellanhöginkomst",
+        "Petit Bourgeoisie",
+        "Petit bourgeoisie/Small business owner",
+        "petit_bourgeois",
+        "Petite Bourgeoisie",
+        "profesionellt borgerskap",
+        "Proffesional class",
+        "Proffessionell klass",
+        "Småborgarklass",
+        "Teknikspecialistklass",
+        "Uppermiddelsocioekonomisk class",
+        "Vitkrag"
       ],
       "contains": [
         "middle class",
         "middle-class",
-        "medelklass",
-        "mellanklass",
+        {
+          "token": "medelklass",
+          "mode": "substring"
+        },
+        {
+          "token": "mellanklass",
+          "mode": "substring"
+        },
         "övre medelklass",
         "högre medelklass",
         "akademiker",
         "akademi",
         "god ekonomi",
-        "pensionär",
         "mellanstora tjänstemän",
         "mellan-tjänstemän",
         "kvalificerad tjänsteman",
         "professional",
         "upper middle",
         "upper-middle",
-        "lower middle",
-        "lower-middle",
         "middle income",
         "middle-income",
         "white collar",
@@ -256,8 +384,14 @@
         "classe media elevat",
         "classe dirigent",
         "classe dirigenz",
-        "mellanskikt",
-        "medelinkomst",
+        {
+          "token": "mellanskikt",
+          "mode": "substring"
+        },
+        {
+          "token": "medelinkomst",
+          "mode": "substring"
+        },
         "mellaninkomst",
         "mittelstand",
         "giovane professionista",
@@ -265,20 +399,88 @@
         "mediano",
         "mediocre",
         "högskoleutbildad",
-        "tjänsteman",
-        "tjänstemän",
+        {
+          "token": "tjänsteman",
+          "mode": "substring"
+        },
+        {
+          "token": "tjänstemän",
+          "mode": "substring"
+        },
         "it-",
         "konsult",
-        "företagare",
+        {
+          "token": "företagare",
+          "mode": "substring"
+        },
         "egenföretagare",
-        "professionell",
+        {
+          "token": "professionell",
+          "mode": "substring"
+        },
         "urban",
         "mittenklass",
         "mittelsocial",
         "middelklass",
         "mellanposition",
         "mellanliggande",
-        "intellektuell"
+        {
+          "token": "intellektuell",
+          "mode": "substring"
+        },
+        "mellerklass",
+        "mittelschicht",
+        "medelstånd",
+        "mellanstånd",
+        "mellanstratum",
+        "mellanborgare",
+        "mellanbourgeoisi",
+        "mellannivå",
+        "mittinkomst",
+        "klass medel",
+        "inkomstklass: medel",
+        "social klass: mellan",
+        "mellan inkomst",
+        "medel-övre",
+        "medelhög",
+        "uppermellan",
+        "uppemiddeklas",
+        "middle-middle",
+        "middelsocioekonomisk",
+        "övermedel",
+        "mellom",
+        "mellanstång",
+        "medelständig",
+        "mittels klass",
+        "mellanclass",
+        "mellanökonomisk",
+        "mittenskiktet",
+        "中产阶级",
+        "borgare (medel)",
+        "mellaklass",
+        "mittelklass",
+        "medelhögre",
+        "övre medel",
+        "medell klass",
+        "medium",
+        "mellan klass"
+      ],
+      "all_of": [
+        [
+          "till medelklass",
+          "mellanklass (",
+          "medelklass (student)",
+          "medelklass-student",
+          "student middle class",
+          "student-oriented middle class",
+          "studerande medelklass",
+          "median",
+          "average income",
+          "average-income",
+          "normal inkomst",
+          "genomsnittlig inkomst",
+          "earning above average"
+        ]
       ]
     },
     "Wealthy": {
@@ -294,7 +496,23 @@
         "high",
         "upper",
         "Högstatus",
-        "Välbeställd"
+        "Välbeställd",
+        "Bourgeoisie",
+        "Borgare",
+        "Borgarklass",
+        "Borgarklassen",
+        "Borger",
+        "Borgerskap",
+        "Finansiell yrkeselit",
+        "Higher non-manual employee",
+        "Higher salaried employee",
+        "Hög status",
+        "Högre inkomst",
+        "Högstatus (förste kasta)",
+        "Högstatus (High Status)",
+        "Privilegierad klass",
+        "Storborgerlig klass",
+        "Värdemiljonärer"
       ],
       "contains": [
         "wealthy",
@@ -302,7 +520,10 @@
         "affluent",
         "upper class",
         "välbärgad",
-        "överklass",
+        {
+          "token": "överklass",
+          "mode": "substring"
+        },
         "högre tjänstemän",
         "high income",
         "high-income",
@@ -310,7 +531,10 @@
         "higher-income",
         "high socioeconomic",
         "corporate class",
-        "elite",
+        {
+          "token": "elite",
+          "mode": "substring"
+        },
         "alta borghesia",
         "alta buona",
         "classe elevat",
@@ -320,7 +544,27 @@
         "höginkomst",
         "comfortable income",
         "high-earning",
-        "high earning"
+        "high earning",
+        "övre klass",
+        "uppclass",
+        "highest",
+        "högklas",
+        "nya rika",
+        "lägre övre klass"
+      ],
+      "all_of": [
+        [
+          "high-income",
+          "high income",
+          "affluent",
+          "high-earning",
+          "high earning",
+          "hög inkomst",
+          "höginkomst",
+          "högavlönad",
+          "högt inkom",
+          "övre inkomstklass"
+        ]
       ]
     }
   }

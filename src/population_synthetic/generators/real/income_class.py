@@ -3,9 +3,11 @@
 Maps bracketed income data to Poverty, Working Class, Middle Class, and
 Wealthy using thresholds relative to the median: Eurostat AROP (0.60x)
 and OECD/Pew middle-class bands (1.00x, 2.00x). ``median_from_brackets``
-estimates the median from bracket midpoints and counts, and
-``classify_brackets`` splits straddling brackets proportionally by width
-to return a probability per class.
+estimates the median by linear interpolation inside the bracket that holds the
+50th percentile, and ``classify_brackets`` splits straddling brackets
+proportionally by width to return a probability per class. Both rest on the
+same assumption -- counts are spread uniformly within a bracket -- so the
+median and the class split are consistent with each other.
 """
 
 from __future__ import annotations
@@ -19,21 +21,42 @@ _WORKING_UPPER = 1.00
 _MIDDLE_UPPER = 2.00
 
 
-def median_from_brackets(midpoints: list[float], counts: list[float]) -> float:
-    """Return the bracket midpoint at the 50th-percentile cumulative count."""
+def median_from_brackets(edges: list[tuple[float, float]], counts: list[float]) -> float:
+    """Return the median of bracketed counts by within-bracket linear interpolation.
+
+    ``edges`` are ``(low, high)`` per bracket in ascending order, ``counts`` the
+    number of persons in each. The 50th percentile is located in the bracket
+    whose cumulative count first reaches half the total, and placed inside it
+    assuming the bracket's persons are spread uniformly over ``[low, high]``
+    (the grouped-data median, ``L + (N/2 - F) / f * w``).
+
+    The previous estimator returned that bracket's midpoint, which is off by up
+    to half a bracket width: SCB's brackets are 100-200 tkr wide above 400 tkr,
+    so every cell whose median fell in 400-499 tkr got 450 (45 tkr from SCB's
+    published 486.9 for men aged 40-44). Interpolation is within 3.3 tkr of
+    SCB's published medians in all 20 five-year band x sex cells (see
+    ``tests/test_income_class.py``).
+    """
+    if len(edges) != len(counts):
+        raise ValueError("edges and counts must have the same length")
+    if any(c < 0 for c in counts):
+        raise ValueError("counts must be non-negative")
     total = sum(counts)
     if total <= 0:
         raise ValueError("counts must sum to a positive number")
-    if len(midpoints) != len(counts):
-        raise ValueError("midpoints and counts must have the same length")
+    prev_hi = None
+    for lo, hi in edges:
+        if hi < lo or (prev_hi is not None and lo < prev_hi):
+            raise ValueError(f"edges must be ascending, non-overlapping (low, high) pairs; got {edges!r}")
+        prev_hi = hi
 
     target = total / 2.0
     cumulative = 0.0
-    for mid, cnt in zip(midpoints, counts):
+    for (lo, hi), cnt in zip(edges, counts):
+        if cnt > 0 and cumulative + cnt >= target:
+            return lo + (target - cumulative) / cnt * (hi - lo)
         cumulative += cnt
-        if cumulative >= target:
-            return mid
-    return midpoints[-1]
+    raise AssertionError("unreachable: a positive total always reaches its half")
 
 
 def classify_brackets(

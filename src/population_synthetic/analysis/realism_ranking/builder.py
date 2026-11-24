@@ -30,6 +30,15 @@ neither changes a number the axes publish. In particular the typicality axis doe
 replace Axis B: it is the same per-persona means read self-contained rather than as a
 distance, so the sign Axis B's absolute value discards is legible again.
 
+Three typicality blocks sit beside ``typicality``: ``typicality_distribution`` (each
+competitor's round-weighted score distribution and band shares on the grid, with
+withdrawn / unjudged / no-typicality cells kept apart), ``typicality_effects`` (epsilon^2
+and Cliff's delta with intervals beside the factor tests, and every combination and
+pooled model against the reference) and ``typicality_closeness`` (one closeness value per
+combination -- TV similarity primary -- decomposed into model + strategy; computed in
+:mod:`~population_synthetic.analysis.realism_ranking.typicality_closeness`). None of them
+changes a number the blocks above publish.
+
 Statistical-honesty rules enforced throughout (guide 03):
 
 * every rate carries its denominator, and the denominator is never used as a divisor
@@ -52,7 +61,21 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Callable, Sequence
 
+import numpy as np
+
+from population_synthetic.analysis.realism_ranking.clash_analysis import (
+    CLASH_STATES,
+    ClashGroup,
+    clash_analysis,
+    clash_analysis_options,
+)
 from population_synthetic.analysis.realism_ranking.loader import CompetitorRecord
+from population_synthetic.analysis.realism_ranking.typicality_closeness import (
+    CLOSENESS_OUTCOMES,
+    ClosenessGroup,
+    closeness_options,
+    typicality_closeness,
+)
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.ordinal import (
     STATISTIC_LABELS,
@@ -67,12 +90,22 @@ from population_synthetic.analysis.utils.realism_csv import (
     SEVERITY_LEVELS,
     SEVERITY_RANK,
 )
+from population_synthetic.analysis.utils.realism_stage2_csv import (
+    NOT_APPLICABLE,
+    STAGE2_CLASSES,
+    UNCLASSIFIED,
+    persona_class,
+)
 from population_synthetic.analysis.utils.stats_tests import (
     bootstrap_ci,
+    bootstrap_cliffs_delta_ci,
     bootstrap_difference_ci,
+    cliffs_delta,
     dunn_posthoc,
+    epsilon_squared,
     holm_adjust,
     kruskal_test,
+    mann_whitney_test,
     summarize,
     two_proportion_test,
     variance_equality_test,
@@ -82,21 +115,37 @@ __all__ = [
     "CAVEATS",
     "CORRECTION",
     "DISPERSION_MEASURES",
+    "DISTRIBUTION_CELL_STATES",
     "DRIVER_COUNTING_UNIT",
     "DRIVER_NON_ADDITIVE",
     "PAIR_SUMMARY_COUNTING_UNIT",
     "SEVERITY_DIRECTIONS",
     "TYPICALITY_COUNTING_UNIT",
+    "TYPICALITY_DISTRIBUTION_BASIS",
     "TYPICALITY_OPTION_KEYS",
     "TYPICALITY_STATISTICS",
     "build_ranking",
+    "clash_analysis_decomposition_rows",
+    "clash_analysis_pooled_rows",
+    "clash_analysis_rank3_pair_rows",
+    "clash_analysis_rows",
     "summary_rows",
     "scb_contrast_rows",
     "severity_driver_rows",
     "severity_driver_value_rows",
     "severity_pair_summary",
+    "typicality_band_rows",
+    "typicality_closeness_decomposition_rows",
+    "typicality_closeness_pair_rows",
+    "typicality_closeness_rows",
+    "typicality_closeness_test_rows",
+    "typicality_distribution_rows",
+    "typicality_effect_model_pair_rows",
+    "typicality_effect_omnibus_rows",
+    "typicality_effect_vs_reference_rows",
     "typicality_histogram_rows",
     "typicality_summary_rows",
+    "validate_typicality_bands",
 ]
 
 #: The multiple-comparison correction applied to every family of tests here. Stated
@@ -1711,8 +1760,840 @@ def _mixed_logit_can_exist(
 
 
 # --------------------------------------------------------------------------- #
+# Typicality distribution -- the round-weighted score distribution per         #
+# competitor, its band shares, and the grid shape with every cell state         #
+# --------------------------------------------------------------------------- #
+
+
+#: How the published distribution counts, as data. It is a second basis beside the
+#: rounded one of ``typicality.grid`` (a per-persona mean binned to a level), and the two
+#: must not be read as one.
+TYPICALITY_DISTRIBUTION_BASIS = (
+    "round-weighted: each survivor (a majority-possible persona with a non-null mean "
+    "typicality) spreads a total weight of 1 evenly over its scored rounds, so every "
+    "survivor counts exactly once and the distribution's mean equals the mean of the "
+    "per-persona means. At one scored round per survivor (e.g. --rounds 1) the weights are "
+    "the integer histogram of that round. Distinct from typicality.grid's histogram, which "
+    "bins each per-persona mean to its nearest level."
+)
+
+#: The cell states of the distribution grid, as published in ``grid.states``. A
+#: withdrawn cell has no individuals by construction (the gate excluded it); an unjudged
+#: one was never consumed; a no-typicality one was consumed but has no survivor.
+DISTRIBUTION_CELL_STATES: tuple[str, ...] = ("ok", "no_typicality", "withdrawn", "unjudged")
+
+
+def validate_typicality_bands(bands: Sequence[int], n_levels: int) -> tuple[int, int]:
+    """The two band edges ``(b1, b2)`` as ints, or ``ValueError``.
+
+    The bands are ``0..b1``, ``b1+1..b2`` and ``b2+1..k-1``, so every band must hold at
+    least one level: ``0 <= b1 < b2 < k - 1``. Shared by the CLI's flag parser and the
+    builder, so the flag and the block can never accept different edges.
+    """
+    edges = tuple(bands)
+    if len(edges) != 2 or not all(isinstance(e, int) and not isinstance(e, bool) for e in edges):
+        raise ValueError(f"typicality bands must be two integer edges b1,b2, got {bands!r}")
+    b1, b2 = edges
+    if not 0 <= b1 < b2 < n_levels - 1:
+        raise ValueError(
+            f"typicality bands {b1},{b2} must satisfy 0 <= b1 < b2 < {n_levels - 1} on the "
+            f"0..{n_levels - 1} scale, so each of the three bands holds at least one level."
+        )
+    return b1, b2
+
+
+def _band_labels(edges: tuple[int, int], n_levels: int) -> list[str]:
+    b1, b2 = edges
+    return [f"0–{b1}", f"{b1 + 1}–{b2}", f"{b2 + 1}–{n_levels - 1}"]
+
+
+def _round_weighted_units(record: CompetitorRecord, n_levels: int) -> np.ndarray:
+    """``(survivors, k)`` unit rows: each survivor's weight 1 spread over its scored rounds.
+
+    The per-individual rows the distribution sums and the closeness bootstrap resamples,
+    built once here so the two can never use different bases. A score outside
+    ``0..k-1`` raises, as :func:`_typicality_levels` does.
+    """
+    rows: list[np.ndarray] = []
+    for scores in record.typicality_round_scores:
+        for score in scores:
+            if not 0 <= score <= n_levels - 1:
+                raise ValueError(
+                    f"Competitor {record.slug!r} carries a typicality score of {score}, outside "
+                    f"the 0..{n_levels - 1} scale this block was given. Either the judge's "
+                    "typicality scale moved or the wrong level count was resolved at the edge."
+                )
+        rows.append(np.bincount(np.asarray(scores, dtype=int), minlength=n_levels) / len(scores))
+    return np.stack(rows) if rows else np.empty((0, n_levels))
+
+
+def _distribution_cell(
+    record: CompetitorRecord, *, n_levels: int, bands: tuple[int, int], skips: list[_Skip]
+) -> dict[str, Any]:
+    """One competitor's round-weighted distribution, band shares and mean."""
+    units = _round_weighted_units(record, n_levels)
+    denominator = int(units.shape[0])
+    identity = {
+        "slug": record.slug,
+        "model": record.model,
+        "strategy": record.strategy,
+        "is_real_reference": record.is_real_reference,
+        "denominator": denominator,
+        "n_personas": record.n_personas,
+        "n_multi_round": sum(1 for scores in record.typicality_round_scores if len(scores) > 1),
+    }
+    if denominator == 0:
+        skips.append(_Skip(
+            test=f"typicality_distribution[{record.slug}]",
+            reason="no survivor carries a scored round, so the distribution is undefined; "
+                   "the competitor is published with status 'no_typicality', not dropped.",
+        ))
+        return {**identity, "status": "no_typicality", "weights": None, "distribution": None,
+                "band_shares": None, "mean": None}
+    weights = units.sum(axis=0)
+    distribution = weights / denominator
+    b1, b2 = bands
+    return {
+        **identity,
+        "status": "ok",
+        "weights": [float(w) for w in weights],
+        "distribution": [float(p) for p in distribution],
+        "band_shares": [float(distribution[: b1 + 1].sum()), float(distribution[b1 + 1: b2 + 1].sum()),
+                        float(distribution[b2 + 1:].sum())],
+        "mean": float(np.dot(np.arange(n_levels), distribution)),
+    }
+
+
+def _typicality_distribution(
+    records: Sequence[CompetitorRecord],
+    country: str,
+    *,
+    n_levels: int,
+    bands: tuple[int, int],
+    withdrawn: Sequence[str],
+    skips: list[_Skip],
+) -> dict[str, Any]:
+    """The per-competitor round-weighted distributions on the model x strategy grid.
+
+    The shape comes from :func:`_grid` (so the null-cell rule, the complexity-ordered
+    strategy axis and the reference carried under ``real`` are inherited). Beside it,
+    ``grid.states`` names each cell's state, because a null cell is two different facts
+    here: **withdrawn** (the population gate excluded the combination -- it has no
+    individuals by construction) and **unjudged** (it exists but was not consumed). A
+    consumed competitor with no survivor is a third state, ``no_typicality``.
+
+    *withdrawn* is the gate's withdrawn slugs for *country*. A slug that is both
+    withdrawn and consumed raises: the gate says it has no individuals, the judge says it
+    has. A withdrawn slug is placed on the grid when its ``{country}_{strategy}_{model}``
+    matches a grid pair; one whose model or strategy has no consumed competitor at all is
+    listed but has no cell (it is not a column).
+    """
+    edges = validate_typicality_bands(bands, n_levels)
+    consumed = {record.slug for record in records}
+    clash = sorted(consumed & set(withdrawn))
+    if clash:
+        raise ValueError(
+            f"Slug(s) {clash} are withdrawn by the population gate (population_cap/_index.json "
+            "excluded: true) yet were consumed as judged competitors. A withdrawn combination "
+            "has no individuals; re-run population_cap and persona_realism so the two agree."
+        )
+    cells = {
+        record.slug: _distribution_cell(record, n_levels=n_levels, bands=edges, skips=skips)
+        for record in records
+    }
+    grid = _grid(
+        _grid_entries(records),
+        value_of=lambda entry: cells[entry["_record"].slug],
+        note=(
+            "A null cell is either withdrawn (the population gate excluded the combination, "
+            "so it has no individuals) or unjudged (never consumed); grid.states says which. "
+            "A consumed competitor with no survivor is present with status 'no_typicality'."
+            + _GRID_NOTE_SUFFIX
+        ),
+    )
+    withdrawn_set = set(withdrawn)
+    states: dict[str, dict[str, str]] = {}
+    unjudged: list[str] = []
+    for model in grid["models"]:
+        states[model] = {}
+        for method in grid["methods"]:
+            cell = grid["cells"][model][method]
+            slug = f"{country}_{method}_{model}"
+            if cell is not None:
+                states[model][method] = cell["status"]
+            elif slug in withdrawn_set:
+                states[model][method] = "withdrawn"
+            else:
+                states[model][method] = "unjudged"
+                unjudged.append(slug)
+    grid["states"] = states
+    return {
+        "basis": TYPICALITY_DISTRIBUTION_BASIS,
+        "counting_unit": TYPICALITY_COUNTING_UNIT,
+        "n_levels": n_levels,
+        "bands": {"edges": list(edges), "labels": _band_labels(edges, n_levels)},
+        "cell_states": list(DISTRIBUTION_CELL_STATES),
+        "grid": grid,
+        "withdrawn": sorted(withdrawn_set),
+        "unjudged": sorted(unjudged),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Typicality effects -- effect sizes beside the factor tests, and the location  #
+# contrast of every combination and pooled model against the reference         #
+# --------------------------------------------------------------------------- #
+
+
+#: The unit every effect here is computed on, stated once as data.
+TYPICALITY_EFFECTS_UNIT = (
+    "per-persona mean typicality over the can_exist survivors -- the unit the Kruskal-Wallis "
+    "and Dunn tests in factor_significance use. Not the round-weighted distribution of "
+    "typicality_distribution; the two coincide at one scored round per persona."
+)
+
+#: The two Holm families of the vs-reference contrasts.
+VS_REFERENCE_FAMILIES: tuple[str, ...] = ("combination_vs_reference", "model_vs_reference")
+
+
+def _omnibus_effect(factor: str, block: Mapping[str, Any]) -> dict[str, Any]:
+    """epsilon^2 for one factor's Kruskal-Wallis result, from the H and N it already carries."""
+    kruskal = block.get("kruskal") or {}
+    h, n = kruskal.get("H"), kruskal.get("n")
+    return {
+        "factor": factor,
+        "k": kruskal.get("k"),
+        "n": n,
+        "H": h,
+        "p": kruskal.get("p"),
+        "epsilon_squared": None if h is None else epsilon_squared(h, n),
+        "n_dunn_pairs": len(block.get("dunn") or []),
+        "correction": CORRECTION,
+    }
+
+
+def _delta_with_interval(
+    a: Sequence[float], b: Sequence[float], *, bootstrap: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Cliff's delta of *a* vs *b*, its magnitude label and its seeded bootstrap interval."""
+    ci = bootstrap_cliffs_delta_ci(
+        a, b, iterations=bootstrap["iterations"], ci_level=bootstrap["ci_level"], seed=bootstrap["seed"],
+    )
+    return {"cliffs_delta": ci["point"], "ci_lo": ci["lo"], "ci_hi": ci["hi"], "ci_level": ci["ci_level"],
+            "magnitude": cliffs_delta(a, b)["magnitude"]}
+
+
+def _vs_reference_row(
+    family: str, values: Sequence[float], reference: CompetitorRecord,
+    *, bootstrap: Mapping[str, Any], identity: Mapping[str, Any],
+) -> dict[str, Any]:
+    reference_values = list(reference.typicality_means)
+    test = mann_whitney_test(values, reference_values)
+    return {
+        "family": family,
+        **identity,
+        "reference": reference.slug,
+        "n": len(values),
+        "reference_n": len(reference_values),
+        "median": summarize(list(values))["median"],
+        "reference_median": summarize(reference_values)["median"],
+        **_delta_with_interval(values, reference_values, bootstrap=bootstrap),
+        "U": test["U"],
+        "p_raw": test["p"],
+        "test": "mann_whitney_two_sided_asymptotic",
+    }
+
+
+def _holm_family(rows: list[dict[str, Any]]) -> None:
+    """Holm over exactly the rows of one family carrying a raw p (in place)."""
+    testable = [row for row in rows if row["p_raw"] is not None]
+    for row, p_holm in zip(testable, holm_adjust([row["p_raw"] for row in testable])):
+        row["p_holm"] = p_holm
+    for row in rows:
+        row.setdefault("p_holm", None)
+        row["correction"] = CORRECTION
+
+
+def _typicality_effects(
+    synthetic: Sequence[CompetitorRecord],
+    real: CompetitorRecord | None,
+    factor_significance: Mapping[str, Any],
+    *,
+    bootstrap: Mapping[str, Any],
+    skips: list[_Skip],
+) -> dict[str, Any]:
+    """Effect sizes for the typicality factor tests, and the location contrast to the reference.
+
+    * **Omnibus**: epsilon^2 = H / (N - 1) of each factor's Kruskal-Wallis result, read
+      from ``factor_significance`` rather than re-run.
+    * **Model pairs**: Cliff's delta with a seeded percentile bootstrap interval for every
+      Dunn pair, in the Dunn row's own ``(a, b)`` orientation (Dunn's z is
+      ``mean_rank[a] - mean_rank[b]``, so the two signs agree), joined to its z and Holm p.
+    * **Versus the reference**: every synthetic combination, and every model pooled over
+      its combinations, against the reference: medians, Cliff's delta (positive = judged
+      more typical than the reference) with its interval, the two-sided Mann-Whitney U and
+      its raw and Holm p. One Holm family per grain; a combination with no
+      typicality-bearing persona is left out of its family with a recorded skip.
+
+    Every interval uses the judge config's bootstrap seed unchanged, so each depends only
+    on its own two samples. The existing ``CAVEATS`` (pseudo-replication, one run per
+    combination) apply to every p here.
+    """
+    by_model, by_method = factor_significance["by_model"], factor_significance["by_method"]
+    omnibus = [_omnibus_effect("model", by_model), _omnibus_effect("strategy", by_method)]
+
+    groups = _factor_groups(synthetic, "model")
+    model_pairs = [
+        {
+            "a": row["a"], "b": row["b"], "n_a": len(groups[row["a"]]), "n_b": len(groups[row["b"]]),
+            **_delta_with_interval(groups[row["a"]], groups[row["b"]], bootstrap=bootstrap),
+            "dunn_z": row["z"], "p_raw": row["p_raw"], "p_holm": row["p_holm"], "correction": CORRECTION,
+        }
+        for row in by_model.get("dunn") or []
+    ]
+
+    vs_reference: dict[str, list[dict[str, Any]]] = {family: [] for family in VS_REFERENCE_FAMILIES}
+    reference_values = [] if real is None else list(real.typicality_means)
+    if real is None or not reference_values:
+        reason = (
+            "no real population in the consumption set" if real is None
+            else f"the real population {real.slug!r} has no typicality-bearing persona"
+        )
+        for family in VS_REFERENCE_FAMILIES:
+            skips.append(_Skip(test=f"typicality_effects.{family}", reason=f"{reason}; nothing to contrast against."))
+    else:
+        combination_rows = vs_reference["combination_vs_reference"]
+        for record in synthetic:
+            values = list(record.typicality_means)
+            if not values:
+                skips.append(_Skip(
+                    test=f"typicality_effects.combination_vs_reference[{record.slug}]",
+                    reason="no typicality-bearing persona; left out of the Holm family.",
+                ))
+                continue
+            combination_rows.append(_vs_reference_row(
+                "combination_vs_reference", values, real, bootstrap=bootstrap,
+                identity={"slug": record.slug, "model": record.model, "strategy": record.strategy,
+                          "is_real_reference": False},
+            ))
+        combination_rows.sort(key=_competitor_position(combination_rows))
+        for model in sorted(groups):
+            vs_reference["model_vs_reference"].append(_vs_reference_row(
+                "model_vs_reference", groups[model], real, bootstrap=bootstrap,
+                identity={"slug": None, "model": model, "strategy": None, "is_real_reference": False},
+            ))
+        for rows in vs_reference.values():
+            _holm_family(rows)
+
+    return {
+        "unit": TYPICALITY_EFFECTS_UNIT,
+        "effect_size": (
+            "Cliff's delta = P(a > b) - P(a < b), magnitude by Romano et al. (2006): negligible "
+            "< 0.147 <= small < 0.33 <= medium < 0.474 <= large; epsilon^2 = H / (N - 1)"
+        ),
+        "ci_method": (
+            "percentile bootstrap resampling each sample at its own size, delta per replicate "
+            "through the Mann-Whitney identity; the judge config's bootstrap seed, iterations and "
+            "ci_level (in provenance), unchanged for every comparison"
+        ),
+        "orientation": (
+            "model pairs follow the Dunn row's (a, b); vs-reference rows are (competitor, "
+            "reference), so a positive delta means judged more typical than the reference"
+        ),
+        "reference_held_out_of_factor_tests": True,
+        "caveats": [caveat["id"] for caveat in CAVEATS],
+        "omnibus": omnibus,
+        "model_pairs": model_pairs,
+        "vs_reference": vs_reference,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Typicality closeness -- one combination-level closeness value per            #
+# combination, and what drives it (model vs strategy)                          #
+# --------------------------------------------------------------------------- #
+
+
+def _typicality_closeness(
+    synthetic: Sequence[CompetitorRecord],
+    real: CompetitorRecord | None,
+    *,
+    n_levels: int,
+    options: Mapping[str, Any],
+    skips: list[_Skip],
+) -> dict[str, Any] | None:
+    """Adapt the records to :func:`~.typicality_closeness.typicality_closeness` and run it.
+
+    The histogram basis is the round-weighted one of ``typicality_distribution`` (the same
+    unit rows, built by :func:`_round_weighted_units`), so the grid and the closeness
+    numbers describe one distribution; at one scored round per survivor it is the
+    first-round integer histogram. Combinations are passed in ``_competitor_position``
+    order (strategy complexity, then model), which fixes the joint bootstrap's draw order
+    independently of the order the records arrived in.
+    """
+    if real is None:
+        skips.append(_Skip(test="typicality_closeness",
+                           reason="no real population in the consumption set; nothing to measure closeness to."))
+        return None
+    reference_units = _round_weighted_units(real, n_levels)
+    if reference_units.shape[0] == 0:
+        skips.append(_Skip(test="typicality_closeness",
+                           reason=f"the real population {real.slug!r} has no scored survivor."))
+        return None
+    entries = _grid_entries(synthetic)
+    entries.sort(key=_competitor_position(entries))
+    groups: list[ClosenessGroup] = []
+    without: list[str] = []
+    for entry in entries:
+        record = entry["_record"]
+        units = _round_weighted_units(record, n_levels)
+        if units.shape[0] == 0:
+            without.append(record.slug)
+            continue
+        groups.append(ClosenessGroup(slug=record.slug, model=record.model, strategy=record.strategy, units=units))
+    if not groups:
+        skips.append(_Skip(test="typicality_closeness", reason="no synthetic combination has a scored survivor."))
+        return None
+    block, sub_skips = typicality_closeness(
+        groups,
+        reference_slug=real.slug,
+        reference_units=reference_units,
+        models=sorted({g.model for g in groups}),
+        strategies=strategy_complexity_order(sorted({g.strategy for g in groups})),
+        options=options,
+    )
+    skips.extend(_Skip(test=test, reason=reason) for test, reason in sub_skips)
+    return {
+        "basis": TYPICALITY_DISTRIBUTION_BASIS,
+        "n_levels": n_levels,
+        **block,
+        "excluded": {
+            "combinations_without_a_scored_survivor": without,
+            "note": (
+                "withdrawn and unjudged cells are absent from the design (never zero); a "
+                "consumed combination with no scored survivor has no distribution and is "
+                "listed here."
+            ),
+        },
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Assembly                                                                     #
 # --------------------------------------------------------------------------- #
+
+
+#: Every class a stage-2 count is keyed by, pipeline states last.
+STAGE2_BREAKDOWN_CLASSES: tuple[str, ...] = (*STAGE2_CLASSES, UNCLASSIFIED, NOT_APPLICABLE)
+
+
+def _stage2_breakdown(records: Sequence[CompetitorRecord], skips: list[_Skip]) -> dict[str, Any] | None:
+    """Each competitor's impossible personas split by stage-2 class. REPORTING-ONLY.
+
+    The impossible set is exactly the one Axis A counts (``can_exist`` majority false
+    on the consumed rounds); this block only says, per competitor, how many of those
+    personas stage 2 classed as ``raw_impossible`` / ``label_clash`` / ``ambiguous`` /
+    ``mapping_error`` / ``judge_error`` (or ``unclassified`` / not applicable). It feeds
+    no rank, contrast or test. The persona class is recomputed from the consumed rounds'
+    issue rows under the order the producer stamped (``stage2_persona_class_order``),
+    which must agree across the set, as must the stage-2 prompt of every synthetic
+    competitor that has one. Absent everywhere -> ``None`` with a recorded skip; absent
+    for some competitors only -> raises (a partial breakdown would read as complete).
+    """
+    have = [r for r in records if r.stage2 is not None]
+    if not have:
+        skips.append(_Skip(
+            test="stage2_breakdown",
+            reason="no competitor carries a {combo}_stage2.csv (judged before stage 2 existed, or "
+                   "stage2.enabled is false); re-run analyze_persona_realism.py.",
+        ))
+        return None
+    lacking = sorted(r.slug for r in records if r.stage2 is None)
+    if lacking:
+        raise ValueError(
+            f"Stage-2 breakdown: {lacking} carry no stage-2 CSV while other competitors do; "
+            "re-run scripts/analyze/analyze_persona_realism.py --rewrite-artifacts for them."
+        )
+    orders = {tuple(r.provenance.get("stage2_persona_class_order") or ()) for r in records}
+    if len(orders) != 1 or not next(iter(orders)):
+        raise ValueError(f"Stage-2 breakdown: the competitors stamp different or no persona-class orders {orders}")
+    order = next(iter(orders))
+    prompts = {r.provenance.get("stage2_prompt_sha256") for r in records
+               if not r.is_real_reference and r.provenance.get("stage2_prompt_sha256") is not None}
+    if len(prompts) > 1:
+        raise ValueError(
+            f"Stage-2 breakdown: synthetic competitors were classified under different stage-2 prompts {prompts}"
+        )
+    rows = []
+    for record in records:
+        issues: dict[str, list[str]] = {}
+        for row in record.stage2 or ():
+            issues.setdefault(row.persona_id, []).append(row.stage2_class)
+        impossible = [p.persona_id for p in record.personas if not p.can_exist_majority]
+        counts = {c: 0 for c in STAGE2_BREAKDOWN_CLASSES}
+        for pid in impossible:
+            if pid not in issues:
+                raise ValueError(
+                    f"Stage-2 breakdown: {record.slug} persona {pid} is impossible but has no S3 "
+                    "clash in the consumed rounds; the verdict cache breaks the can_exist <=> S3 contract."
+                )
+            counts[persona_class(issues[pid], order)] += 1
+        rows.append({
+            "slug": record.slug,
+            "model": record.model,
+            "strategy": record.strategy,
+            "is_real_reference": record.is_real_reference,
+            "impossible_count": len(impossible),
+            "by_class": counts,
+        })
+    return {
+        "note": "reporting-only: changes no rank, contrast or test",
+        "classes": list(STAGE2_BREAKDOWN_CLASSES),
+        "persona_class_order": list(order),
+        "stage2_prompt_sha256": next(iter(prompts)) if prompts else None,
+        "competitors": rows,
+    }
+
+
+#: The worst-clash levels below S3, which the split never touches.
+_WORST_FIXED: tuple[str, ...] = ("none", "S1", "S2")
+
+
+def worst_clash_split_options(spec: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the ``worst_clash_split.yaml`` bundle (fail-fast; see that file for the rules)."""
+    if not isinstance(spec, Mapping):
+        raise ValueError(f"worst-clash split config must be a mapping, got {type(spec).__name__}")
+    for key in ("categories", "s3_split", "display", "clash_analysis"):
+        if key not in spec:
+            raise ValueError(f"worst-clash split config is missing {key!r}")
+    categories = [str(c) for c in spec["categories"]]
+    if len(set(categories)) != len(categories) or not categories:
+        raise ValueError(f"worst-clash split categories must be distinct and non-empty, got {categories}")
+    split = {str(k): str(v) for k, v in dict(spec["s3_split"]).items()}
+    needed = set(STAGE2_BREAKDOWN_CLASSES)
+    if set(split) != needed:
+        raise ValueError(
+            f"worst-clash split s3_split must map exactly {sorted(needed)}; "
+            f"missing {sorted(needed - set(split))}, unknown {sorted(set(split) - needed)}"
+        )
+    required = set(_WORST_FIXED) | set(split.values())
+    if set(categories) != required:
+        raise ValueError(
+            f"worst-clash split categories must be exactly {sorted(required)} "
+            f"(none/S1/S2 plus every s3_split target), got {categories}"
+        )
+    display_spec = spec["display"]
+    if not isinstance(display_spec, Mapping) or set(display_spec) != {"only_when_nonzero", "off_ladder"}:
+        raise ValueError(
+            "worst-clash split display must be a mapping of exactly 'only_when_nonzero' and 'off_ladder', "
+            f"got {display_spec!r}"
+        )
+    display: dict[str, list[str]] = {}
+    for key in ("only_when_nonzero", "off_ladder"):
+        ids = [str(c) for c in (display_spec[key] or ())]
+        unknown = sorted(set(ids) - set(categories))
+        if unknown or len(set(ids)) != len(ids):
+            raise ValueError(f"worst-clash split display.{key} must list distinct declared categories, got {ids}")
+        display[key] = ids
+    if set(display["off_ladder"]) & set(_WORST_FIXED):
+        raise ValueError(f"worst-clash split display.off_ladder cannot hold a ladder level {list(_WORST_FIXED)}")
+    return {"categories": categories, "s3_split": split, "display": display,
+            "clash_analysis": clash_analysis_options(spec["clash_analysis"], categories)}
+
+
+def _persona_class_order(records: Sequence[CompetitorRecord], where: str) -> tuple[str, ...]:
+    orders = {tuple(r.provenance.get("stage2_persona_class_order") or ()) for r in records}
+    if len(orders) != 1 or not next(iter(orders)):
+        raise ValueError(f"{where}: the competitors stamp different or no persona-class orders {orders}")
+    return next(iter(orders))
+
+
+def _stage2_issues(record: CompetitorRecord) -> dict[str, list[Any]]:
+    issues: dict[str, list[Any]] = {}
+    for row in record.stage2 or ():
+        issues.setdefault(row.persona_id, []).append(row)
+    return issues
+
+
+def _worst_categories(
+    record: CompetitorRecord, options: Mapping[str, Any], order: Sequence[str]
+) -> list[tuple[str, str, str | None]]:
+    """``(persona_id, worst-clash category, stage-2 persona class or None)`` per persona, in record order.
+
+    The one placement both the split and the clash analysis read: the worst clash is the
+    per-persona ``max_severity`` over the consumed rounds (empty = no clash), and an S3
+    individual is placed by its stage-2 persona class through ``options["s3_split"]``.
+    """
+    issues = _stage2_issues(record)
+    out: list[tuple[str, str, str | None]] = []
+    for persona in record.personas:
+        worst = persona.max_severity or "none"
+        if worst != "S3":
+            if worst not in _WORST_FIXED:
+                raise ValueError(f"{record.slug} {persona.persona_id}: unknown max_severity {worst!r}")
+            out.append((persona.persona_id, worst, None))
+            continue
+        if persona.persona_id not in issues:
+            raise ValueError(
+                f"Worst-clash split: {record.slug} {persona.persona_id} has an S3 clash but no stage-2 "
+                "row; the per-persona and stage-2 CSVs describe different states of the cache."
+            )
+        cls = persona_class([row.stage2_class for row in issues[persona.persona_id]], order)
+        out.append((persona.persona_id, options["s3_split"][cls], cls))
+    return out
+
+
+def _worst_clash_split(
+    records: Sequence[CompetitorRecord],
+    options: Mapping[str, Any] | None,
+    skips: list[_Skip],
+) -> dict[str, Any] | None:
+    """Each competitor's individuals counted once at their worst clash, R3 split by stage 2.
+
+    REPORTING-ONLY. The worst clash is the per-persona ``max_severity`` over the consumed
+    rounds (empty = no clash); an S3 individual is placed by its stage-2 persona class
+    through ``options["s3_split"]``. The real reference has no free text, so its S3
+    individuals land in the unsplit category by construction. Feeds no rank or test.
+    """
+    if options is None:
+        skips.append(_Skip(test="worst_clash_split",
+                           reason="the caller passed no worst-clash split options"))
+        return None
+    options = worst_clash_split_options(options)
+    if any(r.stage2 is None for r in records):
+        skips.append(_Skip(
+            test="worst_clash_split",
+            reason="not every competitor carries a {combo}_stage2.csv, so S3 cannot be split; "
+                   "re-run analyze_persona_realism.py (with stage2.enabled).",
+        ))
+        return None
+    order = _persona_class_order(records, "Worst-clash split")
+    categories = options["categories"]
+    excluded = set(options["clash_analysis"]["excluded"])
+    rows = []
+    for record in records:
+        counts = {c: 0 for c in categories}
+        s3_classes = {c: 0 for c in STAGE2_BREAKDOWN_CLASSES}
+        for _pid, category, cls in _worst_categories(record, options, order):
+            counts[category] += 1
+            if cls is not None:
+                s3_classes[cls] += 1
+        rows.append({
+            "slug": record.slug,
+            "model": record.model,
+            "strategy": record.strategy,
+            "is_real_reference": record.is_real_reference,
+            "n_individuals": len(record.personas),
+            "n_excluded_from_clash_analysis": sum(counts[c] for c in excluded),
+            "counts": counts,
+            "s3_by_stage2_class": s3_classes,
+        })
+    return {
+        "note": "reporting-only: R3 split by stage 2 for the figures; the impossibility rate, "
+                "can_exist, rankings and tests count every S3 as impossible",
+        "categories": list(categories),
+        "s3_split": dict(options["s3_split"]),
+        "display": {k: list(v) for k, v in options["display"].items()},
+        "clash_analysis_excluded": list(options["clash_analysis"]["excluded"]),
+        "competitors": rows,
+    }
+
+
+def _clash_group(
+    record: CompetitorRecord, options: Mapping[str, Any], order: Sequence[str]
+) -> ClashGroup:
+    """One competitor's analysed individuals as one-hot state rows, its exclusions and its rank-3 pairs.
+
+    A rank-3 pair is a sorted attribute pair of one of the individual's S3 clashes whose
+    stage-2 class places it in the S3 state (for the live config: ``raw_impossible``), so an
+    R3 individual's label-clash pairs are not counted as rank-3 pairs.
+    """
+    spec = options["clash_analysis"]
+    state_of = {c: state for state, members in spec["states"].items() for c in members}
+    s3_members = set(spec["states"]["S3"])
+    excluded = set(spec["excluded"])
+    issues = _stage2_issues(record)
+    rows: list[np.ndarray] = []
+    n_excluded = 0
+    pairs: dict[tuple[str, str], int] = {}
+    for pid, category, _cls in _worst_categories(record, options, order):
+        if category in excluded:
+            n_excluded += 1
+            continue
+        state = state_of[category]
+        unit = np.zeros(len(CLASH_STATES))
+        unit[CLASH_STATES.index(state)] = 1.0
+        rows.append(unit)
+        if state == "S3":
+            held = {(row.attr_a, row.attr_b) for row in issues.get(pid, ())
+                    if options["s3_split"][row.stage2_class] in s3_members}
+            for pair in held:
+                pairs[pair] = pairs.get(pair, 0) + 1
+    return ClashGroup(
+        slug=record.slug, model=record.model, strategy=record.strategy,
+        units=np.array(rows).reshape(-1, len(CLASH_STATES)), n_excluded=n_excluded, rank3_pairs=pairs,
+    )
+
+
+def _clash_analysis(
+    synthetic: Sequence[CompetitorRecord],
+    real: CompetitorRecord | None,
+    options: Mapping[str, Any] | None,
+    *,
+    resampling: Mapping[str, Any],
+    skips: list[_Skip],
+) -> dict[str, Any] | None:
+    """Adapt the records to :func:`~.clash_analysis.clash_analysis` and run it.
+
+    Needs the split options (the clash analysis is declared in the same file), stage 2 on
+    every competitor (S3 must be split before a category can be excluded) and the real
+    reference. Combinations are passed in ``_competitor_position`` order, as for the
+    closeness block.
+    """
+    if options is None:
+        skips.append(_Skip(test="clash_analysis", reason="the caller passed no worst-clash split options"))
+        return None
+    options = worst_clash_split_options(options)
+    if real is None:
+        skips.append(_Skip(test="clash_analysis",
+                           reason="no real population in the consumption set; nothing to compare with."))
+        return None
+    if not synthetic:
+        skips.append(_Skip(test="clash_analysis", reason="no synthetic combination in the consumption set."))
+        return None
+    records = [*synthetic, real]
+    if any(r.stage2 is None for r in records):
+        skips.append(_Skip(
+            test="clash_analysis",
+            reason="not every competitor carries a {combo}_stage2.csv, so S3 cannot be split and the "
+                   "excluded categories cannot be removed; re-run analyze_persona_realism.py (with stage2.enabled).",
+        ))
+        return None
+    order = _persona_class_order(records, "Clash analysis")
+    entries = _grid_entries(synthetic)
+    entries.sort(key=_competitor_position(entries))
+    groups = [_clash_group(entry["_record"], options, order) for entry in entries]
+    block, sub_skips = clash_analysis(
+        groups, _clash_group(real, options, order),
+        models=sorted({g.model for g in groups}),
+        strategies=strategy_complexity_order(sorted({g.strategy for g in groups})),
+        spec=options["clash_analysis"],
+        resampling=resampling,
+    )
+    skips.extend(_Skip(test=test, reason=reason) for test, reason in sub_skips)
+    return block
+
+
+def worst_clash_split_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten ``worst_clash_split`` into ``worst_clash_split.csv`` rows (slug order)."""
+    block = ranking.get("worst_clash_split")
+    if not block:
+        return []
+    return [
+        {
+            "slug": row["slug"], "model": row["model"], "strategy": row["strategy"],
+            "is_real_reference": row["is_real_reference"], "n_individuals": row["n_individuals"],
+            **{f"n_{c}": row["counts"][c] for c in block["categories"]},
+            "n_excluded_from_clash_analysis": row["n_excluded_from_clash_analysis"],
+        }
+        for row in block["competitors"]
+    ]
+
+
+def clash_analysis_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten ``clash_analysis`` into ``clash_analysis.csv`` rows: one per competitor, reference last."""
+    block = ranking.get("clash_analysis")
+    if not block:
+        return []
+    out = []
+    for row in block["competitors"]:
+        flat: dict[str, Any] = {
+            "slug": row["slug"], "model": row["model"], "strategy": row["strategy"],
+            "is_real_reference": row["is_real_reference"], "n_judged": row["n_judged"],
+            "n_excluded": row["n_excluded"], "n": row["n"],
+            **{f"n_{state}": row["counts"][state] for state in block["states"]},
+        }
+        for name in block["rates"]:
+            rate = row["rates"][name]
+            flat.update({f"{name}_count": rate["count"], f"{name}_rate": rate["rate"],
+                         f"{name}_ci_lo": rate["ci_lo"], f"{name}_ci_hi": rate["ci_hi"]})
+            vs = (row["vs_reference"] or {}).get(name) or {}
+            for key in ("diff", "diff_ci_lo", "diff_ci_hi", "p_fisher", "p_holm", "verdict"):
+                flat[f"{name}_{key}"] = vs.get(key)
+        tv = row["tv_similarity"] or {}
+        flat["tv_similarity"] = tv.get("value")
+        for key in ("ci_lo", "ci_hi", "noise_mean", "noise_bound"):
+            flat[f"tv_similarity_{key}"] = tv.get(key)
+        flat["excluded_categories"] = ";".join(block["excluded_categories"])
+        out.append(flat)
+    return out
+
+
+def clash_analysis_pooled_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the pooled rates into ``clash_analysis_pooled.csv``: one row per factor x level x rate."""
+    block = ranking.get("clash_analysis")
+    if not block:
+        return []
+    reference = next(row for row in block["competitors"] if row["is_real_reference"])
+    out = []
+    for factor, levels in block["pooled"].items():
+        for level in levels:
+            for name in block["rates"]:
+                entry = level[name]
+                out.append({
+                    "factor": factor, "level": level["level"], "rate_name": name,
+                    "n_combinations": level["n_combinations"], "n": level["n"], "n_excluded": level["n_excluded"],
+                    "count": entry["count"], "rate": entry["rate"],
+                    "reference_rate": reference["rates"][name]["rate"],
+                    "diff": entry["diff"], "diff_ci_lo": entry["diff_ci_lo"], "diff_ci_hi": entry["diff_ci_hi"],
+                })
+    return out
+
+
+def clash_analysis_decomposition_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the decomposition into ``clash_analysis_decomposition.csv``: one row per rate x factor."""
+    block = ranking.get("clash_analysis")
+    if not block:
+        return []
+    out = []
+    for name, entry in block["decomposition"].items():
+        anova = entry["anova"]
+        for factor in ("strategy", "model"):
+            factor_stats = anova["factors"][factor]
+            perm = entry["permutation"][factor]
+            share_ci = ((entry["intervals"] or {}).get(factor) or {}).get("share") or {}
+            out.append({
+                "rate_name": name, "factor": factor, "df": factor_stats["df"], "df_residual": anova["df_residual"],
+                "share": factor_stats["share"], "share_ci_lo": share_ci.get("ci_lo"),
+                "share_ci_hi": share_ci.get("ci_hi"), "F": factor_stats["F"], "p_parametric": factor_stats["p"],
+                "p_permutation": perm["p"], "permutation_iterations": perm["iterations"],
+                "share_residual": anova["share_residual"],
+            })
+    return out
+
+
+def clash_analysis_rank3_pair_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the rank-3 attribute pairs into ``clash_analysis_rank3_pairs.csv`` (most frequent first)."""
+    block = ranking.get("clash_analysis")
+    if not block:
+        return []
+    n = block["rank3_pairs"]["n_individuals"]
+    return [{**pair, "n_rank3_individuals": n} for pair in block["rank3_pairs"]["pairs"]]
+
+
+def stage2_breakdown_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten ``stage2_breakdown`` into ``stage2_breakdown.csv`` rows (slug order)."""
+    block = ranking.get("stage2_breakdown")
+    if not block:
+        return []
+    out = []
+    for row in block["competitors"]:
+        out.append({
+            "slug": row["slug"], "model": row["model"], "strategy": row["strategy"],
+            "is_real_reference": row["is_real_reference"], "impossible_count": row["impossible_count"],
+            **{f"n_{c}": row["by_class"][c] for c in block["classes"]},
+        })
+    return out
 
 
 def build_ranking(
@@ -1724,7 +2605,11 @@ def build_ranking(
     driver_top_n: int,
     driver_min_count: int,
     typicality: Mapping[str, Any] | None = None,
+    typicality_bands: Sequence[int],
+    withdrawn: Sequence[str],
+    closeness: Mapping[str, Any],
     skipped_combinations: Sequence[tuple[str, str]] = (),
+    worst_clash_split: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble one country's complete ranking document.
 
@@ -1742,7 +2627,21 @@ def build_ranking(
     that omits it gets ``typicality: null`` **and** a recorded skip saying so, rather than
     a block quietly built on defaults this module does not hold; every key inside it is
     required, so an incomplete bundle raises.
+
+    *typicality_bands* ``(b1, b2)`` cut the 0..k-1 scale into the three bands of
+    ``typicality_distribution``; *withdrawn* is the population gate's withdrawn slugs for
+    *country* (``CapIndex.withdrawn_slugs`` filtered at the edge); *closeness* is the
+    resolved resampling bundle of ``typicality_closeness``
+    (:data:`~.typicality_closeness.CLOSENESS_OPTION_KEYS`). All three are required and
+    never defaulted here. *worst_clash_split* is the validated ``worst_clash_split.yaml``
+    bundle; omitted, the reporting-only ``worst_clash_split`` block is null with a skip.
+    ``typicality_distribution`` and ``typicality_closeness`` take
+    their level count from *typicality*, so without it both are null with a recorded
+    skip; ``typicality_effects`` needs no level count and is always built.
     """
+    # Validated before any work, whether or not a block below ends up using them: a
+    # malformed bundle is a caller bug, not a property of this consumption set.
+    closeness = closeness_options(closeness)
     skips: list[_Skip] = []
     real = next((r for r in records if r.is_real_reference), None)
     synthetic = [r for r in records if not r.is_real_reference]
@@ -1768,6 +2667,10 @@ def build_ranking(
     by_model = _factor_significance(synthetic, "model", skips)
     by_method = _factor_significance(synthetic, "strategy", skips)
     mixed = _mixed_logit_can_exist(synthetic, skips)
+    effects = _typicality_effects(
+        synthetic, real, {"by_model": by_model, "by_method": by_method},
+        bootstrap=bootstrap, skips=skips,
+    )
 
     # Built before the document literal, not inside it: it appends to *skips*, which the
     # literal also reads, and a block whose completeness depended on key order would be
@@ -1797,6 +2700,32 @@ def build_ranking(
             bootstrap=bootstrap,
             skipped_combinations=skipped_combinations,
         )
+
+    # The distribution grid and the closeness block share the round-weighted unit rows
+    # and the judge scale's level count, which arrives only inside *typicality*.
+    if typicality is None:
+        for test in ("typicality_distribution", "typicality_closeness"):
+            skips.append(_Skip(
+                test=test,
+                reason="the caller passed no typicality options, so the judge scale's level "
+                       "count (typicality.n_levels) is unknown and the distribution is undefined.",
+            ))
+        distribution = None
+        closeness_block = None
+    else:
+        n_levels = int(typicality["n_levels"])
+        bands = validate_typicality_bands(typicality_bands, n_levels)
+        distribution = _typicality_distribution(
+            records, country, n_levels=n_levels, bands=bands, withdrawn=withdrawn, skips=skips,
+        )
+        closeness_block = _typicality_closeness(
+            synthetic, real, n_levels=n_levels, options=closeness, skips=skips,
+        )
+
+    # Reporting-only, like the severity blocks; both append to *skips*.
+    stage2 = _stage2_breakdown(records, skips)
+    worst_split = _worst_clash_split(records, worst_clash_split, skips)
+    clash_block = _clash_analysis(synthetic, real, worst_clash_split, resampling=closeness, skips=skips)
 
     provenance = dict(records[0].provenance) if records else {}
     return {
@@ -1842,6 +2771,24 @@ def build_ranking(
         # reporting only, and it changes no existing number. Null when the caller did not
         # request it (with the reason in skipped_tests).
         "typicality": typicality_axis,
+        # The round-weighted score distribution per competitor on the grid, with the
+        # withdrawn / unjudged / no-typicality states kept apart. Descriptive.
+        "typicality_distribution": distribution,
+        # Effect sizes beside factor_significance, plus the location contrast of every
+        # combination and pooled model against the reference.
+        "typicality_effects": effects,
+        # One closeness-to-the-reference value per combination (TV similarity primary),
+        # and the model + strategy decomposition of it. Unit: the combination.
+        "typicality_closeness": closeness_block,
+        # Each competitor's impossible personas by stage-2 class (why the clash arose).
+        # Reporting only: no rank, contrast or test reads it.
+        "stage2_breakdown": stage2,
+        # Every individual at its worst clash, R3 split into impossible individual /
+        # contradictory labels / pipeline by stage 2 -- the figure data. Reporting only.
+        "worst_clash_split": worst_split,
+        # The clash analysis: every population's worst-clash states and rates against the
+        # reference, the excluded categories removed from numerator and denominator.
+        "clash_analysis": clash_block,
         "factor_significance": {
             "by_model": by_model,
             "by_method": by_method,
@@ -1861,12 +2808,20 @@ def build_ranking(
             "library_versions": _library_versions(),
             "judge_model": provenance.get("judge_model"),
             "prompt_template_sha256": provenance.get("prompt_template_sha256"),
+            "persona_rendering_sha256": provenance.get("persona_rendering_sha256"),
             "n_rounds": provenance.get("n_rounds"),
             # Where that count came from: "report" (read from the published artifacts),
             # "cap" (pinned with --rounds) or "auto" (the shallowest cached depth of a
             # set that agreed on everything else). A capped ranking is otherwise
             # indistinguishable from a full one.
             "n_rounds_source": provenance.get("n_rounds_source"),
+            "typicality_bands": list(typicality_bands),
+            "closeness_resampling": dict(closeness),
+            # What the clash analysis left out, so its denominators are never guessed.
+            "clash_analysis_excluded_categories": (
+                None if clash_block is None else list(clash_block["excluded_categories"])
+            ),
+            "clash_analysis_n_excluded": None if clash_block is None else clash_block["totals"]["n_excluded"],
             "consumed_artifacts": [str(record.report_path) for record in records],
         },
     }
@@ -2234,4 +3189,276 @@ def scb_contrast_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
             "variance_equality_stat": variance_equality.get("statistic"),
             "variance_equality_p": variance_equality.get("p"),
         })
+    return rows
+
+
+def _distribution_block(ranking: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The distribution block and every competitor's cell in it (reference included).
+
+    Raises ``ValueError`` when the document was built without the block: an empty table
+    would claim there was nothing to publish.
+    """
+    block = ranking["typicality_distribution"]
+    if block is None:
+        raise ValueError(
+            "This ranking document carries no typicality_distribution block (the reason is "
+            "recorded in skipped_tests); build it with the typicality options rather than "
+            "writing an empty table."
+        )
+    grid = block["grid"]
+    cells = [
+        cell
+        for model in grid["models"]
+        for cell in (grid["cells"][model][method] for method in grid["methods"])
+        if cell is not None            # withdrawn / unjudged pairs have no competitor
+    ]
+    if grid["real"] is not None:
+        cells.append(grid["real"])
+    return block, cells
+
+
+def typicality_distribution_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the round-weighted distributions into ``typicality_distribution.csv`` rows.
+
+    Long form: one row per ``(competitor, level)`` over the full scale, levels nobody
+    scored as explicit zeros. ``weight`` is the round-weighted count (it sums over the
+    levels to ``denominator``, the survivors) and ``proportion`` is ``weight /
+    denominator``. A competitor with no survivor contributes no row (it has no
+    distribution); it is in ``typicality_bands.csv`` with status ``no_typicality``.
+    """
+    block, cells = _distribution_block(ranking)
+    rows: list[dict[str, Any]] = []
+    for cell in cells:
+        if cell["distribution"] is None:
+            continue
+        for level, (weight, proportion) in enumerate(zip(cell["weights"], cell["distribution"])):
+            rows.append({
+                **_typicality_identity(cell),
+                "level": level,
+                "weight": weight,
+                "proportion": proportion,
+                "denominator": cell["denominator"],
+                "n_personas": cell["n_personas"],
+                "n_multi_round": cell["n_multi_round"],
+                "basis": "round_weighted",
+            })
+    position = _competitor_position(rows)
+    rows.sort(key=lambda row: (*position(row), row["level"]))
+    return rows
+
+
+def typicality_band_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the band shares into ``typicality_bands.csv`` rows, one per competitor.
+
+    The three shares are taken from the same round-weighted distribution as
+    ``typicality_distribution.csv`` and sum to 1; the band labels travel on every row.
+    """
+    block, cells = _distribution_block(ranking)
+    low, mid, high = block["bands"]["labels"]
+    rows = []
+    for cell in cells:
+        shares = cell["band_shares"] or [None, None, None]
+        rows.append({
+            **_typicality_identity(cell),
+            "status": cell["status"],
+            "band_low": low,
+            "share_low": shares[0],
+            "band_mid": mid,
+            "share_mid": shares[1],
+            "band_high": high,
+            "share_high": shares[2],
+            "mean": cell["mean"],
+            "denominator": cell["denominator"],
+            "n_personas": cell["n_personas"],
+            "n_multi_round": cell["n_multi_round"],
+            "basis": "round_weighted",
+        })
+    rows.sort(key=_competitor_position(rows))
+    return rows
+
+
+def typicality_effect_omnibus_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """``typicality_effect_omnibus.csv``: epsilon^2 per factor beside its Kruskal-Wallis H."""
+    block = ranking["typicality_effects"]
+    return [{**row, "unit": "per_persona_mean_typicality"} for row in block["omnibus"]]
+
+
+def typicality_effect_model_pair_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """``typicality_effect_model_pairs.csv``: Cliff's delta + CI beside each Dunn pair.
+
+    In the Dunn family's own pair order and ``(a, b)`` orientation; ``p_holm`` is the
+    Dunn family's.
+    """
+    return [dict(row) for row in ranking["typicality_effects"]["model_pairs"]]
+
+
+def typicality_effect_vs_reference_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """``typicality_effect_vs_reference.csv``: both vs-reference families, one row each.
+
+    ``family`` says which Holm family a row's ``p_holm`` was adjusted in: the combination
+    rows (strategy complexity, then model) come first, then the pooled-model rows.
+    """
+    block = ranking["typicality_effects"]["vs_reference"]
+    return [dict(row) for family in VS_REFERENCE_FAMILIES for row in block[family]]
+
+
+def _closeness_block(ranking: dict[str, Any]) -> dict[str, Any]:
+    block = ranking["typicality_closeness"]
+    if block is None:
+        raise ValueError(
+            "This ranking document carries no typicality_closeness block (the reason is "
+            "recorded in skipped_tests); there is no closeness table to write."
+        )
+    return block
+
+
+def typicality_closeness_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """``typicality_closeness.csv``: one row per combination, every outcome wide.
+
+    For each outcome: the observed value, its joint-bootstrap interval and the
+    reference self-resampling baseline at the combination's own n (its mean and its
+    bound; see the block's ``resampling.noise_bound``).
+    """
+    block = _closeness_block(ranking)
+    rows = []
+    for entry in block["combinations"]:
+        row: dict[str, Any] = {
+            "slug": entry["slug"], "model": entry["model"], "strategy": entry["strategy"],
+            "is_real_reference": False, "n": entry["n"],
+            "reference": block["reference_slug"], "reference_n": block["reference_n"],
+        }
+        for outcome in CLOSENESS_OUTCOMES:
+            values = entry[outcome]
+            row.update({
+                outcome: values["value"],
+                f"{outcome}_ci_lo": values["ci_lo"],
+                f"{outcome}_ci_hi": values["ci_hi"],
+                f"{outcome}_noise_mean": values.get("noise_mean_abs", values["noise_mean"]),
+                f"{outcome}_noise_bound": values["noise_bound"],
+            })
+        row["ci_level"] = block["resampling"]["ci_level"]
+        row["basis"] = "round_weighted"
+        rows.append(row)
+    rows.sort(key=_competitor_position(rows))
+    return rows
+
+
+def typicality_closeness_decomposition_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """``typicality_closeness_decomposition.csv``: the additive decomposition, long form.
+
+    One row per ``(outcome, term, statistic)`` with the point estimate and its joint-bootstrap
+    interval (null when the interval was undefined; the reason is in ``skipped_tests``).
+    ``term`` is a factor, ``residual``, ``overlap`` or a derived contrast.
+    """
+    block = _closeness_block(ranking)
+    rows: list[dict[str, Any]] = []
+    for outcome in CLOSENESS_OUTCOMES:
+        decomposition = block["by_outcome"][outcome]["decomposition"]
+        anova, intervals = decomposition["anova"], decomposition["intervals"]
+
+        def _add(term: str, statistic: str, estimate: Any, interval: Mapping[str, Any] | None,
+                 _outcome: str = outcome, _anova: Mapping[str, Any] = anova) -> None:
+            rows.append({
+                "outcome": _outcome, "term": term, "statistic": statistic, "estimate": estimate,
+                "ci_lo": None if interval is None else interval["lo"],
+                "ci_hi": None if interval is None else interval["hi"],
+                "n_combinations": _anova["n"], "df_residual": _anova["df_residual"],
+            })
+
+        for factor, stats in anova["factors"].items():
+            factor_intervals = None if intervals is None else intervals["factors"][factor]
+            _add(factor, "df", stats["df"], None)
+            _add(factor, "ss", stats["ss"], None)
+            for statistic in ("share", "F", "partial_eta_sq", "partial_omega_sq", "omega_sq"):
+                _add(factor, statistic, stats[statistic],
+                     None if factor_intervals is None else factor_intervals[statistic])
+            _add(factor, "p_F", stats["p"], None)
+        _add("residual", "share", anova["share_residual"],
+             None if intervals is None else intervals["share_residual"])
+        _add("overlap", "share", anova["share_overlap"],
+             None if intervals is None else intervals["share_overlap"])
+        for term, derived in decomposition["derived"].items():
+            _add(term, "value", derived["point"], derived)
+        normality = decomposition["residual_normality"]
+        _add("residual", "shapiro_wilk_W", normality["W"], None)
+        _add("residual", "shapiro_wilk_p", normality["p"], None)
+    return rows
+
+
+def typicality_closeness_test_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """``typicality_closeness_tests.csv``: every factor-level test of every outcome.
+
+    Per outcome and factor: the within-block permutation test of the type II F, and the
+    complete-block Friedman test with Kendall's W and its joint-bootstrap interval.
+    """
+    block = _closeness_block(ranking)
+    rows: list[dict[str, Any]] = []
+    for outcome in CLOSENESS_OUTCOMES:
+        tests = block["by_outcome"][outcome]
+        for factor, perm in tests["permutation"].items():
+            rows.append({
+                "outcome": outcome, "factor": factor, "test": "within_block_permutation_F",
+                "statistic": perm["F"], "p": perm["p"], "df_effect": perm["df_effect"],
+                "df_residual": perm["df_residual"], "iterations": perm["iterations"],
+                "kendalls_w": None, "kendalls_w_ci_lo": None, "kendalls_w_ci_hi": None,
+                "n_blocks": None, "blocks": perm["block"],
+            })
+        complete = tests["complete_blocks"]
+        for factor in ("strategy", "model"):
+            result = complete.get(factor)
+            if result is None:
+                continue
+            friedman, w_ci = result["friedman"], result["kendalls_w_ci"]
+            rows.append({
+                "outcome": outcome, "factor": factor, "test": "friedman_complete_blocks",
+                "statistic": friedman["chi2"], "p": friedman["p"], "df_effect": friedman["df1"],
+                "df_residual": None, "iterations": None,
+                "kendalls_w": friedman["kendalls_w"], "kendalls_w_ci_lo": w_ci["lo"],
+                "kendalls_w_ci_hi": w_ci["hi"], "n_blocks": friedman["n"], "blocks": result["blocks"],
+            })
+    return rows
+
+
+def typicality_closeness_pair_rows(ranking: dict[str, Any]) -> list[dict[str, Any]]:
+    """``typicality_closeness_pairs.csv``: the post hoc pairs of every outcome.
+
+    Strategy pairs carry both post hocs (paired t with Holm, mean difference ``b - a`` with
+    its CI, d_z and the Shapiro-Wilk test of the differences; Conover with Holm) plus each
+    strategy's mean and SD over the complete models. Model pairs carry Conover with Holm.
+    """
+    block = _closeness_block(ranking)
+    rows: list[dict[str, Any]] = []
+    for outcome in CLOSENESS_OUTCOMES:
+        complete = block["by_outcome"][outcome]["complete_blocks"]
+        strategy_pairs = complete.get("strategy_pairs")
+        if strategy_pairs is not None:
+            summary = strategy_pairs["strategy_summary"]
+            conover = (strategy_pairs["conover"] or {}).get("pairs", {})
+            for key, t in strategy_pairs["paired_t"]["pairs"].items():
+                a, b = key.split("|")
+                normality = strategy_pairs["difference_normality"][key]
+                rows.append({
+                    "outcome": outcome, "factor": "strategy", "a": a, "b": b,
+                    "mean_a": summary[a]["mean"], "sd_a": summary[a]["sd"],
+                    "mean_b": summary[b]["mean"], "sd_b": summary[b]["sd"],
+                    "n_blocks": t["n_blocks"], "mean_diff_b_minus_a": t["mean_diff"],
+                    "mean_diff_ci_lo": t["ci_low"], "mean_diff_ci_hi": t["ci_high"], "dz": t["dz"],
+                    "p_paired_t": t["p_raw"], "p_paired_t_holm": t["p_holm"],
+                    "diff_shapiro_W": normality["W"], "diff_shapiro_p": normality["p"],
+                    "p_conover": conover.get(key, {}).get("p_raw"),
+                    "p_conover_holm": conover.get(key, {}).get("p_holm"),
+                })
+        model_pairs = complete.get("model_pairs")
+        if model_pairs is not None and model_pairs["conover"] is not None:
+            for key, c in model_pairs["conover"]["pairs"].items():
+                a, b = key.split("|")
+                rows.append({
+                    "outcome": outcome, "factor": "model", "a": a, "b": b,
+                    "mean_a": None, "sd_a": None, "mean_b": None, "sd_b": None,
+                    "n_blocks": model_pairs["conover"]["n"], "mean_diff_b_minus_a": None,
+                    "mean_diff_ci_lo": None, "mean_diff_ci_hi": None, "dz": None,
+                    "p_paired_t": None, "p_paired_t_holm": None,
+                    "diff_shapiro_W": None, "diff_shapiro_p": None,
+                    "p_conover": c["p_raw"], "p_conover_holm": c["p_holm"],
+                })
     return rows

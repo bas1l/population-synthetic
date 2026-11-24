@@ -4,6 +4,11 @@
     "High School (Liceo/Professionale)",
     "University Degree"
   ],
+  "priority": [
+    "No Formal Education",
+    "High School (Liceo/Professionale)",
+    "University Degree"
+  ],
   "real": {
     "No Formal Education": {
       "equals": [

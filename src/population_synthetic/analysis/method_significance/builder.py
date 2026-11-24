@@ -49,12 +49,14 @@ from population_synthetic.analysis.model_ranking.loader import ComboPerformance
 from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.analysis.utils.stats_tests import (
     benjamini_hochberg,
+    complete_block_matrix,
     friedman_test,
     mixed_logit_interaction,
     nemenyi_pairwise,
     nemenyi_posthoc,
     page_trend_test,
     paired_t_pairwise,
+    rm_anova_assumptions,
     rm_anova_within,
 )
 
@@ -586,28 +588,6 @@ def _overall_tv_sim(record: ComboPerformance | None) -> float | None:
     return float(np.mean(values))
 
 
-def _complete_case_matrix(
-    per_model: dict[str, dict[str, float | None]],
-    models: list[str],
-    methods: list[str],
-) -> tuple[np.ndarray, list[str], list[str]]:
-    """Build the complete-case ``models x methods`` TV-similarity matrix.
-
-    *per_model* maps ``model -> {method -> tv_similarity | None}``. A model is
-    *complete* iff it has a non-``None`` value under **every** compared method
-    (Friedman requires complete blocks); incomplete models are dropped and
-    returned separately (no imputation). Returns ``(matrix, complete_models,
-    dropped_models)`` with *matrix* shaped ``len(complete_models) x len(methods)``.
-    """
-    complete = [m for m in models if all(per_model[m].get(s) is not None for s in methods)]
-    dropped = [m for m in models if m not in complete]
-    matrix = np.array(
-        [[float(per_model[m][s]) for s in methods] for m in complete],
-        dtype=float,
-    ) if complete else np.empty((0, len(methods)))
-    return matrix, complete, dropped
-
-
 def _negated(value: float | None) -> float | None:
     """Sign-flip *value*, mapping the resulting ``-0.0`` back to ``0.0``.
 
@@ -731,8 +711,19 @@ def _method_panel(
     dropped_models: list[str],
     *,
     confidence_level: float,
+    alpha: float,
 ) -> dict[str, Any]:
     """One panel: Friedman omnibus + Nemenyi pairwise over methods on *matrix*.
+
+    Every panel also carries ``assumptions``
+    (:func:`~population_synthetic.analysis.utils.stats_tests.rm_anova_assumptions`):
+    residual and paired-difference normality, Mauchly's sphericity test with the
+    Greenhouse-Geisser / Huynh-Feldt / lower-bound corrected omnibus p, the
+    variance of each pairwise difference, and a Holm-corrected Wilcoxon
+    cross-check of every paired t verdict at *alpha* (the config-derived
+    significance cutoff). A degenerate panel gets the skeleton plus a ``note``,
+    so the key is unconditional. The diagnostics are reported, never acted on:
+    ``omnibus`` and ``pairwise_p`` are unchanged by them.
 
     *matrix* is ``complete_models x methods`` TV-similarity (no NaN). Records the
     per-method means (over the complete-case models actually entering the test),
@@ -835,6 +826,7 @@ def _method_panel(
         "means": means,
         "per_model": per_model,
         "omnibus": omnibus,
+        "assumptions": rm_anova_assumptions(matrix, labels=methods, alpha=alpha),
         "pairwise_p": pairwise_p,
         "pairwise_detail": pairwise_detail,
         # Oriented views of the pair map above; a degenerate panel hands in an
@@ -895,14 +887,18 @@ def _method_comparison(
     panels: dict[str, Any] = {}
     # Read once at the edge; a config without the key raises rather than defaulting.
     confidence_level = float(config["confidence_level"])
+    # The cutoff the assumption checks judge a paired verdict at: the loosest star
+    # threshold, i.e. exactly where a pair stops being "ns" in every figure.
+    alpha = significance_cutoff(config["star_thresholds"])
 
     for attr in attributes:
         per_model = {
             m: {s: _tv_sim(by_ms.get((m, s)), attr) for s in methods} for m in models
         }
-        matrix, complete, dropped = _complete_case_matrix(per_model, models, methods)
+        matrix, complete, dropped = complete_block_matrix(per_model, models, methods)
         panel = _method_panel(
-            matrix, methods, complete, dropped, confidence_level=confidence_level
+            matrix, methods, complete, dropped,
+            confidence_level=confidence_level, alpha=alpha,
         )
         values = category_values.get(attr)
         if not values:
@@ -918,9 +914,10 @@ def _method_comparison(
     per_model_overall = {
         m: {s: _overall_tv_sim(by_ms.get((m, s))) for s in methods} for m in models
     }
-    o_matrix, o_complete, o_dropped = _complete_case_matrix(per_model_overall, models, methods)
+    o_matrix, o_complete, o_dropped = complete_block_matrix(per_model_overall, models, methods)
     panels["overall"] = _method_panel(
-        o_matrix, methods, o_complete, o_dropped, confidence_level=confidence_level
+        o_matrix, methods, o_complete, o_dropped,
+        confidence_level=confidence_level, alpha=alpha,
     )
 
     # BH-FDR across the *category* omnibus p-values (Overall excluded: single test).

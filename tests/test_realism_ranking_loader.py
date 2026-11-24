@@ -23,6 +23,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+from pathlib import Path
 
 import matplotlib
 import pytest
@@ -35,7 +36,10 @@ from population_synthetic.analysis.persona_realism.artifacts import (  # noqa: E
     write_combo_artifacts,
 )
 from population_synthetic.analysis.persona_realism.config import JudgeConfig  # noqa: E402
-from population_synthetic.analysis.realism_ranking.loader import load_competitors  # noqa: E402
+from population_synthetic.analysis.realism_ranking.loader import (  # noqa: E402
+    CompetitorRecord,
+    load_competitors,
+)
 from population_synthetic.analysis.utils.capped_source import MAPPED_SUBDIR  # noqa: E402
 from population_synthetic.analysis.utils.realism_clash_csv import (  # noqa: E402
     RealismClashRow,
@@ -283,7 +287,10 @@ def test_malformed_report_raises_naming_the_upstream_script(tmp_path):
 
 @pytest.mark.parametrize(
     "key, value",
-    [("judge_model", "claude-haiku-4-5"), ("prompt_template_sha256", "deadbeef"), ("n_rounds", 5)],
+    [
+        ("judge_model", "claude-haiku-4-5"), ("prompt_template_sha256", "deadbeef"),
+        ("persona_rendering_sha256", "deadbeef"), ("n_rounds", 5),
+    ],
 )
 def test_heterogeneous_judge_raises_naming_the_offender(tmp_path, key, value):
     base = _base(tmp_path, [_SLUG_A, _SLUG_B])
@@ -384,6 +391,9 @@ def _write_cached_combo(
             json.dumps({
                 "persona_id": persona_id, "attributes": dict(_ATTRIBUTES),
                 "rounds": rounds, "failed_rounds": 0,
+                # The prompt stamps the runner writes: the report reads them back
+                # from the caches, so a fixture without them would stamp None.
+                **cfg.prompt_identity(),
             }),
             encoding="utf-8",
         )
@@ -391,6 +401,14 @@ def _write_cached_combo(
         combo_dir, slug, cfg=cfg, dpi=60, force=True,
         country=_COUNTRY, model=model, strategy=strategy, is_real_reference=is_real,
         expected_ids=persona_ids, hard_rules=(), pricing=_PRICING,
+    )
+    # The capped mapped population the judge selected these personas from: the round cap
+    # re-derives the roster from it, exactly as the judge did.
+    mapped = analysis_output_dir("population_cap", base) / MAPPED_SUBDIR
+    mapped.mkdir(parents=True, exist_ok=True)
+    (mapped / f"{slug}.json").write_text(
+        json.dumps({"individuals": [{"id": pid, **_ATTRIBUTES} for pid in persona_ids]}),
+        encoding="utf-8",
     )
     return combo_dir
 
@@ -533,6 +551,45 @@ def test_capped_clash_rows_hold_no_round_beyond_the_cap(tmp_path):
     assert all(row.round_index < 2 for row in capped.clashes)
 
 
+def test_a_capped_record_ignores_a_leftover_cache_outside_the_selection(tmp_path, caplog):
+    """A cache file of a persona the current cap no longer selects is never read.
+
+    The leftover is an impossible persona at full depth, so reading it would move the
+    impossibility rate and break the report's n_personas reconciliation. It is ignored,
+    logged once, and kept on disk.
+    """
+    base = _base(tmp_path, [_SLUG_A])
+    combo_dir = _write_cached_combo(base, _SLUG_A, depth=3)
+    (baseline,), _ = load_competitors(base, axis_ids=_AXIS_IDS, rounds_cap=2, judge_cfg=_judge_cfg())
+
+    leftover = combo_dir / "persona_00099.json"
+    leftover.write_text(
+        json.dumps({
+            "persona_id": "persona_00099", "attributes": dict(_ATTRIBUTES),
+            "rounds": [_cached_round(can_exist=False, typicality=None, severity="S3")] * 3,
+            "failed_rounds": 0, **_judge_cfg().prompt_identity(),
+        }),
+        encoding="utf-8",
+    )
+    with caplog.at_level(logging.INFO):
+        (capped,), _ = load_competitors(base, axis_ids=_AXIS_IDS, rounds_cap=2, judge_cfg=_judge_cfg())
+
+    assert capped == baseline
+    assert all(row.persona_id != "persona_00099" for row in capped.personas)
+    assert "ignoring 1 leftover cache file(s)" in caplog.text
+    assert leftover.is_file()
+
+
+def test_a_capped_record_raises_when_a_selected_persona_lost_its_cache(tmp_path):
+    """The report says every selected persona was judged; a missing cache contradicts it."""
+    base = _base(tmp_path, [_SLUG_A])
+    combo_dir = _write_cached_combo(base, _SLUG_A, depth=3)
+    (combo_dir / "persona_00001.json").unlink()
+
+    with pytest.raises(ValueError, match="1 without a cache"):
+        load_competitors(base, axis_ids=_AXIS_IDS, rounds_cap=2, judge_cfg=_judge_cfg())
+
+
 # --------------------------------------------------------------------------- #
 # the round cap: auto-derivation when --rounds is blank                        #
 # --------------------------------------------------------------------------- #
@@ -562,3 +619,39 @@ def test_auto_derivation_does_not_mask_a_differing_judge_model(tmp_path):
 
     with pytest.raises(ValueError, match="judge_model"):
         load_competitors(base, axis_ids=_AXIS_IDS, judge_cfg=_judge_cfg())
+
+
+# --------------------------------------------------------------------------- #
+# typicality_round_scores: the per-persona scored rounds                       #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("rounds_cap", [None, 1, 2])
+def test_round_scores_average_to_the_typicality_means(tmp_path, rounds_cap):
+    """Same survivors, same order: each tuple's mean is that persona's typicality_mean.
+
+    Through the published path and through the round cap, which rebuilds the rows from
+    the trimmed cache -- under ``--rounds 1`` every survivor then holds one scored round.
+    """
+    base = _base(tmp_path, [_SLUG_A])
+    _write_cached_combo(base, _SLUG_A, depth=3)
+    records, _ = load_competitors(base, axis_ids=_AXIS_IDS, rounds_cap=rounds_cap, judge_cfg=_judge_cfg())
+    (record,) = records
+    scores = record.typicality_round_scores
+    assert len(scores) == len(record.typicality_means) > 0
+    for rounds, mean in zip(scores, record.typicality_means):
+        assert sum(rounds) / len(rounds) == pytest.approx(mean, abs=1e-12)
+        assert len(rounds) == (rounds_cap or 3)
+
+
+def test_round_scores_raise_on_a_mean_without_a_scored_round():
+    row = _persona_row("persona_00000", _SLUG_A, impossible=False, typicality=7.0)
+    broken = dataclasses.replace(row, typicality_rounds=(None, None))
+    record = CompetitorRecord(
+        slug=_SLUG_A, country=_COUNTRY, model="claude_haiku", strategy="all_pick",
+        is_real_reference=False, n_personas=1, n_failed=0, personas=(broken,),
+        impossibility={}, dispersion={}, reliability={}, provenance={},
+        report_path=Path("/fake/report.json"), personas_csv_path=Path("/fake/personas.csv"),
+    )
+    with pytest.raises(ValueError, match="no scored round"):
+        record.typicality_round_scores

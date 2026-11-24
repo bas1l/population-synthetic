@@ -5,7 +5,7 @@
 # (the judge's ICC/alpha measures self-consistency, NOT correctness -- these rules
 # do). A rule firing means the persona is structurally IMPOSSIBLE (can_exist=false).
 #
-# These are STRUCTURAL constants (minimum attainment ages tied to the canonical
+# These are STRUCTURAL constants (statutory minimum ages tied to the canonical
 # mapped schema), not probability distributions -- allowed in config per the
 # no-synthetic-distributions rule. Rules reference the native canonical category
 # labels in config/mapping/scb_native/ verbatim; a label that does not exist in
@@ -23,29 +23,45 @@
 #                   the pair impossible.
 #   severity      : "S3" (hard contradiction). Hard rules only encode impossibility.
 #
-# Coverage note: v1 grounds only the education-attainment-by-age constraint, the
-# one cross-axis impossibility the coarse mapped schema supports unassailably --
-# even the oldest person in the 18-24 bracket cannot have earned a doctorate. Age
-# is bracketed (a bracket contains attainable ages), so lower credentials (e.g.
-# ISCED 5A, reachable by 22) cannot be forbidden for a whole bracket. Work-
-# experience/age bounds (a plan example) are deferred: no work-experience axis
-# exists in the mapped schema to check against; add such a rule here when one does.
+# What may be a hard rule (ruling 2026-10-04): can_exist=false -- and therefore a
+# rule here -- is reserved for LOGICAL, LEGAL or DEFINITIONAL contradictions. A
+# combination that is rare but attainable is POSSIBLE and must never be encoded
+# here, however unlikely: the judge prompt (v5) grades it S2, not S3.
+#
+# Removed 2026-10-04: `postgraduate_before_adult_completion_age` (Post-Graduate
+# ISCED 6 x age_group 18-24). A research degree before 25 is rare, not impossible:
+# no statute sets a minimum age or duration for a licentiate/doctorate, only typical
+# study lengths, and SCB register data show the boundary is a frequency, not a
+# limit (UF/UF0506/UF0506B/UtbBefRegionR, 2025: 0 holders aged 18-24, but already
+# 11 at age 25). Keeping it would have scored every judge that correctly calls such
+# a persona possible as having "missed" an impossibility.
+#
+# Coverage: one rule, the statutory pension-age bound, which the coarse mapped
+# schema supports unassailably. Age is bracketed (a bracket contains attainable
+# ages), so a rule may forbid a bracket only when NO age inside it is attainable.
 
 rules:
-  - id: postgraduate_before_adult_completion_age
+  - id: retired_before_minimum_pension_age
     description: >
-      A Post-Graduate (ISCED 6, doctorate/licentiate) credential requires a prior
-      bachelor and master plus multi-year doctoral study, so the minimum realistic
-      age is ~25. No one in the 18-24 age bracket -- including a 24-year-old -- can
-      have attained it. (The plan's motivating example: a 19-year-old with a
-      doctorate.)
+      employment_status "Retired" means an old-age pensioner (people on sickness or
+      activity compensation are "Sick Leave"; see the judge prompt's schema
+      definitions). Swedish law sets a minimum age for drawing an old-age pension:
+      the public income pension from 63 (62 for earlier cohorts) and occupational
+      or private pension insurance from 55 at the earliest. No age in the 18-24 ...
+      45-54 brackets reaches 55, so a Retired person in them is a legal
+      contradiction. The 55-64 bracket contains attainable ages (55-64) and is not
+      forbidden. The real SCB reference (real_swedish_02, 10,000 persons) has no
+      Retired person below 55.
     type: incompatible_pair
     when:
-      attribute: education_level
+      attribute: employment_status
       equals:
-        - "Post-Graduate (ISCED 6)"
+        - "Retired"
     forbid:
       attribute: age_group
       equals:
         - "18-24"
+        - "25-34"
+        - "35-44"
+        - "45-54"
     severity: S3

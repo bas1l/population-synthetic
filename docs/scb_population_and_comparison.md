@@ -36,14 +36,14 @@ The sampler fetches real demographic tables from the SCB PxWeb API and builds pr
 | 3 | `employment_status` | `NAKUBefUtbNivAr` (AM0401P) | labour status × education level × sex |
 | 4 | `birth_location` | `FolkmFodlandHVD` | Sweden / EU / Outside EU |
 | 5 | `region` | `BefolkningNy` | county × age × sex |
-| 6 | `socioeconomic_class` | `TabVX10InkStrukt` | income deciles |
+| 6 | `socioeconomic_class` | `SamForvInk1a` | persons by income bracket × single-year age × sex; class from each (age_group, sex) cell's median, interpolated inside its bracket |
 | 7 | `parental_structure` | `LE0102T17` | family type |
 | 8 | `civil_status` | `BefolkningNy` | civil status × age × sex |
 | 9 | `industry_sector` | `AKURLSysSNI07Ar` | SNI07 industry codes |
 | 10–11 | `employment_type` | `AKURLSysAnkAr` + `NAKUSysselOkArbtidAr` | attachment type × age × sex; hours × age × sex |
 | 12 | `housing_tenure` | `BO0104T04` | building type × tenure form |
-| 13 | `household_size` | `HushallT03` | household size (1–7+) |
-| 14 | `income_source` | `TabVX13InkStruktN` | income component × age × employment status |
+| 13 | `household_size` | `HushallT03` | persons by household size (1–7+; `ContentsCode` `BE0101DK`, number of persons) |
+| 14 | `income_source` | `TabVX13InkStruktN` | income component (8 positive components incl. 325 general allowance, 330 housing allowance) × age × employment status |
 | 15 | `birth_country_detail` | `FodelselandArK` | country × age × sex |
 
 `ethnicity` and `current_environment_type` are derived from `birth_location` and `region` respectively via lookup tables in `category_mappings.json`.
@@ -65,7 +65,7 @@ Each individual is sampled through a dependency chain — later attributes are c
 | 9 | `income_source` | (employment_status, age_group) |
 | 10 | `birth_country_detail` | (age_group, sex), foreign-born only |
 
-**Fallback chains:** When a specific conditioning key is missing (e.g., no data for 75–85 age group), sampling falls back to the opposite sex, then to adjacent age groups. This handles gaps where SCB tables don't cover the full 18–85 range (education covers 18–74, employment_type covers 15–74).
+**No fallback chains (since 2026-10).** A missing conditioning cell raises `ValueError` naming the table and the cell; the sampler never borrows the other sex's or another age group's distribution. The earlier other-sex / other-age-group fallbacks were silent, and the age-group one iterated a `set`, so its choice depended on `PYTHONHASHSEED` (output is now byte-identical across hash seeds). Coverage gaps are filled in the fetch layer by declared proxies only, recorded in the output's `tables_used` notes: employment_type's 18–24 cell comes from AKU's 15–24 attachment band, and 75–85 (outside AKU's 15–74) reuses 65–74. Two income_source cells have no SCB value at all — students aged 65+ and unemployed aged 80+ — and a persona drawn into either raises; none occurs at seed 42, n 10,000.
 
 **Employment-education note:** The employment table (`NAKUBefUtbNivAr`) provides percentage data (`AM0401VR`) rather than absolute counts, because SCB suppressed absolute numbers by education level in April 2026 due to quality concerns. The table has no age dimension, so employment is conditioned on (sex, education) only. "Vocational (Yrkeshogskola)" shares the post-secondary distribution with "University Degree" since the AKU table groups all post-secondary education together.
 
@@ -175,7 +175,7 @@ All populations use the same schema labels for comparability:
 | biological_sex | Male, Female |
 | education_level | No Formal Education, High School (Gymnasieskola), Vocational (Yrkeshogskola), University Degree |
 | employment_status | Employed, Unemployed, Student, Retired |
-| birth_location | Sweden, Nordic Country, Europe (Other), Outside Europe |
+| birth_location | Sweden, Born in another EU country, Born outside the EU (FolkmFodlandHVD `FSV`/`FEU`/`FUEU`; native tier, deprecated from analysis) |
 | ethnicity | Swedish, Nordic, European, Non-European |
 | region | 21 Swedish counties (e.g., Stockholm, Västra Götaland) |
 | current_environment_type | Urban Metropolis, Suburban, Rural/Countryside |
@@ -186,7 +186,7 @@ All populations use the same schema labels for comparability:
 | employment_type | Permanent Full-time, Permanent Part-time, Temporary Full-time, Temporary Part-time, Self-Employed, or Not Applicable |
 | housing_tenure | Owned, Rental, Cooperative (Bostadsrätt) |
 | household_size | 1–7+ persons |
-| income_source | Employment Income, Capital Income, Transfers, Mixed, Pension, Other |
+| income_source | Wage / Business, Capital, Pension, Insurance / Allowance, Social Assistance, Sickness / Activity Compensation, General Allowances, Housing Allowance (`config/mapping/scb_native/income_source.json`) |
 | birth_country_detail | Sweden or specific country (for foreign-born individuals) |
 
 These labels are defined in `config/assets/scb_reference/category_mappings.json`. The pipeline extractor normalizes free-text identity data to match these labels via fuzzy keyword matching.

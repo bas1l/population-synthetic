@@ -34,13 +34,24 @@ def main() -> None:
         ),
     )
     parser.set_defaults(merge_status_education=True)
+    parser.add_argument(
+        "--cache-ttl-days",
+        type=int,
+        default=None,
+        help=(
+            "Override the SCB response cache TTL (days, on file mtime; the client default "
+            "applies when omitted). A large value re-uses every cached table, so only "
+            "queries absent from the cache are fetched live -- use it to re-sample a "
+            "reference without picking up SCB revisions of unchanged tables."
+        ),
+    )
     args = parser.parse_args()
 
     if args.seed is None:
         args.seed = int(np.random.SeedSequence().entropy & 0xFFFFFFFF)
     logger.info("Seed: %d", args.seed)
 
-    client = SCBPxWebClient()
+    client = SCBPxWebClient() if args.cache_ttl_days is None else SCBPxWebClient(cache_ttl_days=args.cache_ttl_days)
     distributions = FetchService.load_all(client, merge_status_education=args.merge_status_education)
     if args.merge_status_education:
         logger.info(
@@ -93,7 +104,11 @@ def main() -> None:
         },
         "AM/AM0401/AM0401I/AKURLSysAnkAr": {
             "classification": "AKU",
-            "notes": "Employment attachment type by age/sex (AKU Labour Force Survey -- permanent/temporary/self-employed)",
+            "notes": (
+                "Employment attachment type by age/sex (AKU Labour Force Survey -- permanent/temporary/self-employed). "
+                "Declared age proxies: the AKU 15-24 band supplies the 18-24 attachment mix (includes ages 15-17); "
+                "75-85, outside AKU's 15-74 coverage, reuses the 65-74 attachment x hours mix"
+            ),
         },
         "AM/AM0401/AM0401S/NAKUSysselOkArbtidAr": {
             "classification": "AKU",
@@ -103,7 +118,10 @@ def main() -> None:
             "notes": "Housing tenure by dwelling type (BO0104 housing stock statistics, tenure codes 1-3)",
         },
         "BE/BE0101/BE0101S/HushallT03": {
-            "notes": "Household size distribution (BE0101S household statistics)",
+            "notes": (
+                "Household size distribution of persons (BE0101S household statistics, "
+                "ContentsCode BE0101DK = number of persons; includes children)"
+            ),
         },
     }
 
@@ -121,6 +139,7 @@ def main() -> None:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "n": args.n,
             "seed": args.seed,
+            "cache_ttl_days": args.cache_ttl_days,
         },
         "individuals": individuals,
     }

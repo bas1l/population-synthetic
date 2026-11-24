@@ -37,11 +37,13 @@ from population_synthetic.analysis.utils.labels import (
     attribute_label,
     country_label,
     discover_model_ids,
+    figure_term,
     method_key_lines,
     method_letters,
     model_label,
     model_provenance_rows,
     population_label,
+    reference_source,
     strategy_label,
 )
 
@@ -422,3 +424,89 @@ def test_provenance_rejects_a_host_the_registry_does_not_declare(tmp_path: Path)
     )
     with pytest.raises(ValueError, match="mars_rover"):
         model_provenance_rows(models_dir=tmp_path)
+
+
+# ------------------------------------------------------------------
+# The manuscript-controlled words and the reference name
+# ------------------------------------------------------------------
+
+
+def _write_terms(path: Path, body: dict) -> Path:
+    path.write_text(yaml.safe_dump(body, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def _write_country(directory: Path, country_id: str, body: dict) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{country_id}.yaml").write_text(yaml.safe_dump(body), encoding="utf-8")
+    return directory
+
+
+VALID_TERMS = {"terms": {"individuals": "individuals", "strategy_key_title": "Strategies", "reference": "Reference"}}
+
+
+def test_live_figure_terms_resolve() -> None:
+    assert figure_term("individuals") == "individuals"
+    assert figure_term("strategy_key_title") == "Strategies"
+    assert figure_term("reference") == "Reference"
+
+
+def test_live_reference_source() -> None:
+    assert reference_source("swedish_02") == "SCB"
+    assert reference_source("swedish") == "SCB"
+    assert reference_source("italian") == "ISTAT"
+
+
+def test_the_reference_term_is_not_an_agency_name() -> None:
+    """Manuscript-facing artwork calls the real population the reference, never SCB/ISTAT."""
+    sources = {reference_source(country_id) for country_id in _selectable(COUNTRIES_DIR)}
+    assert figure_term("reference") not in sources
+
+
+@pytest.mark.parametrize("country_id", _selectable(COUNTRIES_DIR))
+def test_every_country_declares_a_reference_source(country_id: str) -> None:
+    source = reference_source(country_id)
+    assert source and "_" not in source
+
+
+def test_figure_term_missing_file_raises(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        figure_term("individuals", terms_path=tmp_path / "absent.yaml")
+
+
+def test_figure_term_unknown_key_raises(tmp_path: Path) -> None:
+    path = _write_terms(tmp_path / "figure_terms.yaml", VALID_TERMS)
+    with pytest.raises(UnknownAxisValue, match="personas"):
+        figure_term("personas", terms_path=path)
+
+
+@pytest.mark.parametrize("value", ["", "   ", None, 3])
+def test_figure_term_empty_value_raises(tmp_path: Path, value) -> None:
+    body = {**VALID_TERMS, "terms": {"individuals": value}}
+    path = _write_terms(tmp_path / "figure_terms.yaml", body)
+    with pytest.raises(ValueError, match="non-empty"):
+        figure_term("individuals", terms_path=path)
+
+
+def test_figure_term_without_terms_mapping_raises(tmp_path: Path) -> None:
+    path = _write_terms(tmp_path / "figure_terms.yaml", {"terms": {}})
+    with pytest.raises(ValueError, match="'terms' mapping"):
+        figure_term("individuals", terms_path=path)
+
+
+def test_country_without_display_block_raises(tmp_path: Path) -> None:
+    directory = _write_country(tmp_path, "ruritanian", {"id": "ruritanian", "label": "Ruritania"})
+    with pytest.raises(ValueError, match="reference_source"):
+        reference_source("ruritanian", countries_dir=directory)
+
+
+@pytest.mark.parametrize("display", [{}, {"reference_source": ""}, {"reference_source": "  "}])
+def test_country_with_empty_reference_source_raises(tmp_path: Path, display: dict) -> None:
+    directory = _write_country(tmp_path, "ruritanian", {"id": "ruritanian", "label": "Ruritania", "display": display})
+    with pytest.raises(ValueError, match="display.reference_source"):
+        reference_source("ruritanian", countries_dir=directory)
+
+
+def test_unknown_country_reference_source_raises() -> None:
+    with pytest.raises(UnknownAxisValue, match="atlantean"):
+        reference_source("atlantean")

@@ -19,7 +19,8 @@ marginals but rarely emit an incoherent individual. This task fills that gap.
 Per persona (the bare mapped demographic tuple; Sweden's deprecated `birth_location` is excluded to
 match `ComparisonScheme.attributes`, and `age` is shown to the judge as the bracketed `age_group`
 derived on demand from the raw integer via the canonical `attr_value` accessor, matching the analyzed
-scheme), the judge is called **N cold rounds** and returns two orthogonal axes plus a structured
+scheme), the judge is called **N independent rounds** -- each round its own fresh `claude -p` process
+with no shared history and no project context -- and returns two orthogonal axes plus a structured
 clash list:
 
 - **`can_exist`** — binary: can this attribute set describe one real person? False **only** on a hard
@@ -171,6 +172,16 @@ Outputs per country under `03_Analysis/realism_ranking/<country>/`:
 | `typicality_histogram.csv` | the same statistic's published object: one row per `(competitor, level)` over the full 0–10 scale, so the levels nobody scored are explicit zeros |
 | `typicality_heatmap.png/.svg` | that statistic as a model × method grid on the shared sequential ramp. The ramp orders by magnitude only, so the real population's value is marked by a rule on the colourbar and by a **signed delta in every cell** — read the side from the sign. Four distinct fills: a value, an under-powered value (hatched), a judged competitor with no typicality-bearing persona (white, cross-hatched), an unjudged pair (grey) |
 | `typicality_by_method.png/.svg` | the same statistic with methods on x in complexity order, one mark per model, and the real population as a horizontal reference line — the only figure in this task that draws it as a reference rather than a series |
+| `typicality_distribution.csv` | one row per `(competitor, level)`: the **round-weighted** score distribution (weights and shares) behind the distribution grid — a different basis from `typicality_histogram.csv`; see below |
+| `typicality_bands.csv` | one row per competitor: the shares of its individuals in the three `--typicality-bands` score bands |
+| `typicality_distribution_by_model_strategy.png/.svg/.eps` | every combination's whole distribution as a mini histogram on the strategy × model grid, the reference as an outline in every cell and as its own column, one ternary of band shares per strategy; a fixed 456 pt canvas. Columns follow `model_ranking`'s published order |
+| `typicality_effect_omnibus.csv` | ε² of the model and strategy Kruskal-Wallis tests |
+| `typicality_effect_model_pairs.csv` | Cliff's δ with a bootstrap interval beside every Dunn model pair |
+| `typicality_effect_vs_reference.csv` | every combination and every pooled model against the reference: medians, Cliff's δ + interval, Mann-Whitney U, raw and Holm p |
+| `typicality_closeness.csv` | one row per combination: closeness of its distribution to the reference's (TV similarity, Cliff's δ, Cramér distance), each with a joint-bootstrap interval and its sampling-noise baseline |
+| `typicality_closeness_decomposition.csv` | the additive model + strategy decomposition of each closeness outcome |
+| `typicality_closeness_tests.csv` | per outcome and factor: the within-block permutation test and Friedman + Kendall's W on the complete blocks |
+| `typicality_closeness_pairs.csv` | strategy pairs (paired t / Holm, Conover / Holm) and model pairs (Conover / Holm); not written when fewer than two models are complete blocks |
 
 ### Ranking a sweep that is still topping up -- `--rounds`
 
@@ -192,8 +203,8 @@ python scripts/analyze/rank_persona_realism.py --country swedish_02 --rounds 2
   re-runs the judge's own statistics function -- zero LLM calls, and nothing is written under
   `persona_realism/`. The two tidy CSVs are bypassed rather than filtered: their row grain has
   already summed each persona's votes over *all* its cached rounds, so it cannot express a cap.
-* **The judge identity is not relaxed.** `judge_model` and `prompt_template_sha256` are still
-  compared exactly; no round cap repairs a different judge or a different prompt.
+* **The judge identity is not relaxed.** `judge_model`, `prompt_template_sha256` and
+  `persona_rendering_sha256` are still compared exactly; no round cap repairs a different judge or a different prompt.
 * **The round count becomes a capacity requirement.** A persona holding fewer than N cached rounds
   fails the run, naming the combination, the persona and both counts. It is never ranked short --
   consuming the 3 rounds a persona happens to hold against a cap of 5 is exactly the mixed-depth
@@ -212,6 +223,12 @@ capacity check, which is the honest answer -- top that combination up rather tha
 
 The flag is exposed in the GUI as the `rounds` option on the `realism_ranking` node of
 `config/gui/flows/analysis_workflow.yaml` (blank = no cap).
+
+**The manuscript's typicality figures and tables are ranked at `--rounds 1`.** On the current
+`swedish_02` base the survivor set is unchanged under a one-round cap, and at one round the
+round-weighted distribution is exactly the integer histogram of each individual's single scored
+round, which is the basis the approved prototype and its golden values were computed on (see
+[The typicality distribution](#the-typicality-distribution-effect-sizes-and-closeness-to-the-reference) below).
 
 ### The severity dimension (reporting only)
 
@@ -243,8 +260,8 @@ the shared analysis-layer ramp (`analysis/utils/palette.py`), which carries no b
 reading of its own, so an S1 grid and an S3 grid are distinguishable only by their title,
 their colourbar label and S1's caption. The two hues that once separated them (red for the
 defect levels, blue for S1) were given up when the analysis figures were unified onto one
-house palette. The typicality heatmap is the one realism figure that keeps its own ramp,
-because there the direction *is* the colour — see below.
+house palette. The typicality heatmap is on that same ramp too, which is why it prints its
+direction as a signed number in every cell rather than in the colour — see below.
 
 > **Schema versions.** The per-severity columns arrived with per-persona tidy-CSV schema
 > **v2**; the per-clash file is its own contract at schema **v1**, versioned separately (both
@@ -414,6 +431,119 @@ denominators, different directions — and `non_composite` says so as a field.
 > `dc:date` creation timestamp and salts per-save element ids. That is a property of the writer, not of
 > this axis.
 
+### The typicality distribution, effect sizes and closeness to the reference
+
+The typicality axis publishes one number per competitor. Three further blocks in
+`realism_ranking.json` publish what that number summarises and what it leaves out: the whole
+distribution (`typicality_distribution`), the effect sizes of the factor tests
+(`typicality_effects`) and one closeness-to-the-reference value per combination
+(`typicality_closeness`). All three are additive — no existing key changes shape — and none feeds
+Axis A or Axis B.
+
+**The distribution is round-weighted.** Each survivor (a `can_exist` majority and a non-null mean,
+the same denominator as above) spreads a total weight of 1 evenly over its scored rounds: a
+survivor scoring 8 and 9 puts 0.5 on each. The published distribution is the weights over the
+number of survivors, so each individual counts once, no rounding rule is involved, and its mean
+equals the mean of the per-persona means the factor tests use exactly. This is a different basis
+from `typicality_histogram.csv`, which bins each per-persona mean rounded half-to-even; the block
+states its own `basis` and `counting_unit` as data, and the two bases agree at one round. Under
+`--rounds 1` every survivor has one scored round and the distribution is the plain integer
+histogram of it, which is the manuscript basis.
+
+**Bands.** `--typicality-bands B1,B2` (default `4,7`) cuts the 0–10 scale into 0–B1, B1+1–B2 and
+B2+1–10, and `typicality_bands.csv` gives each competitor's share in each. The shares are computed
+from the same distribution, so the figure's triangles and histograms cannot disagree. The edges
+must satisfy `0 ≤ B1 < B2 < 10`, else the CLI raises, and they are recorded in `provenance`.
+
+**Four cell states, kept apart.** A grid cell is `ok` (a distribution), `no_typicality` (judged, no
+survivor), `withdrawn` or `unjudged`. *Withdrawn* is read from `population_cap/_index.json`: the
+gate's full-N rule excluded the combination, so it has no individuals by construction, and the
+figure crosses it out rather than dropping it. *Unjudged* is a grid pair that is neither consumed
+nor withdrawn (`persona_realism` has not run on it yet) and is drawn grey, as on every other grid
+in this process. The block lists both slug sets; a withdrawn slug that is also consumed raises. A
+model withdrawn in every strategy has no consumed competitor, so it is listed but is not a column
+(live: `ollama_llama31_8b`).
+
+**The figure depends on `model_ranking`.** `typicality_distribution_by_model_strategy` puts the
+models across the columns in `model_ranking`'s published order (tier 1, then tier 2), so that it
+agrees with the sibling figures on which model comes first. The order is computed by
+`analysis/utils/model_order.py` from `03_Analysis/model_ranking/{country}_performance.json` and the
+cap index — never copied from a list. With charts on, the CLI resolves it for every country
+**before anything is written**: a missing `{country}_performance.json` exits naming
+`scripts/analyze/rank_models.py`, and a grid model the ranking does not know raises (there is no
+"unranked" group on a fixed 456 pt canvas). `--no-charts` skips the read, so the JSON and CSVs
+alone still need only `persona_realism` output. In the GUI workflow `realism_ranking` therefore
+depends on `[persona_realism, model_ranking]`; an operator who has disabled `model_ranking` ticks
+its `bypass` instead. The JSON block and the CSVs keep the process's own competitor order and are
+unaffected by the ranking. The figure's layout rules are in
+[Figure conventions](figure-conventions.md#the-typicality-distribution-grid-glyphs-not-tiles).
+
+**Effect sizes beside every test.** `factor_significance` published H, p and the Dunn/Holm pairs
+with nothing that says how large a difference is. `typicality_effects` adds:
+
+| Table | What it holds |
+|---|---|
+| `typicality_effect_omnibus.csv` | ε² = H / (N − 1) for the model and strategy factors, from the H and N already in `factor_significance` (no second Kruskal-Wallis run) |
+| `typicality_effect_model_pairs.csv` | Cliff's δ and its bootstrap interval for every model pair, in the **same `(a, b)` orientation** as the Dunn row, so δ and Dunn z agree in sign; the Holm p is the Dunn family's own |
+| `typicality_effect_vs_reference.csv` | two families: every synthetic combination against the reference (`combination_vs_reference`) and every pooled model against it (`model_vs_reference`) — n and median on each side, Cliff's δ with its interval, a two-sided asymptotic Mann-Whitney U, raw p and Holm p within the family |
+
+These are computed on the per-persona means (`typicality_means`), the unit the factor tests use;
+a round is not an independent unit, an individual is. The δ intervals are percentile bootstraps
+seeded from the judge config's `bootstrap` block, the same seed for every comparison, so each
+interval depends only on its own two samples and never on processing order. A group below two
+values, or a missing reference, gives nulls plus a `skipped_tests` reason. The `pseudo_replication`
+and `single_run_per_combination` caveats apply to these p-values too: read the effect size, not
+the p.
+
+**Closeness to the reference.** `typicality_closeness` gives one value per synthetic combination
+for how close its distribution (the round-weighted one above, so the grid and the closeness numbers
+describe one distribution) is to the reference's. The unit of analysis is the **combination**
+(n = 58 on the full `swedish_02` grid); individuals are never test units and enter only through the
+bootstrap. The computation lives in `realism_ranking/typicality_closeness.py`, which reads no
+record, path or config.
+
+- **Primary outcome: TV similarity**, 1 − ½ Σ_k |p(k) − q(k)| over the 11 levels. It is the measure
+  the attribute-level fidelity score already publishes, now held in one shared definition
+  (`analysis/utils/distribution_distance.py`, which `fidelity` also calls), so typicality closeness
+  and demographic fidelity are read on one scale.
+- **Sensitivity outcomes.** TV similarity is blind to the order of the levels and to the side a
+  combination sits on, so two are reported beside it: **Cliff's δ** against the reference (the side;
+  zero is closest) and the **Cramér distance**, the L2 distance between the two CDFs over the ten
+  cut points (order-aware; lower is closer). This δ is taken on the round-weighted histograms and is
+  not the δ on per-persona means that `typicality_effects` reports; the two agree at one round.
+- **The sampling-noise baseline.** A combination's distance to the reference is not zero even when
+  it is drawn from the reference itself. Beside every observed outcome sits the value noise alone
+  produces at that combination's n: n individuals drawn from the reference against an independent
+  redraw of the reference at its own size. It is reported as the mean and the bound at
+  `noise_quantile` (for TV similarity the lower 5th percentile, since noise pulls similarity down;
+  for Cramér the 95th; for δ the 95th of |δ| beside the mean |δ|). At the reference's own n (100)
+  the TV similarity noise floor is 0.829 on average, with a 5th percentile of 0.760.
+- **The decomposition.** Each outcome is split additively into model + strategy over the present
+  combinations (withdrawn cells absent, never zero): type II sums of squares, each factor's share of
+  the total, F, partial η², partial ω² and ω², the unbalanced remainder as `share_overlap`, and a
+  residual that holds the model × strategy interaction and the sampling noise together (with a
+  Shapiro–Wilk check of it). On `swedish_02` at one round the TV similarity shares are strategy
+  0.638, model 0.238, residual 0.180.
+- **The tests.** A within-block permutation test of each factor's type II F (values permuted within
+  the levels of the other factor); Friedman with Kendall's W on the complete blocks, both
+  directions, with the models dropped for incompleteness listed; the strategy pairs by paired t
+  (Holm, mean difference, interval, d_z) and by Conover (Holm); the model pairs by Conover (Holm).
+- **One joint bootstrap for every interval.** Each replicate resamples the individuals of every
+  combination within that combination **and** the reference's individuals once, so the reference's
+  own sampling error (n = 100) reaches every statistic computed across combinations. Groups are
+  resampled in the process's canonical order, so the output does not depend on processing order.
+  Iterations, seeds, the interval level and `noise_quantile` live in
+  `config/analysis/realism_ranking/typicality_closeness.yaml` (every key required, no in-code
+  default) and are stamped into `provenance.closeness_resampling`.
+
+**Caveats that belong beside every reading.** The reference holds only 100 individuals, so its
+outline and star are noisy and its sampling error dominates every vs-reference interval — which is
+why every row carries `reference_n` and why the bootstrap resamples the reference too. And the judge
+(`claude-sonnet-5`) belongs to the same family as one generator (`claude_sonnet`) and may favour
+that family's individuals; this is not computed, so read that column with it in mind.
+
+### Gates and honesty fields
+
 Two gates run before any statistic, because both failure modes produce plausible-looking wrong
 numbers:
 
@@ -421,8 +551,8 @@ numbers:
   and the CSV's row count equals the report's `n_personas`. A partial directory (verdict caches but
   no report -- several exist on any real output base) is skipped with a machine-readable reason, or
   raises under `--strict`.
-- **Homogeneity.** Every consumed combination must share one `judge_model`, `prompt_template_sha256`
-  and `n_rounds`, read from the stamped provenance rather than from current config. A mismatch
+- **Homogeneity.** Every consumed combination must share one `judge_model`, `prompt_template_sha256`,
+  `persona_rendering_sha256`, `context_isolation` and `n_rounds`, read from the stamped provenance rather than from current config. A mismatch
   **raises**, naming the offending combination: ranking units judged by different judges measures the
   judges, not the units.
 
@@ -430,6 +560,99 @@ numbers:
 family of tests, a denominator beside every rate, `skipped_combinations` and `skipped_tests` with
 reasons, the `pseudo_replication` and `single_run_per_combination` caveats, and the bootstrap seed
 plus resolved library versions.
+
+## Stage 2: why an S3 clash arose (reporting only)
+
+Stage 1 sees only a persona's mapped categories. An S3 clash can therefore come from four
+places: the generating model wrote an impossible person, it described a real situation with
+categories the schema makes mutually exclusive, the mapper mis-coded one attribute, or stage 1
+applied a wrong rule. Stage 2 tells these apart. After stage 1, every persona with at least one
+S3 clash in a round gets one more call per such round: the judge reads the persona's raw
+free-text answers (`identity.json` in the `population_cap` mirror), the mapped categories exactly
+as stage 1 saw them, and stage 1's explanation of each S3 clash, and returns one class per clash
+(`config/analysis/persona_realism/stage2_prompt.md`):
+
+| class | meaning |
+|---|---|
+| `raw_impossible` | the raw answers themselves describe no possible person (an age-based one must name the listed legal fact it rests on) |
+| `label_clash` | a real situation whose chosen categories exclude each other under the schema (e.g. a working student coded Student + a contract) |
+| `ambiguous` | the raw text cannot decide it (e.g. a bare contract type next to a non-working status, income not wage) |
+| `mapping_error` | one attribute's own raw answer was mis-coded, and correcting it would remove the clash |
+| `judge_error` | the mapped pair is not contradictory; stage 1 applied a wrong rule or limit |
+
+The persona class is the highest-ranked issue class under `stage2.persona_class_order` in
+`judge.yaml` (raw_impossible > label_clash > ambiguous > mapping_error > judge_error; the prompt
+must state the same order, the loader raises otherwise). Two pipeline states complete it:
+`unclassified` (the stage-2 call failed every attempt; retried on the next run) and
+`not_applicable_no_free_text` (the real reference has no free text: no call is made).
+
+- **Same client path as stage 1** (fresh `claude -p` process per call, isolation tag checked).
+- **Cache** `<combo>/stage2/persona_XXXXX.json` + `.jsonl` telemetry, in a sub-directory so the
+  stage-1 glob never sees it. Each cached round carries the fingerprint of the stage-1 S3 clashes
+  it classified, plus the stage-2 prompt hash, judge model, isolation tag, the stage-1 prompt
+  identity and the raw-identity hash. Resume classifies only missing rounds; any mismatch raises
+  and points at `--force`, which re-judges stage 1 and clears the combination's stage-2 files.
+  `--rewrite-artifacts` makes no stage-2 call: an S3 clash without a cached class is written as
+  `unclassified`.
+- **Outputs** (per combination, under the same force gate as the other CSVs):
+  `{combo}_stage2.csv` (schema `stage2_csv_schema_version` 1; one row per S3 clash at the
+  per-clash contract's key `(persona_id, round_index, attr_a, attr_b)`: class, misread attribute,
+  legal fact, reason, the two attributes' raw answers, the quoted raw strings) and
+  `{combo}_stage2_personas.csv` (one row per persona with an S3 clash: persona class). The report
+  gains a `stage2` block (class counts, the impossible personas by class, stage-2 cost) and its
+  provenance `stage2_enabled`, `stage2_prompt_sha256` (read from the caches),
+  `stage2_persona_class_order`, `stage2_csv_schema_version`.
+- **Ranking.** `realism_ranking` reads `{combo}_stage2.csv` (trimmed to the consumed rounds under
+  `--rounds`) and reconciles it against the S3 rows of `{combo}_clashes.csv` (any difference
+  raises). Two **reporting-only** blocks use it; neither changes Axis A, `can_exist`, a ranking or a
+  test, where every S3 still counts as impossible:
+  - `stage2_breakdown` / `stage2_breakdown.csv`: each competitor's impossible individuals (the Axis A
+    set) by stage-2 class.
+  - `worst_clash_split` / `worst_clash_split.csv`: every individual counted once at its worst clash
+    (none, S1, S2, S3), with S3 split by `config/analysis/realism_ranking/worst_clash_split.yaml`:
+    `raw_impossible` -> `r3_impossible` ("R3: impossible"); `label_clash`, `ambiguous` ->
+    `c_scb_category_limitation` ("C: SCB category limitation" -- not a rank of the R1-R3 ladder:
+    a limitation of the SCB category system, not a generation issue); `mapping_error`,
+    `judge_error` -> `pipeline`; `unclassified` and the reference's `not_applicable_no_free_text`
+    -> plain `S3` ("R3: not split"; the reference is never split). CSV columns are `n_<id>`.
+    Display labels are `worst_clash_<id>` in `config/analysis/figure_terms.yaml`
+    (`labels.worst_clash_label`) and colours `palette.WORST_CLASH_COLORS`; an id without either
+    raises when drawn. The yaml's `display` block, copied into the ranking block, is presentation
+    only: `only_when_nonzero` (`S3`, `pipeline`: drawn and listed only when some count in the
+    figure is non-zero) and `off_ladder` (C, `pipeline`: listed after the ladder, set apart).
+    Each row also carries `n_excluded_from_clash_analysis`, the individuals the clash analysis
+    below leaves out.
+  A competitor without a stage-2 CSV makes both blocks null with a recorded skip when none has one,
+  and raises when only some do.
+- **Clash analysis.** `clash_analysis` (module `realism_ranking/clash_analysis.py`) is the
+  manuscript's clash analysis, declared in the same yaml under `clash_analysis`: every individual in
+  one of four worst-clash states (`states`: none, S1, S2, and S3 = `r3_impossible` + unsplit `S3`),
+  except the categories listed under `excluded` (`c_scb_category_limitation`, a limitation of the
+  SCB category system, and `pipeline`, an S3 clash stage 2 classed `mapping_error` / `judge_error`,
+  an error of this pipeline rather than of the individual), which leave **numerator and
+  denominator** of every statistic in the block; `n_excluded` is published per
+  competitor (`n_judged` = `n` + `n_excluded`) and in provenance (`clash_analysis_n_excluded`,
+  `clash_analysis_excluded_categories`). Per population: the `rates` (any clash, rank 2 or 3,
+  rank 3) with Clopper-Pearson intervals; per combination and rate, the difference from the
+  reference (bootstrap CI), the two-sided Fisher exact p, Holm over the combinations and a verdict
+  at `alpha`; the four-state TV similarity with its reference self-resampling baseline at the
+  combination's own n. Across combinations: the rates pooled per strategy and per model minus the
+  reference's, the additive model + strategy decomposition of each `decomposed_rates` difference
+  (type II shares with bootstrap CIs, within-block permutation F), and the rank-3 attribute pairs
+  counted per individual (pairs of the S3 issues whose stage-2 class falls in the S3 state, so an
+  R3 individual's label-clash pairs are not counted). Resampling settings are
+  `typicality_closeness.yaml`'s. Files: `clash_analysis.csv`, `clash_analysis_pooled.csv`,
+  `clash_analysis_decomposition.csv`, `clash_analysis_rank3_pairs.csv`. The exclusion is local to
+  this block: Axis A, `can_exist`, the mixed logit, `stage2_breakdown`, the severity heatmaps,
+  drivers and pair summaries, and the typicality blocks (which leave out every first-round S3
+  individual, C included) are stage-1 views and still count C and pipeline. Null with a recorded
+  skip without the real reference or without stage 2 on every competitor.
+- **Cost.** About 2.4 times a stage-1 call each (prototype: $0.039 and about 30 s per call), but only
+  on personas with an S3 clash (1-2 % of the judged ones).
+- **Regression check, not validation.** The prompt was revised against 69 hand-labelled personas
+  (2026-10-05) and re-run once on the same 69: agreement 54/69 (kappa 0.70). The labels and the
+  revisions come from the same review, so this measures rule-following, not accuracy on unseen
+  personas.
 
 ## Config knobs — `config/analysis/persona_realism/`
 
@@ -444,8 +667,8 @@ the emitted artifacts disagree with the config that describes them.
 |-----|---------|
 | `judge_model` | Raw string passed to `claude -p ... --model`; must match a row in `model_pricing.yaml`. Default `claude-sonnet-5` (best coherence-judge tier + low latency + cost). |
 | `model_options` | GUI dropdown (Claude family). `judge_model` must be one of these; Fable-5 is the slowest/most-expensive selectable option. |
-| `n_rounds` | Independent judge calls per persona (default 3). N≥2 is required for any reliability or per-persona SD. |
-| `temperature` | Judge sampling temperature (default 0.0 — cold, for reproducibility). |
+| `n_rounds` | Independent judge calls per persona (default 3), each a fresh conversation. N≥2 is required for any reliability or per-persona SD. |
+| *(no `temperature`)* | **Deliberately absent; declaring it raises.** The `claude` CLI has no sampling-temperature control (no flag, no settings key; `--effort` is not a temperature), so the judge samples at the CLI's default. Reports stamp `temperature: null`, `temperature_applied: false`. Reports written before 2026-10-04 stamped `temperature: 0.0`, which never reached the model. |
 | `severity_weights` | **Declared but not wired.** Validated and stamped into provenance, but no computation reads it -- impossibility is decided solely by the `can_exist` majority (`reduce.possible_majority`). Every report carries a `severity_config_status` note saying so. |
 | `impossibility_severities` | **Declared but not wired** (same as above). Wiring severity gating into `reduce_persona` would change every existing impossibility rate and is a separate decision. |
 | `sample_size` | Personas judged per **synthetic** combination (nullable → all). Caps judge cost via seeded sampling. |
@@ -457,12 +680,116 @@ the emitted artifacts disagree with the config that describes them.
 | `workers` | Parallel judge-call fan-out (ThreadPool `max_workers`). |
 | `timeout_seconds` | Per-call subprocess wall-clock timeout (default 600). Threaded into the `ClaudeCodeClient` the judge factory builds; 600 s is a generous ceiling that also covers the slowest *selectable* judge (a Fable/Opus single turn can run for minutes) if you select it — Sonnet, the default, finishes in seconds. The client's own 120 s default is too tight for the slow tiers and is raised only for the judge. |
 | `prompt_template` | Path (relative to the config dir) to the system+user template. |
+| `stage2` | Stage 2 (see above): `enabled` (bool), `prompt_template` (relative path, here `stage2_prompt.md`), `persona_class_order` (a permutation of the five stage-2 classes, stated verbatim in the prompt). All three required; the loader raises otherwise. |
+| `persona_rendering` | Judge-facing labels for canonical category values: `mapping_tier` (relative to the config dir) + `labels: {attribute: {canonical value: label}}`. Applied **only** to the persona lines of the prompt; mapped data, verdict caches, CSVs and hard rules keep canonical values. The loader raises unless each attribute is declared in the tier's `_index.json` and its keys are **exactly** that category file's `values` (total coverage -- a partial map would leave some values coded, and a value falling through unrendered is a fallback; `Unknown / Not reported` is therefore listed, mapped to itself), with non-empty, distinct labels. A persona value outside the map raises at render time, so judging a population from another mapping tier needs its own map first. Today: `education_level` (scb_native) as plain Swedish-statistics wording + ISCED 1997 level. |
 
-`judge_prompt.md` — the constraint-scaffolded system + user template (biological/legal/temporal
-categories, anchored typicality exemplars, strict JSON output schema, explicit "unusual ≠ impossible"
-guardrail).
+`judge_prompt.md` — the constraint-scaffolded system + user template, **v7 since 2026-10-05**
+(v5 since 2026-10-04; v6 adds one schema definition, v7 two definition lines, nothing else):
+schema definitions (education = highest *completed* level; `Retired` = old-age pensioner, disability
+pension is `Sick Leave`; v6: `parental_structure` is the family the person grew up in -- which
+parents they lived with as a child -- not their own parenthood or current household; v7: `Sick Leave`
+also covers an employee sick-listed from a job at any age, only sickness / activity compensation ends
+at the pension reference age; pension income at a young age is not impossible by itself, while an
+occupational pension before 55 and sickness / activity compensation past the reference age stay
+hard), four constraint categories (biological / legal-institutional / temporal /
+definitional), a no-rescue rule (no invented circumstances, no re-reading a label), the explicit
+"unusual ≠ impossible" guardrail, `can_exist` false iff at least one S3 issue, and the rule that
+typical study lengths and career timing are not legal minimums (an unusually early qualification is
+S2) while statutory age rules stay hard. Anchored typicality exemplars and the JSON schema are
+unchanged. Chosen over v1-v4 on a labelled 40-persona set plus 14 education edge cases and 40
+held-out personas: the earlier production prompt caught 1 of 19 known contradictions, v5 catches
+16 of 19 by majority, flags none of the 20 held-out real SCB personas, and calls a research degree at
+18-24 possible (S2) in 20 of 21 calls (v4 called it impossible in 12 of 21).
+v6 exists because v5 read `parental_structure` as the persona's own parenthood ("Single Mother" +
+`Married` or + `1 person` rated S3): the category is the family of origin -- the generation prompt
+(config 006) asks for "the family composition the persona grew up in as a child", and the real side
+is SCB LE0102T17, children aged 0-17 by family type. Caches judged under v5 carry the v5 template
+hash and are refused on resume and by `realism_ranking`: re-judge with `--force`.
+v7 exists because v6 still rated two plain readings S3: a person sick-listed from a job at 77
+(`Sick Leave` read as sickness compensation only, which ends at the reference age) and pension income
+beside `Employed` at 35 (survivor's and disability pensions have no minimum age). The template hash
+changes again, so v6 caches are refused like v5 ones.
 
-`hard_rules.yaml` — config-driven deterministic `incompatible_pair` checks (see below).
+`hard_rules.yaml` — config-driven deterministic `incompatible_pair` checks (see below). A rule is
+reserved for a **logical, legal or definitional** contradiction; rare-but-attainable is possible and
+never a rule. On that ruling (2026-10-04) the former research-degree-at-18-24 rule was removed (no
+statutory minimum; SCB UF0506 2025 shows 0 holders aged 18-24 but 11 at 25, a frequency boundary)
+and replaced by `retired_before_minimum_pension_age` (`Retired` x 18-24 ... 45-54: no Swedish old-age
+pension, public or occupational, can be drawn before 55; the real reference has no such person).
+
+## Call independence and the context-isolation tag
+
+Every judge call is an independent conversation: `ClaudeCodeClient` spawns one `claude -p` process per
+call with `--tools ""`, `--setting-sources ""` (no user/project settings, hooks, `CLAUDE.md` or
+memory), `--strict-mcp-config`, `--no-session-persistence`, the prompt on stdin, and an empty
+temporary working directory; the process is reaped (its tree killed on timeout) before the call
+returns. The runner still caches one client object per worker thread, but it holds only
+configuration, so nothing is shared between calls. Measured 2026-10-04: ~510 setup tokens per call,
+~3.3-3.7 s per short call including launch, ~250 MB peak working set per process (at most `workers`
+alive at once), zero processes left after a run.
+
+**Before 2026-10-04 this was not true.** The client kept one persistent process per worker thread and
+each call was the next turn of one growing conversation, so a round saw that persona's earlier rounds
+and every persona the thread had judged before (about 94% of the calls behind the pre-fix figures
+carried earlier judgements; the CLI also loaded the repository's `CLAUDE.md`). Round-to-round
+agreement (ICC, Krippendorff's α) from those runs is inflated by construction and verdicts depend on
+thread scheduling. See `docs/development/plans/completed/fix-claude-cli-conversation-leak.md`.
+
+The regimes cannot be mixed silently:
+
+- every persona cache records `context_isolation` (currently `fresh_process_per_call_v1`); a
+  pre-fix cache has no tag;
+- the runner raises on a cache whose tag is not the current one -- it is neither skipped as complete
+  nor topped up -- and points at `--force`. `--rewrite-artifacts` (plan-only, zero LLM calls) may
+  still read old caches;
+- the runner raises if a judge client's metadata does not report the current tag on a successful
+  call;
+- each report's `provenance.context_isolation` is read from its caches (an untagged combination is
+  stamped `untagged_shared_conversation`; a combination mixing regimes raises);
+- `realism_ranking` treats `context_isolation` as a judge-identity key, so a consumption set mixing
+  regimes raises.
+
+Re-judge everything after the fix with `--force` (see the plan for the run estimate).
+
+## Prompt identity: template and category rendering
+
+The same gate covers what the judge read. Every persona cache records `prompt_template_sha256`
+(the template file) and `persona_rendering_sha256` (the canonicalised `persona_rendering` map, key
+order irrelevant). On resume a cache whose stamps differ from the current config's -- or that has
+none, i.e. predates v5 -- raises and points at `--force`; a cache with matching stamps is topped up
+as usual (round 1 kept, the missing rounds added), so raising `n_rounds` or passing `--rounds N`
+later extends a run without discarding it. Each report's provenance takes both stamps from its
+caches (mixed stamps in one combination raise; a pre-stamp combination reads `null`), and
+`realism_ranking` compares both as judge-identity keys.
+
+## Persona identity and judge model
+
+Two more stamps gate resume. Every persona cache stores an `attributes` snapshot -- the analyzed
+axis resolved through `attr_value`, exactly what the judge read -- and the `judge_model`. On resume
+the snapshot must equal the current mapped record value for value: a persona re-mapped since it was
+judged keeps its id but is a different persona, so a changed value, a snapshot key missing, or a key
+no longer on the analyzed axis raises, naming the persona, the attributes and the cached vs current
+values, and points at `--force`. This check also runs under `--rewrite-artifacts`, since the rounds
+would be mis-attributed whether or not anything is judged. A cache judged by another `judge_model`
+raises the same way on every path that may write (`--rewrite-artifacts` may still read it). Stage 2
+needs no check of its own: it classifies from the stage-1 cache's snapshot, and the stage-1 gate has
+already matched that snapshot to the mapped file before stage 2 runs.
+
+## The selection, not the folder
+
+A combination's folder can hold cache files of personas the current cap no longer selects: a
+re-cap of `population_cap` draws a different persona set, and nothing deletes the files the old
+set left. So no reader takes its persona set from the folder. The roster is the set stage 1
+selects from the capped mapped file (`population_cap/_mapped/{combo}.json`, through
+`resolve_mapped_dir`), under the one rule in `persona_realism/selection.py`, and every consumer
+reads that set and nothing else: stage 2 classifies the roster's S3 rounds only (a persona outside
+it raises), the reduction and the `{combo}_personas.csv` / `_clashes.csv` / `_stage2.csv` writers
+read only the roster's caches, both costs sum only the roster's telemetry, and the stage-2 prompt
+stamp reads only the roster's stage-2 caches. `realism_ranking`'s round-cap path re-derives the same
+roster from the same mapped file. A leftover file is ignored and kept -- `--force` clears the
+roster's files only -- and each combination logs one INFO line with the count it ignored. A selected
+persona with no cache stays a failed persona (`n_failed`), as before; under a round cap a cache
+count that disagrees with the report's `n_personas` / `n_failed` raises.
 
 ## Reliability is self-consistency, not validity
 

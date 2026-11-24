@@ -4,7 +4,16 @@
     "Unspecified/Part-time",
     "Not Applicable"
   ],
+  "priority": [
+    "Unspecified/Full-time",
+    "Unspecified/Part-time",
+    "Not Applicable"
+  ],
   "real": {
+    "subfields": [
+      "attachment",
+      "hours"
+    ],
     "Unspecified/Full-time": {
       "attachment": {
         "contains": [

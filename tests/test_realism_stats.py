@@ -729,10 +729,26 @@ def test_loader_reduce_pipeline_end_to_end(tmp_path):
 def test_load_hard_rules_from_config():
     rules = load_hard_rules(_HARD_RULES_PATH)
     assert len(rules) >= 1
-    rule = rules[0]
-    assert rule.id == "postgraduate_before_adult_completion_age"
-    assert rule.type == "incompatible_pair"
-    assert "18-24" in rule.forbid_equals
+    by_id = {rule.id: rule for rule in rules}
+    retired = by_id["retired_before_minimum_pension_age"]
+    assert retired.type == "incompatible_pair"
+    assert retired.when_attribute == "employment_status" and retired.when_equals == {"Retired"}
+    # Every bracket below 55 is forbidden; 55-64 holds attainable pension ages.
+    assert retired.forbid_equals == {"18-24", "25-34", "35-44", "45-54"}
+
+
+def test_hard_rules_encode_no_rare_but_attainable_combination():
+    """Ruling 2026-10-04: a research degree at 18-24 is rare, not impossible.
+
+    Hard rules are reserved for logical/legal/definitional contradictions, so no rule
+    may forbid a research degree for an age bracket (SCB 2025: 0 holders aged 18-24,
+    11 at 25 -- a frequency boundary, not a legal one).
+    """
+    for rule in load_hard_rules(_HARD_RULES_PATH):
+        for attribute, values in (
+            (rule.when_attribute, rule.when_equals), (rule.forbid_attribute, rule.forbid_equals),
+        ):
+            assert not (attribute == "education_level" and "Post-Graduate (ISCED 6)" in values), rule.id
 
 
 def test_load_hard_rules_rejects_unsupported_type(tmp_path):

@@ -92,6 +92,57 @@ Outputs, per country, under the analysis-stage realism_ranking folder:
                                           horizontal reference line (the only figure here that
                                           draws it as a reference rather than a series -- this
                                           axis ranks nothing).
+    {country}/typicality_distribution_by_model_strategy.png/.svg/.eps  every combination's
+                                          round-weighted distribution as a mini histogram on the
+                                          strategy x model grid, the reference as an outline and
+                                          as its own column, one ternary of band shares per
+                                          strategy; a fixed 456 pt canvas. Its columns follow
+                                          model_ranking's published order, read from
+                                          {country}_performance.json -- so with charts on, a
+                                          missing model_ranking output fails the run before
+                                          anything is written (run scripts/analyze/rank_models.py
+                                          first, or pass --no-charts).
+    {country}/typicality_distribution.csv one row per (competitor, level): the ROUND-WEIGHTED
+                                          score distribution (each survivor spreads weight 1
+                                          over its scored rounds; at --rounds 1 the integer
+                                          first-round histogram). A different basis from
+                                          typicality_histogram.csv, which bins per-persona means.
+    {country}/typicality_bands.csv        one row per competitor: the share of individuals in
+                                          the three --typicality-bands score bands.
+    {country}/typicality_effect_omnibus.csv       epsilon^2 of the model and strategy Kruskal-Wallis tests.
+    {country}/typicality_effect_model_pairs.csv   Cliff's delta + bootstrap CI beside every Dunn pair.
+    {country}/typicality_effect_vs_reference.csv  every combination and every pooled model vs the
+                                          reference: medians, Cliff's delta + CI, Mann-Whitney
+                                          U, raw and Holm p (one family per grain).
+    {country}/typicality_closeness.csv    one row per combination: closeness of its round-weighted
+                                          distribution to the reference's (TV similarity primary,
+                                          Cliff's delta and Cramer distance as sensitivity), each
+                                          with a joint-bootstrap CI and the reference-vs-itself
+                                          noise baseline at the combination's own n. The unit is
+                                          the combination; resampling settings are read from
+                                          config/analysis/realism_ranking/typicality_closeness.yaml.
+    {country}/typicality_closeness_decomposition.csv  the additive model + strategy decomposition
+                                          of each closeness outcome (shares, F, partial eta^2 /
+                                          omega^2 with CIs, residual Shapiro-Wilk).
+    {country}/typicality_closeness_tests.csv  per outcome and factor: the within-block permutation
+                                          test and the complete-block Friedman test with Kendall's W.
+    {country}/typicality_closeness_pairs.csv  strategy pairs (paired t / Holm, Conover / Holm) and
+                                          model pairs (Conover / Holm) on the complete blocks.
+    {country}/clash_analysis.csv          one row per competitor (reference last): the individuals in
+                                          each worst-clash state (none / S1 / S2 / S3), the rates
+                                          (Clopper-Pearson), the difference from the reference
+                                          (bootstrap CI), Fisher exact p + Holm and a verdict, and
+                                          the four-state TV similarity with its noise baseline. The
+                                          categories listed in worst_clash_split.yaml
+                                          clash_analysis.excluded leave numerator and denominator;
+                                          n_excluded counts them.
+    {country}/clash_analysis_pooled.csv   the rates pooled per strategy and per model, minus the
+                                          reference's, with bootstrap CIs.
+    {country}/clash_analysis_decomposition.csv  the additive model + strategy decomposition of
+                                          each decomposed rate difference (share + CI, F,
+                                          within-block permutation p).
+    {country}/clash_analysis_rank3_pairs.csv  the attribute pairs of the rank-3 clashes, counted
+                                          per individual.
 
 Two gates run before any statistic (both failure modes produce plausible-looking wrong
 numbers, so neither is a warning): a combination is consumed only if its report, its
@@ -114,7 +165,9 @@ Usage:
 --strategy      Strategy axis ID filter. May be repeated. Default: all strategies.
 --slug          Exact slug filter ({country}_{strategy}_{model}). May be repeated.
 --output-base   Base output directory (the analysis-stage parent). Default: experiment_defaults.yaml.
---no-charts     Skip chart generation (the JSON and CSVs are still written).
+--no-charts     Skip chart generation (the JSON and CSVs are still written). Also skips the
+                read of model_ranking's {country}_performance.json, which only the
+                distribution-grid figure needs.
 --strict        Fail when any selected combination is not consumable (default: skip it with
                 a recorded reason).
 --force         Recompute a country even if its realism_ranking.json already exists
@@ -136,6 +189,8 @@ Usage:
 --typicality-min-n    Typicality-bearing personas a competitor needs before its cell is read
                 as powered. Default: 30. Below it the cell is flagged and counted, never dropped.
 --typicality-tail-threshold  k0 of the secondary P(typicality <= k0) column. Default: 5.
+--typicality-bands    Edges b1,b2 of the three score bands (0..b1, b1+1..b2, b2+1..10) of
+                typicality_bands.csv. Default: 4,7. Must satisfy 0 <= b1 < b2 < 10.
 --dpi           PNG render resolution. Default: the layer's one raster resolution (``figures.RASTER_DPI``).
 """
 
@@ -145,18 +200,38 @@ import json
 import sys
 from pathlib import Path
 
+import yaml
+
 from population_synthetic._paths import PROJECT_ROOT
+from population_synthetic.analysis.model_ranking.hosting import classify_hosting, load_hosting_config
 from population_synthetic.analysis.persona_realism.config import JudgeConfig
 from population_synthetic.analysis.realism_ranking.builder import (
     TYPICALITY_STATISTICS,
     build_ranking,
+    clash_analysis_decomposition_rows,
+    clash_analysis_pooled_rows,
+    clash_analysis_rank3_pair_rows,
+    clash_analysis_rows,
     scb_contrast_rows,
     severity_driver_rows,
     severity_driver_value_rows,
     severity_pair_summary,
+    stage2_breakdown_rows,
     summary_rows,
+    typicality_band_rows,
+    typicality_closeness_decomposition_rows,
+    typicality_closeness_pair_rows,
+    typicality_closeness_rows,
+    typicality_closeness_test_rows,
+    typicality_distribution_rows,
+    typicality_effect_model_pair_rows,
+    typicality_effect_omnibus_rows,
+    typicality_effect_vs_reference_rows,
     typicality_histogram_rows,
     typicality_summary_rows,
+    validate_typicality_bands,
+    worst_clash_split_options,
+    worst_clash_split_rows,
 )
 from population_synthetic.analysis.realism_ranking.charts import (
     RATE_GRID_VARIANTS,
@@ -167,11 +242,16 @@ from population_synthetic.analysis.realism_ranking.charts import (
     plot_severity_heatmap,
     plot_severity_pair_summary,
     plot_typicality_by_method,
+    plot_typicality_distribution_grid,
     plot_typicality_heatmap,
 )
 from population_synthetic.analysis.realism_ranking.loader import load_competitors
+from population_synthetic.analysis.realism_ranking.typicality_closeness import closeness_options
+from population_synthetic.analysis.utils.axes import decompose_slug
+from population_synthetic.analysis.utils.cap_index import load_cap_index
 from population_synthetic.analysis.utils.figures import RASTER_DPI, save_figure
 from population_synthetic.analysis.utils.grid_variants import variant_suffixes
+from population_synthetic.analysis.utils.model_order import ranked_grid_columns, ranked_model_order
 from population_synthetic.analysis.utils.realism_csv import SEVERITY_LEVELS
 from population_synthetic.analysis.utils.registry import (
     analysis_output_dir,
@@ -180,6 +260,19 @@ from population_synthetic.analysis.utils.registry import (
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
 
 _CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
+
+#: The resampling settings of the typicality_closeness block (seeds, iteration counts,
+#: interval level, noise quantile). Read fail-fast here and passed verbatim.
+_CLOSENESS_CONFIG = PROJECT_ROOT / "config" / "analysis" / "realism_ranking" / "typicality_closeness.yaml"
+#: The reporting-only worst-clash split (R3 split by stage 2 for the figures).
+_WORST_SPLIT_CONFIG = PROJECT_ROOT / "config" / "analysis" / "realism_ranking" / "worst_clash_split.yaml"
+
+#: The provider -> hosting-class map that tints the distribution grid's column labels and
+#: ternary points (the same file rank_models.py classifies with).
+_HOSTING_PATH = PROJECT_ROOT / "config" / "analysis" / "model_ranking" / "provider_hosting.json"
+
+#: The one figure laid out on a fixed canvas; it is written at its own size, uncropped.
+_DISTRIBUTION_GRID = "typicality_distribution_by_model_strategy"
 
 #: The judge's typicality scale: levels 0..10, so k = 11. A **prompt-schema constant**,
 #: not a tunable -- it is fixed by config/analysis/persona_realism/judge_prompt.md and
@@ -295,6 +388,12 @@ def _parse_args() -> argparse.Namespace:
         "tail_coverage): at k0=3 a sixth of the swedish_02 cells sit at exactly 0.000 and "
         "the column carries almost nothing.",
     )
+    parser.add_argument(
+        "--typicality-bands", default="4,7", dest="typicality_bands", metavar="B1,B2",
+        help="Edges of the three typicality score bands of typicality_distribution / "
+        "typicality_bands.csv: 0..B1, B1+1..B2, B2+1..10. Default: 4,7 (0-4 / 5-7 / 8-10). "
+        "Must satisfy 0 <= B1 < B2 < 10.",
+    )
     parser.add_argument("--dpi", type=int, default=RASTER_DPI, help=f"PNG render resolution. Default: {RASTER_DPI}.")
     return parser.parse_args()
 
@@ -309,6 +408,78 @@ def _validate_filter_ids(filter_ids: list[str], axis_ids: set[str], axis_name: s
     unknown = [fid for fid in filter_ids if fid not in axis_ids]
     if unknown:
         raise ValueError(f"Unknown {axis_name} ID(s): {unknown}. Valid IDs are: {sorted(axis_ids)}")
+
+
+def _parse_bands(text: str) -> tuple[int, int]:
+    """``"b1,b2"`` -> ``(b1, b2)``, validated by the builder's own rule (fail-fast)."""
+    parts = [part.strip() for part in text.split(",")]
+    try:
+        edges = tuple(int(part) for part in parts)
+    except ValueError as exc:
+        raise ValueError(f"--typicality-bands must be two integers 'b1,b2', got {text!r}") from exc
+    return validate_typicality_bands(edges, _TYPICALITY_LEVELS)
+
+
+def _load_closeness_options(path: Path) -> dict:
+    """Read the closeness resampling settings, raising on a missing or malformed file."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Typicality-closeness config not found: {path}")
+    with open(path, "r", encoding="utf-8") as fh:
+        payload = yaml.safe_load(fh)
+    if not isinstance(payload, dict):
+        raise ValueError(f"Typicality-closeness config {path} must be a mapping, got {type(payload).__name__}")
+    return closeness_options(payload)
+
+
+def _country_withdrawn(
+    withdrawn: frozenset[str],
+    country: str,
+    *,
+    axis_ids: tuple[list[str], list[str], list[str]],
+    models: list[str] | None,
+    strategies: list[str] | None,
+    slugs: list[str] | None,
+) -> list[str]:
+    """The gate's withdrawn slugs of *country*, narrowed by the same filters as the records.
+
+    Decomposed through the axis registries rather than matched on a prefix: ``swedish``
+    is a prefix of ``swedish_02``.
+    """
+    country_ids, strategy_ids, model_ids = axis_ids
+    selected: list[str] = []
+    for slug in sorted(withdrawn):
+        decomposed = decompose_slug(slug, country_ids, strategy_ids, model_ids)
+        if decomposed is None or decomposed[0] != country:
+            continue
+        if slugs and slug not in slugs:
+            continue
+        if models and decomposed[2] not in models:
+            continue
+        if strategies and decomposed[1] not in strategies:
+            continue
+        selected.append(slug)
+    return selected
+
+
+def _distribution_grid_columns(records: list, performance_path: Path, cap_index) -> list[str]:
+    """The distribution grid's models in ``model_ranking``'s published order.
+
+    Read at the edge, before any output is written: a figure that fell back to another
+    order would disagree with its sibling figures without saying so. The grid's models
+    are the consumed synthetic competitors' models (exactly what the builder puts on the
+    grid); a ranked model with none is not a column, and a grid model the ranking does
+    not know raises (``model_order.ranked_grid_columns``).
+    """
+    if not performance_path.is_file():
+        raise FileNotFoundError(
+            f"model_ranking output not found: {performance_path}. The typicality distribution "
+            "grid orders its columns by the published model ranking; run "
+            "scripts/analyze/rank_models.py first, or pass --no-charts."
+        )
+    with open(performance_path, "r", encoding="utf-8") as fh:
+        performance = json.load(fh)
+    grid_models = sorted({record.model for record in records if not record.is_real_reference})
+    return ranked_grid_columns(grid_models, ranked_model_order(performance, cap_index))
 
 
 def _write_json(payload: dict, path: Path) -> Path:
@@ -397,6 +568,33 @@ def _print_country_summary(ranking: dict) -> None:
             f"typicality-bearing persona, {excluded['cells_unjudged']} unjudged cell(s)."
         )
 
+    effects = ranking["typicality_effects"]
+    epsilon = ", ".join(
+        f"{row['factor']} {row['epsilon_squared']:.4f}" if row["epsilon_squared"] is not None
+        else f"{row['factor']} n/a"
+        for row in effects["omnibus"]
+    )
+    combos = effects["vs_reference"]["combination_vs_reference"]
+    deltas = [row["cliffs_delta"] for row in combos]
+    delta_range = f"{min(deltas):+.3f} to {max(deltas):+.3f}" if deltas else "n/a (no reference)"
+    print(f"typicality effects: epsilon^2 {epsilon}; Cliff's delta vs the reference over "
+          f"{len(combos)} combination(s): {delta_range}.")
+
+    closeness = ranking["typicality_closeness"]
+    if closeness is not None:
+        similarity = [row["tv_similarity"]["value"] for row in closeness["combinations"]]
+        headline = next(entry for entry in closeness["noise_baseline"]["by_n"]
+                        if entry["n"] == closeness["noise_baseline"]["headline_n"])["tv_similarity"]
+        anova = closeness["by_outcome"]["tv_similarity"]["decomposition"]["anova"]
+        shares = ", ".join(
+            f"{name} {factor['share']:.3f}" for name, factor in anova["factors"].items()
+            if factor["share"] is not None
+        )
+        print(f"typicality closeness (TV similarity, {closeness['n_combinations']} combination(s)): "
+              f"{min(similarity):.3f} to {max(similarity):.3f}; reference-vs-itself noise at "
+              f"n={closeness['noise_baseline']['headline_n']}: mean {headline['mean']:.3f}, "
+              f"bound {headline['bound']:.3f}. SS shares -- {shares or 'n/a'}.")
+
     for skip in ranking["skipped_tests"]:
         print(f"SKIPPED TEST {skip['test']}: {skip['reason']}")
 
@@ -410,7 +608,8 @@ def main() -> None:
     slug_filter = _split_csv(args.slugs)
 
     all_country_ids = {c["id"] for c in discover_axis_values("countries")}
-    all_model_ids = {m["id"] for m in discover_axis_values("models")}
+    all_models = discover_axis_values("models")
+    all_model_ids = {m["id"] for m in all_models}
     all_strategy_ids = {s["id"] for s in discover_axis_values("strategies")}
 
     try:
@@ -427,7 +626,19 @@ def main() -> None:
         # read fail-fast: no in-code default may silently disagree with judge.yaml.
         cfg = JudgeConfig.load(_CONFIG_DIR)
         variance_center = str(cfg.reliability_value("variance_center"))
-    except (ValueError, KeyError, FileNotFoundError) as exc:
+        typicality_bands = _parse_bands(args.typicality_bands)
+        closeness = _load_closeness_options(_CLOSENESS_CONFIG)
+        if not _WORST_SPLIT_CONFIG.is_file():
+            raise FileNotFoundError(f"Worst-clash split config not found: {_WORST_SPLIT_CONFIG}")
+        with open(_WORST_SPLIT_CONFIG, "r", encoding="utf-8") as fh:
+            worst_split = worst_clash_split_options(yaml.safe_load(fh))
+        # Column-label and point tints of the distribution grid, classified from config
+        # here so the chart module never imports model_ranking.
+        hosting = (
+            None if args.no_charts
+            else classify_hosting(all_models, load_hosting_config(_HOSTING_PATH))
+        )
+    except (ValueError, KeyError, FileNotFoundError, yaml.YAMLError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
@@ -446,8 +657,13 @@ def main() -> None:
 
     output_base = resolve_output_base(args.output_base)
     ranking_dir = analysis_output_dir("realism_ranking", output_base)
+    axis_ids = (sorted(all_country_ids), sorted(all_strategy_ids), sorted(all_model_ids))
 
     try:
+        # The gate's own record, read always: it is a hard upstream of this process, and
+        # the distribution grid needs it to tell a withdrawn cell from an unjudged one.
+        cap_index = load_cap_index(output_base)
+        withdrawn_all = cap_index.withdrawn_slugs()
         records, skipped = load_competitors(
             output_base,
             countries=country_filter, models=model_filter,
@@ -478,6 +694,22 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
+
+    # The distribution grid's column order, resolved for every country this run will
+    # write before any of them is written: a missing model_ranking output (or a grid
+    # model it does not rank) then fails the run with nothing on disk.
+    grid_columns: dict[str, list[str]] = {}
+    if not args.no_charts:
+        performance_dir = analysis_output_dir("model_ranking", output_base)
+        try:
+            for country in sorted(by_country):
+                if args.force or not (ranking_dir / country / "realism_ranking.json").exists():
+                    grid_columns[country] = _distribution_grid_columns(
+                        by_country[country], performance_dir / f"{country}_performance.json", cap_index,
+                    )
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     processed = 0
     skipped_existing = 0
@@ -510,7 +742,14 @@ def main() -> None:
             bootstrap=cfg.bootstrap, variance_center=variance_center,
             driver_top_n=args.driver_top_n, driver_min_count=args.driver_min_count,
             typicality=typicality_options,
+            typicality_bands=typicality_bands,
+            withdrawn=_country_withdrawn(
+                withdrawn_all, country, axis_ids=axis_ids,
+                models=model_filter, strategies=strategy_filter, slugs=slug_filter,
+            ),
+            closeness=closeness,
             skipped_combinations=country_skipped,
+            worst_clash_split=worst_split,
         )
 
         print(f"Report written to {_write_json(ranking, ranking_json)}")
@@ -523,6 +762,38 @@ def main() -> None:
         else:
             print("No contrast CSV: there is no real competitor to contrast against "
                   "(recorded in skipped_tests).")
+
+        # Reporting-only: every individual at its worst clash, R3 split by stage 2.
+        split_csv = _write_csv(worst_clash_split_rows(ranking), country_dir / "worst_clash_split.csv")
+        if split_csv is not None:
+            print(f"Worst-clash split CSV written to {split_csv}")
+        else:
+            print("No worst-clash split: stage 2 is missing for a competitor (recorded in skipped_tests).")
+
+        # The clash analysis: worst-clash states against the reference, excluded categories removed.
+        if ranking["clash_analysis"] is not None:
+            for name, flatten, grain in (
+                ("clash_analysis.csv", clash_analysis_rows, "competitor"),
+                ("clash_analysis_pooled.csv", clash_analysis_pooled_rows, "factor x level x rate"),
+                ("clash_analysis_decomposition.csv", clash_analysis_decomposition_rows, "rate x factor"),
+                ("clash_analysis_rank3_pairs.csv", clash_analysis_rank3_pair_rows, "attribute pair"),
+            ):
+                written = _write_csv(flatten(ranking), country_dir / name)
+                if written is not None:
+                    print(f"Clash-analysis CSV ({grain}) written to {written}")
+            totals = ranking["clash_analysis"]["totals"]
+            print(f"clash analysis: {totals['n']} of {totals['n_judged']} synthetic individuals analysed, "
+                  f"{totals['n_excluded']} excluded ({', '.join(ranking['clash_analysis']['excluded_categories'])}) "
+                  f"in {totals['n_combinations_with_exclusions']} combination(s)")
+        else:
+            print("No clash analysis (recorded in skipped_tests).")
+
+        # Reporting-only: each competitor's impossible personas split by stage-2 class.
+        stage2_csv = _write_csv(stage2_breakdown_rows(ranking), country_dir / "stage2_breakdown.csv")
+        if stage2_csv is not None:
+            print(f"Stage-2 breakdown CSV written to {stage2_csv}")
+        else:
+            print("No stage-2 breakdown: no competitor carries a stage-2 CSV (recorded in skipped_tests).")
 
         # Two grains, one table each: the attribute pairs that drove each cell, and the
         # category pairs under them. All three severity levels live in the same file
@@ -561,14 +832,53 @@ def main() -> None:
             else:
                 print(f"No {name}: no competitor carries a typicality-bearing persona.")
 
+        # The round-weighted distribution at two grains, the effect sizes of the
+        # typicality tests at three, and the closeness block at four. A block that was not
+        # built (its reason is in skipped_tests) writes none of its tables; an empty
+        # table is a recorded outcome (e.g. no real population to contrast against).
+        typicality_tables = []
+        if ranking["typicality_distribution"] is not None:
+            typicality_tables += [
+                ("typicality_distribution.csv", typicality_distribution_rows, "competitor x level"),
+                ("typicality_bands.csv", typicality_band_rows, "competitor"),
+            ]
+        typicality_tables += [
+            ("typicality_effect_omnibus.csv", typicality_effect_omnibus_rows, "factor"),
+            ("typicality_effect_model_pairs.csv", typicality_effect_model_pair_rows, "model pair"),
+            ("typicality_effect_vs_reference.csv", typicality_effect_vs_reference_rows,
+             "competitor vs reference"),
+        ]
+        if ranking["typicality_closeness"] is not None:
+            typicality_tables += [
+                ("typicality_closeness.csv", typicality_closeness_rows, "combination"),
+                ("typicality_closeness_decomposition.csv", typicality_closeness_decomposition_rows,
+                 "outcome x term x statistic"),
+                ("typicality_closeness_tests.csv", typicality_closeness_test_rows, "outcome x factor x test"),
+                ("typicality_closeness_pairs.csv", typicality_closeness_pair_rows, "outcome x pair"),
+            ]
+        for name, flatten, grain in typicality_tables:
+            rows = flatten(ranking)
+            written = _write_csv(rows, country_dir / name)
+            if written is not None:
+                print(f"Typicality CSV ({grain}) written to {written} -- {len(rows)} row(s)")
+            else:
+                print(f"No {name}: the table is empty (see skipped_tests).")
+
         if not args.no_charts:
+            # (name, build, fixed_canvas): a fixed-canvas figure is laid out in points to
+            # an exact size and written at that size, uncropped.
             charts = [
-                ("headline_map", lambda: plot_headline_map(ranking)),
-                ("impossibility_forest", lambda: plot_impossibility_forest(ranking)),
+                ("headline_map", lambda: plot_headline_map(ranking), False),
+                ("impossibility_forest", lambda: plot_impossibility_forest(ranking), False),
                 # The typicality axis, on the same grid as the impossibility one and then
                 # on the method axis. Both render the block verbatim -- the reference is
                 # the real population's own value read from the document, never a literal.
-                ("typicality_by_method", lambda: plot_typicality_by_method(ranking)),
+                ("typicality_by_method", lambda: plot_typicality_by_method(ranking), False),
+                # The whole distribution behind that statistic, per cell, columns in the
+                # published model_ranking order resolved above.
+                (_DISTRIBUTION_GRID, lambda: plot_typicality_distribution_grid(
+                    ranking, model_order=grid_columns[country], hosting=hosting,
+                ), True),
             ]
             # Every model x method grid is published once per variant, enumerated from the
             # chart module rather than named here: the canonical (unsuffixed) file is the
@@ -577,19 +887,19 @@ def main() -> None:
             # time; a bare closure would render the last one under every filename.
             charts += [
                 (f"impossibility_heatmap{suffix}",
-                 lambda variant=variant: plot_impossibility_heatmap(ranking, variant=variant))
+                 lambda variant=variant: plot_impossibility_heatmap(ranking, variant=variant), False)
                 for suffix, variant in variant_suffixes(RATE_GRID_VARIANTS)
             ]
             charts += [
                 (f"typicality_heatmap{suffix}",
-                 lambda variant=variant: plot_typicality_heatmap(ranking, variant=variant))
+                 lambda variant=variant: plot_typicality_heatmap(ranking, variant=variant), False)
                 for suffix, variant in variant_suffixes(TYPICALITY_GRID_VARIANTS)
             ]
             charts += [
                 (f"severity_heatmap_{level.lower()}{suffix}",
                  lambda level=level, variant=variant: plot_severity_heatmap(
                      ranking, level, variant=variant,
-                 ))
+                 ), False)
                 for level in SEVERITY_LEVELS
                 for suffix, variant in variant_suffixes(RATE_GRID_VARIANTS)
             ]
@@ -603,12 +913,14 @@ def main() -> None:
                 (f"severity_pair_summary_{level.lower()}",
                  lambda level=level: plot_severity_pair_summary(severity_pair_summary(
                      country_records, level, top_n=args.pair_summary_top_n,
-                 )))
+                 )), False)
                 for level in SEVERITY_LEVELS
             ]
-            for name, build in charts:
+            for name, build, fixed_canvas in charts:
                 try:
-                    saved = save_figure(build(), country_dir / f"{name}.png", dpi=args.dpi)
+                    saved = save_figure(
+                        build(), country_dir / f"{name}.png", dpi=args.dpi, fixed_canvas=fixed_canvas,
+                    )
                 except ValueError as exc:
                     print(f"WARNING: {name} not rendered: {exc}", file=sys.stderr)
                     continue

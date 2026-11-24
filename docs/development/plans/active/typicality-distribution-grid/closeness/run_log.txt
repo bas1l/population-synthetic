@@ -1,0 +1,411 @@
+          basis outcome              stat  estimate  ci_lo_joint  ci_hi_joint  ci_lo_combos_only  ci_hi_combos_only  ci_lo_scb_only  ci_hi_scb_only  boot_mean_joint  p_parametric
+6   first_round   delta           F_model     5.449        3.791        6.680              3.870              6.711           4.963           5.728            5.076         0.000
+7   first_round   delta        F_strategy    37.384       26.022       45.934             27.205             44.442          31.244          43.429           34.408         0.000
+8   first_round   delta       peta2_model     0.588        0.498        0.636              0.503              0.637           0.565           0.600            0.568           NaN
+9   first_round   delta     pomega2_model     0.458        0.346        0.519              0.352              0.520           0.429           0.473            0.432           NaN
+10  first_round   delta      omega2_model     0.197        0.147        0.239              0.154              0.234           0.174           0.216            0.192           NaN
+11  first_round   delta       share_model     0.243        0.196        0.286              0.206              0.280           0.217           0.265            0.241           NaN
+12  first_round   delta    peta2_strategy     0.781        0.712        0.814              0.722              0.809           0.748           0.805            0.763           NaN
+13  first_round   delta  pomega2_strategy     0.715        0.633        0.756              0.644              0.750           0.676           0.745            0.694           NaN
+14  first_round   delta   omega2_strategy     0.587        0.515        0.633              0.527              0.620           0.544           0.627            0.573           NaN
+15  first_round   delta    share_strategy     0.605        0.538        0.651              0.550              0.637           0.564           0.645            0.593           NaN
+16  first_round   delta       share_resid     0.170        0.146        0.221              0.148              0.217           0.156           0.190            0.184           NaN
+17  first_round   delta     share_overlap    -0.018       -0.028       -0.007             -0.028             -0.007          -0.020          -0.015           -0.017           NaN
+26  first_round     le4           F_model     3.328        2.007        4.166              1.993              4.109           3.328           3.328            2.942         0.002
+27  first_round     le4        F_strategy    38.628       21.210       48.340             20.977             47.718          38.628          38.628           32.487         0.000
+28  first_round     le4       peta2_model     0.466        0.344        0.522              0.343              0.518           0.466           0.466            0.432           NaN
+29  first_round     le4     pomega2_model     0.306        0.160        0.375              0.158              0.371           0.306           0.306            0.265           NaN
+30  first_round     le4      omega2_model     0.112        0.062        0.158              0.062              0.156           0.112           0.112            0.106           NaN
+31  first_round     le4       share_model     0.162        0.118        0.217              0.119              0.214           0.162           0.162            0.164           NaN
+32  first_round     le4    peta2_strategy     0.786        0.669        0.822              0.666              0.820           0.786           0.786            0.750           NaN
+33  first_round     le4  pomega2_strategy     0.722        0.582        0.766              0.579              0.763           0.722           0.722            0.678           NaN
+34  first_round     le4   omega2_strategy     0.661        0.530        0.712              0.528              0.710           0.661           0.661            0.624           NaN
+35  first_round     le4    share_strategy     0.682        0.560        0.730              0.557              0.729           0.682           0.682            0.647           NaN
+36  first_round     le4       share_resid     0.185        0.157        0.281              0.159              0.282           0.185           0.185            0.216           NaN
+37  first_round     le4     share_overlap    -0.028       -0.044       -0.009             -0.044             -0.010          -0.028          -0.028           -0.027           NaN
+46  first_round     cdf           F_model     5.481        4.014        6.850              3.992              6.733           5.240           6.061            5.256         0.000
+47  first_round     cdf        F_strategy    35.684       26.451       42.416             26.565             42.277          34.253          38.819           33.546         0.000
+48  first_round     cdf       peta2_model     0.589        0.513        0.642              0.511              0.638           0.578           0.614            0.577           NaN
+49  first_round     cdf     pomega2_model     0.459        0.364        0.526              0.362              0.521           0.446           0.490            0.443           NaN
+50  first_round     cdf      omega2_model     0.204        0.163        0.242              0.162              0.240           0.199           0.214            0.202           NaN
+51  first_round     cdf       share_model     0.250        0.216        0.288              0.214              0.286           0.247           0.258            0.251           NaN
+52  first_round     cdf    peta2_strategy     0.773        0.716        0.802              0.717              0.801           0.765           0.787            0.760           NaN
+53  first_round     cdf  pomega2_strategy     0.705        0.637        0.741              0.638              0.740           0.696           0.723            0.689           NaN
+54  first_round     cdf   omega2_strategy     0.573        0.517        0.604              0.518              0.606           0.569           0.583            0.562           NaN
+55  first_round     cdf    share_strategy     0.592        0.539        0.622              0.540              0.624           0.589           0.601            0.582           NaN
+56  first_round     cdf       share_resid     0.174        0.151        0.219              0.151              0.219           0.162           0.180            0.184           NaN
+57  first_round     cdf     share_overlap    -0.017       -0.027       -0.007             -0.027             -0.006          -0.018          -0.016           -0.017           NaN
+              basis outcome  F_strategy  p_perm_strategy   F_model  p_perm_model  p_F_strategy  p_F_model  n_perm
+0       first_round   delta   37.383533           0.0001  5.448987        0.0001  2.520529e-13   0.000026   10000
+1       first_round     le4   38.628422           0.0001  3.328436        0.0030  1.480185e-13   0.002322   10000
+2       first_round     cdf   35.683558           0.0001  5.480750        0.0002  5.332292e-13   0.000024   10000
+3  mean_over_rounds   delta   37.554038           0.0001  5.487834        0.0001  2.341433e-13   0.000024   10000
+4  mean_over_rounds     le4   37.189928           0.0001  3.356736        0.0026  2.741414e-13   0.002176   10000
+5  mean_over_rounds     cdf   35.929378           0.0001  5.504725        0.0001  4.776785e-13   0.000023   10000
+{
+ "delta": {
+  "n_blocks_models": 10,
+  "dropped_models": [
+   "ollama_deepseek_r1_14b",
+   "ollama_gemma4_e4b"
+  ],
+  "friedman_strategy": {
+   "chi2": 27.200000000000017,
+   "p": 1.811122816736785e-05,
+   "k": 5,
+   "n": 10,
+   "kendalls_w": 0.6800000000000004,
+   "iman_davenport_f": 19.12500000000004,
+   "df1": 4,
+   "df2": 36,
+   "p_f": 1.6390326120138033e-08
+  },
+  "friedman_model": {
+   "chi2": 23.00727272727275,
+   "p": 0.0061800045438897494,
+   "k": 10,
+   "n": 5,
+   "kendalls_w": 0.5112727272727278,
+   "iman_davenport_f": 4.184523809523817,
+   "df1": 9,
+   "df2": 36,
+   "p_f": 0.0009273797360747817
+  },
+  "page_strategy_simplest_first": {
+   "L": 401.0,
+   "z": -3.0990321069650117,
+   "p": 0.9990292301074798,
+   "k": 5,
+   "n": 10,
+   "order": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "p_two_sided": 0.0019415397850404137
+  },
+  "linear_contrast": {
+   "estimate": -0.627116069168926,
+   "t": -7.389797109190159,
+   "p": 4.148044943297982e-05,
+   "slope_sign": "negative"
+  },
+  "quadratic_contrast": {
+   "estimate": -0.8844815237143809,
+   "t": -8.090918250522225,
+   "p": 2.0221644956624906e-05,
+   "slope_sign": "negative"
+  },
+  "rm_anova_strategy": {
+   "test": "rm_anova",
+   "F": 32.90629776514379,
+   "p": 1.429875656345206e-11,
+   "df1": 4,
+   "df2": 36,
+   "k": 5,
+   "n": 10,
+   "partial_eta_sq": 0.7852351441198919
+  },
+  "rm_anova_model": {
+   "test": "rm_anova",
+   "F": 4.269878897667299,
+   "p": 0.0007933521857182476,
+   "df1": 9,
+   "df2": 36,
+   "k": 10,
+   "n": 5,
+   "partial_eta_sq": 0.5163169800311963
+  },
+  "nemenyi_cd_strategy": 1.9288277551893114,
+  "nemenyi_cd_model": 6.057992834068865,
+  "avg_rank_strategy": {
+   "A": 2.7,
+   "B": 4.5,
+   "C": 3.9,
+   "D": 2.8,
+   "E": 1.1
+  },
+  "avg_rank_model": {
+   "openrouter_kimi_k3": 2.6,
+   "claude_haiku": 6.6,
+   "claude_sonnet": 8.0,
+   "openrouter_opus_5": 3.8,
+   "openrouter_gpt56_sol": 7.0,
+   "openrouter_glm_52": 5.4,
+   "openrouter_qwen35_flash": 9.0,
+   "openrouter_gpt_oss_120b": 5.8,
+   "openrouter_mistral_medium": 3.4,
+   "ollama_mistral_nemo_12b": 3.4
+  },
+  "kendall_w_strategy_ci": [
+   0.5840000000000003,
+   0.7560000000000002
+  ],
+  "kendall_w_model_ci": [
+   0.3910303030303036,
+   0.6063030303030309
+  ],
+  "kendall_w_strategy_point_check": 0.6800000000000004,
+  "kendall_w_model_point_check": 0.5112727272727278
+ },
+ "le4": {
+  "n_blocks_models": 10,
+  "dropped_models": [
+   "ollama_deepseek_r1_14b",
+   "ollama_gemma4_e4b"
+  ],
+  "friedman_strategy": {
+   "chi2": 28.494382022471925,
+   "p": 9.90178294946759e-06,
+   "k": 5,
+   "n": 10,
+   "kendalls_w": 0.7123595505617981,
+   "iman_davenport_f": 22.28906250000004,
+   "df1": 4,
+   "df2": 36,
+   "p_f": 2.511221217227712e-09
+  },
+  "friedman_model": {
+   "chi2": 28.69721115537851,
+   "p": 0.00072878946330523,
+   "k": 10,
+   "n": 5,
+   "kendalls_w": 0.6377158034528558,
+   "iman_davenport_f": 7.04105571847509,
+   "df1": 9,
+   "df2": 36,
+   "p_f": 8.520053573669369e-06
+  },
+  "page_strategy_simplest_first": {
+   "L": 382.0,
+   "z": -4.300697617828996,
+   "p": 0.9999914869370864,
+   "k": 5,
+   "n": 10,
+   "order": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "p_two_sided": 1.702612582721308e-05
+  },
+  "linear_contrast": {
+   "estimate": -0.4694059591202448,
+   "t": -11.878287325986635,
+   "p": 8.398037507215805e-07,
+   "slope_sign": "negative"
+  },
+  "quadratic_contrast": {
+   "estimate": -0.4830423227566084,
+   "t": -9.347463478405889,
+   "p": 6.256430428830106e-06,
+   "slope_sign": "negative"
+  },
+  "rm_anova_strategy": {
+   "test": "rm_anova",
+   "F": 41.3903098135681,
+   "p": 5.399653461372046e-13,
+   "df1": 4,
+   "df2": 36,
+   "k": 5,
+   "n": 10,
+   "partial_eta_sq": 0.8213942316826824
+  },
+  "rm_anova_model": {
+   "test": "rm_anova",
+   "F": 3.017893503434046,
+   "p": 0.00866567232878245,
+   "df1": 9,
+   "df2": 36,
+   "k": 10,
+   "n": 5,
+   "partial_eta_sq": 0.4300283984015016
+  },
+  "nemenyi_cd_strategy": 1.9288277551893114,
+  "nemenyi_cd_model": 6.057992834068865,
+  "avg_rank_strategy": {
+   "A": 3.55,
+   "B": 4.35,
+   "C": 3.55,
+   "D": 2.45,
+   "E": 1.1
+  },
+  "avg_rank_model": {
+   "openrouter_kimi_k3": 2.7,
+   "claude_haiku": 8.2,
+   "claude_sonnet": 7.4,
+   "openrouter_opus_5": 6.7,
+   "openrouter_gpt56_sol": 6.6,
+   "openrouter_glm_52": 4.4,
+   "openrouter_qwen35_flash": 8.9,
+   "openrouter_gpt_oss_120b": 3.5,
+   "openrouter_mistral_medium": 3.0,
+   "ollama_mistral_nemo_12b": 3.6
+  },
+  "kendall_w_strategy_ci": [
+   0.5820769243329745,
+   0.7642096013097074
+  ],
+  "kendall_w_model_ci": [
+   0.3761072017916079,
+   0.6784901145843999
+  ],
+  "kendall_w_strategy_point_check": 0.7123595505617981,
+  "kendall_w_model_point_check": 0.6377158034528558
+ },
+ "cdf": {
+  "n_blocks_models": 10,
+  "dropped_models": [
+   "ollama_deepseek_r1_14b",
+   "ollama_gemma4_e4b"
+  ],
+  "friedman_strategy": {
+   "chi2": 25.959595959595976,
+   "p": 3.224380282170578e-05,
+   "k": 5,
+   "n": 10,
+   "kendalls_w": 0.6489898989898994,
+   "iman_davenport_f": 16.640287769784205,
+   "df1": 4,
+   "df2": 36,
+   "p_f": 8.297257729607204e-08
+  },
+  "friedman_model": {
+   "chi2": 21.05825242718449,
+   "p": 0.012394268791403434,
+   "k": 10,
+   "n": 5,
+   "kendalls_w": 0.46796116504854424,
+   "iman_davenport_f": 3.5182481751824897,
+   "df1": 9,
+   "df2": 36,
+   "p_f": 0.003249566513103151
+  },
+  "page_strategy_simplest_first": {
+   "L": 401.5,
+   "z": -3.067409330363328,
+   "p": 0.9989203852254002,
+   "k": 5,
+   "n": 10,
+   "order": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "p_two_sided": 0.0021592295491996705
+  },
+  "linear_contrast": {
+   "estimate": -0.38442974485831616,
+   "t": -7.966309989013696,
+   "p": 2.289348281582256e-05,
+   "slope_sign": "negative"
+  },
+  "quadratic_contrast": {
+   "estimate": -0.5319024721310435,
+   "t": -7.819925267578025,
+   "p": 2.65379786239858e-05,
+   "slope_sign": "negative"
+  },
+  "rm_anova_strategy": {
+   "test": "rm_anova",
+   "F": 31.79763352099922,
+   "p": 2.3007582808132656e-11,
+   "df1": 4,
+   "df2": 36,
+   "k": 5,
+   "n": 10,
+   "partial_eta_sq": 0
+    outcome    factor  a  b  mean_b_minus_a  median_b_minus_a  b_higher_in_blocks  n_blocks  p_nemenyi  p_conover_raw  p_conover_holm  p_paired_t_holm  p_sign      dz
+0     delta  strategy  A  B          0.1378            0.1203                  10        10     0.0808         0.0001          0.0011           0.0030  0.0020  1.7108
+1     delta  strategy  A  C          0.0869            0.1053                   8        10     0.4357         0.0073          0.0291           0.1162  0.1094  0.8202
+2     delta  strategy  A  D          0.0417            0.0363                   5        10     0.9999         0.8139          0.8139           0.5463  1.0000  0.2916
+3     delta  strategy  A  E         -0.2655           -0.2274                   0        10     0.1571         0.0005          0.0027           0.0012  0.0020 -1.9661
+4     delta  strategy  B  C         -0.0509           -0.0087                   4        10     0.9153         0.1633          0.3267           0.3574  0.7539 -0.5446
+5     delta  strategy  B  D         -0.0961           -0.0657                   1        10     0.1141         0.0003          0.0019           0.0504  0.0215 -1.0260
+6     delta  strategy  B  E         -0.4033           -0.4207                   0        10     0.0000         0.0000          0.0000           0.0000  0.0020 -3.3733
+7     delta  strategy  C  D         -0.0452           -0.0222                   3        10     0.5261         0.0131          0.0394           0.5463  0.3438 -0.3691
+8     delta  strategy  C  E         -0.3525           -0.3705                   0        10     0.0007         0.0000          0.0000           0.0000  0.0020 -3.0077
+9     delta  strategy  D  E         -0.3072           -0.3000                   1        10     0.1141         0.0003          0.0019           0.0030  0.0215 -1.6879
+55      le4  strategy  A  B          0.0374            0.0100                   5        10     0.7899         0.0408          0.1225           0.3906  1.0000  0.6285
+56      le4  strategy  A  C          0.0204            0.0000                   3        10     1.0000         1.0000          1.0000           0.7636  0.3438  0.2574
+57      le4  strategy  A  D         -0.0136           -0.0250                   2        10     0.5261         0.0061          0.0303           0.7636  0.1094 -0.3156
+58      le4  strategy  A  E         -0.2092           -0.2150                   0        10     0.0048         0.0000          0.0000           0.0001  0.0020 -2.6683
+59      le4  strategy  B  C         -0.0170            0.0000                   1        10     0.7899         0.0408          0.1225           0.7137  0.0215 -0.4615
+60      le4  strategy  B  D         -0.0510           -0.0300                   0        10     0.0559         0.0000          0.0001           0.3042  0.0020 -0.7127
+61      le4  strategy  B  E         -0.2466           -0.2378                   0        10     0.0000         0.0000          0.0000           0.0000  0.0020 -3.7960
+62      le4  strategy  C  D         -0.0340           -0.0200                   2        10     0.5261         0.0061          0.0303           0.7636  0.1094 -0.3849
+63      le4  strategy  C  E         -0.2296           -0.2328                   0        10     0.0048         0.0000          0.0000           0.0000  0.0020 -4.3381
+64      le4  strategy  D  E         -0.1956           -0.2100                   1        10     0.3123         0.0010          0.0060           0.0010  0.0215 -1.9987
+110     cdf  strategy  A  B          0.0867            0.0820                  10        10     0.1141         0.0004          0.0031           0.0042  0.0020  1.5991
+111     cdf  strategy  A  C          0.0500            0.0525                   7        10     0.5723         0.0222          0.0889           0.1429  0.3438  0.7803
+112     cdf  strategy  A  D          0.0237            0.0111                   5        10     0.9996         0.7348          0.7348           0.6350  1.0000  0.2653
+113     cdf  strategy  A  E         -0.1607           -0.1303                   0        10     0.1343         0.0006          0.0037           0.0010  0.0020 -2.0239
+114     cdf  strategy  B  C         -0.0367           -0.0045                   3        10     0.8896         0.1477          0.2955           0.2174  0.3438 -0.6432
+115     cdf  strategy  B  D         -0.0630           -0.0460                   2        10     0.1826         0.0012          0.0058           0.0463  0.1094 -1.0428
+116     cdf  strategy  B  E         -0.2474           -0.2550                   0        10     0.0000         0.0000          0.0000           0.0000  0.0020 -3.5062
+117     cdf  strategy  C  D         -0.0263           -0.0140                   3        10     0.7080         0.0479          0.1436           0.6350  0.3438 -0.3347
+118     cdf  strategy  C  E         -0.2107           -0.2241                   0        10     0.0013         0.0000          0.0000           0.0001  0.0020 -2.9744
+119     cdf  strategy  D  E         -0.1844           -0.1850                   1        10     0.0808         0.0002          0.0018           0.0042  0.0215 -1.6285
+   outcome    factor                                 level               label  ls_mean  ci_lo  ci_hi  raw_mean  n_cells
+0    delta  strategy                           all_pick_v2                   A    0.648  0.539  0.752     0.648       12
+1    delta  strategy                       all_pick_dag_v2                   B    0.784  0.695  0.864     0.784       12
+2    delta  strategy                  all_generate_pick_v2                   C    0.738  0.647  0.823     0.738       12
+3    delta  strategy         all_generate_evaluate_pick_v2                   D    0.699  0.606  0.787     0.699       12
+4    delta  strategy  all_generate_evaluate_random_pick_v2                   E    0.385  0.254  0.516     0.396       10
+5    delta     model                    openrouter_kimi_k3             Kimi K3    0.514  0.391  0.636     0.514        5
+6    delta     model                          claude_haiku        Claude Haiku    0.700  0.603  0.790     0.700        5
+7    delta     model                         claude_sonnet       Claude Sonnet    0.749  0.663  0.826     0.749        5
+8    delta     model                     openrouter_opus_5       Claude Opus 5    0.607  0.485  0.723     0.607        5
+9    delta     model                  openrouter_gpt56_sol         GPT-5.6 Sol    0.724  0.623  0.818     0.724        5
+10   delta     model                     openrouter_glm_52             GLM-5.2    0.677  0.581  0.769     0.677        5
+11   delta     model               openrouter_qwen35_flash      Qwen 3.5 Flash    0.766  0.676  0.850     0.766        5
+12   delta     model               openrouter_gpt_oss_120b        GPT-OSS 120B    0.682  0.590  0.770     0.682        5
+13   delta     model             openrouter_mistral_medium  Mistral Medium 3.5    0.617  0.518  0.712     0.617        5
+14   delta     model               ollama_mistral_nemo_12b    Mistral Nemo 12B    0.582  0.468  0.694     0.582        5
+15   delta     model                ollama_deepseek_r1_14b     DeepSeek-R1 14B    0.493  0.363  0.619     0.559        4
+16   delta     model                     ollama_gemma4_e4b          Gemma4 E4B    0.698  0.607  0.782     0.765        4
+17     le4  strategy                           all_pick_v2                   A    0.510  0.413  0.609     0.510       12
+18     le4  strategy                       all_pick_dag_v2                   B    0.563  0.465  0.663     0.563       12
+19     le4  strategy                  all_generate_pick_v2                   C    0.533  0.436  0.633     0.533       12
+20     le4  strategy         all_generate_evaluate_pick_v2                   D    0.506  0.408  0.606     0.506       12
+21     le4  strategy  all_generate_evaluate_random_pick_v2                   E    0.308  0.207  0.412     0.316       10
+22     le4     model                    openrouter_kimi_k3             Kimi K3    0.413  0.312  0.518     0.413        5
+23     le4     model                          claude_haiku        Claude Haiku    0.524  0.424  0.626     0.524        5
+24     le4     model                         claude_sonnet       Claude Sonnet    0.518  0.418  0.620     0.518        5
+25     le4     model                     openrouter_opus_5       Claude Opus 5    0.506  0.408  0.606     0.506        5
+26     le4     model                  openrouter_gpt56_sol         GPT-5.6 Sol    0.520  0.422  0.620     0.520        5
+27     le4     model                     openrouter_glm_52             GLM-5.2    0.500  0.400  0.602     0.500        5
+28     le4     model               openrouter_qwen35_flash      Qwen 3.5 Flash    0.540  0.442  0.640     0.540        5
+29     le4     model               openrouter_gpt_oss_120b        GPT-OSS 120B    0.463  0.364  0.565     0.463        5
+30     le4     model             openrouter_mistral_medium  Mistral Medium 3.5    0.461  0.360  0.563     0.461        5
+31     le4     model               ollama_mistral_nemo_12b    Mistral Nemo 12B    0.481  0.382  0.585     0.481        5
+32     le4     model                ollama_deepseek_r1_14b     DeepSeek-R1 14B    0.399  0.296  0.504     0.443        4
+33     le4     model                     ollama_gemma4_e4b          Gemma4 E4B    0.483  0.383  0.585     0.528        4
+34     cdf  strategy                           all_pick_v2                   A    0.362  0.305  0.421     0.362       12
+35     cdf  strategy                       all_pick_dag_v2                   B    0.447  0.389  0.507     0.447       12
+36     cdf  strategy                  all_generate_pick_v2                   C    0.416  0.358  0.477     0.416       12
+37     cdf  strategy         all_generate_evaluate_pick_v2                   D    0.392  0.335  0.453     0.392       12
+38     cdf  strategy  all_generate_evaluate_random_pick_v2                   E    0.203  0.148  0.265     0.210       10
+39     cdf     model                    openrouter_kimi_k3             Kimi K3    0.275  0.219  0.338     0.275        5
+40     cdf     model                          claude_haiku        Claude Haiku    0.392  0.332  0.454     0.392        5
+41     cdf     model                         claude_sonnet       Claude Sonnet    0.424  0.367  0.485     0.424        5
+42     cdf     model                     openrouter_opus_5       Claude Opus 5    0.336  0.278  0.395     0.336        5
+43     cdf     model                  openrouter_gpt56_sol         GPT-5.6 Sol    0.412  0.354  0.471     0.412        5
+44     cdf     model                     openrouter_glm_52             GLM-5.2    0.380  0.325  0.440     0.380        5
+45     cdf     model               openrouter_qwen35_flash      Qwen 3.5 Flash    0.431  0.373  0.493     0.431        5
+46     cdf     model               openrouter_gpt_oss_120b        GPT-OSS 120B    0.385  0.327  0.446     0.385        5
+47     cdf     model             openrouter_mistral_medium  Mistral Medium 3.5    0.351  0.292  0.413     0.351        5
+48     cdf     model               ollama_mistral_nemo_12b    Mistral Nemo 12B    0.320  0.263  0.382     0.320        5
+49     cdf     model                ollama_deepseek_r1_14b     DeepSeek-R1 14B    0.265  0.205  0.327     0.305        4
+50     cdf     model                     ollama_gemma4_e4b          Gemma4 E4B    0.396  0.336  0.459     0.436        4
+  outcome   n  pomega2_model  pomega2_strategy  peta2_model  peta2_strategy
+0   delta  53          0.462             0.706        0.593           0.776
+1     le4  53          0.291             0.704        0.455           0.774
+2     cdf  53          0.459             0.694        0.592           0.766
+SCB le4 0.5700000000000001

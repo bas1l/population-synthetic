@@ -11,7 +11,23 @@
     "Self-Employed Short Part-time",
     "Not Applicable"
   ],
+  "priority": [
+    "Permanent Full-time",
+    "Permanent Part-time",
+    "Permanent Short Part-time",
+    "Temporary Full-time",
+    "Temporary Part-time",
+    "Temporary Short Part-time",
+    "Self-Employed Full-time",
+    "Self-Employed Part-time",
+    "Self-Employed Short Part-time",
+    "Not Applicable"
+  ],
   "real": {
+    "subfields": [
+      "attachment",
+      "hours"
+    ],
     "Permanent Full-time": {
       "attachment": {
         "contains": [
@@ -123,23 +139,130 @@
     "absent": "Not Applicable"
   },
   "synthetic": {
+    "numeric_facet": {
+      "extract": [
+        {
+          "pattern": "(\\d+(?:[.,]\\d+)?)(?:\\s*-\\s*(\\d+(?:[.,]\\d+)?))?\\s*(?:h\\b|hrs?\\b|hours?\\b|tim\\b|timmar\\b|tim/|t/v|h/v)",
+          "scale": 1.0
+        },
+        {
+          "pattern": "(\\d+(?:[.,]\\d+)?)(?:\\s*-\\s*(\\d+(?:[.,]\\d+)?))?\\s*%",
+          "scale": 0.4
+        }
+      ],
+      "ambiguous_if_preceded_by": [
+        "<",
+        ">",
+        "<=",
+        ">=",
+        "≤",
+        "≥",
+        "över",
+        "under",
+        "minst",
+        "max",
+        "upp till",
+        "mer än",
+        "mindre än",
+        "less than",
+        "more than",
+        "at least",
+        "up to"
+      ],
+      "bands": [
+        {
+          "name": "short",
+          "gte": 1,
+          "lt": 20
+        },
+        {
+          "name": "part",
+          "gte": 20,
+          "lt": 35
+        },
+        {
+          "name": "full",
+          "gte": 35
+        }
+      ],
+      "remap": {
+        "Permanent Full-time": {
+          "short": "Permanent Short Part-time",
+          "part": "Permanent Part-time",
+          "full": "Permanent Full-time"
+        },
+        "Permanent Part-time": {
+          "short": "Permanent Short Part-time",
+          "part": "Permanent Part-time",
+          "full": "Permanent Full-time"
+        },
+        "Permanent Short Part-time": {
+          "short": "Permanent Short Part-time",
+          "part": "Permanent Part-time",
+          "full": "Permanent Full-time"
+        },
+        "Temporary Full-time": {
+          "short": "Temporary Short Part-time",
+          "part": "Temporary Part-time",
+          "full": "Temporary Full-time"
+        },
+        "Temporary Part-time": {
+          "short": "Temporary Short Part-time",
+          "part": "Temporary Part-time",
+          "full": "Temporary Full-time"
+        },
+        "Temporary Short Part-time": {
+          "short": "Temporary Short Part-time",
+          "part": "Temporary Part-time",
+          "full": "Temporary Full-time"
+        },
+        "Self-Employed Full-time": {
+          "short": "Self-Employed Short Part-time",
+          "part": "Self-Employed Part-time",
+          "full": "Self-Employed Full-time"
+        },
+        "Self-Employed Part-time": {
+          "short": "Self-Employed Short Part-time",
+          "part": "Self-Employed Part-time",
+          "full": "Self-Employed Full-time"
+        },
+        "Self-Employed Short Part-time": {
+          "short": "Self-Employed Short Part-time",
+          "part": "Self-Employed Part-time",
+          "full": "Self-Employed Full-time"
+        }
+      }
+    },
     "Permanent Full-time": {
       "none_of": [
         "deltid",
         "part-time",
         "part time",
-        "1-19",
-        "20-34",
         "kort deltid",
-        "visstid",
-        "vikariat",
-        "vikarie",
+        {
+          "token": "visstid",
+          "mode": "substring"
+        },
+        {
+          "token": "vikariat",
+          "mode": "substring"
+        },
+        {
+          "token": "vikarie",
+          "mode": "substring"
+        },
         "projektanställ",
         "provanställ",
-        "säsong",
+        {
+          "token": "säsong",
+          "mode": "substring"
+        },
         "timanställ",
         "behovsanställ",
-        "temporary",
+        {
+          "token": "temporary",
+          "mode": "substring"
+        },
         "fixed-term",
         "seasonal",
         "tidsbegränsad",
@@ -155,26 +278,113 @@
         "egenföretag",
         "egen företag",
         "enskild firma",
-        "frilans",
+        {
+          "token": "frilans",
+          "mode": "substring"
+        },
         "freelan",
         "näringsverksamhet",
         "aktiebolag",
-        "pension",
-        "student",
+        {
+          "token": "pension",
+          "mode": "substring"
+        },
+        {
+          "token": "student",
+          "mode": "substring"
+        },
         "arbetslös",
         "retired",
-        "unemployed"
+        "unemployed",
+        "0 timmar",
+        "0 timme",
+        "0 tim/",
+        "0 h/v",
+        "0 h per",
+        "0 hours",
+        "0 h)",
+        "0 h,",
+        "0 tim)",
+        "project-based",
+        "project employment",
+        "projektuppdrag",
+        "probation",
+        "trial period",
+        "fixed_term",
+        "fixed term",
+        "graduate program",
+        "korttidskontrakt",
+        "objektsanställ",
+        "provisori",
+        "tidsbestämd",
+        "doktorand",
+        "substitute",
+        "förårskontrakt",
+        "tidsbunden",
+        "eget bolag",
+        "egna bolaget",
+        "självständig",
+        "egen firma",
+        "sole_trader",
+        "sole trader",
+        "f-skatt",
+        "eget företag",
+        "egen företagare",
+        "konsultavtal via ab",
+        "näringsidkare",
+        "självföretagare",
+        "egenföretakare",
+        "former",
+        "previous",
+        "före detta",
+        "f.d.",
+        "tidigareanställ",
+        "tidigare anställ",
+        "tidigare ansatt",
+        "tidigare fast",
+        "tidigare tillsvid",
+        "tidigare permanent",
+        "tidigare heltid",
+        "tidigare deltid",
+        "tidigare allmän",
+        "tidigare visstid",
+        "tidigare tidsbegränsad",
+        "tidigare projekt",
+        "tidigare säsong",
+        "tidigare jour",
+        "tidigare egen",
+        "(past)",
+        "now ended",
+        "nu avslutad",
+        "nu avslutat",
+        ", avslutad",
+        ", avslutat",
+        "(avslutad",
+        "(avslutat",
+        "avslutad anställning",
+        "avveckl",
+        "nedlag",
+        "before retirement",
+        "pre-retirement",
+        "fram till pension",
+        "innan pension",
+        "korttidsanställ"
       ],
       "all_of": [
         [
-          "permanent",
-          "tillsvidare",
+          {
+            "token": "permanent",
+            "mode": "substring"
+          },
+          {
+            "token": "tillsvidare",
+            "mode": "substring"
+          },
           "fast anställ"
         ],
         [
           "full",
-          "heltid",
-          "100%"
+          "heltid"
         ]
       ],
       "equals": [
@@ -189,14 +399,73 @@
         "full-time",
         "heltid",
         "Fast tjänst",
-        "Sysselsatt"
+        "Sysselsatt",
+        "Anställd i private sektor",
+        "Fasta arbetsplats (40 timmar/vecka)",
+        "100% tjänstgöring",
+        "35 timmar/vecka",
+        "37.5 timmar/vecka",
+        "A-ställning, 37.5 timmar",
+        "Anställd i privata sektorn",
+        "Anställd i staten",
+        "Anställd i större privat företag",
+        "Anställd inom privat sektor (t.ex. företag)",
+        "Anställd inom privatsektorn",
+        "Anställd med 40 timmars arbetsvecka",
+        "Anställd med fasta timmar",
+        "Anställd med flexibel arbetsorganisation",
+        "Anställd med flexibelt arbetssätt",
+        "Anställd på 37.5 timmar/vecka",
+        "Anställd som forskare vid en vetenskaplig institution",
+        "Anställd vid myndighet",
+        "Fast today, 37.5 hours",
+        "Fasta arbetsplats med 40-timmars vecka",
+        "Fasta arbetsplats, 40 timmar veckan",
+        "Fasta tid - 40 timmar per vecka",
+        "Fasta tid - 40 timmar/vecka",
+        "Fulgtid | 40 timmar/vecka",
+        "Fuljtidstjänst (40 timmar/vecka)",
+        "Full-tidstjänster",
+        "Förbundsanställd",
+        "government employment",
+        "Government/state employment (fixed allowance)",
+        "helftidsarbete",
+        "Helkontrakt (full tid, 40 timmar/vecka)",
+        "heltime",
+        "heltime arbete",
+        "Kollektivavtalsanställd",
+        "Kommunal tjänst",
+        "Kontorsanställd, dagtid (Office worker, day shift)",
+        "Lärare vid en gymnasieskola i Uppsala (fast)",
+        "Lönearbetare",
+        "Lönearbete",
+        "Medarbetare hos en privatfirma",
+        "municipal employment",
+        "Private Sector Employment",
+        "Public sector employment",
+        "Public sector employment (förvaltningen)",
+        "Regelbundet anställd",
+        "Regular Employment",
+        "Regular employment (tillsvideregående)",
+        "Tenured position",
+        "tillsvids",
+        "Tjänstemanstjänst (40 h/vecka)"
       ],
       "contains": [
-        "tillsvidareanställning",
+        {
+          "token": "tillsvidareanställning",
+          "mode": "substring"
+        },
         "heltidsanställning",
         "heltidsanställd",
-        "permanent",
-        "tillsvidare",
+        {
+          "token": "permanent",
+          "mode": "substring"
+        },
+        {
+          "token": "tillsvidare",
+          "mode": "substring"
+        },
         "fast anställ",
         "open-ended",
         "salaried",
@@ -209,8 +478,14 @@
         "fulltid",
         "volltid",
         "tillvidare",
-        "anstellning",
-        "anställning",
+        {
+          "token": "anstellning",
+          "mode": "substring"
+        },
+        {
+          "token": "anställning",
+          "mode": "substring"
+        },
         "obestämd",
         "indefinite",
         "indeterminate",
@@ -220,113 +495,897 @@
         "förlagd arbetare",
         "lönarbetare",
         "löntagare",
-        "anständig anställ"
+        "anständig anställ",
+        "fast tjänst",
+        "fasta tjänst",
+        "fasta tj",
+        "fastanställd",
+        "tills vidare",
+        "tidlös",
+        "tjänst (fast)"
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              {
+                "token": "student",
+                "mode": "substring"
+              },
+              {
+                "token": "studer",
+                "mode": "substring"
+              },
+              {
+                "token": "studie",
+                "mode": "substring"
+              },
+              {
+                "token": "pension",
+                "mode": "substring"
+              },
+              {
+                "token": "pensionär",
+                "mode": "substring"
+              },
+              {
+                "token": "pensioner",
+                "mode": "substring"
+              },
+              "retired",
+              "pensio"
+            ],
+            [
+              {
+                "token": "anställ",
+                "mode": "substring"
+              },
+              "employ",
+              "konsult",
+              {
+                "token": "frilans",
+                "mode": "substring"
+              },
+              "freelanc",
+              "arbetar",
+              "working",
+              "works",
+              {
+                "token": "work",
+                "mode": "word"
+              },
+              {
+                "token": "deltidsarbet",
+                "mode": "substring"
+              },
+              "heltidsarbet",
+              {
+                "token": "extraarbet",
+                "mode": "substring"
+              },
+              {
+                "token": "lönearbet",
+                "mode": "substring"
+              },
+              {
+                "token": "timmar",
+                "mode": "substring"
+              },
+              {
+                "token": "tim",
+                "mode": "word"
+              },
+              "timme",
+              {
+                "token": "h/v",
+                "mode": "substring"
+              },
+              {
+                "token": "h/w",
+                "mode": "substring"
+              },
+              {
+                "token": "hours",
+                "mode": "word"
+              },
+              {
+                "token": "hrs",
+                "mode": "word"
+              },
+              "eget företag",
+              "egen firma",
+              "deltidstjänst",
+              "heltidstjänst"
+            ]
+          ],
+          "none_of": [
+            "tidigare",
+            "avveckl",
+            "avslutad",
+            "avslutat",
+            "former",
+            "previous",
+            "before retirement",
+            "pre-retirement",
+            "f.d.",
+            {
+              "token": "f d",
+              "mode": "word"
+            },
+            "före detta",
+            "fram till pension",
+            "innan pension",
+            "(past)",
+            "now ended",
+            "nedlag",
+            "no longer",
+            "ej längre",
+            "inte längre",
+            "0 timmar",
+            "0 timme",
+            "0 tim/",
+            "0 h/v",
+            "0 h per",
+            "0 hours",
+            "0 h)",
+            "0 h,",
+            "0 tim)",
+            "0h",
+            "0 weekly",
+            "no weekly",
+            "no working hours",
+            "0 veckotimmar",
+            "0 arbetstimmar",
+            "inga timmar",
+            "frivillig",
+            {
+              "token": "volontär",
+              "mode": "substring"
+            },
+            "volunteer",
+            "ideell",
+            "oavlönad",
+            "obetald",
+            "unpaid",
+            "utan lön",
+            {
+              "token": "jobb",
+              "mode": "substring"
+            },
+            {
+              "token": "job",
+              "mode": "substring"
+            },
+            {
+              "token": "assistant",
+              "mode": "substring"
+            },
+            "worker",
+            {
+              "token": "intern",
+              "mode": "substring"
+            },
+            "deltid",
+            "part-time",
+            "part time",
+            "parttime",
+            "halvtid",
+            "half-time",
+            "half time",
+            "partiell",
+            "visstidsanställning",
+            "projektanställning",
+            "provanställning",
+            {
+              "token": "vikariat",
+              "mode": "substring"
+            },
+            {
+              "token": "vikarie",
+              "mode": "substring"
+            },
+            {
+              "token": "temporary",
+              "mode": "substring"
+            },
+            {
+              "token": "visstid",
+              "mode": "substring"
+            },
+            "fixed-term",
+            "seasonal",
+            {
+              "token": "säsong",
+              "mode": "substring"
+            },
+            "tillfällig",
+            "påkallad",
+            "tidsbegränsad",
+            "villkorlig",
+            "villkorad",
+            "internship",
+            "praktik",
+            "traineeship",
+            "trainee",
+            "project-based",
+            "project employment",
+            "projektuppdrag",
+            "probation",
+            "trial period",
+            "förordna",
+            "fixed_term",
+            "fixed term",
+            "graduate program",
+            "korttidskontrakt",
+            "objektsanställ",
+            "provisori",
+            "tidsbestämd",
+            "doktorand",
+            "substitute",
+            "förårskontrakt",
+            "tidsbunden",
+            "korttidsanställ",
+            "projektanställ",
+            "provanställ",
+            "casual",
+            "timanställ",
+            "behovsanställ",
+            "studentjobb",
+            "student job",
+            "student jobb",
+            "student assistant",
+            "studentassistent",
+            "student worker",
+            "studiassistans",
+            "amanuens",
+            "tidsbegränsat",
+            "self-employed",
+            "self-employ",
+            "self employ",
+            "egenföretagare",
+            "enskild firma",
+            "egenanställd",
+            "aktiebolag",
+            "freelance",
+            "freelan",
+            {
+              "token": "frilans",
+              "mode": "substring"
+            },
+            "konsultanställning",
+            "konsultverksamhet",
+            "eget bolag",
+            "egna bolaget",
+            "självständig",
+            "egen firma",
+            "sole_trader",
+            "sole trader",
+            "f-skatt",
+            "eget företag",
+            "egen företagare",
+            "konsultavtal via ab",
+            "näringsidkare",
+            "självföretagare",
+            "egenföretakare",
+            "egen företag",
+            "näringsverksamhet",
+            "konsultanställ"
+          ]
+        }
       ]
     },
     "Permanent Part-time": {
       "none_of": [
-        "visstid",
-        "vikariat",
+        {
+          "token": "visstid",
+          "mode": "substring"
+        },
+        {
+          "token": "vikariat",
+          "mode": "substring"
+        },
         "projektanställ",
         "provanställ",
-        "säsong",
+        {
+          "token": "säsong",
+          "mode": "substring"
+        },
         "timanställ",
         "behovsanställ",
-        "temporary",
+        {
+          "token": "temporary",
+          "mode": "substring"
+        },
         "self-employ",
         "egenföretag",
         "enskild firma",
-        "frilans",
+        {
+          "token": "frilans",
+          "mode": "substring"
+        },
         "freelan",
         "näringsverksamhet",
         "aktiebolag",
-        "pension",
-        "student",
+        {
+          "token": "pension",
+          "mode": "substring"
+        },
+        {
+          "token": "student",
+          "mode": "substring"
+        },
         "arbetslös",
         "retired",
-        "unemployed"
+        "unemployed",
+        "0 timmar",
+        "0 timme",
+        "0 tim/",
+        "0 h/v",
+        "0 h per",
+        "0 hours",
+        "0 h)",
+        "0 h,",
+        "0 tim)",
+        "project-based",
+        "project employment",
+        "projektuppdrag",
+        "probation",
+        "trial period",
+        "fixed_term",
+        "fixed term",
+        "fixed-term",
+        "graduate program",
+        "korttidskontrakt",
+        "objektsanställ",
+        "provisori",
+        "tidsbestämd",
+        "doktorand",
+        "substitute",
+        "förårskontrakt",
+        "tidsbunden",
+        "tillfällig",
+        "eget bolag",
+        "egna bolaget",
+        "självständig",
+        "egen firma",
+        "sole_trader",
+        "sole trader",
+        "f-skatt",
+        "eget företag",
+        "egen företagare",
+        "konsultavtal via ab",
+        "näringsidkare",
+        "självföretagare",
+        "egenföretakare",
+        "former",
+        "previous",
+        "före detta",
+        "f.d.",
+        "tidigareanställ",
+        "tidigare anställ",
+        "tidigare ansatt",
+        "tidigare fast",
+        "tidigare tillsvid",
+        "tidigare permanent",
+        "tidigare heltid",
+        "tidigare deltid",
+        "tidigare allmän",
+        "tidigare visstid",
+        "tidigare tidsbegränsad",
+        "tidigare projekt",
+        "tidigare säsong",
+        "tidigare jour",
+        "tidigare egen",
+        "(past)",
+        "now ended",
+        "nu avslutad",
+        "nu avslutat",
+        ", avslutad",
+        ", avslutat",
+        "(avslutad",
+        "(avslutat",
+        "avslutad anställning",
+        "avveckl",
+        "nedlag",
+        "before retirement",
+        "pre-retirement",
+        "fram till pension",
+        "innan pension",
+        "korttidsanställ",
+        "föräldraledig med möjlighet",
+        "föräldraledig med deltid"
       ],
       "all_of": [
         [
-          "permanent",
-          "tillsvidare",
-          "fast anställ"
+          {
+            "token": "permanent",
+            "mode": "substring"
+          },
+          {
+            "token": "tillsvidare",
+            "mode": "substring"
+          },
+          "fast anställ",
+          "fastanställd",
+          "fast tjänst",
+          "tidlös"
         ],
         [
           "part",
           "deltid",
-          "50%",
-          "75%"
+          "80%"
         ]
       ],
       "equals": [
         "tillsvidareanställning, deltid",
         "permanent part-time",
         "deltidsanställd",
-        "Halvtid"
+        "Halvtid",
+        "30 timmar i veckan",
+        "Delarbetstid inom offentlig sektor, 24 timmar/vecka",
+        "Delarbetstid med utökad flexibilitet kring barnomsorg",
+        "Halvtid (20-25 timmar/vecka)",
+        "Halvtidstjänst",
+        "Halvtidstjänst, 30 timmar/vecka",
+        "hälftid",
+        "Minskad arbetstid p.g.a vårdansvar (Indefinierat, 20h/vecka)",
+        "Parttid",
+        "Parttime",
+        "Parttime anställd"
       ],
       "contains": [
         "deltidsanställ",
         "deltid",
         "part-time",
         "part time"
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              {
+                "token": "student",
+                "mode": "substring"
+              },
+              {
+                "token": "studer",
+                "mode": "substring"
+              },
+              {
+                "token": "studie",
+                "mode": "substring"
+              },
+              {
+                "token": "pension",
+                "mode": "substring"
+              },
+              {
+                "token": "pensionär",
+                "mode": "substring"
+              },
+              {
+                "token": "pensioner",
+                "mode": "substring"
+              },
+              "retired",
+              "pensio"
+            ],
+            [
+              {
+                "token": "anställ",
+                "mode": "substring"
+              },
+              "employ",
+              "konsult",
+              {
+                "token": "frilans",
+                "mode": "substring"
+              },
+              "freelanc",
+              "arbetar",
+              "working",
+              "works",
+              {
+                "token": "work",
+                "mode": "word"
+              },
+              {
+                "token": "deltidsarbet",
+                "mode": "substring"
+              },
+              "heltidsarbet",
+              {
+                "token": "extraarbet",
+                "mode": "substring"
+              },
+              {
+                "token": "lönearbet",
+                "mode": "substring"
+              },
+              {
+                "token": "timmar",
+                "mode": "substring"
+              },
+              {
+                "token": "tim",
+                "mode": "word"
+              },
+              "timme",
+              {
+                "token": "h/v",
+                "mode": "substring"
+              },
+              {
+                "token": "h/w",
+                "mode": "substring"
+              },
+              {
+                "token": "hours",
+                "mode": "word"
+              },
+              {
+                "token": "hrs",
+                "mode": "word"
+              },
+              "eget företag",
+              "egen firma",
+              "deltidstjänst",
+              "heltidstjänst"
+            ],
+            [
+              "deltid",
+              "part-time",
+              "part time",
+              "parttime",
+              "halvtid",
+              "half-time",
+              "half time",
+              "partiell"
+            ]
+          ],
+          "none_of": [
+            "tidigare",
+            "avveckl",
+            "avslutad",
+            "avslutat",
+            "former",
+            "previous",
+            "before retirement",
+            "pre-retirement",
+            "f.d.",
+            {
+              "token": "f d",
+              "mode": "word"
+            },
+            "före detta",
+            "fram till pension",
+            "innan pension",
+            "(past)",
+            "now ended",
+            "nedlag",
+            "no longer",
+            "ej längre",
+            "inte längre",
+            "0 timmar",
+            "0 timme",
+            "0 tim/",
+            "0 h/v",
+            "0 h per",
+            "0 hours",
+            "0 h)",
+            "0 h,",
+            "0 tim)",
+            "0h",
+            "0 weekly",
+            "no weekly",
+            "no working hours",
+            "0 veckotimmar",
+            "0 arbetstimmar",
+            "inga timmar",
+            "frivillig",
+            {
+              "token": "volontär",
+              "mode": "substring"
+            },
+            "volunteer",
+            "ideell",
+            "oavlönad",
+            "obetald",
+            "unpaid",
+            "utan lön",
+            {
+              "token": "jobb",
+              "mode": "substring"
+            },
+            {
+              "token": "job",
+              "mode": "substring"
+            },
+            {
+              "token": "assistant",
+              "mode": "substring"
+            },
+            "worker",
+            {
+              "token": "intern",
+              "mode": "substring"
+            },
+            "visstidsanställning",
+            "projektanställning",
+            "provanställning",
+            {
+              "token": "vikariat",
+              "mode": "substring"
+            },
+            {
+              "token": "vikarie",
+              "mode": "substring"
+            },
+            {
+              "token": "temporary",
+              "mode": "substring"
+            },
+            {
+              "token": "visstid",
+              "mode": "substring"
+            },
+            "fixed-term",
+            "seasonal",
+            {
+              "token": "säsong",
+              "mode": "substring"
+            },
+            "tillfällig",
+            "påkallad",
+            "tidsbegränsad",
+            "villkorlig",
+            "villkorad",
+            "internship",
+            "praktik",
+            "traineeship",
+            "trainee",
+            "project-based",
+            "project employment",
+            "projektuppdrag",
+            "probation",
+            "trial period",
+            "förordna",
+            "fixed_term",
+            "fixed term",
+            "graduate program",
+            "korttidskontrakt",
+            "objektsanställ",
+            "provisori",
+            "tidsbestämd",
+            "doktorand",
+            "substitute",
+            "förårskontrakt",
+            "tidsbunden",
+            "korttidsanställ",
+            "projektanställ",
+            "provanställ",
+            "casual",
+            "timanställ",
+            "behovsanställ",
+            "studentjobb",
+            "student job",
+            "student jobb",
+            "student assistant",
+            "studentassistent",
+            "student worker",
+            "studiassistans",
+            "amanuens",
+            "tidsbegränsat",
+            "self-employed",
+            "self-employ",
+            "self employ",
+            "egenföretagare",
+            "enskild firma",
+            "egenanställd",
+            "aktiebolag",
+            "freelance",
+            "freelan",
+            {
+              "token": "frilans",
+              "mode": "substring"
+            },
+            "konsultanställning",
+            "konsultverksamhet",
+            "eget bolag",
+            "egna bolaget",
+            "självständig",
+            "egen firma",
+            "sole_trader",
+            "sole trader",
+            "f-skatt",
+            "eget företag",
+            "egen företagare",
+            "konsultavtal via ab",
+            "näringsidkare",
+            "självföretagare",
+            "egenföretakare",
+            "egen företag",
+            "näringsverksamhet",
+            "konsultanställ"
+          ]
+        }
       ]
     },
     "Permanent Short Part-time": {
       "all_of": [
         [
-          "permanent",
-          "tillsvidare",
+          {
+            "token": "permanent",
+            "mode": "substring"
+          },
+          {
+            "token": "tillsvidare",
+            "mode": "substring"
+          },
           "fast anställ"
         ],
         [
-          "1-19",
           "few hours",
           "marginal",
-          "kort deltid",
-          "timmar i veckan"
+          "kort deltid"
         ]
+      ],
+      "none_of": [
+        "0 timmar",
+        "0 timme",
+        "0 tim/",
+        "0 h/v",
+        "0 h per",
+        "0 hours",
+        "0 h)",
+        "0 h,",
+        "0 tim)",
+        "former",
+        "previous",
+        "före detta",
+        "f.d.",
+        "tidigareanställ",
+        "tidigare anställ",
+        "tidigare ansatt",
+        "tidigare fast",
+        "tidigare tillsvid",
+        "tidigare permanent",
+        "tidigare heltid",
+        "tidigare deltid",
+        "tidigare allmän",
+        "tidigare visstid",
+        "tidigare tidsbegränsad",
+        "tidigare projekt",
+        "tidigare säsong",
+        "tidigare jour",
+        "tidigare egen",
+        "(past)",
+        "now ended",
+        "nu avslutad",
+        "nu avslutat",
+        ", avslutad",
+        ", avslutat",
+        "(avslutad",
+        "(avslutat",
+        "avslutad anställning",
+        "avveckl",
+        "nedlag",
+        "before retirement",
+        "pre-retirement",
+        "fram till pension",
+        "innan pension"
+      ],
+      "equals": [
+        "Anställd med 25% arbetstid",
+        "Delad arbetstid (30-40%)",
+        "Delad tid (30% av arbetstiden)",
+        "Delad tid (40% av arbetstiden)",
+        "early retirement transition (reduced hours, 10-15 hours/week)"
       ]
     },
     "Temporary Full-time": {
       "all_of": [
         [
-          "temporary",
-          "visstid",
-          "vikariat",
-          "vikarie",
+          {
+            "token": "temporary",
+            "mode": "substring"
+          },
+          {
+            "token": "visstid",
+            "mode": "substring"
+          },
+          {
+            "token": "vikariat",
+            "mode": "substring"
+          },
+          {
+            "token": "vikarie",
+            "mode": "substring"
+          },
           "projektanställ",
           "provanställ",
-          "säsong",
+          {
+            "token": "säsong",
+            "mode": "substring"
+          },
           "tidsbegränsad",
           "villkorlig",
           "villkorad",
           "internship",
           "praktik",
-          "trainee"
+          "trainee",
+          "project-based",
+          "project employment",
+          "projektuppdrag",
+          "probation",
+          "trial period",
+          "casual",
+          "förordna",
+          "fixed_term",
+          "fixed term",
+          "fixed-term",
+          "graduate program",
+          "korttidskontrakt",
+          "objektsanställ",
+          "provisori",
+          "tidsbestämd",
+          "doktorand",
+          "substitute",
+          "förårskontrakt",
+          "tidsbunden",
+          "tillfällig",
+          "korttidsanställ"
         ],
         [
           "full",
-          "heltid",
-          "100%"
+          "heltid"
         ]
       ],
       "equals": [
         "visstidsanställning, heltid",
         "temporary full-time",
-        "Project-based"
+        "Project-based",
+        "Utbildningsanställd",
+        "Anställd (tidsbegränsat, över 1 år)",
+        "apprenticeship contract",
+        "Arbete som researchassistent (projektbaserat)",
+        "call center temp",
+        "Korttidspraktik, 100% (40h), 3 månader",
+        "Projektanställd",
+        "Projektbaserat kontrakt",
+        "prosjektarbete",
+        "Provanställd",
+        "Tidskontrakt (40 timmar/vecka, 6 månader)",
+        "Tidskontrakt (6 månader, 35 timmar/vecka)",
+        "Uppdragskontrakt (9 månader), 40 timmar/vecka",
+        "Viss tid"
       ],
       "contains": [
         "visstidsanställning",
         "projektanställning",
         "provanställning",
-        "vikariat",
-        "vikarie",
-        "temporary",
-        "visstid",
+        {
+          "token": "vikariat",
+          "mode": "substring"
+        },
+        {
+          "token": "vikarie",
+          "mode": "substring"
+        },
+        {
+          "token": "temporary",
+          "mode": "substring"
+        },
+        {
+          "token": "visstid",
+          "mode": "substring"
+        },
         "fixed-term",
         "seasonal",
-        "säsong",
+        {
+          "token": "säsong",
+          "mode": "substring"
+        },
         "tillfällig",
         "påkallad",
         "tidsbegränsad",
@@ -335,19 +1394,323 @@
         "internship",
         "praktik",
         "traineeship",
-        "trainee"
+        "trainee",
+        "project-based",
+        "project employment",
+        "projektuppdrag",
+        "probation",
+        "trial period",
+        "förordna",
+        "fixed_term",
+        "fixed term",
+        "graduate program",
+        "korttidskontrakt",
+        "objektsanställ",
+        "provisori",
+        "tidsbestämd",
+        "doktorand",
+        "substitute",
+        "förårskontrakt",
+        "tidsbunden",
+        "korttidsanställ"
+      ],
+      "none_of": [
+        "0 timmar",
+        "0 timme",
+        "0 tim/",
+        "0 h/v",
+        "0 h per",
+        "0 hours",
+        "0 h)",
+        "0 h,",
+        "0 tim)",
+        "former",
+        "previous",
+        "före detta",
+        "f.d.",
+        "tidigareanställ",
+        "tidigare anställ",
+        "tidigare ansatt",
+        "tidigare fast",
+        "tidigare tillsvid",
+        "tidigare permanent",
+        "tidigare heltid",
+        "tidigare deltid",
+        "tidigare allmän",
+        "tidigare visstid",
+        "tidigare tidsbegränsad",
+        "tidigare projekt",
+        "tidigare säsong",
+        "tidigare jour",
+        "tidigare egen",
+        "(past)",
+        "now ended",
+        "nu avslutad",
+        "nu avslutat",
+        ", avslutad",
+        ", avslutat",
+        "(avslutad",
+        "(avslutat",
+        "avslutad anställning",
+        "avveckl",
+        "nedlag",
+        "before retirement",
+        "pre-retirement",
+        "fram till pension",
+        "innan pension",
+        "studentjobb",
+        "student job",
+        "student jobb",
+        "student assistant",
+        "studentassistent",
+        "student worker",
+        "studiassistans"
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              {
+                "token": "student",
+                "mode": "substring"
+              },
+              {
+                "token": "studer",
+                "mode": "substring"
+              },
+              {
+                "token": "studie",
+                "mode": "substring"
+              },
+              {
+                "token": "pension",
+                "mode": "substring"
+              },
+              {
+                "token": "pensionär",
+                "mode": "substring"
+              },
+              {
+                "token": "pensioner",
+                "mode": "substring"
+              },
+              "retired",
+              "pensio"
+            ],
+            [
+              "visstidsanställning",
+              "projektanställning",
+              "provanställning",
+              {
+                "token": "vikariat",
+                "mode": "substring"
+              },
+              {
+                "token": "vikarie",
+                "mode": "substring"
+              },
+              {
+                "token": "temporary",
+                "mode": "substring"
+              },
+              {
+                "token": "visstid",
+                "mode": "substring"
+              },
+              "fixed-term",
+              "seasonal",
+              {
+                "token": "säsong",
+                "mode": "substring"
+              },
+              "tillfällig",
+              "påkallad",
+              "tidsbegränsad",
+              "villkorlig",
+              "villkorad",
+              "internship",
+              "praktik",
+              "traineeship",
+              "trainee",
+              "project-based",
+              "project employment",
+              "projektuppdrag",
+              "probation",
+              "trial period",
+              "förordna",
+              "fixed_term",
+              "fixed term",
+              "graduate program",
+              "korttidskontrakt",
+              "objektsanställ",
+              "provisori",
+              "tidsbestämd",
+              "doktorand",
+              "substitute",
+              "förårskontrakt",
+              "tidsbunden",
+              "korttidsanställ",
+              "projektanställ",
+              "provanställ",
+              "casual",
+              "timanställ",
+              "behovsanställ",
+              "studentjobb",
+              "student job",
+              "student jobb",
+              "student assistant",
+              "studentassistent",
+              "student worker",
+              "studiassistans",
+              "amanuens",
+              "tidsbegränsat"
+            ]
+          ],
+          "none_of": [
+            "tidigare",
+            "avveckl",
+            "avslutad",
+            "avslutat",
+            "former",
+            "previous",
+            "before retirement",
+            "pre-retirement",
+            "f.d.",
+            {
+              "token": "f d",
+              "mode": "word"
+            },
+            "före detta",
+            "fram till pension",
+            "innan pension",
+            "(past)",
+            "now ended",
+            "nedlag",
+            "no longer",
+            "ej längre",
+            "inte längre",
+            "0 timmar",
+            "0 timme",
+            "0 tim/",
+            "0 h/v",
+            "0 h per",
+            "0 hours",
+            "0 h)",
+            "0 h,",
+            "0 tim)",
+            "0h",
+            "0 weekly",
+            "no weekly",
+            "no working hours",
+            "0 veckotimmar",
+            "0 arbetstimmar",
+            "inga timmar",
+            "frivillig",
+            {
+              "token": "volontär",
+              "mode": "substring"
+            },
+            "volunteer",
+            "ideell",
+            "oavlönad",
+            "obetald",
+            "unpaid",
+            "utan lön",
+            {
+              "token": "jobb",
+              "mode": "substring"
+            },
+            {
+              "token": "job",
+              "mode": "substring"
+            },
+            {
+              "token": "assistant",
+              "mode": "substring"
+            },
+            "worker",
+            {
+              "token": "intern",
+              "mode": "substring"
+            },
+            "deltid",
+            "part-time",
+            "part time",
+            "parttime",
+            "halvtid",
+            "half-time",
+            "half time",
+            "partiell",
+            "self-employed",
+            "self-employ",
+            "self employ",
+            "egenföretagare",
+            "enskild firma",
+            "egenanställd",
+            "aktiebolag",
+            "freelance",
+            "freelan",
+            {
+              "token": "frilans",
+              "mode": "substring"
+            },
+            "konsultanställning",
+            "konsultverksamhet",
+            "eget bolag",
+            "egna bolaget",
+            "självständig",
+            "egen firma",
+            "sole_trader",
+            "sole trader",
+            "f-skatt",
+            "eget företag",
+            "egen företagare",
+            "konsultavtal via ab",
+            "näringsidkare",
+            "självföretagare",
+            "egenföretakare",
+            "egen företag",
+            "näringsverksamhet",
+            "konsultanställ",
+            "timanställ",
+            "behovsanställ",
+            "studentjobb",
+            "student job",
+            "student jobb",
+            "student assistant",
+            "studentassistent",
+            "student worker",
+            "studiassistans",
+            "amanuens"
+          ]
+        }
       ]
     },
     "Temporary Part-time": {
       "all_of": [
         [
-          "temporary",
-          "visstid",
-          "vikariat",
-          "vikarie",
+          {
+            "token": "temporary",
+            "mode": "substring"
+          },
+          {
+            "token": "visstid",
+            "mode": "substring"
+          },
+          {
+            "token": "vikariat",
+            "mode": "substring"
+          },
+          {
+            "token": "vikarie",
+            "mode": "substring"
+          },
           "projektanställ",
           "provanställ",
-          "säsong",
+          {
+            "token": "säsong",
+            "mode": "substring"
+          },
           "timanställ",
           "tidsbegränsad",
           "villkorlig",
@@ -358,13 +1721,32 @@
           "student assistant",
           "studentassistent",
           "student worker",
-          "studiassistans"
+          "studiassistans",
+          "project-based",
+          "project employment",
+          "projektuppdrag",
+          "probation",
+          "trial period",
+          "casual",
+          "förordna",
+          "fixed_term",
+          "fixed term",
+          "fixed-term",
+          "graduate program",
+          "korttidskontrakt",
+          "objektsanställ",
+          "provisori",
+          "tidsbestämd",
+          "doktorand",
+          "substitute",
+          "förårskontrakt",
+          "tidsbunden",
+          "tillfällig",
+          "korttidsanställ"
         ],
         [
           "part",
-          "deltid",
-          "50%",
-          "75%"
+          "deltid"
         ]
       ],
       "equals": [
@@ -372,7 +1754,25 @@
         "timanställning",
         "temporary part-time",
         "studiejobb",
-        "Casual worker"
+        "Casual worker",
+        "apprenticeship contract (6 months, 25h/week)",
+        "Casual",
+        "Feriejobb – cirka 30 timmar per vecka under sommarlovet",
+        "Flerårskontrakt (30 timmar/vecka)",
+        "Förårstidskontrakt (1-6 månader), 30 timmar/vecka",
+        "Hourly Worker",
+        "Hourly/on-call contract (intermittent employment)",
+        "Hourly/on-call employment",
+        "Introduktionsjobb, 12 månader, 25 timmar/vecka",
+        "Korttidsarbete (20 timmar/vecka, 6 månader)",
+        "lärlingsplats (del av introduktionsprogram, 20h/vecka)",
+        "Nolltimmarsavtal, variabel tid",
+        "Studentarbete (studiejobb)",
+        "Studiejobb (max 20 timmar/vecka)",
+        "Tidlönare (30h/vecka), 1 år",
+        "Tidsbegränsat avtal kopplat till specifikt projekt (9 mån), 30 hours/week",
+        "Tidvis kontrakt (vid behov)",
+        "Timavlönat arbete"
       ],
       "contains": [
         "timanställ",
@@ -385,30 +1785,367 @@
         "student worker",
         "studiassistans",
         "amanuens"
+      ],
+      "none_of": [
+        "0 timmar",
+        "0 timme",
+        "0 tim/",
+        "0 h/v",
+        "0 h per",
+        "0 hours",
+        "0 h)",
+        "0 h,",
+        "0 tim)",
+        "former",
+        "previous",
+        "före detta",
+        "f.d.",
+        "tidigareanställ",
+        "tidigare anställ",
+        "tidigare ansatt",
+        "tidigare fast",
+        "tidigare tillsvid",
+        "tidigare permanent",
+        "tidigare heltid",
+        "tidigare deltid",
+        "tidigare allmän",
+        "tidigare visstid",
+        "tidigare tidsbegränsad",
+        "tidigare projekt",
+        "tidigare säsong",
+        "tidigare jour",
+        "tidigare egen",
+        "(past)",
+        "now ended",
+        "nu avslutad",
+        "nu avslutat",
+        ", avslutad",
+        ", avslutat",
+        "(avslutad",
+        "(avslutat",
+        "avslutad anställning",
+        "avveckl",
+        "nedlag",
+        "before retirement",
+        "pre-retirement",
+        "fram till pension",
+        "innan pension"
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              {
+                "token": "student",
+                "mode": "substring"
+              },
+              {
+                "token": "studer",
+                "mode": "substring"
+              },
+              {
+                "token": "studie",
+                "mode": "substring"
+              },
+              {
+                "token": "pension",
+                "mode": "substring"
+              },
+              {
+                "token": "pensionär",
+                "mode": "substring"
+              },
+              {
+                "token": "pensioner",
+                "mode": "substring"
+              },
+              "retired",
+              "pensio"
+            ],
+            [
+              "visstidsanställning",
+              "projektanställning",
+              "provanställning",
+              {
+                "token": "vikariat",
+                "mode": "substring"
+              },
+              {
+                "token": "vikarie",
+                "mode": "substring"
+              },
+              {
+                "token": "temporary",
+                "mode": "substring"
+              },
+              {
+                "token": "visstid",
+                "mode": "substring"
+              },
+              "fixed-term",
+              "seasonal",
+              {
+                "token": "säsong",
+                "mode": "substring"
+              },
+              "tillfällig",
+              "påkallad",
+              "tidsbegränsad",
+              "villkorlig",
+              "villkorad",
+              "internship",
+              "praktik",
+              "traineeship",
+              "trainee",
+              "project-based",
+              "project employment",
+              "projektuppdrag",
+              "probation",
+              "trial period",
+              "förordna",
+              "fixed_term",
+              "fixed term",
+              "graduate program",
+              "korttidskontrakt",
+              "objektsanställ",
+              "provisori",
+              "tidsbestämd",
+              "doktorand",
+              "substitute",
+              "förårskontrakt",
+              "tidsbunden",
+              "korttidsanställ",
+              "projektanställ",
+              "provanställ",
+              "casual",
+              "timanställ",
+              "behovsanställ",
+              "studentjobb",
+              "student job",
+              "student jobb",
+              "student assistant",
+              "studentassistent",
+              "student worker",
+              "studiassistans",
+              "amanuens",
+              "tidsbegränsat"
+            ],
+            [
+              "deltid",
+              "part-time",
+              "part time",
+              "parttime",
+              "halvtid",
+              "half-time",
+              "half time",
+              "partiell"
+            ]
+          ],
+          "none_of": [
+            "tidigare",
+            "avveckl",
+            "avslutad",
+            "avslutat",
+            "former",
+            "previous",
+            "before retirement",
+            "pre-retirement",
+            "f.d.",
+            {
+              "token": "f d",
+              "mode": "word"
+            },
+            "före detta",
+            "fram till pension",
+            "innan pension",
+            "(past)",
+            "now ended",
+            "nedlag",
+            "no longer",
+            "ej längre",
+            "inte längre",
+            "0 timmar",
+            "0 timme",
+            "0 tim/",
+            "0 h/v",
+            "0 h per",
+            "0 hours",
+            "0 h)",
+            "0 h,",
+            "0 tim)",
+            "0h",
+            "0 weekly",
+            "no weekly",
+            "no working hours",
+            "0 veckotimmar",
+            "0 arbetstimmar",
+            "inga timmar",
+            "frivillig",
+            {
+              "token": "volontär",
+              "mode": "substring"
+            },
+            "volunteer",
+            "ideell",
+            "oavlönad",
+            "obetald",
+            "unpaid",
+            "utan lön",
+            {
+              "token": "jobb",
+              "mode": "substring"
+            },
+            {
+              "token": "job",
+              "mode": "substring"
+            },
+            {
+              "token": "assistant",
+              "mode": "substring"
+            },
+            "worker",
+            {
+              "token": "intern",
+              "mode": "substring"
+            },
+            "self-employed",
+            "self-employ",
+            "self employ",
+            "egenföretagare",
+            "enskild firma",
+            "egenanställd",
+            "aktiebolag",
+            "freelance",
+            "freelan",
+            {
+              "token": "frilans",
+              "mode": "substring"
+            },
+            "konsultanställning",
+            "konsultverksamhet",
+            "eget bolag",
+            "egna bolaget",
+            "självständig",
+            "egen firma",
+            "sole_trader",
+            "sole trader",
+            "f-skatt",
+            "eget företag",
+            "egen företagare",
+            "konsultavtal via ab",
+            "näringsidkare",
+            "självföretagare",
+            "egenföretakare",
+            "egen företag",
+            "näringsverksamhet",
+            "konsultanställ"
+          ]
+        }
       ]
     },
     "Temporary Short Part-time": {
       "all_of": [
         [
-          "temporary",
-          "visstid",
-          "vikariat",
-          "vikarie",
+          {
+            "token": "temporary",
+            "mode": "substring"
+          },
+          {
+            "token": "visstid",
+            "mode": "substring"
+          },
+          {
+            "token": "vikariat",
+            "mode": "substring"
+          },
+          {
+            "token": "vikarie",
+            "mode": "substring"
+          },
           "projektanställ",
           "provanställ",
           "timanställ",
           "tidsbegränsad",
           "studentjobb",
           "student job",
-          "student jobb"
+          "student jobb",
+          "project-based",
+          "project employment",
+          "projektuppdrag",
+          "probation",
+          "trial period",
+          "casual",
+          "förordna",
+          "fixed_term",
+          "fixed term",
+          "fixed-term",
+          "graduate program",
+          "korttidskontrakt",
+          "objektsanställ",
+          "provisori",
+          "tidsbestämd",
+          "doktorand",
+          "substitute",
+          "förårskontrakt",
+          "tidsbunden",
+          "tillfällig",
+          "korttidsanställ"
         ],
         [
-          "1-19",
           "few hours",
           "marginal",
-          "kort deltid",
-          "timmar i veckan"
+          "kort deltid"
         ]
+      ],
+      "none_of": [
+        "0 timmar",
+        "0 timme",
+        "0 tim/",
+        "0 h/v",
+        "0 h per",
+        "0 hours",
+        "0 h)",
+        "0 h,",
+        "0 tim)",
+        "former",
+        "previous",
+        "före detta",
+        "f.d.",
+        "tidigareanställ",
+        "tidigare anställ",
+        "tidigare ansatt",
+        "tidigare fast",
+        "tidigare tillsvid",
+        "tidigare permanent",
+        "tidigare heltid",
+        "tidigare deltid",
+        "tidigare allmän",
+        "tidigare visstid",
+        "tidigare tidsbegränsad",
+        "tidigare projekt",
+        "tidigare säsong",
+        "tidigare jour",
+        "tidigare egen",
+        "(past)",
+        "now ended",
+        "nu avslutad",
+        "nu avslutat",
+        ", avslutad",
+        ", avslutat",
+        "(avslutad",
+        "(avslutat",
+        "avslutad anställning",
+        "avveckl",
+        "nedlag",
+        "before retirement",
+        "pre-retirement",
+        "fram till pension",
+        "innan pension"
+      ],
+      "equals": [
+        "Gästlektorsbefattning, 10 h/vecka",
+        "Timlön, 12 timmar/vecka",
+        "Timlönt arbete, ej bindande, 10 h/vecka"
       ]
     },
     "Self-Employed Full-time": {
@@ -419,15 +2156,30 @@
           "egenföretagare",
           "egen företag",
           "enskild firma",
-          "frilans",
+          {
+            "token": "frilans",
+            "mode": "substring"
+          },
           "freelan",
           "näringsverksamhet",
-          "aktiebolag"
+          "aktiebolag",
+          "eget bolag",
+          "egna bolaget",
+          "självständig",
+          "egen firma",
+          "sole_trader",
+          "sole trader",
+          "f-skatt",
+          "eget företag",
+          "egen företagare",
+          "konsultavtal via ab",
+          "näringsidkare",
+          "självföretagare",
+          "egenföretakare"
         ],
         [
           "full",
-          "heltid",
-          "100%"
+          "heltid"
         ]
       ],
       "equals": [
@@ -436,7 +2188,15 @@
         "enskild firma",
         "frilansare",
         "företagare",
-        "self-employed/freelance"
+        "self-employed/freelance",
+        "Independent contractor",
+        "Entrepreneur",
+        "Företagare (enhet)",
+        "Företagsägare, flexibel arbetstid, ingen fast timantal",
+        "Limited Company Owner",
+        "Selfständig",
+        "Selvställig",
+        "Sole proprietor"
       ],
       "contains": [
         "self-employed",
@@ -448,8 +2208,213 @@
         "aktiebolag",
         "freelance",
         "freelan",
-        "frilans",
-        "konsultanställning"
+        {
+          "token": "frilans",
+          "mode": "substring"
+        },
+        "konsultanställning",
+        "konsultverksamhet",
+        "eget bolag",
+        "egna bolaget",
+        "självständig",
+        "egen firma",
+        "sole_trader",
+        "sole trader",
+        "f-skatt",
+        "eget företag",
+        "egen företagare",
+        "konsultavtal via ab",
+        "näringsidkare",
+        "självföretagare",
+        "egenföretakare"
+      ],
+      "none_of": [
+        "0 timmar",
+        "0 timme",
+        "0 tim/",
+        "0 h/v",
+        "0 h per",
+        "0 hours",
+        "0 h)",
+        "0 h,",
+        "0 tim)",
+        "former",
+        "previous",
+        "före detta",
+        "f.d.",
+        "tidigareanställ",
+        "tidigare anställ",
+        "tidigare ansatt",
+        "tidigare fast",
+        "tidigare tillsvid",
+        "tidigare permanent",
+        "tidigare heltid",
+        "tidigare deltid",
+        "tidigare allmän",
+        "tidigare visstid",
+        "tidigare tidsbegränsad",
+        "tidigare projekt",
+        "tidigare säsong",
+        "tidigare jour",
+        "tidigare egen",
+        "(past)",
+        "now ended",
+        "nu avslutad",
+        "nu avslutat",
+        ", avslutad",
+        ", avslutat",
+        "(avslutad",
+        "(avslutat",
+        "avslutad anställning",
+        "avveckl",
+        "nedlag",
+        "before retirement",
+        "pre-retirement",
+        "fram till pension",
+        "innan pension"
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              {
+                "token": "student",
+                "mode": "substring"
+              },
+              {
+                "token": "studer",
+                "mode": "substring"
+              },
+              {
+                "token": "studie",
+                "mode": "substring"
+              },
+              {
+                "token": "pension",
+                "mode": "substring"
+              },
+              {
+                "token": "pensionär",
+                "mode": "substring"
+              },
+              {
+                "token": "pensioner",
+                "mode": "substring"
+              },
+              "retired",
+              "pensio"
+            ],
+            [
+              "self-employed",
+              "self-employ",
+              "self employ",
+              "egenföretagare",
+              "enskild firma",
+              "egenanställd",
+              "aktiebolag",
+              "freelance",
+              "freelan",
+              {
+                "token": "frilans",
+                "mode": "substring"
+              },
+              "konsultanställning",
+              "konsultverksamhet",
+              "eget bolag",
+              "egna bolaget",
+              "självständig",
+              "egen firma",
+              "sole_trader",
+              "sole trader",
+              "f-skatt",
+              "eget företag",
+              "egen företagare",
+              "konsultavtal via ab",
+              "näringsidkare",
+              "självföretagare",
+              "egenföretakare",
+              "egen företag",
+              "näringsverksamhet",
+              "konsultanställ"
+            ]
+          ],
+          "none_of": [
+            "tidigare",
+            "avveckl",
+            "avslutad",
+            "avslutat",
+            "former",
+            "previous",
+            "before retirement",
+            "pre-retirement",
+            "f.d.",
+            {
+              "token": "f d",
+              "mode": "word"
+            },
+            "före detta",
+            "fram till pension",
+            "innan pension",
+            "(past)",
+            "now ended",
+            "nedlag",
+            "no longer",
+            "ej längre",
+            "inte längre",
+            "0 timmar",
+            "0 timme",
+            "0 tim/",
+            "0 h/v",
+            "0 h per",
+            "0 hours",
+            "0 h)",
+            "0 h,",
+            "0 tim)",
+            "0h",
+            "0 weekly",
+            "no weekly",
+            "no working hours",
+            "0 veckotimmar",
+            "0 arbetstimmar",
+            "inga timmar",
+            "frivillig",
+            {
+              "token": "volontär",
+              "mode": "substring"
+            },
+            "volunteer",
+            "ideell",
+            "oavlönad",
+            "obetald",
+            "unpaid",
+            "utan lön",
+            {
+              "token": "jobb",
+              "mode": "substring"
+            },
+            {
+              "token": "job",
+              "mode": "substring"
+            },
+            {
+              "token": "assistant",
+              "mode": "substring"
+            },
+            "worker",
+            {
+              "token": "intern",
+              "mode": "substring"
+            },
+            "deltid",
+            "part-time",
+            "part time",
+            "parttime",
+            "halvtid",
+            "half-time",
+            "half time",
+            "partiell"
+          ]
+        }
       ]
     },
     "Self-Employed Part-time": {
@@ -460,17 +2425,224 @@
           "egenföretagare",
           "egen företag",
           "enskild firma",
-          "frilans",
+          {
+            "token": "frilans",
+            "mode": "substring"
+          },
           "freelan",
           "näringsverksamhet",
-          "aktiebolag"
+          "aktiebolag",
+          "eget bolag",
+          "egna bolaget",
+          "självständig",
+          "egen firma",
+          "sole_trader",
+          "sole trader",
+          "f-skatt",
+          "eget företag",
+          "egen företagare",
+          "konsultavtal via ab",
+          "näringsidkare",
+          "självföretagare",
+          "egenföretakare"
         ],
         [
           "part",
-          "deltid",
-          "50%",
-          "75%"
+          "deltid"
         ]
+      ],
+      "none_of": [
+        "0 timmar",
+        "0 timme",
+        "0 tim/",
+        "0 h/v",
+        "0 h per",
+        "0 hours",
+        "0 h)",
+        "0 h,",
+        "0 tim)",
+        "former",
+        "previous",
+        "före detta",
+        "f.d.",
+        "tidigareanställ",
+        "tidigare anställ",
+        "tidigare ansatt",
+        "tidigare fast",
+        "tidigare tillsvid",
+        "tidigare permanent",
+        "tidigare heltid",
+        "tidigare deltid",
+        "tidigare allmän",
+        "tidigare visstid",
+        "tidigare tidsbegränsad",
+        "tidigare projekt",
+        "tidigare säsong",
+        "tidigare jour",
+        "tidigare egen",
+        "(past)",
+        "now ended",
+        "nu avslutad",
+        "nu avslutat",
+        ", avslutad",
+        ", avslutat",
+        "(avslutad",
+        "(avslutat",
+        "avslutad anställning",
+        "avveckl",
+        "nedlag",
+        "before retirement",
+        "pre-retirement",
+        "fram till pension",
+        "innan pension"
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              {
+                "token": "student",
+                "mode": "substring"
+              },
+              {
+                "token": "studer",
+                "mode": "substring"
+              },
+              {
+                "token": "studie",
+                "mode": "substring"
+              },
+              {
+                "token": "pension",
+                "mode": "substring"
+              },
+              {
+                "token": "pensionär",
+                "mode": "substring"
+              },
+              {
+                "token": "pensioner",
+                "mode": "substring"
+              },
+              "retired",
+              "pensio"
+            ],
+            [
+              "self-employed",
+              "self-employ",
+              "self employ",
+              "egenföretagare",
+              "enskild firma",
+              "egenanställd",
+              "aktiebolag",
+              "freelance",
+              "freelan",
+              {
+                "token": "frilans",
+                "mode": "substring"
+              },
+              "konsultanställning",
+              "konsultverksamhet",
+              "eget bolag",
+              "egna bolaget",
+              "självständig",
+              "egen firma",
+              "sole_trader",
+              "sole trader",
+              "f-skatt",
+              "eget företag",
+              "egen företagare",
+              "konsultavtal via ab",
+              "näringsidkare",
+              "självföretagare",
+              "egenföretakare",
+              "egen företag",
+              "näringsverksamhet",
+              "konsultanställ"
+            ],
+            [
+              "deltid",
+              "part-time",
+              "part time",
+              "parttime",
+              "halvtid",
+              "half-time",
+              "half time",
+              "partiell"
+            ]
+          ],
+          "none_of": [
+            "tidigare",
+            "avveckl",
+            "avslutad",
+            "avslutat",
+            "former",
+            "previous",
+            "before retirement",
+            "pre-retirement",
+            "f.d.",
+            {
+              "token": "f d",
+              "mode": "word"
+            },
+            "före detta",
+            "fram till pension",
+            "innan pension",
+            "(past)",
+            "now ended",
+            "nedlag",
+            "no longer",
+            "ej längre",
+            "inte längre",
+            "0 timmar",
+            "0 timme",
+            "0 tim/",
+            "0 h/v",
+            "0 h per",
+            "0 hours",
+            "0 h)",
+            "0 h,",
+            "0 tim)",
+            "0h",
+            "0 weekly",
+            "no weekly",
+            "no working hours",
+            "0 veckotimmar",
+            "0 arbetstimmar",
+            "inga timmar",
+            "frivillig",
+            {
+              "token": "volontär",
+              "mode": "substring"
+            },
+            "volunteer",
+            "ideell",
+            "oavlönad",
+            "obetald",
+            "unpaid",
+            "utan lön",
+            {
+              "token": "jobb",
+              "mode": "substring"
+            },
+            {
+              "token": "job",
+              "mode": "substring"
+            },
+            {
+              "token": "assistant",
+              "mode": "substring"
+            },
+            "worker",
+            {
+              "token": "intern",
+              "mode": "substring"
+            }
+          ]
+        }
+      ],
+      "equals": [
+        "Konsultuppdrag, Betald per faktura, Flexibelt antal timmar, 20–30 h/vecka"
       ]
     },
     "Self-Employed Short Part-time": {
@@ -481,27 +2653,166 @@
           "egenföretagare",
           "egen företag",
           "enskild firma",
-          "frilans",
+          {
+            "token": "frilans",
+            "mode": "substring"
+          },
           "freelan",
           "näringsverksamhet",
-          "aktiebolag"
+          "aktiebolag",
+          "eget bolag",
+          "egna bolaget",
+          "självständig",
+          "egen firma",
+          "sole_trader",
+          "sole trader",
+          "f-skatt",
+          "eget företag",
+          "egen företagare",
+          "konsultavtal via ab",
+          "näringsidkare",
+          "självföretagare",
+          "egenföretakare"
         ],
         [
-          "1-19",
           "few hours",
           "marginal",
-          "kort deltid",
-          "timmar i veckan"
+          "kort deltid"
         ]
+      ],
+      "none_of": [
+        "0 timmar",
+        "0 timme",
+        "0 tim/",
+        "0 h/v",
+        "0 h per",
+        "0 hours",
+        "0 h)",
+        "0 h,",
+        "0 tim)",
+        "former",
+        "previous",
+        "före detta",
+        "f.d.",
+        "tidigareanställ",
+        "tidigare anställ",
+        "tidigare ansatt",
+        "tidigare fast",
+        "tidigare tillsvid",
+        "tidigare permanent",
+        "tidigare heltid",
+        "tidigare deltid",
+        "tidigare allmän",
+        "tidigare visstid",
+        "tidigare tidsbegränsad",
+        "tidigare projekt",
+        "tidigare säsong",
+        "tidigare jour",
+        "tidigare egen",
+        "(past)",
+        "now ended",
+        "nu avslutad",
+        "nu avslutat",
+        ", avslutad",
+        ", avslutat",
+        "(avslutad",
+        "(avslutat",
+        "avslutad anställning",
+        "avveckl",
+        "nedlag",
+        "before retirement",
+        "pre-retirement",
+        "fram till pension",
+        "innan pension"
       ]
     },
     "Not Applicable": {
       "none_of": [
-        "jobb",
-        "job",
-        "assistant",
+        {
+          "token": "jobb",
+          "mode": "substring"
+        },
+        {
+          "token": "job",
+          "mode": "substring"
+        },
+        {
+          "token": "assistant",
+          "mode": "substring"
+        },
         "worker",
-        "intern"
+        {
+          "token": "intern",
+          "mode": "substring"
+        }
+      ],
+      "all_of": [
+        [
+          "former",
+          "previous",
+          "före detta",
+          "f.d.",
+          "tidigareanställ",
+          "tidigare anställ",
+          "tidigare ansatt",
+          "tidigare fast",
+          "tidigare tillsvid",
+          "tidigare permanent",
+          "tidigare heltid",
+          "tidigare deltid",
+          "tidigare allmän",
+          "tidigare visstid",
+          "tidigare tidsbegränsad",
+          "tidigare projekt",
+          "tidigare säsong",
+          "tidigare jour",
+          "tidigare egen",
+          "(past)",
+          "now ended",
+          "nu avslutad",
+          "nu avslutat",
+          ", avslutad",
+          ", avslutat",
+          "(avslutad",
+          "(avslutat",
+          "avslutad anställning",
+          "avveckl",
+          "nedlag",
+          "before retirement",
+          "pre-retirement",
+          "fram till pension",
+          "innan pension"
+        ],
+        [
+          "anställ",
+          "ansatt",
+          "employ",
+          "self",
+          "permanent",
+          "tillsvid",
+          "fast",
+          "full",
+          "part",
+          "heltid",
+          "deltid",
+          "visstid",
+          "tidsbegränsad",
+          "projekt",
+          "säsong",
+          "seasonal",
+          "hourly",
+          "jour",
+          "egen",
+          "företag",
+          "firma",
+          {
+            "token": "contract",
+            "mode": "word"
+          },
+          "kontrakt",
+          "avtal",
+          "tjänst"
+        ]
       ],
       "equals": [
         "not applicable",
@@ -531,26 +2842,159 @@
         "voluntary work",
         "unemployed",
         "Study grant recipient",
-        "Inte i arbete"
+        "Inte i arbete",
+        "Inaktiv",
+        "Retiree",
+        "Volunteer (unpaid)",
+        "Aktivt sökande arbete",
+        "Arbetsmarknadsutbildning (AMU)",
+        "Arbetssökande (gäst)",
+        "Arbetssökande (utan bestämd anställning)",
+        "Arbetssökande inom Arbetsförmedlingen, ingen tjänst på gång",
+        "Arbetssökande som väntar på arbetsmarknadens återhämtning",
+        "Arbetssökande via Arbetsförmedlingen",
+        "Arbetssökande, ej inkompetent för arbetsmarknaden",
+        "contractor (past)",
+        "Early Retirement",
+        "Early retirement scheme",
+        "Ej i arbete",
+        "Ej i arbete (Aktivitetsstöd)",
+        "Ej i arbetsstyrkan",
+        "Engagemang i familjens verksamhet, oavlönat, flexibelt",
+        "Ensamstående arbetssökande",
+        "Full retirement",
+        "Förtroendeuppdrag i förening, utan lön, löpande",
+        "Föräldraledighet, ej arbetsaktiv",
+        "Hemhjälp (uppdragsvis, ej lönebaserat)",
+        "Hemmafru/Man",
+        "inactive",
+        "Inaktiv arbetsmarknad (0h/vecka)",
+        "Inaktiv på arbetsmarknaden",
+        "Informal unpaid work",
+        "Inga löpande arbetstimmar",
+        "Passivt engagemang i en bostadsrättsförening (utan lön, men formellt uppdrag)",
+        "Studying",
+        "Ta huvudsakligen hand om familj",
+        "Tidigare arvoderad uppdragstagare (hemsamarit på arvode)",
+        "Tidigare oavlönat arbete i hemmet som hemmafru",
+        "Tidigareanställd",
+        "Tjänstledig för omvårdnad (0 veckotimmar)",
+        "Voluntary/unpaid",
+        "volunteer",
+        "volunteer, 1-5 hours per week, ongoing",
+        "volunteer, flexible hours, variable"
       ],
       "contains": [
         "ej tillämpligt",
         "ej relevant",
-        "volontär",
+        {
+          "token": "volontär",
+          "mode": "substring"
+        },
         "arbetsträning",
-        "student",
-        "studer",
-        "studie",
-        "pension",
-        "pensionär",
-        "pensioner",
+        {
+          "token": "student",
+          "mode": "substring"
+        },
+        {
+          "token": "studer",
+          "mode": "substring"
+        },
+        {
+          "token": "studie",
+          "mode": "substring"
+        },
+        {
+          "token": "pension",
+          "mode": "substring"
+        },
+        {
+          "token": "pensionär",
+          "mode": "substring"
+        },
+        {
+          "token": "pensioner",
+          "mode": "substring"
+        },
         "arbetslös",
         "unemploy",
         "retired",
         "frivilligarbete",
         "ej anställd",
         "no employment contract",
-        "no current employment contract"
+        "no current employment contract",
+        "0 timmar",
+        "0 timme",
+        "0 tim/",
+        "0 h/v",
+        "0 h per",
+        "0 hours",
+        "0 h)",
+        "0 h,",
+        "0 tim)",
+        "ingen anställning",
+        "saknar anställning",
+        "inte anställd",
+        "not employed",
+        "not_employed",
+        "no current employment",
+        "no employment",
+        "ingen aktiv anställning",
+        "utan anställning",
+        "ingen betald",
+        "ej i arbetskraften",
+        "ej i arbetslivet",
+        "ingen fast anställning",
+        "ej fast anställd",
+        "unpaid volunteer",
+        "oavlönad",
+        "ingen aktuell anställning",
+        "not applicable",
+        "pensio",
+        "frivillig",
+        "skola",
+        "arbetstid ej tillämpad",
+        "ej tillämpl",
+        "no job"
+      ],
+      "all_of_rules": [
+        {
+          "all_of": [
+            [
+              "föräldraledig",
+              {
+                "token": "föräldraledighet",
+                "mode": "substring"
+              },
+              "parental leave",
+              "maternity leave",
+              "paternity leave",
+              "mammaledig",
+              "pappaledig"
+            ],
+            [
+              "utan lön",
+              "unpaid",
+              "obetald",
+              "utan anställning",
+              "no job",
+              "without pay"
+            ]
+          ]
+        },
+        {
+          "all_of": [
+            [
+              "arbetslös - jobbsökare",
+              "arbetslös med jobbsök",
+              "arbetssökande (aktiv jobbsökande)",
+              "currently unemployed due to lack of job",
+              "job seeker - no current employment",
+              "job seeker on labor market program",
+              "på arbetsmarknaden och söker jobb aktivt"
+            ]
+          ]
+        }
       ]
     }
   }

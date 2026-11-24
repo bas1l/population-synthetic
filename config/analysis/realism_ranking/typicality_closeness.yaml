@@ -1,0 +1,34 @@
+# Resampling settings of the realism_ranking `typicality_closeness` block -- the single
+# source of truth for them. Read fail-fast at the CLI edge
+# (scripts/analyze/rank_persona_realism.py) and passed to the builder verbatim: every
+# key is required, an unknown key raises, and there is no in-code default.
+#
+# The block publishes one closeness-to-the-reference value per synthetic combination
+# (TV similarity primary; Cliff's delta and the Cramer distance as sensitivity outcomes)
+# and decomposes it into model + strategy. Every seed below feeds one local
+# numpy.random.default_rng per call, and all of them are stamped into the ranking's
+# provenance (`closeness_resampling`).
+
+# Central mass of every interval in the block (percentile intervals).
+ci_level: 0.95
+
+# Joint individual-level bootstrap: each replicate resamples the individuals of every
+# combination within itself and the reference's individuals once. Every interval in the
+# block (per-combination outcomes, decomposition shares / effect sizes, Kendall's W) is
+# taken over these same replicates.
+bootstrap_iterations: 5000
+bootstrap_seed: 20260921
+
+# Within-block permutation test of each factor's type II F (values permuted within the
+# levels of the other factor). p = (1 + #{F* >= F}) / (iterations + 1), so the smallest
+# attainable p is 1 / (iterations + 1).
+permutation_iterations: 10000
+permutation_seed: 20260928
+
+# Sampling-noise baseline: n individuals drawn from the reference against an independent
+# redraw of the reference at its own size, per distinct combination size n. Reported as
+# the mean and the bound at `noise_quantile` (for TV similarity the lower
+# 1 - noise_quantile quantile, since noise alone pulls similarity down from 1).
+noise_iterations: 20000
+noise_seed: 20261020
+noise_quantile: 0.95

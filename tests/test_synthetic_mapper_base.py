@@ -22,7 +22,7 @@ import pytest
 from population_synthetic.analysis.mapping.synthetic_mapper import get_synthetic_mapper
 from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
 
-from ._mapping_fixtures import new_shape_mappings
+from ._mapping_fixtures import new_shape_mappings, with_matching
 
 
 def _synth_mapper() -> BaseSyntheticMapper:
@@ -131,14 +131,78 @@ def test_misses_accumulate_across_personas_and_skip_refine_duplicates():
     assert len(attrs) == len(set(attrs))
 
 
+# --- tie log (the {slug}.ties.csv sidecar) -----------------------------------
+
+def test_ties_record_candidates_winner_and_criterion():
+    mappings = with_matching(
+        new_shape_mappings(),
+        synthetic={"token_mode": "substring", "negation": None, "tie_break": ["longest", "priority"]},
+    )
+    mapper = BaseSyntheticMapper(mappings)
+    # Both Secondary ("secondary") and Tertiary ("tertiary") hit in the contains tier;
+    # "secondary" is longer, so ``longest`` decides against the declared order.
+    out = mapper.map_individual({"age": 30, "education_level": "post-secondary or tertiary"}, "persona_7")
+    assert out["education_level"] == "Secondary"
+    ties = [t for t in mapper.ties if t["attribute"] == "education_level"]
+    assert len(ties) == 1
+    tie = ties[0]
+    assert tie["persona_id"] == "persona_7"
+    assert tie["raw_value"] == "post-secondary or tertiary"
+    assert tie["tier"] == "contains"
+    assert tie["winner"] == "Secondary"
+    assert tie["criterion"] == "longest"
+    assert "Secondary:9:secondary" in tie["candidates"]
+    assert "Tertiary:8:tertiary" in tie["candidates"]
+
+
+def test_single_hit_is_not_a_tie():
+    mapper = _synth_mapper()
+    mapper.map_individual({"age": 30, "education_level": "university"}, "p")
+    assert mapper.ties == []
+
+
+def test_ambiguous_numeric_facet_is_logged_as_tie_row():
+    mappings = new_shape_mappings()
+    et = mappings["employment_type"]
+    et["synthetic"]["numeric_facet"] = {
+        "extract": [{"pattern": r"(\d+)(?:\s*-\s*(\d+))?\s*(?:h\b|timmar\b)", "scale": 1.0}],
+        "ambiguous_if_preceded_by": ["över"],
+        "bands": [{"name": "part", "gte": 1, "lt": 35}, {"name": "full", "gte": 35}],
+        "remap": {
+            "Permanent Full-time": {"part": "Permanent Part-time", "full": "Permanent Full-time"},
+            "Permanent Part-time": {"part": "Permanent Part-time", "full": "Permanent Full-time"},
+        },
+    }
+    mapper = BaseSyntheticMapper(mappings)
+    out = mapper.map_individual({"age": 30, "employment_type": "fast heltid, 20 h"}, "p1")
+    assert out["employment_type"] == "Permanent Part-time"           # re-banded from stated hours
+    assert mapper.ties == []
+    out = mapper.map_individual({"age": 30, "employment_type": "fast heltid, 30-40 timmar"}, "p2")
+    assert out["employment_type"] == "__UNMAPPED__"                  # straddle: band undetermined
+    (row,) = mapper.ties
+    assert (row["persona_id"], row["criterion"], row["tier"]) == ("p2", "facet_ambiguous", "numeric_facet")
+    assert row["candidates"] == "full | part"
+    assert row["winner"] == "__UNMAPPED__"
+    assert not [m for m in mapper.misses if m["attribute"] == "employment_type"]  # walk hit: no miss
+
+
+def test_invalid_config_raises_at_construction():
+    mappings = new_shape_mappings()
+    mappings["education"]["synthetic"]["Primary"] = {"contain": ["primary"]}
+    with pytest.raises(ValueError, match="unknown matcher key 'contain'"):
+        BaseSyntheticMapper(mappings)
+
+
 # --- real-config integration: the Sweden Nordic-fold reconciliation ---------
 
-def test_swedish_nordic_born_folds_into_europe_other():
-    # Sweden dropped the "Nordic Country" bucket in Phase 3: a Norway-born persona
-    # now folds into "Europe (Other)" on both sides.
+def test_swedish_norway_born_is_outside_the_eu():
+    # FolkmFodlandHVD splits Sweden / other EU / outside the EU, so a Norway-born
+    # persona is "Born outside the EU" and a Germany-born one "Born in another EU country".
     mapper = get_synthetic_mapper("swedish")
     out = mapper.map_individual(_swedish_identity(birth_country_detail="Norway"), "p")
-    assert out["birth_location"] == "Europe (Other)"
+    assert out["birth_location"] == "Born outside the EU"
+    out = mapper.map_individual(_swedish_identity(birth_country_detail="Germany"), "p")
+    assert out["birth_location"] == "Born in another EU country"
 
 
 def test_swedish_domestic_maps_to_sweden():
@@ -198,3 +262,30 @@ def _swedish_identity(**overrides) -> dict:
     }
     base.update(overrides)
     return base
+
+
+# --- real-config integration: scb_native matching rules (SCB-checked audit) ---
+
+@pytest.mark.parametrize("attr, raw, expected", [
+    # prefix boundary: no left-embedded hit
+    ("education_level", "Eftergymnasial utbildning, 3 år eller längre", "Post-Secondary 3+ yrs (ISCED 5A)"),
+    ("education_level", "Eftergymnasial utbildning, kortare än 3 år", "Post-Secondary < 3 yrs (ISCED 4+5B)"),
+    ("education_level", "Masterexamen (2-årig på högskola)", "Post-Secondary 3+ yrs (ISCED 5A)"),
+    ("biological_sex", "Female (kvinna)", "Female"),
+    # substring overrides for compound heads
+    ("income_source", "Månadslön", "Wage / Business"),
+    ("employment_status", "Heltidsanställd", "Employed"),
+    # longest beats axis order; it-konsult
+    ("industry_sector", "IT-konsulting", "Information & Communication"),
+    # negation: a cue before the token discards it (Married); a cue-initial token still hits
+    ("civil_status", "Inte gift", "Single/Never Married"),
+    ("civil_status", "Never married", "Single/Never Married"),
+    # hours facet: stated hours re-band the attachment (AKU 1-19 / 20-34 / 35+)
+    ("employment_type", "Tillsvidareanställning, 15 timmar/vecka", "Permanent Short Part-time"),
+    ("employment_type", "Tillsvidareanställning, 30 timmar/vecka", "Permanent Part-time"),
+    ("employment_type", "Tillsvidareanställning, 40 timmar/vecka", "Permanent Full-time"),
+])
+def test_swedish_scb_native_matching_rules(attr, raw, expected):
+    mapper = get_synthetic_mapper("swedish")
+    out = mapper.map_individual(_swedish_identity(**{attr: raw}), "p")
+    assert out[attr] == expected

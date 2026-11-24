@@ -255,7 +255,7 @@ def test_the_csv_carries_one_row_per_joined_combination(workspace) -> None:
     out_dir = _run(workspace, "--no-charts")
     rows = read_cost_csv(out_dir / f"{COUNTRY}_cost_efficiency.csv")
     assert len(rows) == len(_MIXED)
-    assert {row.cost_basis for row in rows} == {"generated_pool_01_raw"}
+    assert {row.cost_basis for row in rows} == {"finished_pool_01_raw"}
     assert any(row.unmetered for row in rows)
     assert any(not row.unmetered for row in rows)
 

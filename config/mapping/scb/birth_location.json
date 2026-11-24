@@ -4,6 +4,11 @@
     "Europe (Other)",
     "Outside Europe"
   ],
+  "priority": [
+    "Sweden",
+    "Europe (Other)",
+    "Outside Europe"
+  ],
   "real": {
     "Sweden": {
       "equals": [

@@ -4,6 +4,11 @@
     "Tenant-owned apartment (bostadsrätt)",
     "Rental apartment"
   ],
+  "priority": [
+    "Owner-occupied (villa/house)",
+    "Tenant-owned apartment (bostadsrätt)",
+    "Rental apartment"
+  ],
   "real": {
     "Owner-occupied (villa/house)": {
       "equals": [
@@ -36,7 +41,36 @@
         "ej-äger",
         "icke ägd",
         "inte ägd",
-        "hemförsäkring"
+        "hemförsäkring",
+        "bostadsrätt",
+        "bostadsratt",
+        "bostadsrått",
+        "tenant-own",
+        "tenant own",
+        "tenancy-own",
+        "cooperative",
+        "co-op",
+        "condominium",
+        "condo",
+        "apartment",
+        "appartement",
+        "lägenhet",
+        "flat",
+        "hyresrätt",
+        "hyres",
+        "rental",
+        "rented",
+        "renting",
+        "hyr ",
+        "hyrd",
+        "ägarlägenhet",
+        "våningsägar",
+        "flerfamilj",
+        "fastighetsägare",
+        "eigentumswohnung",
+        "penthouse",
+        "bostadsbolag",
+        "lån på lägenhet"
       ],
       "equals": [
         "Owner-occupied (villa/house)",
@@ -84,18 +118,49 @@
         "Friliggande hus",
         "Eget bostad",
         "Egenbostad",
-        "Hus i ägo"
+        "Hus i ägo",
+        "Mortgaging",
+        "Egenbostad med lån",
+        "eget bostad med lån",
+        "Enfamiljsvilla",
+        "Fastighetsägande",
+        "Köpt",
+        "Mortgagad",
+        "Mortgagd ägande bostadsform",
+        "Own outright",
+        "Parhus (friliggande)",
+        "Privat ägande",
+        "Property inherited from grandparents",
+        "Purchased property",
+        "Single-family home",
+        "Single-family home in urban area (enkelsparka i staden)",
+        "Townhouse",
+        "Ägad bostad",
+        "Ägande (fast)}",
+        "Ägande bostad (krediterad)"
       ],
       "contains": [
         "villa",
         "radhus",
         "friköpt",
-        "äganderätt",
-        "owner",
+        {
+          "token": "äganderätt",
+          "mode": "substring"
+        },
+        {
+          "token": "owner",
+          "mode": "substring"
+        },
         "house",
         "detached",
-        "egendom",
-        "eget h",
+        {
+          "token": "egendom",
+          "mode": "substring"
+        },
+        {
+          "token": "eget h",
+          "mode": "substring"
+        },
         "egen bostad",
         "egna bostad",
         "egen hemma",
@@ -105,14 +170,38 @@
         "owned",
         "mortgage",
         "freehold",
-        "äger",
-        "ägd",
-        "ägt",
+        {
+          "token": "äger",
+          "mode": "substring"
+        },
+        {
+          "token": "ägd",
+          "mode": "substring"
+        },
+        {
+          "token": "ägt",
+          "mode": "substring"
+        },
         "ägar",
         "owns",
-        "eigen",
+        {
+          "token": "eigen",
+          "mode": "substring"
+        },
         "eigendom",
-        "eigenbolig"
+        "eigenbolig",
+        "tomträtt",
+        "hypotek",
+        "hus med lån",
+        "huset ägande",
+        "ejendom med mark",
+        "hus i ägo",
+        "egenhem",
+        "eget bostadshus",
+        "köphus",
+        "småhus i ägo",
+        "fritidshus",
+        "friliggande hus"
       ]
     },
     "Tenant-owned apartment (bostadsrätt)": {
@@ -121,21 +210,104 @@
         "Bostadsrätt",
         "Bostadsrätt (cooperative apartment)",
         "Bostadsrättslägenhet",
-        "Ägarlägenhet",
         "Ägd lägenhet",
         "Owner-occupied apartment",
         "Owned apartment",
-        "ägs lägenhet"
+        "ägs lägenhet",
+        "Koop"
       ],
       "contains": [
-        "bostadsrätt",
+        {
+          "token": "bostadsrätt",
+          "mode": "substring"
+        },
         "bostadsratt",
         "cooperative",
         "co-op",
         "tenant-owned",
         "condominium",
-        "bostadsbolag",
-        "bostadsförening"
+        "bostadsförening",
+        "tenant-owner",
+        "tenant-ownership",
+        "hsb",
+        "housing association",
+        "housing_association_member",
+        "bostadscoop",
+        "bostadsco",
+        "bostadsright",
+        "tenant_owner",
+        "eigentumswohnung",
+        "tenancy-owned",
+        "andelslägenhet",
+        "kondominium",
+        "คอนโด",
+        "cooperative ownership",
+        "cooperative housing",
+        "housing cooperative",
+        "co-op (bostadsbolag)"
+      ],
+      "all_of": [
+        [
+          "own",
+          "äger",
+          "ägd",
+          "ägt",
+          "ägande av",
+          "äga ",
+          "egen",
+          "eget",
+          "eigen",
+          "egendom",
+          "mortgage",
+          "bolån",
+          "köpt",
+          "purchased",
+          "förvärva",
+          "i ägande"
+        ],
+        [
+          "apartment",
+          "appartement",
+          "lägenhet",
+          "flat",
+          "condo",
+          "kondominium",
+          "penthouse"
+        ]
+      ],
+      "none_of": [
+        "kooperativ hyresrätt",
+        "cooperative rental",
+        "public housing cooperative",
+        "housing cooperative rental",
+        "fastighetsägd",
+        "kommunal hyresrätt",
+        "ej äg",
+        "ej-äg",
+        "icke äg",
+        "inte äg",
+        "not owned",
+        "hyresrätt (egen",
+        "hyrad hyresrätt",
+        "municipality-owned",
+        "municipal housing",
+        "municipal rental",
+        "municipally",
+        "äldreboende",
+        "ägarlägenhet (fri",
+        "ägd ägarlägenhet",
+        "hus eller lägenhet",
+        "hus/lägenhet",
+        "hus/ lägenhet",
+        "hus/egen lägenhet",
+        "house or apartment",
+        "apartment or house",
+        "house or flat",
+        "apartment/house",
+        "house/apartment",
+        "flat/house",
+        "villa or lägenhet",
+        "apartment (villa/radhus)"
       ]
     },
     "Rental apartment": {
@@ -187,7 +359,39 @@
         "Subsidized housing",
         "Delat boende",
         "Hyrorätt",
-        "studerboende"
+        "studerboende",
+        "Sublet apartment",
+        "Subventionerad bostad",
+        "Akademikerbostad",
+        "Andrahandslägenhet med korttidskontrakt",
+        "Boende i kommunal regi",
+        "Delad lägenhet",
+        "ett hyrrum i större hus",
+        "Hyrs bostad på landet",
+        "Hyrt rum",
+        "Hyrt torp eller litet hus på landsbygden",
+        "Innboende",
+        "kollektiv",
+        "Kollektiv (delad lägenhet)",
+        "Kollektivboende (delat boende)",
+        "Kollektivbostad",
+        "Kollektivhus",
+        "Kommunboende",
+        "KTH-hus (university-provided housing)",
+        "Lägenhetsdelning",
+        "privathus (hyrigt)",
+        "Rum i kollektiv",
+        "Shared flat with friends or partner",
+        "Shared flatshare",
+        "Socialt boende",
+        "Socialtjänsts bostad",
+        "subventionerat boende",
+        "subventionerat hus",
+        "Tillfälligt boende via socialtjänsten",
+        "Universitetsbostad",
+        "University housing",
+        "Övergångsbostad",
+        "Övergångsbostad anvisad av kommunen"
       ],
       "contains": [
         "rental",
@@ -200,10 +404,22 @@
         "ej-äger",
         "icke ägd",
         "inte ägd",
-        "hyresrätt",
-        "hyres",
-        "hyra",
-        "uthyr",
+        {
+          "token": "hyresrätt",
+          "mode": "substring"
+        },
+        {
+          "token": "hyres",
+          "mode": "substring"
+        },
+        {
+          "token": "hyra",
+          "mode": "substring"
+        },
+        {
+          "token": "uthyr",
+          "mode": "substring"
+        },
         "studentbostad",
         "student",
         "shared apartment",
@@ -215,7 +431,28 @@
         "dormitory",
         "residence hall",
         "social housing",
-        "förstahand"
+        "förstahand",
+        "bostadsbolag",
+        "kommunal bostad",
+        "kommunalbostad",
+        "kommunalt bostad",
+        "kommunala bostad",
+        "kommunalt förmedlad",
+        "allmänn",
+        "public housing",
+        "council",
+        "subsidized",
+        "tenant in",
+        "hyr lägenhet",
+        "hyr en",
+        "hyrorätt",
+        "hyrningsrätt",
+        "bostadsföretag",
+        "försäkringsbolag",
+        "ungdomsbostad",
+        "hyrd",
+        "hyr ",
+        "fastighetsägd"
       ]
     }
   }

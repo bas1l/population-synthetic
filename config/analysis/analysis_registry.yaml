@@ -187,7 +187,7 @@ processes:
     label: "Persona Realism Judge (LLM-as-judge)"
     description: >
       LLM-as-judge scoring of each individual persona's internal coherence: per
-      persona, N judge rounds (cold temperature) return can_exist (binary
+      persona, N independent judge rounds (one fresh claude process per call) return can_exist (binary
       possibility) and typicality (0-10 ordinal) plus severity-tagged
       attribute-clash issues. Aggregates round -> persona -> combination into that
       combination's OWN impossibility rate (bootstrap CI), typicality dispersion,
@@ -202,7 +202,7 @@ processes:
       is reproducible in isolation and independent of processing order. The real
       API-sourced population is enumerated as an ORDINARY competitor with no
       reference role. Cross-combination claims belong to realism_ranking. Judge
-      model, rounds, temperature, sampling size, and bootstrap params are
+      model, rounds, sampling size, and bootstrap params are
       config-driven (config/analysis/persona_realism/); cost per combo reuses
       config/analysis/model_pricing.yaml.
     folder: "persona_realism"
@@ -279,6 +279,30 @@ processes:
       under-powered: it is flagged, hatched on the heatmap, drawn hollow on the method
       figure and counted in the block's excluded map, never dropped and never confused with
       an unjudged pair.
+      The WHOLE typicality distribution beside that statistic: a typicality_distribution
+      block (one round-weighted 0-10 distribution per competitor -- each can_exist survivor
+      spreads weight 1 over its scored rounds, so --rounds 1 gives the first-round
+      histogram -- with the three --typicality-bands shares and the grid's four cell
+      states ok / no_typicality / withdrawn / unjudged, a withdrawn cell read from
+      population_cap/_index.json, never inferred), a typicality_effects block (epsilon^2 of
+      the model and strategy Kruskal-Wallis tests, Cliff's delta with a bootstrap CI beside
+      every Dunn model pair, and every combination and pooled model against the real
+      population: medians, delta + CI, Mann-Whitney U, Holm per family) and a
+      typicality_closeness block (per combination the TV similarity of its distribution to
+      the real population's, with Cliff's delta and the Cramer distance as sensitivity
+      outcomes, each with a joint-bootstrap CI and the reference-vs-itself noise baseline;
+      the additive model + strategy decomposition with its permutation and complete-block
+      tests). Nine CSVs carry them (typicality_distribution, typicality_bands, three
+      typicality_effect_* and four typicality_closeness* tables). The figure
+      typicality_distribution_by_model_strategy draws one mini histogram per model x
+      strategy cell with the real population's distribution as an outline and as its own
+      column, a ternary of the band shares per strategy, on a fixed 456 pt canvas. Its
+      columns follow model_ranking's published order, read from
+      model_ranking/{country}_performance.json -- the only input this process takes from
+      another analysis process, read only when charts are on (a missing file fails the run
+      before anything is written; --no-charts skips the read). The JSON and the CSVs never
+      use that order, so they stay reproducible from the persona_realism outputs and the
+      gate's index alone.
     folder: "realism_ranking"
     script: "scripts/analyze/rank_persona_realism.py"
     dispatch: "slugs"
@@ -289,10 +313,11 @@ processes:
       Publishes the validation gate's per-combination attrition: the five-stage
       funnel (generated -> raw-valid -> mapped-valid -> clean -> selected) read
       back out of population_cap/_index.json and the two validator roll-ups, plus
-      the two rates derived from it -- retention_rate (clean / generated) and
-      generation_multiplier (generated / clean, personas generated per USABLE
+      the two rates derived from it -- retention_rate (clean / raw_valid) and
+      generation_multiplier (raw_valid / clean, finished personas per USABLE
       persona, deliberately not denominated on selected, which is zero for every
-      withdrawn combination). Re-reads what the gate already wrote, performing no
+      withdrawn combination; a persona failing validate_raw is a generation
+      stopped midway and is ignored by both rates). Re-reads what the gate already wrote, performing no
       validation, no capping and no LLM work. Its row grain is EVERY combination
       the gate recorded, INCLUDING the ones the full-N rule withdrew: an excluded
       combination has no capped mirror, no capped mapped file and no
@@ -314,8 +339,9 @@ processes:
       it, per country x model x method, and emits a tidy CSV, a JSON report and an
       accuracy-vs-cost scatter. THE DENOMINATOR IS THE POINT: generation_metadata totals
       its cost over the capped mirror -- the ~100 personas each combination was
-      subsampled down to -- whereas this task totals the same per-call telemetry over the
-      FULL generated pool in 01_Raw, because the discarded personas were paid for. The
+      subsampled down to -- whereas this task totals the same per-call telemetry over
+      every FINISHED persona of the generated pool in 01_Raw (passed validate_raw; a
+      generation stopped midway is excluded), because the discarded personas were paid for. The
       two bases differ by up to 4.8x on the live grid, and the gap is largest exactly
       where retention is worst, so a capped figure flatters the models that wasted the
       most tokens. The basis travels as a CSV column and is printed on the figure. The

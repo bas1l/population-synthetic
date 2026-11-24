@@ -13,6 +13,7 @@ from population_synthetic.generators.real.data import PopulationDistributions
 
 from .constants import (
     AGE_SEX_TABLE,
+    AKU_ATTACHMENT_AGE_LABEL_MAP,
     BIRTH_COUNTRY_DETAIL_TABLE,
     BIRTH_COUNTRY_TOP_CODES,
     CIVIL_STATUS_TABLE,
@@ -21,11 +22,13 @@ from .constants import (
     EMPLOYMENT_ATTACHMENT_TABLE,
     EMPLOYMENT_BY_EDUCATION_TABLE,
     EMPLOYMENT_STATUS_EDU_TABLE,
+    EMPLOYMENT_TYPE_AGE_PROXIES,
     FAMILY_TABLE,
     FOREIGN_BORN_TABLE,
     HOUSEHOLD_SIZE_TABLE,
     HOUSING_TENURE_TABLE,
     INCOME_BRACKET_TABLE,
+    INCOME_SOURCE_COMPONENTS,
     INCOME_SOURCE_TABLE,
     INDUSTRY_SECTOR_TABLE,
     SCB_INCOME_BRACKETS,
@@ -55,6 +58,7 @@ from .parsers import (
     parse_industry_sector,
     parse_parental_structure,
     parse_region,
+    parse_region_by_age_sex,
     parse_socioeconomic,
 )
 
@@ -213,7 +217,13 @@ class FetchService:
         return result, FOREIGN_BORN_TABLE
 
     @staticmethod
-    def fetch_region(client: SCBPxWebClient) -> tuple[dict, str]:
+    def fetch_region(client: SCBPxWebClient) -> tuple[dict, dict, str]:
+        """County marginal and the county distribution within each (age_group, sex) cell.
+
+        One query (county x single age x sex), parsed twice: ``parse_region`` for the
+        national marginal (kept for provenance and the explorer), and
+        ``parse_region_by_age_sex`` for the distribution the sampler draws from.
+        """
         ages = [str(i) for i in range(18, 86)]
         query = {
             "query": [
@@ -227,7 +237,8 @@ class FetchService:
         }
         raw = client.fetch_table(AGE_SEX_TABLE, query)
         result = parse_region(raw)
-        return result, AGE_SEX_TABLE + "#region"
+        by_age_sex = parse_region_by_age_sex(raw, age_group_map={})
+        return result, by_age_sex, AGE_SEX_TABLE + "#region"
 
     @staticmethod
     def fetch_socioeconomic(client: SCBPxWebClient) -> tuple[dict, str]:
@@ -347,7 +358,12 @@ class FetchService:
         }
         raw_hours = client.fetch_table(WORKING_HOURS_TABLE, query_hours)
 
-        result = parse_employment_type_combined(raw_attach, raw_hours, age_group_map={})
+        result = parse_employment_type_combined(
+            raw_attach,
+            raw_hours,
+            age_group_map=AKU_ATTACHMENT_AGE_LABEL_MAP,
+            age_proxies=EMPLOYMENT_TYPE_AGE_PROXIES,
+        )
         return result, EMPLOYMENT_ATTACHMENT_TABLE, WORKING_HOURS_TABLE
 
     @staticmethod
@@ -375,13 +391,16 @@ class FetchService:
 
     @staticmethod
     def fetch_household_size(client: SCBPxWebClient) -> tuple[dict, str]:
+        # ContentsCode BE0101DK is SCB's "Number of persons" series: a persona is a
+        # person, so household_size is drawn from the share of persons living in each
+        # household size. The previous BE0101CZ series counted households instead.
         query = {
             "query": [
                 {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
                 {"code": "Hushallsstorlek", "selection": {"filter": "item", "values": [
                     "1P", "2P", "3P", "4P", "5P", "6P", "7+P",
                 ]}},
-                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["BE0101CZ"]}},
+                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["BE0101DK"]}},
                 {"code": "Tid", "selection": {"filter": "item", "values": ["2024"]}},
             ],
             "response": {"format": "json-stat2"},
@@ -397,9 +416,13 @@ class FetchService:
         query = {
             "query": [
                 {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
-                {"code": "Inkomstkomponenter", "selection": {"filter": "item", "values": [
-                    "300", "305", "310", "315", "320", "335",
-                ]}},
+                # 325 general allowance (child allowance, maintenance support,
+                # study grants and loans) and 330 housing allowance complete the
+                # positive transfers; 340/350 (taxes, other negative transfers)
+                # and 220 (disposable income, a total) are not sources.
+                {"code": "Inkomstkomponenter", "selection": {
+                    "filter": "item", "values": list(INCOME_SOURCE_COMPONENTS),
+                }},
                 {"code": "Alder", "selection": {"filter": "item", "values": [
                     "20-29", "30-49", "50-64", "65-79", "80-",
                 ]}},
@@ -449,7 +472,7 @@ class FetchService:
         education_by_age, tag_education = FetchService.fetch_education_by_age(client)
         employment_by_sex_education, tag_employment = FetchService.fetch_employment_by_sex_education(client)
         birth_location, tag_birth_location = FetchService.fetch_birth_location(client)
-        region, tag_region = FetchService.fetch_region(client)
+        region, region_by_age_sex, tag_region = FetchService.fetch_region(client)
         socioeconomic, tag_socioeconomic = FetchService.fetch_socioeconomic(client)
         parental_structure, tag_parental = FetchService.fetch_parental_structure(client)
         civil_status_by_age_sex, tag_civil = FetchService.fetch_civil_status_by_age_sex(client)
@@ -492,6 +515,7 @@ class FetchService:
             employment_by_sex_education=employment_by_sex_education,
             birth_location=birth_location,
             region=region,
+            region_by_age_sex=region_by_age_sex,
             socioeconomic=socioeconomic,
             parental_structure=parental_structure,
             civil_status_by_age_sex=civil_status_by_age_sex,

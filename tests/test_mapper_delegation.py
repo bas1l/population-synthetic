@@ -20,6 +20,8 @@ from population_synthetic.analysis.mapping.real_mapper.base import BaseRealMappe
 from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
 from population_synthetic.analysis.utils.mapping_sentinel import UNMAPPED
 
+from ._mapping_fixtures import with_matching
+
 # ---------------------------------------------------------------------------
 # Shared new-shape config, keyed by file stem (as load_mappings would return),
 # plus the ``_index`` master listing the comparison attributes in axis order.
@@ -39,7 +41,7 @@ _INDEX = {
     },
 }
 
-_MAPPINGS = {
+_RAW_MAPPINGS = {
     "_index": _INDEX,
     "age": {"values": ["18-24", "25-44", "45-64", "65+"]},
     "biological_sex": {
@@ -145,6 +147,8 @@ _MAPPINGS = {
             "4+ persons": {"int_gte": 4},        },
     },
 }
+
+_MAPPINGS = with_matching(_RAW_MAPPINGS)
 
 
 # ---------------------------------------------------------------------------

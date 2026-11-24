@@ -23,19 +23,23 @@ of that question is exactly the drift the repository's config invariant exists t
 
 The module knows nothing about matplotlib, figures, layout, colours, which metric is
 plotted, which country is analysed, or which process is asking. It resolves the stage
-directory, reads the index, and answers two questions about integers.
+directory, reads the index, and answers two questions about integers -- plus one about the
+gate's verdict: which combinations it **withdrew** (``excluded: true``, the full-N rule's
+exclusion). A withdrawn combination has no individuals by construction, and a consumer that
+lays out a grid must be able to tell it apart from one that simply has not been analysed yet;
+the index is the only record of that verdict, so its reader is the one place that exposes it.
 
 Failure policy: fail-fast at the read boundary. A missing stage directory, a missing or
-malformed ``_index.json``, or a lookup for a slug the index does not carry all raise with
-the offending path named. There is no default cap and no inferred one -- a figure that
-silently degraded to "nothing is thin" would look complete while having dropped the whole
-point of the marking.
+malformed ``_index.json`` (including a record without a boolean ``excluded``), or a lookup
+for a slug the index does not carry all raise with the offending path named. There is no
+default cap and no inferred one -- a figure that silently degraded to "nothing is thin"
+would look complete while having dropped the whole point of the marking.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 
 from population_synthetic.analysis.utils.capped_source import resolve_stage_source
@@ -43,10 +47,11 @@ from population_synthetic.analysis.utils.capped_source import resolve_stage_sour
 #: Filename of the stage-level cap index inside the ``population_cap`` output folder.
 INDEX_FILENAME = "_index.json"
 
-#: The two ``CapSummary`` keys this module reads. The record carries more (seed, selected
+#: The three ``CapSummary`` keys this module reads. The record carries more (seed, selected
 #: ids, the two gate counts); none of it is this module's concern.
 SLUG_KEY = "slug"
 REQUESTED_N_KEY = "requested_n"
+EXCLUDED_KEY = "excluded"
 
 
 class CapIndex(Mapping[str, int]):
@@ -57,11 +62,31 @@ class CapIndex(Mapping[str, int]):
     it as the plain map it is. It additionally carries the *path it was read from*,
     which is what lets a failed lookup name the offending file rather than raising a
     bare ``KeyError`` on a slug string.
+
+    *withdrawn* names the slugs the gate excluded under the full-N rule. It is required,
+    not defaulted: an index built without saying which combinations were withdrawn would
+    answer "none" by omission. Every withdrawn slug must also carry a ``requested_n`` --
+    the gate records the cap an excluded combination fell short of -- so a withdrawn
+    slug outside *requested_n* raises.
     """
 
-    def __init__(self, requested_n: Mapping[str, int], *, source: Path) -> None:
+    def __init__(
+        self,
+        requested_n: Mapping[str, int],
+        *,
+        source: Path,
+        withdrawn: Iterable[str],
+    ) -> None:
         self._requested_n: dict[str, int] = dict(requested_n)
         self._source = Path(source)
+        self._withdrawn: frozenset[str] = frozenset(withdrawn)
+        unknown = sorted(self._withdrawn - self._requested_n.keys())
+        if unknown:
+            raise ValueError(
+                f"Withdrawn slug(s) {unknown} carry no requested_n in the population-cap "
+                f"index {self._source}; every combination the gate withdrew is a record of "
+                f"the index."
+            )
 
     @property
     def source(self) -> Path:
@@ -100,6 +125,19 @@ class CapIndex(Mapping[str, int]):
         """``True`` iff *slug* holds fewer personas than it requested (``n < requested_n``)."""
         return not self.is_full_n(slug, n)
 
+    def is_withdrawn(self, slug: str) -> bool:
+        """``True`` iff the gate excluded *slug* under the full-N rule.
+
+        Raises when *slug* has no entry -- a combination the gate never saw is neither
+        withdrawn nor kept, and answering ``False`` would pass it off as kept.
+        """
+        self[slug]  # raises, naming the index, on an unknown slug
+        return slug in self._withdrawn
+
+    def withdrawn_slugs(self) -> frozenset[str]:
+        """Every slug the gate withdrew, across all countries the index carries."""
+        return self._withdrawn
+
 
 def load_cap_index(output_base: str | Path) -> CapIndex:
     """Read ``population_cap/_index.json`` under *output_base* into a :class:`CapIndex`.
@@ -108,14 +146,15 @@ def load_cap_index(output_base: str | Path) -> CapIndex:
         output_base: The run's output base (the parent of ``03_Analysis/``).
 
     Returns:
-        The per-slug ``requested_n`` map, carrying the path it was read from.
+        The per-slug ``requested_n`` map and the withdrawn slugs, carrying the path they
+        were read from.
 
     Raises:
         FileNotFoundError: If the ``population_cap`` stage directory or its
             ``_index.json`` is absent -- the gate has not run for this output base.
         ValueError: If the index is not a JSON list of records, or a record lacks a
-            non-empty string slug or a positive integer ``requested_n``, or two records
-            claim the same slug.
+            non-empty string slug, a positive integer ``requested_n`` or a boolean
+            ``excluded``, or two records claim the same slug.
     """
     index_path = resolve_stage_source(output_base) / INDEX_FILENAME
     if not index_path.is_file():
@@ -134,6 +173,7 @@ def load_cap_index(output_base: str | Path) -> CapIndex:
         )
 
     requested_n: dict[str, int] = {}
+    withdrawn: list[str] = []
     for position, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise ValueError(
@@ -158,6 +198,15 @@ def load_cap_index(output_base: str | Path) -> CapIndex:
                 f"The per-combo records are upserted by slug, so a duplicate means the "
                 f"index is corrupt and the cap for that combo is ambiguous."
             )
+        excluded = entry.get(EXCLUDED_KEY)
+        if not isinstance(excluded, bool):
+            raise ValueError(
+                f"Population-cap index record for {slug!r} must carry a boolean "
+                f"{EXCLUDED_KEY!r}, got {excluded!r}: {index_path}. It is the gate's "
+                f"full-N verdict and is never defaulted; re-run the population_cap task."
+            )
         requested_n[slug] = value
+        if excluded:
+            withdrawn.append(slug)
 
-    return CapIndex(requested_n, source=index_path)
+    return CapIndex(requested_n, source=index_path, withdrawn=withdrawn)

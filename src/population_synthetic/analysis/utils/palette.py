@@ -82,6 +82,7 @@ __all__ = [
     "RESIDUAL_GREY",
     "SECONDARY_GREY",
     "SEVERITY_SERIES",
+    "WORST_CLASH_COLORS",
     "SIGNIFICANCE_CMAP",
     "STAGE_SERIES",
     "SURFACE",
@@ -93,6 +94,7 @@ __all__ = [
     "relative_luminance",
     "text_color_for_rgb",
     "text_color_on",
+    "worst_clash_color",
 ]
 
 # ------------------------------------------------------------------
@@ -181,16 +183,52 @@ ORDERED_QUALITATIVE_SERIES: tuple[str, ...] = (
 #: lost ones) without relying on hue discrimination alone.
 STAGE_SERIES: tuple[str, ...] = ("#0571B0", "#92C5DE", "#F4A582", "#CA0020")
 
-#: An ordered three-step alert series, **severest first**, ending on a neutral grey.
-#: The grey is load-bearing: the last step is the one that is reported but never counted
-#: as a defect, and giving it a hue would enlist it into the reading that the other two
-#: carry.
-SEVERITY_SERIES: tuple[str, str, str] = ("#C44E52", "#DD8452", "#8C8C8C")
+#: An ordered three-step alert series, **severest first**: Okabe & Ito's vermillion,
+#: orange and sky blue (Wong 2011, *Nature Methods* 8:441), the colour-blind-safe
+#: categorical set. Severity is ordinal, so the three run warm-to-cool as well as
+#: dark-to-light: the severest step is the darkest and warmest, the mildest the coolest.
+#: The mildest step is a hue rather than a grey on purpose -- as a grey it sat too close to
+#: the light-grey "no clash" fill and to the reference outline to be told apart in a small
+#: glyph. Under simulated deuteranopia, protanopia and tritanopia (Machado et al. 2009)
+#: every pair of :data:`WORST_CLASH_COLORS` stays above CIEDE2000 10; the figures are in
+#: docs/development/figure-conventions.md.
+SEVERITY_SERIES: tuple[str, str, str] = ("#D55E00", "#E69F00", "#56B4E9")
+
+#: The worst-clash-per-individual categories (``config/analysis/realism_ranking/
+#: worst_clash_split.yaml``), keyed by category id; the categorical severity palette of the
+#: worst-clash figures. ``none`` is a neutral light grey (no clash is not a severity step);
+#: ``S1``/``S2`` are :data:`SEVERITY_SERIES`'s mild and middle steps. The stage-2 split of
+#: the severest level stays in the Okabe-Ito set: an impossible individual (``r3_impossible``)
+#: keeps the severest step's vermillion, a limitation of the SCB categories
+#: (``c_scb_category_limitation``, not a rank) takes the reddish purple, and the unsplit
+#: ``S3`` (the reference, or a failed stage-2 call) the dark blue
+#: -- a hue outside the warm run, because "not split" is a missing classification, not a
+#: degree. Black was rejected there: it merges with the reference step outline drawn over
+#: the bars. ``pipeline`` (a mapping or judge artefact) is the bluish green, outside the
+#: severity run on purpose: it is not a verdict on the individual. The yellow of the set is
+#: not used -- it is unreadable as a thin bar or as count text on white.
+WORST_CLASH_COLORS: dict[str, str] = {
+    "none": "#E4E4E4",
+    "S1": SEVERITY_SERIES[2],
+    "S2": SEVERITY_SERIES[1],
+    "r3_impossible": SEVERITY_SERIES[0],
+    "S3": "#0072B2",
+    "c_scb_category_limitation": "#CC79A7",
+    "pipeline": "#009E73",
+}
+
+
+def worst_clash_color(category: str) -> str:
+    """The colour of worst-clash *category*; raises on an id the palette does not know."""
+    if category not in WORST_CLASH_COLORS:
+        raise KeyError(f"no worst-clash colour for category {category!r}; known: {sorted(WORST_CLASH_COLORS)}")
+    return WORST_CLASH_COLORS[category]
+
 
 #: The single series singled out for contrast against a field of
 #: :data:`CATEGORICAL_SERIES` members -- a reference competitor among ordinary ones, or
-#: the tail of a distribution against its body. Shares its hue with
-#: ``SEVERITY_SERIES[0]``; the two roles are independent and may be retuned separately.
+#: the tail of a distribution against its body. It once shared its hue with
+#: ``SEVERITY_SERIES[0]``; the two roles are independent and are retuned separately.
 HIGHLIGHT_ACCENT = "#C44E52"
 
 #: Provenance colours for the hosted/local split. Colourblind-safe categorical hues that

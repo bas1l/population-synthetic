@@ -62,7 +62,7 @@ These are enforced guardrails, not suggestions. Full rationale in
 - **A discarded model is still a model** -- A model axis YAML retires itself from the sweep with a top-level `discarded: true`; **an absent key means active** (a documented default -- the 15 live model files carry no key, never `discarded: false`), and a non-boolean value raises. Like `version`, it is a selection-side concept only: nothing downstream reads it, and a discarded model stays runnable if checked. The GUI's Global tab derives its `Active`/`Discarded` chip row from it (opening on `Active`), just as it derives the strategy `v{n}` chips from `version` (opening on the highest discovered version) -- both defaults come from config, never a literal. Filtering is view-only and retaining (`visible = matches(chips) OR isChecked()`), so a default can never hide something a flow selects. See [Axis composition](docs/architecture/axis-composition.md).
 - **Strategy × country compatibility** -- A pair is valid iff the strategy's categories cover the country's required raw keys (mapping `_index.json` attributes **minus** `deprecated_attributes`, `age_group`→`age`). Sweden requires 14 keys **without** `birth_location`; Italy requires 14 **with** it, so **v2 is Sweden-only**. Enforced pre-generation by `scripts/generate/generate_identities_parallel.py::_assert_strategy_covers_country` on the axis-composition path (`--model-id`/`--strategy-id`/`--country-id`); `--manifest` and explicit `--config`/`--strategy` carry no country id and are unchecked.
 - **Generation is crash-safe and resumable** -- The process may die at any instruction (the GUI's Abort is `taskkill /F /T`), so every durable write is atomic (tmp + `fsync` + `os.replace`) and a persona checkpoints after **every** resolved category into `identity.partial.json`. Re-running the same command resumes: a *complete* persona (parses, flat, every category in this run's resolved order present and non-empty -- not merely "the file exists") is skipped, an unfinished one continues from its checkpoint, and a checkpoint written under a different strategy/schema/model/category-order fingerprint is discarded rather than spliced. **`--force` is the only thing that discards a checkpoint** -- a retry round deliberately keeps it. There is **no `--resume` flag and none may be added**: resuming is the default. `llm_interactions.jsonl` is truncated **iff** the checkpoint is discarded, which is what keeps `(persona_id, call_index)` unique without any downstream dedupe. No signal handler -- explicitly rejected, it cannot help against `taskkill /F` and would be a second, weaker recovery path. See [Aborted and resumed runs](docs/development/aborted-and-resumed-runs.md).
-- **Presentation computes nothing** -- The seven modules under `analysis/utils/` that every `charts.py` draws through (`palette`, `style`, `labels`, `figures`, `grids`, `grid_annotations`, `table_style`) form a **presentation boundary**: they receive finished numbers and draw them, computing no statistic, rate, threshold or ranking, and importing nothing from any analysis subpackage -- which is also the membership test for the layer. Each publication decision has exactly one home, so `src/` holds one `savefig` call site, one `imshow` call site, one backend selection and one `rcParams` block; the canvas and file-size budgets are enforced **on write** and a rejection leaves nothing partial on disk. Caveat text is read from the data block, never authored in a chart; an annotation policy declares the cell keys it reads and every record is validated against that declaration; and an id with no display label **raises** rather than printing itself -- so `openrouter_kimi_k3` can never reach a canvas. No artist is drawn with `alpha=` anywhere in the layer (`palette.opaque()` composites the colour instead): matplotlib's PostScript backend flattens transparency, so an EPS drawn with it diverges from its PNG and SVG siblings in the one file that leaves the repository. Which of those figures is *published* is decided one layer further out, by `figure_selection`, and it is **config, not code**: `config/analysis/figure_selection.yaml` holds named sets of extension-less stems, nothing is auto-discovered, and a figure enters a set because a human listed it — with its manuscript number (`n`) beside it, which is what makes a citation resolve to a file. See [Figure conventions](docs/development/figure-conventions.md).
+- **Presentation computes nothing** -- The eight modules under `analysis/utils/` that every `charts.py` draws through (`palette`, `style`, `labels`, `figures`, `grids`, `grid_annotations`, `table_style`, `glyph_grid`) form a **presentation boundary**: they receive finished numbers and draw them, computing no statistic, rate, threshold or ranking, and importing nothing from any analysis subpackage -- which is also the membership test for the layer. Each publication decision has exactly one home, so `src/` holds one `savefig` call site, one `imshow` call site, one backend selection and one `rcParams` block; the canvas and file-size budgets are enforced **on write** and a rejection leaves nothing partial on disk. Caveat text is read from the data block, never authored in a chart; an annotation policy declares the cell keys it reads and every record is validated against that declaration; and an id with no display label **raises** rather than printing itself -- so `openrouter_kimi_k3` can never reach a canvas. No artist is drawn with `alpha=` anywhere in the layer (`palette.opaque()` composites the colour instead): matplotlib's PostScript backend flattens transparency, so an EPS drawn with it diverges from its PNG and SVG siblings in the one file that leaves the repository. Which of those figures is *published* is decided one layer further out, by `figure_selection`, and it is **config, not code**: `config/analysis/figure_selection.yaml` holds named sets of extension-less stems, nothing is auto-discovered, and a figure enters a set because a human listed it — with its manuscript number (`n`) beside it, which is what makes a citation resolve to a file. See [Figure conventions](docs/development/figure-conventions.md).
 - **Fail-fast** -- Raise loudly on unexpected or malformed input rather than silently defaulting.
 
 ## Architecture
@@ -89,9 +89,11 @@ capped mapped file + copied real reference under `.../population_cap/_mapped/` (
 mapped-file analysis via `analysis/utils/capped_source.resolve_mapped_dir`, fail-fast, no `mapping/`
 fallback), `validation_attrition/` the gate's own report on what it discarded — per combination the
 five-stage funnel (generated -> raw-valid -> mapped-valid -> clean -> selected) read back out of
-`population_cap/_index.json` and the two validator roll-ups, plus `retention_rate` (clean/generated)
-and `generation_multiplier` (generated/clean, personas generated per *usable* persona, deliberately
-not denominated on `selected`, which is zero for every withdrawal); it validates nothing and caps
+`population_cap/_index.json` and the two validator roll-ups, plus `retention_rate` (clean/raw_valid)
+and `generation_multiplier` (raw_valid/clean, finished personas per *usable* persona, deliberately
+not denominated on `selected`, which is zero for every withdrawal; neither divides by `generated`,
+because a persona failing `validate_raw` is a generation stopped midway, an artefact of interrupting
+the run -- the `generated` count stays in the CSV for transparency only); it validates nothing and caps
 nothing, and its row grain is **every** combination the gate recorded **including the withdrawn
 ones**, which makes it the only artifact in the layer on which an excluded combination appears at
 all (one tidy CSV + JSON per country, a normalised per-combination funnel and a model × method
@@ -111,8 +113,10 @@ plus per-combo deep diagnostics and per-country cross-factor significance (Krusk
 across the model and method factors), read from the LLM-call telemetry of the **capped mirror**
 (`03_Analysis/population_cap/`, produced by `population_cap`), not `01_Raw` directly,
 `cost_efficiency/` the accuracy-vs-cost join — pairs `model_ranking`'s TV fidelity with the same
-per-call LLM telemetry, but totalled over the **full generated pool in `01_Raw`** rather than over
-the capped mirror, because the discarded personas were paid for: the two bases differ by up to 4.8×
+per-call LLM telemetry, but totalled over every **finished** persona of the generated pool in
+`01_Raw` (passed `validate_raw`, whether or not it later passed the mapped gate; a generation stopped
+midway is excluded) rather than over the capped mirror, because the discarded personas were paid
+for: the two bases differ by up to 4.8×
 on the live grid and the gap is widest exactly where retention is worst, so a capped figure flatters
 the models that wasted the most tokens. The basis is a CSV column and is printed on the figure; the
 join key is the run slug reconstructed from `generation_metadata`'s slug-less `model` + `method`
@@ -123,11 +127,11 @@ reported with the money it cost and the personas it kept; and **no composite sco
 about a third of the model axis is unmetered (priced `{in: 0, out: 0}`, the local `ollama_*` models)
 and unmetered is not free, so the flag travels as a data column and the scatter draws those models
 in a labelled zero-cost band on a symlog x-axis,
-`persona_realism/` an LLM-as-judge coherence task — judges each individual mapped persona N cold
+`persona_realism/` an LLM-as-judge coherence task — judges each individual mapped persona N independent
 rounds (`can_exist` binary + `typicality` 0-10 ordinal + severity-tagged clash issues) and reduces
 round → persona → combination into **that combination's own** impossibility rate (bootstrap CI),
 typicality dispersion, and judge self-reliability metric (ICC / Krippendorff's α — self-consistency,
-**not** validity; the config-driven hard-rules subset is the only validity anchor). It is **strictly
+**not** validity; the config-driven hard-rules subset is the only validity anchor). A reporting-only **stage 2** re-reads every S3 clash beside the persona's raw free text (`stage2_prompt.md`, one call per round with an S3 clash, cached under `{combo}/stage2/`) and classes it `raw_impossible` / `label_clash` / `ambiguous` / `mapping_error` / `judge_error` (`{combo}_stage2.csv`; the real reference has no free text: `not_applicable_no_free_text`); `realism_ranking` uses it only in reporting blocks (`stage2_breakdown`, and `worst_clash_split`, which splits the worst-clash R3 into impossible individual / contradictory labels / pipeline for the figures, the reference never split), and in `clash_analysis`, the clash statistics of the manuscript (rates with Clopper-Pearson intervals, Fisher/Holm per combination, rates pooled per strategy and model, four-state TV similarity, model + strategy decomposition), which removes the categories `worst_clash_split.yaml` lists under `clash_analysis.excluded` (C and pipeline) from numerator **and** denominator and publishes `n_excluded` per competitor; never in Axis A or `can_exist`. It is **strictly
 per-combination**: it emits no field that depends on another unit, so its artifacts are
 byte-reproducible in isolation and order-independent, and the SCB real population is enumerated as
 an **ordinary competitor** `real_{country}` with no reference role; judge model + params
@@ -168,16 +172,27 @@ completeness and on one judge model / prompt hash across the consumption set, pl
 and turns the round count into a per-persona **capacity** check — a persona holding fewer than N
 fails the run rather than being ranked short — with a blank `--rounds` on a set differing on
 `n_rounds` alone doing the same at the shallowest cached depth, loudly; which of the three it was
-travels as `provenance.n_rounds_source` (`report` | `cap` | `auto`),
+travels as `provenance.n_rounds_source` (`report` | `cap` | `auto`); and beside the typicality axis
+three more reporting-only blocks — each competitor's whole **round-weighted** score distribution and
+band shares (drawn as `typicality_distribution_by_model_strategy`, a fixed 456 pt glyph grid whose
+columns follow `model_ranking`'s published order via `analysis/utils/model_order.py`, withdrawn cells
+read from the cap index and crossed out, never dropped), the effect sizes the factor tests lacked
+(ε², Cliff's δ with bootstrap intervals beside every Dunn pair, every combination and pooled model vs
+the reference by Mann-Whitney/Holm), and a per-combination **closeness to the reference** (TV
+similarity primary — the fidelity layer's own measure — with Cliff's δ and the Cramér distance as
+sensitivity, each beside a reference self-resampling noise baseline, decomposed additively into model +
+strategy, every interval from one joint individual-level bootstrap configured in
+`config/analysis/realism_ranking/typicality_closeness.yaml`; the manuscript basis is `--rounds 1`),
 and `utils/` cross-process shared infra -- which also holds the **presentation layer**, the
-seven single-responsibility collaborators every `charts.py` draws through: `palette.py`
+eight single-responsibility collaborators every `charts.py` draws through: `palette.py`
 (the one colour vocabulary, sequential ramp and categorical hues alike), `style.py` (the only
 module in `src/` naming a backend or touching `rcParams`: the house font, the named type scale,
 the stroke ladder and the `SINGLE`/`DOUBLE`/`FULL` canvas vocabulary), `labels.py` (config ids
 to display strings, raising on an unresolvable one), `figures.py` (the one `savefig`, emitting
 PNG + SVG + EPS and enforcing the print budgets on write), `grids.py` (the one heatmap draw
-loop, the sole `imshow`), `grid_annotations.py` (what a cell prints, and nothing else) and
-`table_style.py` (the manuscript grids' furniture)), plus `gui/`, `clients/`, and a
+loop, the sole `imshow`), `grid_annotations.py` (what a cell prints, and nothing else),
+`table_style.py` (the manuscript grids' furniture) and `glyph_grid.py` (grids whose cells are small
+axes — mini histograms, ternaries, a stepped colourbar — on a canvas laid out in points)), plus `gui/`, `clients/`, and a
 top-level `utils/`. The full breakdown and the design patterns live in the wiki:
 
 **Analysis registry (single source of truth for the analysis layer):**
@@ -210,7 +225,9 @@ mirror's telemetry via `analysis/utils/capped_source.py` and the mapped-file con
 hangs directly off the gate (`depends_on: [population_cap]`) and re-reads what it wrote, so it is
 the one process whose row grain still includes the combinations the full-N rule withdrew. Two
 processes are chained further still — the only analysis nodes whose upstreams are other analysis
-nodes rather than the gate: `realism_ranking` declares `depends_on: [persona_realism]`, and
+nodes rather than the gate: `realism_ranking` declares `depends_on: [persona_realism, model_ranking]`
+(the second edge because its distribution grid orders its columns by `model_ranking`'s published
+order, read before anything is written — `--no-charts` skips that read), and
 `cost_efficiency` declares `depends_on: [model_ranking, generation_metadata, validation_attrition]`.
 That third edge is why `generation_metadata` is `enabled: true` in the workflow — a disabled task
 never enters `completed_tasks`, so every dependent would sit at `SKIPPED_DEP` and never fire; an
@@ -239,7 +256,7 @@ that the task's outputs are already on disk — so it is confirmed by an unskipp
 ## Environment & Secrets
 
 - `GEMINI_API_KEY` environment variable required for identity generation with `--provider gemini` (raises `ValueError` if missing)
-- `--provider claude` requires the `claude` CLI on PATH; raises `RuntimeError` at construction if not found; no extra API key needed (Claude Code manages its own auth)
+- `--provider claude` requires the `claude` CLI on PATH; raises `RuntimeError` at construction if not found; no extra API key needed (Claude Code manages its own auth). Every call is a fresh minimal `claude -p` process (`--tools ""`, `--setting-sources ""`, empty temp cwd) -- never a persistent conversation -- and the CLI has no temperature control, so a configured temperature is recorded as `temperature_applied: false`
 - `OPENROUTER_API_KEY` environment variable required for identity generation with `--provider openrouter` (raises `ValueError` if missing)
 - `--provider ollama` needs no API key, but it **does** need an endpoint: select one with `--ollama-host <id>` from the registry at `config/synthetic/ollama_hosts.yaml` (omitted → that file's `default_host`). There is no default base URL in code and no `OLLAMA_BASE_URL` env read — both were removed, since a silent fallback dispatches a whole sweep to the wrong GPU while the outputs look normal. `--base-url` remains as an explicit ad-hoc override. Worker counts are per (model × host), declared in each `ollama_*` axis file's `parameters.parallel.workers` map; an unsupported (host, model) pair raises before any persona is generated. See [Ollama hosts](docs/ollama_server_models.md).
 - `--ollama-reconfigure` (off by default on the CLI, **on by default in the GUI flow**) adds a once-per-invocation pre-flight that sets the selected host's `OLLAMA_NUM_PARALLEL` to the run's resolved worker count via that host's optional `control_url` (`:11435`), then warms the model and gates on the server serving again. **A run may therefore restart the host's Ollama container**, evicting the loaded model and killing another user's in-flight request — accepted deliberately, and bounded by the skip check (a server already at the requested value is read and left untouched) and by the flag being opt-in. Never fatal: the outcome is one of `already_correct` / `applied` / `mismatch` / `failed` / `no_control_url` and is recorded in `run_metadata.json` with the `observed` value read back from `/status` (never the requested one).

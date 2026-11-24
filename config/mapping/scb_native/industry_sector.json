@@ -14,6 +14,21 @@
     "Personal & Cultural Services",
     "Not Applicable"
   ],
+  "priority": [
+    "Agriculture, Forestry & Fishing",
+    "Manufacturing, Mining & Energy",
+    "Construction",
+    "Trade",
+    "Transport",
+    "Accommodation & Food Services",
+    "Information & Communication",
+    "Financial & Business Services",
+    "Public Administration",
+    "Education",
+    "Healthcare & Social Work",
+    "Personal & Cultural Services",
+    "Not Applicable"
+  ],
   "real": {
     "Agriculture, Forestry & Fishing": {
       "equals": [
@@ -119,7 +134,13 @@
         "fiske",
         "naturbruk",
         "timber",
-        "agrifood"
+        "agrifood",
+        "horticulture",
+        "greenhouse",
+        "vattenbruk",
+        "agriculture and food production",
+        "jordbruk och livsmedel",
+        "jordbruk/livsmedel"
       ]
     },
     "Manufacturing, Mining & Energy": {
@@ -133,18 +154,35 @@
         "Manufacturing/Industry",
         "Industry",
         "Utvinning av mineral",
-        "Life science och läkemedel"
+        "Life science och läkemedel",
+        "Teknik och elektronik",
+        "Teknik och kemi",
+        "Teknik och elektroteknik",
+        "Elektroteknik",
+        "Underhållsteknik",
+        "Läkemedel och bioteknik",
+        "Elektroteknik och automatisering",
+        "Luft- och rymdfart"
       ],
       "contains": [
-        "tillverkning",
-        "industri",
+        {
+          "token": "tillverkning",
+          "mode": "substring"
+        },
+        {
+          "token": "industri",
+          "mode": "substring"
+        },
         "manufactur",
         "heavy industry",
         "industrial",
         "factory",
         "fabrik",
         "automotive",
-        "fordon",
+        {
+          "token": "fordon",
+          "mode": "substring"
+        },
         "gruv",
         "mining",
         "verkstad",
@@ -157,7 +195,43 @@
         "wood processing",
         "paper and pulp",
         "pharmaceutical",
-        "biotech"
+        "biotech",
+        "livsmedelsproduktion",
+        "food production",
+        "food processing",
+        "livsmedel och dryck",
+        "aerospace",
+        "avfall",
+        "återvinning",
+        "recycl",
+        "renhållning",
+        "shipbuilding",
+        "assembly",
+        "montering",
+        "textil",
+        "kemi",
+        "vattenförsörjning",
+        "el, gas",
+        "furniture",
+        "möbel",
+        "läkemedel",
+        "handicraft production",
+        "automatisering",
+        "elektricitet",
+        "vatten och avlopp",
+        "vattenkraft",
+        "kraftvärme",
+        "eldistribution",
+        "trä och papper",
+        "waste management",
+        "waste"
+      ],
+      "none_of": [
+        "serviceindustri",
+        "tjänsteindustri",
+        "kreativ industri",
+        "bygg",
+        "städ"
       ]
     },
     "Construction": {
@@ -168,17 +242,37 @@
         "Byggindustri"
       ],
       "contains": [
-        "bygg",
+        {
+          "token": "bygg",
+          "mode": "substring"
+        },
         "construction",
-        "anläggning",
+        {
+          "token": "anläggning",
+          "mode": "substring"
+        },
         "contractor",
-        "installation",
+        {
+          "token": "installation",
+          "mode": "substring"
+        },
         "el, vvs",
         "vvs",
         "rörmokare",
         "snickare",
         "carpenter",
-        "plumber"
+        "plumber",
+        "plumbing",
+        "electrical",
+        "painting and decoration",
+        "måleri",
+        "grundarbeten",
+        "renovering",
+        "entreprenad",
+        "bostadsproduktion",
+        "takläggning",
+        "väghållning",
+        "infrastruktur"
       ]
     },
     "Trade": {
@@ -192,16 +286,40 @@
       ],
       "contains": [
         "detaljhandel",
-        "handel",
+        {
+          "token": "handel",
+          "mode": "substring"
+        },
         "partihandel",
         "retail",
         "wholesale",
         "trade",
         "sales",
-        "butik",
+        {
+          "token": "butik",
+          "mode": "substring"
+        },
         "shop",
         "store",
-        "merchandis"
+        "merchandis",
+        "fordonsservice",
+        "reparation av motorfordon",
+        "fordonsreparation",
+        "fordonshandel",
+        "handel med motorfordon",
+        "bilhandel",
+        "motorfordonshandel",
+        "repair of motor vehicles",
+        "motor vehicle repair",
+        "repair and maintenance of motor vehicles",
+        "fordonsteknik och underhåll",
+        "bensinstation",
+        "supermarket",
+        "teknisk försäljning",
+        "försäljning av maskiner"
+      ],
+      "none_of": [
+        "skilled trade"
       ]
     },
     "Transport": {
@@ -209,10 +327,14 @@
         "Transport",
         "Transport och magasinering",
         "Logistik",
-        "Kurir- och budverksamhet (matleverans)"
+        "Kurir- och budverksamhet (matleverans)",
+        "Matleveranser"
       ],
       "contains": [
-        "transport",
+        {
+          "token": "transport",
+          "mode": "substring"
+        },
         "logistic",
         "logistik",
         "freight",
@@ -222,14 +344,26 @@
         "delivery",
         "shipping",
         "haulage",
-        "magasinering"
+        "magasinering",
+        "fordonstransport",
+        "trafiken",
+        "kollektivtrafik",
+        "lager och logistik",
+        "lagerarbete",
+        "warehous",
+        "e-handelslager",
+        "lager- och",
+        "lagerhantering",
+        "post och",
+        "kurir"
       ]
     },
     "Accommodation & Food Services": {
       "equals": [
         "Accommodation & Food Services",
         "Hotell och restaurang",
-        "Hotell- och restaurangverksamhet"
+        "Hotell- och restaurangverksamhet",
+        "Kaféer och bakelerier"
       ],
       "contains": [
         "hospitality",
@@ -244,7 +378,12 @@
         "turism",
         "travel",
         "café",
-        "bar och"
+        "bar och",
+        "food and beverage service",
+        "food and beverage management",
+        "konditori",
+        "livsmedelsservice",
+        "matservering"
       ]
     },
     "Information & Communication": {
@@ -259,31 +398,78 @@
         "Data och IT"
       ],
       "contains": [
-        "teknik",
+        {
+          "token": "teknik",
+          "mode": "substring"
+        },
         "information",
         "it-",
+        "it-konsult",
         "it/",
         "it och",
         "it and",
+        "it och konsult",
+        "programming consult",
         "it service",
         "it-tjänst",
         "it support",
         "ict",
         "technolog",
         "teknolog",
-        "tech",
+        {
+          "token": "tech",
+          "mode": "substring"
+        },
         "software",
         "mjukvar",
         "programvar",
-        "systemutveckl",
-        "digital",
+        {
+          "token": "systemutveckl",
+          "mode": "substring"
+        },
+        {
+          "token": "digital",
+          "mode": "substring"
+        },
         "telekom",
         "telecom",
         "kommunikation",
         "communication",
         "media",
         "data analy",
-        "datavetenskap"
+        "datavetenskap",
+        "it consult",
+        "itkonsult",
+        "it konsult",
+        "datakonsult",
+        "datorprogrammering",
+        "kommunikationsindustri",
+        "databehandling",
+        "web development",
+        "webbutveckling",
+        "programmering",
+        "data och analys",
+        "dataanalys",
+        "security/cyber",
+        "video editing",
+        "spelutveckling",
+        "machine learning",
+        "utveckling och it",
+        "dataverksamhet",
+        "ikt",
+        "cybersäkerhet"
+      ],
+      "none_of": [
+        "ingenjör",
+        "bioteknik",
+        "miljöteknik",
+        "kemi",
+        "konstruktion",
+        "produktutveckling",
+        "bibliotek",
+        "kultur",
+        "culture",
+        "entertainment"
       ]
     },
     "Financial & Business Services": {
@@ -313,25 +499,43 @@
         "Office Administration",
         "Personaladministration",
         "Security Services",
-        "Rengöring"
+        "Rengöring",
+        "Industrivärden",
+        "Ekonomisk rådgivning",
+        "Fack, vetenskap och teknisk verksamhet",
+        "Företagstjänster (management, rådgivning etc.)",
+        "Media and entertainment law"
       ],
       "contains": [
         "finansiell",
-        "bank",
+        {
+          "token": "bank",
+          "mode": "substring"
+        },
         "finans",
         "financ",
         "insurance",
-        "försäkring",
+        {
+          "token": "försäkring",
+          "mode": "substring"
+        },
         "consult",
-        "konsult",
+        {
+          "token": "konsult",
+          "mode": "substring"
+        },
         "business service",
         "professional service",
         "affärstjänst",
         "real estate",
         "fastighet",
+        "fastighetsförvalt",
         "law firm",
         "advokat",
-        "juridik",
+        {
+          "token": "juridik",
+          "mode": "substring"
+        },
         "marknadsföring",
         "reklam",
         "marketing",
@@ -347,12 +551,138 @@
         "callcenter",
         "kundtjänst",
         "städbransch",
-        "städning",
+        {
+          "token": "städning",
+          "mode": "substring"
+        },
         "cleaning service",
         "bevakning",
         "kontorsservice",
         "konferensservice",
-        "administrative and support"
+        "administrative and support",
+        "professional, scientific",
+        "professional,scientific",
+        "professional scientific",
+        "professional and technical",
+        "professional_scientific",
+        "scientific and technical",
+        "juridik, ekonomi, vetenskap",
+        "vetenskap och teknik",
+        "vetenskaplig och teknisk",
+        "teknikkonsult",
+        "teknik och konsult",
+        "konsult och teknik",
+        "ingenjörs- och teknik",
+        "ingenjörs‑ och teknik",
+        "teknik & management",
+        "technical consult",
+        "engineering and technical consult",
+        "teknik, vetenskap och ingenjör",
+        "professionell, vetenskap",
+        "forskning och utveckling",
+        "research and development",
+        "r&d",
+        "vetenskaplig forskning",
+        "naturvetenskaplig forskning",
+        "forskning och vetenskaplig",
+        "biologisk forskning",
+        "aerospace research",
+        "kommunikationsbyrå",
+        "pr och",
+        ", pr ",
+        "veterinär",
+        "lokalvård",
+        "landskapsvård",
+        "rekrytering",
+        "byggnadsskötsel",
+        "grönyte",
+        "arbetsförmedling",
+        "arbetsmarknadens service",
+        "sysselsättningsstöd",
+        "arbetsmarknadspolitisk",
+        "sysselsättningsfrämjande",
+        "arbetsmarknads- och utveckling",
+        "arbetsmarknadsinsats",
+        "staffing",
+        "recruitment",
+        "temp agency",
+        "ingenjörstjänst",
+        "ingenjörsverksamhet",
+        "ingenjörverksamhet",
+        "engineering service",
+        "environmental engineering",
+        "arkitektur",
+        "företagsledning",
+        "administrative",
+        "administrativ",
+        "kontorsverksamhet",
+        "kontor och administration",
+        "kontorsadministration",
+        "sekreterar",
+        "clerical",
+        "customer service",
+        "kundservice",
+        "call cent",
+        "product design",
+        "interior design",
+        "graphic design",
+        "photograph",
+        "copywriting",
+        "translation",
+        "översättning",
+        "tolktjänst",
+        "event",
+        "konferens",
+        "facilit",
+        "property",
+        "cleaning",
+        "janitor",
+        "städverksamhet",
+        "städ-",
+        "rengöring",
+        "gardening",
+        "human resources",
+        "hr-",
+        "hr och",
+        "juridisk",
+        "företagsrådgivning",
+        "affärsrådgivning",
+        "rådgivning och konsult",
+        "rådgivning och management",
+        "rådgivning och professionella",
+        "business management",
+        "management consult",
+        "företag och management",
+        "office management",
+        "facility management",
+        "facilities management",
+        "property management",
+        "event management",
+        "business process",
+        "affärsutveckling",
+        "pensionsbransch",
+        "resebyrå",
+        "naturvetenskaplig utveckling",
+        "vetenskapliga tjänster",
+        "professional & scientific",
+        "hushållsnära",
+        "städ och",
+        "arkitektbyrå",
+        "affärsmässig",
+        "företagsekonomisk",
+        "ekonomiadministration",
+        "ekonomistyrning",
+        "administration och stöd",
+        "verksamhetsstöd",
+        "tekniska tjänster",
+        "vaktmästar",
+        "human resurser",
+        "konsulenttjänst",
+        "marketing/communication",
+        "marknadsföring/kommunikation"
+      ],
+      "none_of": [
+        "hälso"
       ]
     },
     "Public Administration": {
@@ -361,7 +691,8 @@
         "Offentlig förvaltning",
         "Offentlig sektor",
         "Försvar",
-        "Public Administration/Defense"
+        "Public Administration/Defense",
+        "Arbetsmarknadsdepartementet"
       ],
       "contains": [
         "offentlig förvaltning",
@@ -376,14 +707,25 @@
         "kommunal",
         "kommun",
         "landsting",
-        "myndighet",
+        {
+          "token": "myndighet",
+          "mode": "substring"
+        },
         "statlig",
         "staten",
-        "förvaltning",
+        {
+          "token": "förvaltning",
+          "mode": "substring"
+        },
         "civil service",
         "defence",
         "defense",
-        "försvar"
+        "försvar",
+        "firefight",
+        "offentlig administration",
+        "departement",
+        "tullverket",
+        "länsstyrelse"
       ]
     },
     "Education": {
@@ -396,7 +738,10 @@
         "Skolväsende"
       ],
       "contains": [
-        "utbildning",
+        {
+          "token": "utbildning",
+          "mode": "substring"
+        },
         "forskning",
         "undervisning",
         "education",
@@ -404,14 +749,34 @@
         "universit",
         "högskola",
         "lärosäte",
-        "skola",
-        "school",
+        "förskol",
+        {
+          "token": "skola",
+          "mode": "substring"
+        },
+        {
+          "token": "school",
+          "mode": "substring"
+        },
         "teaching",
         "training",
         "edtech",
-        "pedagog",
+        {
+          "token": "pedagog",
+          "mode": "substring"
+        },
         "research",
-        "tuition"
+        "tuition",
+        "statlig utbildning",
+        "sektor/utbildning",
+        "skolväsend",
+        "gymnasie",
+        "akademin",
+        "éducation",
+        "lärande",
+        "skolpersonal",
+        "folkbildning",
+        "grundskol"
       ]
     },
     "Healthcare & Social Work": {
@@ -426,12 +791,22 @@
         "Hemtjänst",
         "Äldreomsorg",
         "Healthcare/Social Work",
-        "Personlig assistans"
+        "Personlig assistans",
+        "After-school Care"
       ],
       "contains": [
-        "vård",
-        "sjukvård",
-        "omsorg",
+        {
+          "token": "vård",
+          "mode": "substring"
+        },
+        {
+          "token": "sjukvård",
+          "mode": "substring"
+        },
+        {
+          "token": "omsorg",
+          "mode": "substring"
+        },
         "healthcare",
         "health",
         " care",
@@ -439,8 +814,14 @@
         "social work",
         "social services",
         "socialtjänst",
-        "hälsa",
-        "hälso",
+        {
+          "token": "hälsa",
+          "mode": "substring"
+        },
+        {
+          "token": "hälso",
+          "mode": "substring"
+        },
         "sjukhus",
         "hospital",
         "nursing",
@@ -450,7 +831,40 @@
         "childcare",
         "welfare",
         "välfärd",
-        "disability"
+        "disability",
+        "äldreomsorg",
+        "kommunal omsorg",
+        "hemtjänst",
+        "health care and social",
+        "vård och omsorg",
+        "fritidshem",
+        "livsmedelsbank",
+        "matbank",
+        "food bank",
+        "rehabilitering",
+        "hemtjanst",
+        "family support",
+        "socialtjanst",
+        "hospice",
+        "hosptal",
+        "sjuksköterska",
+        "sköterske",
+        "socialarbete",
+        "senior citizen support",
+        "sjukgymnast",
+        "seniorcenter",
+        "refugee support",
+        "psykologisk",
+        "geriatrik",
+        "allmänpraktik",
+        "särskilda boenden",
+        "psykosocial",
+        "assistans",
+        "hemtjänst och"
+      ],
+      "none_of": [
+        "animal",
+        "pensionär"
       ]
     },
     "Personal & Cultural Services": {
@@ -461,7 +875,10 @@
         "Övriga tjänster",
         "Other Services",
         "Annan serviceverksamhet",
-        "Other service activities"
+        "Other service activities",
+        "Hushållsarbete",
+        "Seniorförening",
+        "Tjänstesektorn (annat)"
       ],
       "contains": [
         "kultur",
@@ -479,12 +896,46 @@
         "hairdress",
         "frisör",
         "beauty",
-        "skönhet"
+        "skönhet",
+        "massage",
+        "friskvård",
+        "naturvård",
+        "nagelvård",
+        "bibliotek",
+        "museum",
+        "arkiv",
+        "religious",
+        "konstnär",
+        "bildkonst",
+        "freelance writing",
+        "förening",
+        "household services",
+        "inom hushåll",
+        "politiska partier",
+        "frälsningsarmé",
+        "frivilligkoordinator",
+        "gym och",
+        "fitness",
+        "lokalhistoria",
+        "övrig tjänstesektor",
+        "tjänster (övrigt)",
+        "tjänstesektor (annat)",
+        "övrig serviceverksamhet",
+        "personlig tjänst"
+      ],
+      "none_of": [
+        "kreativ industri",
+        "media"
       ]
     },
     "Not Applicable": {
       "equals": [
-        "Not Applicable"
+        "Not Applicable",
+        "Ej yrkesverksam (Pension)",
+        "Hushållsarbete i eget hem (ej förvärvsarbete)",
+        "No employment",
+        "Pensionist",
+        "Saknar arbetsplats"
       ],
       "contains": [
         "not applicable",
@@ -497,17 +948,35 @@
         "no current sector",
         "inte i arbete",
         "retired",
-        "pensionär",
+        {
+          "token": "pensionär",
+          "mode": "substring"
+        },
         "unemployed",
         "arbetslös",
         "arbetssökande",
         "student",
-        "studerande",
+        {
+          "token": "studerande",
+          "mode": "substring"
+        },
         "studerar",
-        "studier",
+        {
+          "token": "studier",
+          "mode": "substring"
+        },
         "Ej i arbete",
         "Ej anställd",
-        "pensionerad"
+        "pensionerad",
+        "outside the labour force",
+        "oavlönad",
+        "unpaid",
+        "ej förvärvsarbetande",
+        "saknar bransch",
+        "ej aktuell",
+        "volontärarbete",
+        "ej applicable",
+        "ingen bransch"
       ]
     }
   }

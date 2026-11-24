@@ -168,8 +168,22 @@ def test_the_row_carries_the_counts_its_rates_are_quotients_of() -> None:
     """Guide 03 sect. 4: a rate never travels without its denominator."""
     (row,) = build_rows([_record("s", generated=150, mapped_valid=120, clean=120)])
 
-    assert row.retention_rate == pytest.approx(row.clean / row.generated)
-    assert row.generation_multiplier == pytest.approx(row.generated / row.clean)
+    assert row.retention_rate == pytest.approx(row.clean / row.raw_valid)
+    assert row.generation_multiplier == pytest.approx(row.raw_valid / row.clean)
+
+
+def test_unfinished_generations_are_ignored_by_both_rates() -> None:
+    """A persona failing the raw gate is a generation stopped midway, not a model outcome.
+
+    549 persona dirs, 488 finished, 189 clean: the rates are over the 488, and the 549
+    stays on the row for transparency only.
+    """
+    (row,) = build_rows([_record("s", generated=549, raw_valid=488, mapped_valid=189, clean=189)])
+
+    assert row.generated == 549
+    assert row.raw_valid == 488
+    assert row.retention_rate == pytest.approx(189 / 488)
+    assert row.generation_multiplier == pytest.approx(488 / 189)
 
 
 # --------------------------------------------------------------------------- #

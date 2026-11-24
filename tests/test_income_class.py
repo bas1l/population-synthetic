@@ -5,7 +5,9 @@ proportional splitting of brackets that straddle a class boundary, probability
 normalisation, and the loud-failure paths.
 """
 
+import json
 import math
+from pathlib import Path
 
 import pytest
 
@@ -14,30 +16,68 @@ from population_synthetic.generators.real.income_class import (
     median_from_brackets,
 )
 
-
 # --- median_from_brackets ------------------------------------------------
 
 
-def test_median_picks_bracket_at_50th_percentile():
-    # Cumulative counts: 10, 30, 60 -> target 30 reached at the 2nd midpoint.
-    midpoints = [50.0, 150.0, 250.0]
-    counts = [10.0, 20.0, 30.0]
-    assert median_from_brackets(midpoints, counts) == 150.0
+def test_median_interpolates_inside_the_median_bracket():
+    # Cumulative 10, 30, 60; target 30 is reached exactly at the top of bracket 2.
+    edges = [(0.0, 100.0), (100.0, 200.0), (200.0, 300.0)]
+    assert median_from_brackets(edges, [10.0, 20.0, 30.0]) == pytest.approx(200.0)
+    # Target 25 lies 15/20 of the way through bracket 2 (not its midpoint 150).
+    assert median_from_brackets(edges, [10.0, 20.0, 20.0]) == pytest.approx(175.0)
 
 
-def test_median_returns_last_midpoint_when_target_unreached():
-    # Degenerate: a single bracket always returns its own midpoint.
-    assert median_from_brackets([100.0], [5.0]) == 100.0
+def test_median_of_a_single_bracket_is_its_centre():
+    assert median_from_brackets([(50.0, 150.0)], [5.0]) == pytest.approx(100.0)
+
+
+def test_median_skips_empty_brackets():
+    # The empty middle bracket cannot hold the median even when the cumulative
+    # count sits exactly on the target at its lower edge.
+    edges = [(0.0, 10.0), (10.0, 20.0), (20.0, 30.0)]
+    assert median_from_brackets(edges, [5.0, 0.0, 5.0]) == pytest.approx(10.0)
 
 
 def test_median_raises_on_nonpositive_total():
     with pytest.raises(ValueError, match="positive"):
-        median_from_brackets([50.0, 150.0], [0.0, 0.0])
+        median_from_brackets([(0.0, 100.0), (100.0, 200.0)], [0.0, 0.0])
 
 
 def test_median_raises_on_length_mismatch():
     with pytest.raises(ValueError, match="same length"):
-        median_from_brackets([50.0, 150.0], [10.0])
+        median_from_brackets([(0.0, 100.0), (100.0, 200.0)], [10.0])
+
+
+def test_median_raises_on_negative_count():
+    with pytest.raises(ValueError, match="non-negative"):
+        median_from_brackets([(0.0, 100.0), (100.0, 200.0)], [10.0, -1.0])
+
+
+def test_median_raises_on_unordered_edges():
+    with pytest.raises(ValueError, match="ascending"):
+        median_from_brackets([(100.0, 200.0), (0.0, 100.0)], [1.0, 1.0])
+
+
+_ORACLE = Path(__file__).parent / "data" / "income_class" / "scb_median_oracle_2024.json"
+
+
+def _oracle_cells():
+    data = json.loads(_ORACLE.read_text(encoding="utf-8"))
+    edges = [tuple(e) for e in data["edges_tkr"]]
+    return [(edges, c) for c in data["cells"]]
+
+
+@pytest.mark.parametrize(
+    "edges, cell", _oracle_cells(), ids=lambda v: f"{v['age_band']}-{v['sex']}" if isinstance(v, dict) else ""
+)
+def test_median_matches_scb_published_median(edges, cell):
+    # Regression oracle: SCB's own published 2024 median (SamForvInk1, HE0110J8)
+    # for each 5-year band x sex, against the median interpolated from the same
+    # year's bracket counts (SamForvInk1a). The bracket-midpoint estimator this
+    # replaced was off by up to 45.3 tkr here (men 45-49: 550 vs 504.7);
+    # interpolation is within 3.3 tkr in all 20 cells.
+    estimate = median_from_brackets(edges, cell["counts"])
+    assert abs(estimate - cell["published_median_tkr"]) <= 5.0
 
 
 # --- classify_brackets ---------------------------------------------------

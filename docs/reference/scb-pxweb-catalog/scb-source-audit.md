@@ -48,13 +48,13 @@ Highest-value wins:
 | 4 | civil_status | BE | `BE0101A/BefolkningNy` | — | **Keep** | Full 4-cat × age × sex × region. |
 | 5 | birth_location | BE | `BE0101E/FolkmFodlandHVD` (Alder=TOT1) | **same table, add Alder×Kon, Tid=2025** | **Enrich — implemented (Phase 2)** | Gains age+sex on the 3-way SE/EU/non-EU split, free. |
 | 6 | birth_country_detail | BE | `BE0101E/FodelselandArK` | — | **Keep** | Finest country×age×sex table (206 countries). |
-| 7 | household_size | BE | `BE0101S/HushallT03` | — | **Keep** | No size-by-age/sex table exists; keep + aggregate. |
+| 7 | household_size | BE | `BE0101S/HushallT03` | same table, series `BE0101CZ` (households) → `BE0101DK` (persons), 2026-10-03 | **Keep table — series switched** | No size-by-age/sex table exists; keep + aggregate. Series switched from `BE0101CZ` (households) to `BE0101DK` (persons), 2026-10-03, because a persona is a person. |
 | 8 | education_level | UF | `UF0506B/Utbildning` (16–74) | **`UF0506B/UtbBefRegionR`** (16–95+) | **Switch — implemented (Phase 1)** | **Closes the 75+ gap.** Same series/values, age→95+. |
 | 9 | employment_status | AM | `AM0401P/NAKUBefUtbNivAr` (no age) | **`AM0210D/ArRegArbStatus`** or `AM0401A/AKURLBefAr` | **Switch to add age — implemented (Phase 4)** | Adds status × age (× sex); drops the education cross (no 3-way exists). Caps at 74. |
 | 10 | industry_sector | AM | `AM0401I/AKURLSysSNI07Ar` (age→total) | **`AM0210F/ArRegSNI2007Riket`** | **Switch — implemented (Phase 3)** | Restores real age × sex. Needs collapse to 12-sector schema; register def. |
-| 11 | employment_type | AM | `AM0401I/AKURLSysAnkAr` + `AM0401S/NAKUSysselOkArbtidAr` | — | **Keep** | No single attachment×hours table exists; merge is structural. Caps at 74. |
-| 12 | socioeconomic_class | HE | `HE0110A/SamForvInk1` (5-yr bands) | **`HE0110A/SamForvInk1a`** (single-year) | **Switch — implemented (Phase 1)** | Finer age, coverage from 16. Same income measure. |
-| 13 | income_source | HE | `HE0110F/TabVX13InkStruktN` | — | **Keep** | Only sex-bearing alt loses the employment×age conditioning. |
+| 11 | employment_type | AM | `AM0401I/AKURLSysAnkAr` + `AM0401S/NAKUSysselOkArbtidAr` | — | **Keep** | No single attachment×hours table exists; merge is structural. Caps at 74. Declared age proxies (2026-10): attachment band 15–24 → 18–24 (includes 15–17); 75–85 reuses 65–74. |
+| 12 | socioeconomic_class | HE | `HE0110A/SamForvInk1` (5-yr bands) | **`HE0110A/SamForvInk1a`** (single-year) | **Switch — implemented (Phase 1)** | Finer age, coverage from 16. Same income measure. Cell median interpolated inside its bracket (2026-10; ≤ 3.3 tkr from SCB's published medians, was ≤ 45 tkr with bracket midpoints). |
+| 13 | income_source | HE | `HE0110F/TabVX13InkStruktN` | — | **Keep** | Only sex-bearing alt loses the employment×age conditioning. Components 325 (general allowance) and 330 (housing allowance) fetched since 2026-10 (8 of 8 positive components). |
 | 14 | housing_tenure | BO | `BO0104D/BO0104T04` (dwelling-level) | **`HE0111A/HushallT31`** (person-level) | **Switch — implemented (Phase 3)** | Adds tenure × single-year age × sex. Needs `Boendeform`→tenure collapse map. |
 | 15 | parental_structure | LE | `LE0102B/LE0102T17` | — | **Keep** | Already register full-count (not a survey); finest age. |
 
@@ -79,6 +79,7 @@ Current AKU table collapses `Alder` to `tot15-74` (a working-age total — the t
 
 ### 12 · socioeconomic_class → switch to `HE/HE0110/HE0110A/SamForvInk1a`
 Same income-bracket register measure as the current `SamForvInk1`, but **single-year `Alder`** (16–100) instead of 5-year bands, extending coverage down to 16. **Verified:** 26/30 cells non-null (the 4 nulls are legitimate confidentiality suppression at age-16 × high-bracket). `ContentsCode` differs (`HE0110AD`). The 4-class derivation must tolerate nulls in sparse cells.
+**Median method (2026-10).** Each (age_group, sex) cell's median is placed by linear interpolation inside the bracket holding the 50th percentile (`income_class.median_from_brackets`), the same within-bracket uniformity `classify_brackets` uses to split straddling brackets. Checked against SCB's published 2024 median (`SamForvInk1`, `HE0110J8`) for all 20 five-year band × sex cells: max error 3.3 tkr (bracket midpoints: 45.3 tkr, e.g. men 45–49 gave 550 vs 504.7). Fixture: `tests/data/income_class/scb_median_oracle_2024.json`.
 
 ### 14 · housing_tenure → switch to `HE/HE0111/HE0111A/HushallT31`
 Current `BO0104T04` is **dwelling-level** — tenure has no person age/sex. `HushallT31` gives **`Boendeform` (housing type) × single-year age × sex × region**, register/full-count. **Verified:** 12/12 non-null person-level cells. `Boendeform` maps onto the 3-way owner / tenant-owned / rented split via a small **collapse map** (`SMAG`→owner-house, `SMBO`/`FBBO`→bostadsrätt, `SMHY0`/`FBHY0`→hyresrätt; `SPBO`/`OB`/missing folded or dropped explicitly). No table exposes `Upplatelseform` itself by person age/sex, so `Boendeform` is the route.

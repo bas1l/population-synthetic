@@ -17,9 +17,9 @@ country's analysis-deprecated attributes, which are exempt for the same reason
 ``validate_raw`` does not require them: a deprecated axis is emitted into population data
 but excluded from every analysis, so failing a persona over its value would discard a
 persona nothing scores. Sweden deprecates ``birth_location``, whose synthetic rules
-``refine_from`` ``birth_country_detail`` -- and the SCB categories ``Other`` and
-``Yugoslavia`` carry no Sweden/Europe/Outside-Europe answer, so a persona born in a
-country outside SCB's named top-21 is *unresolvable by construction* on that axis.
+``refine_from`` ``birth_country_detail`` -- and the SCB category ``Other`` carries no
+Sweden / other-EU / outside-EU answer, so a persona born in a country outside SCB's named
+top-21 is *unresolvable by construction* on that axis.
 """
 
 from __future__ import annotations

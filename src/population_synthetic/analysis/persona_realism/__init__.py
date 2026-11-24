@@ -1,7 +1,8 @@
 """persona_realism -- LLM-as-judge individual-persona coherence analysis.
 
 An analysis subpackage that judges each individual mapped persona (a bare
-demographic tuple) with an LLM, N times at cold temperature, asking two
+demographic tuple) with an LLM, N independent times (each call a fresh
+conversation; the claude CLI has no temperature control), asking two
 orthogonal questions per persona: can this attribute set describe one real
 person (``can_exist``), and if so how typical is it (``typicality`` 0-10). The
 process ranks every generation combination -- plus the SCB real population as one

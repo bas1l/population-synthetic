@@ -7,6 +7,14 @@
     "Social Assistance",
     "Sickness / Activity Compensation"
   ],
+  "priority": [
+    "Wage / Business",
+    "Capital",
+    "Pension",
+    "Insurance / Allowance",
+    "Social Assistance",
+    "Sickness / Activity Compensation"
+  ],
   "real": {
     "Wage / Business": {
       "equals": [

@@ -17,12 +17,191 @@ Same symmetric per-attribute schema as `config/mapping/scb/` (see
 `src/population_synthetic/analysis/mapping/mapping_engine.py`):
 
 - `values` — the ordered unified value set (also the comparison axis order).
+- `priority` — the same values in **rule-priority** order (a permutation of `values`, required),
+  consulted when several values hit in the same tier. Kept separate from `values` so the chart
+  order never decides a tie.
 - `real` — raw national-statistics label → unified value matchers, plus attribute
-  directives (`absent`, `on_miss`, `refine_from`).
+  directives (`absent`, `on_miss`, `refine_from`, `subfields`).
 - `synthetic` — raw LLM `identity.json` value → unified value matchers, plus directives.
 
 `_index.json` maps each comparison attribute to its per-attribute file (identical order to
-the coarse tier).
+the coarse tier) and declares the required `matching` block (below).
+
+## Matching rules (`_index.json` → `matching`)
+
+The engine has no in-code matching defaults; a missing or malformed block raises when a mapper is
+built. This tier's `real` side keeps the historic rules (`substring`, no negation,
+`tie_break: ["priority"]`); the `synthetic` side, which reads free LLM text, uses:
+
+- **`token_mode: "prefix"`** — a `contains` / `all_of` / `none_of` token must start at a word
+  start (the preceding character is not a letter or digit). This stops the left-embedding hits
+  the SCB-checked audit found (`gymnasial` in *efter*gymnasial, `male` in *fe*male, `rent` in
+  pa*rent*s, `skild` in *en*skild, `hög inkomst` in *medel*hög inkomst, `0 timmar` in
+  4*0 timmar*) while keeping compound *modifiers* (`högskole` in högskoleexamen). Compound
+  *heads*, which Swedish puts last and which must match mid-word (`lön` in månadslön, `anställd`
+  in heltidsanställd, `vård` in hemvård, `pension` in garantipension), are written as
+  `{"token": "lön", "mode": "substring"}`. The override list was generated over the full
+  `01_Raw` Swedish pool (tokens whose only hit in a persona value was mid-word) and reviewed by
+  hand; the tokens whose mid-word hits are the defect itself stay prefix. A token missing an
+  override fails loudly (`__UNMAPPED__`, visible to `validate_mapped`) rather than silently
+  matching the wrong category.
+- **`negation`** — a cue word (`inte`, `ej`, `ingen`, `not`, `no`, `never`, `utan`, …) among the
+  two words before a token, in the same clause, discards that hit; applies to `contains`, `all_of`
+  members and `none_of` (a negated veto does not veto), never to `equals`. A token that itself
+  starts with a cue still hits ("never married"). Past tense is not negation. `biological_sex`
+  and `birth_location` opt out (`"negation": null` in their `synthetic` block: "non-binary",
+  "non-EU").
+- **`tie_break: ["longest", "priority"]`** — within the winning tier, the value whose matched
+  token is longest wins (for `all_of`, the summed length of the group hits), then `priority`.
+  Tier precedence is unchanged. `employment_status` (SCB BAS hierarchy Employed > Unemployed >
+  Student > Retired > Sick > Other) and `income_source` (wage first) override it with
+  `"tie_break": ["priority"]`. Every multi-hit is written to `{slug}.ties.csv`.
+
+**`all_of_rules`** (engine key): a list of self-contained `{all_of, none_of}` rules on one value,
+swept in the `all_of` tier. A rule honours only its own `none_of`, never the value's, so it is the
+one way to reach a value past its own veto; every veto the rule still needs is written into it.
+Used by `employment_type` and `employment_status` for "a status word, except beside stated current
+work, unless that work is over".
+
+`employment_type`'s `synthetic` block also declares a **`numeric_facet`**: after the walk, weekly
+hours (or a percentage of a 40 h week) stated in the text re-band the walked attachment into the
+AKU agreed-hours bands 1–19 / 20–34 / 35+, so text stating only hours under 35 never keeps a
+Full-time value. Stated hours spanning two or more bands ("10-20 timmar", "1-35 timmar") leave
+the band undetermined and map to `__UNMAPPED__`; a number behind a comparator ("över 30") is not
+banded and keeps the walked value. Both are logged as `facet_ambiguous` in the ties sidecar (a
+span is not a total miss, so it does not reach the misses log); `0 timmar` is in no band and
+never overrides. The attachment rules therefore carry no
+hour tokens; `heltid` / `deltid` remain the fallback when no hours are stated. Zero stated hours
+are handled in config instead: every employed value vetoes `0 timmar` / `0 h/v` / `0 hours` (prefix
+mode keeps them off "40 timmar") and `Not Applicable` lists them.
+
+`education_level` routes post-secondary text by stated length in its `all_of` tier: 4+5B needs a
+higher-education word and a short-length marker (`kortare än 3`, `2-årig`, `120 hp`, …, vetoed by
+`master` / `magister` / `kandidat` / `bachelor`), 5A a higher-education word and a ≥ 3-year or
+degree marker (`3 år eller`, `kandidat`, `master`, …). Without it, "Eftergymnasial utbildning,
+3 år eller längre" — which reached 3A only through the `gymnasial` substring bug — would fall
+to `__UNMAPPED__` under `prefix`.
+
+## Per-attribute rules from the SCB-checked audit
+
+Each rule follows SCB's own definition of the category; the regression cases live in
+`tests/test_scb_native_audit_rules_core.py`.
+
+- **`civil_status`** is the legal register status. A sambo / cohabiting / partner text is
+  `Single/Never Married` (a sambo is not married); a separated spouse stays `Married` (Sweden has
+  no legal separation); registered partnership is `Married`. Negated forms ("ej gift",
+  "utan sambo") carry positive Single tokens, because the engine discards the negated `gift` hit
+  rather than inverting it. A stated prior status beats "ensamstående" (Single vetoes divorce and
+  widowhood words), and "previously married" with the current status unstated is `Divorced`.
+- **`education_level`** codes the highest *completed* SUN level. A bare `högskoleexamen` is
+  `Post-Secondary < 3 yrs (4+5B)` (SCB codes an 80 p examen as under 3 years); a 3-year or degree
+  marker routes it to 5A. Upper secondary with no stated length is 3A, and 3C needs an explicit
+  ≤ 2-year length. Folkhögskola has no general SUN level and is unmapped; folkskola is ISCED 1;
+  incomplete or ongoing gymnasium is ISCED 2. Post-secondary text vetoes both upper-secondary
+  values, so "post-secondary education" with no length is unmapped.
+- **`employment_status`** follows the BAS hierarchy (`tie_break: ["priority"]`): a working student
+  or pensioner is `Employed`; job-seeking and past-tense text leave `Employed`; förtidspension /
+  sjukersättning is `Sick Leave`, not `Retired`; homemakers and carers are `Other`. "Hemarbetande"
+  is not an `Employed` veto: alone (or with full-time wording only — "hemarbetande på heltid") it is
+  the homemaker (`Other`), but beside an occupation noun from `Employed`'s own list ("Hemarbetande
+  konsult") it is work done from home and the BAS priority makes it `Employed`. More generally
+  (2026-10-07), a retired / homemaker / job-seeker status text that itself states paid work —
+  `konsult*`, `lönearbet*`, `arbetar`, part-time / reduced hours, `deltid*`, `extraarbet*` — is
+  `Employed` through an `all_of_rules` rule on `Employed` ("pensioner with part-time work",
+  "Lönearbete vid sidan av pension", "Arbetssökande med deltidsjobb"); ended work, `söker` /
+  `seeking` and volunteer words veto that rule, so "Arbetssökande (söker deltidsjobb)" stays
+  `Unemployed`. The whole word "fulltidsarbetslös" vetoes `Employed` (it is not a `fulltid` job).
+- **`employment_type`**: fixed-term, project, probation and doctoral posts are Temporary; an own
+  company, sole trader or näringsidkare is Self-Employed; negated employment and zero stated hours
+  are `Not Applicable`. So is a contract the text itself says is former or ended ("former",
+  "previous(ly)", "före detta", "f.d.", "tidigare anställd / fast / tillsvidare / …", "(past)",
+  ", avslutad", "nu avslutad", "avvecklat", "before retirement", "pre-retirement", …): every
+  contract value vetoes these cues and `Not Applicable`'s `all_of` needs a cue plus a contract
+  word. The cues are phrases taken from the `01_Raw` pool so that text stating a current job keeps
+  its contract — "efter avslutad provanställning", "Tidigare med fulltid, nu halvtidsanställd". A
+  cue with no contract word stays unmapped, except the exact strings listed under `equals` from the
+  2026-10-19 labelling below ("contractor (past)" → `Not Applicable`). The rule reads
+  `employment_type`'s own text only.
+  Parental leave is **not** an ended job (2026-10-07; SCB BAS counts a parent on paid leave as
+  employed with the job): leave from a stated contract keeps that contract ("Anställning med
+  föräldraledighet (tillsvidare)" → `Permanent Full-time`); leave the text itself calls unpaid or
+  jobless ("utan lön", "unpaid", "utan anställning", "no job") is `Not Applicable` through an
+  `all_of_rules` rule on it; leave with no contract word ("Föräldraledighet") stays unmapped,
+  and so does leave with part-time work but no contract word ("Föräldraledig med deltidsarbete":
+  `Permanent Part-time` vetoes `föräldraledig med deltid` / `föräldraledig med möjlighet`).
+  `korttidsanställ*` is Temporary, but a student job is Temporary Part-time: `Temporary Full-time`
+  vetoes the student-job words, so "Studentjobb (…, korttidsanställning)" is not Full-time.
+  A pensioner / student / retired word beside stated current work maps to the contract, not to
+  `Not Applicable` (2026-10-07): each contract value carries an `all_of_rules` rule `[Not
+  Applicable's own status tokens] + [a work cue]` — `anställ*`, `employ*`, `konsult*`, `frilans`,
+  `arbetar`, `working`, `deltidsarbet*` / `extraarbet*` / `lönearbet*`, stated hours (`timmar`,
+  `tim`, `h/v`, `hours`, …) — vetoed by ended-work cues (bare `tidigare`, `avveckl*`, `avslutad`,
+  `former`, …), zero hours, unpaid / volunteer words and `Not Applicable`'s own `none_of` (`job`,
+  `jobb`, …), so it fires only on text `Not Applicable` would otherwise take. Temporary and
+  Self-Employed words pick their own rule; a part-time word picks Part-time. What the text leaves
+  unstated follows the bare-word convention: Permanent, Full-time band, re-banded by stated hours
+  ("pensionär (delvis, 15 timmar/vecka)" → `Permanent Short Part-time`). A band word on its own is
+  not a work cue, because it qualifies the status itself: "Full-time student", "Pensionär
+  (heltid)", "deltidspensionär" stay `Not Applicable`.
+  A consulting business stated beside a pensioner word ("Pensionär med konsultverksamhet") is a
+  current own business: `konsultverksamhet` is a Self-Employed token and, being longer than
+  `pensionär`, wins the `longest` tie-break. With no stated hours it lands on `Self-Employed
+  Full-time`, the band every bare self-employment word lands on; stated hours re-band it through
+  the numeric facet. A bare "verksamhet" is not a cue ("kommunal / ideell verksamhet").
+- **`housing_tenure`** is a property of the building: `Owner-occupied` is SMAG only, so any
+  apartment, BRF or rental word vetoes it and an owned flat is a bostadsrätt. Ägarlägenhet (OB)
+  is not fetched and is unmapped: the real side's Boendeform request excludes OB, so the
+  reference `Owner-occupied` is SMAG (houses) only and an owned apartment has no category on this
+  table -- a table-scope limit, not a mapping gap (decided 2026-10-19 after the Figure 6
+  labelling, which had first marked it a mapping miss). Bostadsbolag is a landlord (`Rental`). A house-or-flat
+  disjunction ("Eget hus eller lägenhet") names no tenure and is unmapped.
+- **`income_source`** is wage first (`tie_break: ["priority"]`, Wage first in `values`): any stated
+  paid work, including an occupation or employer named as the source, is `Wage / Business`.
+  CSN / studielån / barnbidrag are `General Allowances` (component 325) and bostadsbidrag /
+  bostadstillägg `Housing Allowance` (330); since `priority` is shared with the real side and
+  stays the `values` order, the generic `Insurance / Allowance` (which precedes them) vetoes their
+  tokens. Parental or family support is not an SCB income component and is unmapped. Swedish
+  förtidspension / sjukpension is the disability benefit (renamed sjuk- och aktivitetsersättning in
+  2003) and is `Sickness / Activity Compensation`, as `employment_status` codes it `Sick Leave`;
+  English "early retirement (pension)" is an old-age pension drawn before the reference age
+  (allmän pension from 63/64, tjänstepension from 55) and is `Pension`, as `employment_status` codes
+  it `Retired`.
+
+The rules below have their regression cases in `tests/test_scb_native_audit_rules_social.py`.
+
+- **`industry_sector`** is SNI 2007, which classifies by *activity*, not by owner or wording:
+  professional / scientific / technical activities, R&D (SNI 72), marketing and PR, engineering
+  services and administrative services are `Financial & Business Services` (sections M–N);
+  municipal elderly care is `Healthcare & Social Work`, not `Public Administration`; vehicle sale and
+  repair is `Trade` (G 45); warehouse work without a trade context is `Transport` (H 52); labour-
+  market services — Arbetsförmedlingen, staffing, recruitment — are SNI 78 (`Financial & Business
+  Services`). A bare "Engineering" (C 25–30 or M 71), "Administration", general advice and
+  media-plus-culture texts (J or R) name no single section and are unmapped; a pensioner's former
+  job is not a current sector. Phrase priority is native: the longer phrase wins the contains tier.
+- **`parental_structure`** follows LE0102's legal ("ursprunglig") parents and folkbokföring
+  residence: a cohabiting or married couple's child has `Natural Parents` (a sambo couple counts);
+  adoptive parents are `Natural Parents`; after a divorce the parent the child lived with decides
+  (`Single Mother` / `Single Father`); a parent's new partner makes a stepparent family. A
+  two-phase text keeps the **earlier** phase ("both parents until the divorce …" → `Natural
+  Parents`), so `mother remarried` is not a token. Joint custody / alternating residence is
+  unmapped (the registered parent is unknown); a bare same-sex couple keeps `Natural Parents`
+  (above). Known residue: five two-phase texts whose *later* phase carries a divorce or custody veto
+  word ("…, then shared custody", "later separated") resolve to `__UNMAPPED__`, because a `none_of`
+  veto applies in every tier; honouring the earlier phase there needs clause splitting in the
+  engine.
+- **`socioeconomic_class`** is an income band relative to the (age, sex) median, so only income or
+  class wording places a persona: explicit poverty cues → `Poverty`; low income / låginkomst /
+  lägre inkomst / underklass → `Poverty`; modest / moderate, lower class / lägre klass, lower or
+  low socioeconomic status, lower-middle class, limited / pressed economy → `Working Class`;
+  median / average income → `Middle Class`; high-income / affluent → `Wealthy`. Explicit cues are
+  a single-group `all_of` (they must beat any `contains` token, which `longest` alone would not
+  give). Occupation, employment-status and SEI group words (student, pensionär, tjänsteman,
+  akademiker, professional, kunskapsarbetare, företagare, …) carry no income band and are
+  unmapped: no SCB table places an occupation in these bands without inventing the mapping.
+- **Small attributes.** `biological_sex`: text naming both sexes is unmapped. `region`: unaccented
+  and province names that lie in one län; "Uppland" and "Region Väst" are unmapped.
+  `birth_country_detail`: "Sverige (född i utlandet)" is not Sweden-born. `household_size`: "With
+  parents (2)" is three persons.
 
 ## Deprecated attributes
 
@@ -35,12 +214,25 @@ axis).
 
 This tier deprecates **`birth_location`**, so Sweden analyses **14** axes (not 15) while the
 field is still present in generated/mapped populations. Reason: `birth_location` (coarse
-Sweden/EU/non-Europe) and `birth_country_detail` (top-20 specific countries) are sampled as
-independent marginals joined only by a binary Sweden/non-Sweden gate, so contradictory pairs
-occur (e.g. "Outside Europe" + "Germany"); `birth_country_detail` already carries the
-birthplace signal, so the coarse axis is dropped from scoring while retained in data. This
-sidesteps — does not fix — the sampling independence; see
+Sweden / other EU / outside the EU) and `birth_country_detail` (top-20 specific countries) are
+sampled as independent marginals joined only by a binary Sweden/non-Sweden gate, so
+contradictory pairs occur (e.g. "Born outside the EU" + "Germany"); `birth_country_detail`
+already carries the birthplace signal, so the coarse axis is dropped from scoring while retained
+in data. This sidesteps — does not fix — the sampling independence; see
 `docs/development/plans/active/deprecate-birth-location-analysis-axis.md`.
+
+**Birth-region labels.** FolkmFodlandHVD returns `FSV` / `FEU` / `FUEU` — born in Sweden, in
+another EU member state, outside the EU — so the two foreign values are named **`Born in another
+EU country`** and **`Born outside the EU`** (they were "Europe (Other)" / "Outside Europe", which
+misdescribed the table). The synthetic country lists follow EU membership: Norway, Iceland, the
+UK, Switzerland, Serbia, Bosnia, Ukraine, (former) Yugoslavia, Kosovo, Albania, Belarus, Moldova,
+Montenegro and North Macedonia are outside the EU; `nordic`, `scandinav`, `europe`, `european`
+and `immigrant` fit neither side and are not tokens. The `real` block lists only the three
+FolkmFodlandHVD labels (the legacy labels of other tables were dead). Still open: `refine_from`
+re-walks only the *resolved* `birth_country_detail` value, so a country outside its 21
+categories leaves `birth_location` unmapped even when the country is in these lists. The global
+tier `config/mapping/scb/` and Italy's `istat` keep the old labels (Italy's "Europe (Other)" is
+the same EU27 mislabel, out of scope).
 
 ## Resolution vs the coarse (global) tier
 
@@ -51,6 +243,14 @@ until the global tier is formalised as a native → global overlay:
 `age_group`, `biological_sex`, `education_level`, `employment_status`, `birth_location`,
 `socioeconomic_class`, `region`, `civil_status`, `housing_tenure`, `household_size`,
 `income_source`, `birth_country_detail`.
+
+Since the SCB-checked audit (`docs/development/plans/pending/mapping-fixes-scb-audit.md`) these
+files are **no longer verbatim copies**: the native synthetic blocks are written for this tier's
+`prefix` / negation / `longest` matching and carry the audit's rule changes and the birth-region
+rename, while `config/mapping/scb/` keeps the historic behaviour-preserving matching and rules.
+The global tier was deliberately not mirrored (it is read by no Swedish axis file, and the native
+rules would not mean the same under `substring` matching); re-deriving it is part of formalising
+the native → global overlay.
 
 3 attributes are **expanded to native resolution** here (the coarse tier merges them):
 
@@ -141,3 +341,15 @@ Re-introducing `on_miss` on any attribute in this tier is a regression and is as
 in `tests/test_mapping_config_no_on_miss.py`. Italy (`config/mapping/istat/`) still declares it
 on two attributes; that is a separate change, since removing it there invalidates every Italian
 mapped artefact.
+
+## Figure-6 answer labelling (2026-10-19)
+
+Every answer the researcher labelled a mapping-config miss (`M`) in
+`02_Data/figure6_labelling_2026-10-19/figure6_answer_labels.xlsx` is listed as an `equals` token on
+its target value: these are the exact rejected strings, so they reach no other text. Where the target
+value's own `none_of` would veto the string (a veto applies to `equals` too), the string is admitted
+by an `all_of_rules` rule naming it instead, and the veto itself is unchanged: `employment` `Employed` (three "tidigare" strings that state current work),
+`employment_type` `Not Applicable` (seven job-seeker strings containing "job"/"jobb"), education
+ISCED 1 ("shorter than 9 years") and `parental_structure` `Natural Parents` (both parents present
+with grandparents). Answers labelled `A` or `B` stay unmapped -- including every ägarlägenhet form,
+relabelled `B` (table-scope limit, see `housing_tenure` above).

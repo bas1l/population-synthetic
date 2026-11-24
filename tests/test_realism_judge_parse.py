@@ -291,7 +291,8 @@ def test_default_client_factory_passes_timeout(monkeypatch):
 
     assert captured["timeout"] == cfg.timeout_seconds
     assert captured["model_name"] == cfg.judge_model
-    assert captured["default_config"] == {"temperature": cfg.temperature}
+    # No temperature is passed: the claude CLI cannot apply one (see judge.yaml).
+    assert "default_config" not in captured
 
 
 # --------------------------------------------------------------------------
@@ -308,6 +309,29 @@ def test_load_real_prompt_template_splits_sections():
     assert user_tmpl.count("{persona_block}") == 1
     # The system section's literal JSON-schema braces must survive verbatim.
     assert '"can_exist"' in system_str
+
+
+def test_real_prompt_defines_parental_structure_as_family_of_origin():
+    # v6: parental_structure is who raised the person (generation prompt, SCB LE0102T17:
+    # children 0-17 by family type), not the persona's own parenthood. v5 lacked the line and
+    # rated "Single Mother" + Married / 1 person impossible. It must sit in the system prompt.
+    system_str, _ = prompt.load_prompt_template(_CONFIG_DIR / "judge_prompt.md")
+    definitions = system_str.split("SCHEMA DEFINITIONS", 1)[1].split("Reason across", 1)[0]
+    assert "parental_structure is the family the person GREW UP in" in " ".join(definitions.split())
+    assert "not their own parenthood" in " ".join(definitions.split())
+
+
+def test_real_prompt_v7_defines_sick_leave_and_young_pension_income():
+    # v7: Sick Leave also covers an employee sick-listed from a job at any age (only the benefit
+    # ends at the reference age), and young pension income is not impossible by itself while the
+    # statutory pension ages stay hard. Both must sit in the schema definitions.
+    system_str, _ = prompt.load_prompt_template(_CONFIG_DIR / "judge_prompt.md")
+    definitions = " ".join(system_str.split("SCHEMA DEFINITIONS", 1)[1].split("Reason across", 1)[0].split())
+    sick_leave = 'employment_status "Sick Leave" also covers an employee who is on sick leave from a job, at any age'
+    assert sick_leave in definitions
+    assert "Only sickness or activity compensation (a benefit) ends at the pension reference age" in definitions
+    assert "Pension income at a young age is not by itself impossible" in definitions
+    assert "an occupational pension cannot be drawn before 55" in definitions
 
 
 def test_parse_template_missing_sentinel_raises():
@@ -329,7 +353,7 @@ def test_parse_template_duplicate_placeholder_raises():
 
 def test_render_persona_block_orders_by_analyzed_attrs():
     persona = {"age_group": "25-34", "sex": "female", "birth_location": "SE"}
-    block = prompt.render_persona_block(persona, ["sex", "age_group"])
+    block = prompt.render_persona_block(persona, ["sex", "age_group"], rendering={})
     assert block == "sex: female\nage_group: 25-34"
     # birth_location (deprecated / not in analyzed list) is excluded
     assert "birth_location" not in block
@@ -338,17 +362,17 @@ def test_render_persona_block_orders_by_analyzed_attrs():
 def test_render_persona_block_unmapped_axis_renders_token():
     # An analyzed axis genuinely absent from the persona (or an explicit UNMAPPED
     # sentinel) is TOLERATED and rendered as the token line, not raised.
-    block = prompt.render_persona_block({"age_group": "25-34"}, ["age_group", "income"])
+    block = prompt.render_persona_block({"age_group": "25-34"}, ["age_group", "income"], rendering={})
     assert block == f"age_group: 25-34\nincome: {UNMAPPED}"
     # An explicit sentinel value renders identically.
-    block2 = prompt.render_persona_block({"sex": UNMAPPED}, ["sex"])
+    block2 = prompt.render_persona_block({"sex": UNMAPPED}, ["sex"], rendering={})
     assert block2 == f"sex: {UNMAPPED}"
 
 
 def test_build_prompts_substitutes_only_persona_block():
     persona = {"sex": "male"}
     system_str, user_str = prompt.build_prompts(
-        persona, ["sex"], "SYSTEM {keep}", "before {persona_block} after"
+        persona, ["sex"], "SYSTEM {keep}", "before {persona_block} after", rendering={}
     )
     # system passed through verbatim (literal braces preserved)
     assert system_str == "SYSTEM {keep}"
@@ -406,7 +430,7 @@ def test_render_persona_block_derives_age_group_from_raw_age():
     persona = _real_shaped_sweden_persona()
     assert "age_group" not in persona  # precondition: real record has no bin
 
-    block = prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS)
+    block = prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS, rendering={})
 
     # No KeyError, and the age_group line carries a derived bracket string
     # (a bin label such as "65-74"/"65+"), never the raw integer 65.
@@ -423,7 +447,7 @@ def test_render_persona_block_derives_age_group_from_raw_age():
 def test_build_prompts_real_shaped_persona_no_keyerror():
     persona = _real_shaped_sweden_persona()
     system_str, user_str = prompt.build_prompts(
-        persona, _SWEDEN_ANALYZED_ATTRS, "SYS", "P: {persona_block}"
+        persona, _SWEDEN_ANALYZED_ATTRS, "SYS", "P: {persona_block}", rendering={}
     )
     assert system_str == "SYS"
     assert "age_group:" in user_str
@@ -434,5 +458,5 @@ def test_render_persona_block_missing_age_renders_unmapped_token():
     persona = _real_shaped_sweden_persona()
     del persona["age"]  # no raw age and no age_group -> genuinely absent
     # Tolerated: the age_group axis renders the UNMAPPED token instead of raising.
-    block = prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS)
+    block = prompt.render_persona_block(persona, _SWEDEN_ANALYZED_ATTRS, rendering={})
     assert f"age_group: {UNMAPPED}" in block

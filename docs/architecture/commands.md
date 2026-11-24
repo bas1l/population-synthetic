@@ -150,8 +150,9 @@ python scripts/analyze/summarize_generation_metadata.py --country swedish --verb
 # Validation attrition: what the gate discarded. Per combination, the five-stage funnel
 # (generated -> raw-valid -> mapped-valid -> clean -> selected) re-read out of
 # population_cap/_index.json + the validate_raw/validate_mapped roll-ups, plus retention_rate
-# (clean/generated) and generation_multiplier (generated/clean -- per USABLE persona, deliberately
-# not denominated on selected, which is zero for every withdrawal). Emits one tidy CSV + JSON per
+# (clean/raw_valid) and generation_multiplier (raw_valid/clean -- finished personas per USABLE
+# persona, deliberately not denominated on selected, which is zero for every withdrawal). Neither
+# divides by generated: a persona failing validate_raw is a generation stopped midway. Emits one tidy CSV + JSON per
 # country, a normalised per-combination funnel and a model x method validation-survival grid.
 # Its row grain is EVERY combination the gate recorded, INCLUDING the ones the full-N rule withdrew
 # -- a withdrawn combination has no capped mirror, no capped mapped file and no generation_metadata
@@ -174,7 +175,7 @@ python scripts/analyze/analyze_cost_efficiency.py --country swedish_02 --no-char
 
 # Persona realism judge (LLM-as-judge): judge each mapped persona's internal coherence with the
 # Claude CLI (default claude-sonnet-5; Fable is the slowest/most-expensive selectable option) over N
-# cold rounds -- can_exist (binary) + typicality (0-10) +
+# independent rounds (one fresh claude process per call) -- can_exist (binary) + typicality (0-10) +
 # severity-tagged clash issues -- and rank every combination PLUS the SCB real reference on a per-
 # combination impossibility rate (bootstrap CI) x typicality-dispersion-vs-SCB (Levene), with an
 # ICC/alpha judge self-consistency metric. Two-stage: run map_populations.py first (depends_on:
@@ -249,7 +250,8 @@ generated — because collapsing withdrawn into missing is exactly how the previ
 of this figure went wrong.
 
 `cost_efficiency` joins that CSV to `model_ranking`'s accuracy and to LLM cost totalled over the
-**full generated pool**, not the capped mirror. Its join key is the run slug, which
+**finished personas of the generated pool** (generations stopped midway, i.e. failing
+`validate_raw`, are excluded), not the capped mirror. Its join key is the run slug, which
 `generation_metadata`'s summary does not publish: it is reconstructed from that file's `model` +
 `method` columns through `manifest_loader.axis_slug` and checked on every read against the slug
 `model_ranking` does publish for the same pair, so the reconstruction rule is proved against live
@@ -324,6 +326,28 @@ that draws it as a reference rather than a series, because this axis ranks nothi
 [ADR](../development/decisions/2026-08-12-self-contained-typicality-axis.md) for why the statistic is
 reference-free while its rendering is not.
 
+Beside that statistic sit three further typicality blocks, also reporting-only. The
+**distribution** block publishes each competitor's whole **round-weighted** score distribution
+(each survivor spreads weight 1 over its scored rounds, so at `--rounds 1` it is the plain
+first-round histogram) and its shares in three `--typicality-bands` bands, as
+`typicality_distribution.csv` and `typicality_bands.csv`, and draws them as
+`typicality_distribution_by_model_strategy.png/.svg/.eps`: a mini histogram per strategy × model
+cell with the reference as an outline, a detached column and a star in one ternary per strategy, on a
+fixed 456 pt canvas. Its columns follow `model_ranking`'s published order, so with charts on the run
+reads `03_Analysis/model_ranking/{country}_performance.json` **before writing anything** and exits
+naming `rank_models.py` when it is missing; `--no-charts` skips that read. The **effects** block adds
+the effect sizes the factor tests lacked: `typicality_effect_omnibus.csv` (ε² per factor),
+`typicality_effect_model_pairs.csv` (Cliff's δ + bootstrap interval beside every Dunn pair) and
+`typicality_effect_vs_reference.csv` (every combination and pooled model against the reference:
+Mann-Whitney U, Cliff's δ + interval, Holm within each family). The **closeness** block gives one
+closeness-to-the-reference value per combination — TV similarity primary, Cliff's δ and the Cramér
+distance as sensitivity, each beside its reference self-resampling noise baseline — with the additive
+model + strategy decomposition and its tests, every interval from one joint bootstrap whose settings
+come from `config/analysis/realism_ranking/typicality_closeness.yaml`: `typicality_closeness.csv`,
+`typicality_closeness_decomposition.csv`, `typicality_closeness_tests.csv` and
+`typicality_closeness_pairs.csv`. See the
+[operator guide](../development/persona-realism-judge.md#the-typicality-distribution-effect-sizes-and-closeness-to-the-reference).
+
 ```bash
 python scripts/analyze/analyze_persona_realism.py --slug swedish_02_all_pick_v2_claude_haiku
 python scripts/analyze/analyze_persona_realism.py --rewrite-artifacts   # rebuild artifacts, 0 LLM calls
@@ -333,8 +357,10 @@ python scripts/analyze/rank_persona_realism.py --country swedish_02 --force \
     --pair-summary-top-n 15 \                    # bars on each severity_pair_summary figure
     --typicality-metric iov \                    # or `mean` (location, interval assumption)
     --typicality-min-n 30 \                      # below it a cell is flagged, never dropped
-    --typicality-tail-threshold 5                # k0 of the secondary P(typicality <= k0) column
+    --typicality-tail-threshold 5 \              # k0 of the secondary P(typicality <= k0) column
+    --typicality-bands 4,7                       # score bands 0-4 / 5-7 / 8-10 of the distribution block
 python scripts/analyze/rank_persona_realism.py --country swedish_02 --rounds 2   # rank a mid-top-up sweep
+python scripts/analyze/rank_persona_realism.py --country swedish_02 --rounds 1 --force   # the manuscript basis
 ```
 
 `--rewrite-artifacts` regenerates the derived files from the verdict cache already on disk. It is
@@ -357,10 +383,13 @@ whose caveat is then published as a column on every emitted row), `--typicality-
 below it a cell is flagged `under_powered`, hatched on the heatmap, drawn hollow on the method figure
 and counted in the block's `excluded` map, never dropped and never confused with an unjudged pair) and
 `--typicality-tail-threshold` (default 5 — the `k0` of the secondary `P(typicality ≤ k0)` column, not
-the per-combination chart's 3.0) bound the typicality axis.
+the per-combination chart's 3.0) bound the typicality axis. `--typicality-bands B1,B2` (default
+`4,7`, i.e. 0–4 / 5–7 / 8–10; must satisfy `0 ≤ B1 < B2 < 10`) sets the three score bands of the
+distribution block and is recorded in `provenance.typicality_bands`.
 
-All six are resolved at the CLI edge — the builder reads no config — and `--no-charts` skips the
-figures while still writing the JSON and the CSVs.
+All seven are resolved at the CLI edge — the builder reads no config — and `--no-charts` skips the
+figures while still writing the JSON and the CSVs (and skips the read of `model_ranking`'s output,
+which only the distribution grid needs).
 
 `--rounds N` pins how many judge rounds the **ranking** consumes per persona, so a sweep still being
 topped up can be ranked at one depth instead of being refused as heterogeneous. Blank (the default)
@@ -372,7 +401,9 @@ the run rather than being ranked short — the round count becomes a capacity re
 way**: the cap reads caches, makes zero LLM calls and writes nothing under `persona_realism/`.
 `realism_ranking.json` carries the consumed count as `provenance.n_rounds` and where it came from as
 `provenance.n_rounds_source` (`report` / `cap` / `auto`); pin `--rounds` for anything published,
-since an auto-derived depth moves as the sweep tops up.
+since an auto-derived depth moves as the sweep tops up. The manuscript's typicality figures and tables use `--rounds 1`: at one
+round the round-weighted distribution is the integer first-round histogram the approved prototype
+was computed on.
 
 ## See also
 

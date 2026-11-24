@@ -19,6 +19,8 @@ Template contract (see ``config/analysis/persona_realism/judge_prompt.md``):
   mistaken for the real delimiters);
 * the text between them is the system prompt; the text after ``<!-- USER -->`` is
   the user template, which contains exactly one ``{persona_block}`` placeholder;
+* category values listed in the config's ``persona_rendering`` map are shown to
+  the judge by their rendered label (the persona block only; never the stored data);
 * substitution is a literal string replace of ``{persona_block}`` only -- never
   ``str.format`` (the system section contains a literal ``{...}`` JSON schema
   that must survive verbatim).
@@ -101,8 +103,13 @@ def load_prompt_template(path: str | Path) -> tuple[str, str]:
     return parse_prompt_template(path.read_text(encoding="utf-8"))
 
 
-def render_persona_block(persona: dict[str, Any], analyzed_attrs: list[str]) -> str:
-    """Render the analyzed tuple as raw ``attribute: value`` lines (one per line).
+def render_persona_block(
+    persona: dict[str, Any],
+    analyzed_attrs: list[str],
+    *,
+    rendering: dict[str, dict[str, str]],
+) -> str:
+    """Render the analyzed tuple as ``attribute: value`` lines (one per line).
 
     Iterates *analyzed_attrs* in order (the config-sourced comparison axis, which
     already excludes the deprecated axis). Each value is resolved through the
@@ -117,6 +124,13 @@ def render_persona_block(persona: dict[str, Any], analyzed_attrs: list[str]) -> 
     ``UNMAPPED`` token line rather than raising. The earlier fail-fast is
     intentionally replaced: unmapped is now an explicit, judge-visible state, so the
     judge sees the axis verbatim instead of the persona being dropped.
+
+    *rendering* (``JudgeConfig.persona_rendering``) maps attribute -> {canonical value
+    -> judge-facing label}. A rendered attribute's value is replaced by its label in
+    the returned string **only** -- the persona dict is not touched, so every stored
+    value stays canonical. Such a value that is neither a declared key nor unmapped
+    raises (``ValueError``): the map covers its tier's categories exactly, so a value
+    outside it comes from another tier and must never reach the judge coded.
     """
     # Lazy import: this pure rendering layer must not pull the statistics stack
     # (numpy/scipy, via evaluator) at module import time. ``attr_value`` is the
@@ -128,6 +142,14 @@ def render_persona_block(persona: dict[str, Any], analyzed_attrs: list[str]) -> 
         value = attr_value(persona, attr)
         if is_unmapped(value):
             value = UNMAPPED
+        elif attr in rendering:
+            labels = rendering[attr]
+            if value not in labels:
+                raise ValueError(
+                    f"{attr} value {value!r} has no judge-facing rendering; the "
+                    f"persona_rendering map declares only {sorted(labels)}"
+                )
+            value = labels[value]
         lines.append(f"{attr}: {value}")
     return "\n".join(lines)
 
@@ -137,6 +159,8 @@ def build_prompts(
     analyzed_attrs: list[str],
     system_str: str,
     user_template: str,
+    *,
+    rendering: dict[str, dict[str, str]],
 ) -> tuple[str, str]:
     """Return ``(system_str, user_str)`` for one persona.
 
@@ -144,6 +168,6 @@ def build_prompts(
     with its single ``{persona_block}`` literally replaced by the rendered tuple.
     Pure -- no side effects.
     """
-    block = render_persona_block(persona, analyzed_attrs)
+    block = render_persona_block(persona, analyzed_attrs, rendering=rendering)
     user_str = user_template.replace(PERSONA_PLACEHOLDER, block)
     return system_str, user_str

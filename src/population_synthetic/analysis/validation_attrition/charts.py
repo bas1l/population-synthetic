@@ -10,7 +10,7 @@ travels in the document like every other value.
 **Every published rate is read, never recomputed** (guide 02 sect. 9). ``retention_rate``
 is derived once, in the builder, and the grid renders that field verbatim, so the CSV,
 the JSON and the figure cannot disagree about a cell. The only arithmetic in this module
-is the funnel's bar geometry -- four disjoint slices of one combination's generated pool,
+is the funnel's bar geometry -- three disjoint slices of one combination's finished pool,
 which is the drawing itself rather than a statistic -- and the two pooled marginals on
 the grid, both of which are printed **with the counts they are quotients of** so a reader
 never meets a rate over an unstated base (guide 03 sect. 4).
@@ -26,9 +26,9 @@ never meets a rate over an unstated base (guide 03 sect. 4).
     it as an ordinary cell would publish a survival rate for a combination that no
     downstream artifact contains. It is emphatically **not** drawn as ``0``.
 ``undefined``
-    A combination the gate recorded whose generated pool is empty, so no rate exists.
-    Grey, labelled with its zero pool -- never ``0.0``, which would claim a pool was
-    generated and wholly discarded.
+    A combination the gate recorded whose finished pool is empty, so no rate exists.
+    Grey, labelled with its zero pool -- never ``0.0``, which would claim a pool
+    finished and was wholly discarded.
 ``absent``
     No such ``(model, method)`` combination in the run at all. Grey, labelled as not
     generated.
@@ -139,7 +139,7 @@ _WITHDRAWN_HATCH = "xxx"
 #: than solid so the two greys are separable at a glance while neither reads as a value.
 _UNDEFINED_EDGE_STYLE = (0, (1, 1.6))
 
-#: The funnel's four disjoint slices of the generated pool, in draw order (widest stage
+#: The funnel's three disjoint slices of the finished (raw-valid) pool, in draw order (widest stage
 #: of the funnel last), on the palette's stage series: these encode **which stage** a
 #: persona left at -- a category with a direction, not a score -- so they are
 #: deliberately not the sequential score ramp, and the pair of blues (kept) reads against
@@ -148,10 +148,13 @@ _SEGMENTS: tuple[tuple[str, str, str], ...] = (
     ("selected", STAGE_SERIES[0], "selected (drawn by the cap)"),
     ("clean_unselected", STAGE_SERIES[1], "clean, not drawn"),
     ("failed_mapped", STAGE_SERIES[2], "failed the mapped-value gate"),
-    ("failed_raw", STAGE_SERIES[3], "failed the raw-completeness gate"),
 )
 
-#: Fill for a combination whose generated pool is empty: there is no composition to draw,
+#: Colour of a withdrawn row's label: the stage series' last hue, which no bar slice
+#: uses since unfinished generations left the bar.
+_WITHDRAWN_LABEL_COLOR = STAGE_SERIES[3]
+
+#: Fill for a combination whose finished pool is empty: there is no composition to draw,
 #: and a zero-width bar is indistinguishable from a missing row.
 _EMPTY_POOL_COLOR = MISSING_COLOR
 
@@ -164,7 +167,7 @@ GRID_VARIANT_WITH_COUNTS = GridVariant(
         value_key="rate", numerator_key="numerator", denominator_key="denominator",
     ),
     cell_clause=(
-        "Cell: retention_rate (clean / generated) as published in the attrition CSV, "
+        "Cell: retention_rate (clean / finished) as published in the attrition CSV, "
         "printed with the two counts it is the quotient of."
     ),
     fontsize=ANNOT_FONTSIZE,
@@ -178,7 +181,7 @@ GRID_VARIANT_CLEAN = GridVariant(
     name=CANONICAL_VARIANT,
     policy=RateOnlyPolicy(value_key="rate"),
     cell_clause=(
-        "Cell: retention_rate (clean / generated) as published in the attrition CSV. The "
+        "Cell: retention_rate (clean / finished) as published in the attrition CSV. The "
         "two counts behind each rate are printed on the with-counts sibling figure and in "
         "the CSV; the pooled marginals here carry theirs."
     ),
@@ -217,14 +220,16 @@ def _funnel_counts(entry: Mapping[str, Any]) -> tuple[int, int, int, int, int]:
 
 
 def _segment_counts(entry: Mapping[str, Any]) -> dict[str, int]:
-    """Partition the generated pool into the four disjoint slices the funnel draws.
+    """Partition the finished pool into the three disjoint slices the funnel draws.
 
-    ``generated = (generated - raw_valid) + (raw_valid - clean) + (clean - selected) +
-    selected``, an identity rather than an estimate: ``clean`` is by construction the
-    subset of the raw-gate passers that also passed the mapped gate, so ``raw_valid -
-    clean`` is exactly the personas the mapped gate rejected among those the raw gate
-    kept. Every slice is a count difference, never a rate -- the rates on this figure are
-    read from the document.
+    ``raw_valid = (raw_valid - clean) + (clean - selected) + selected``, an identity rather
+    than an estimate: ``clean`` is by construction the subset of the raw-gate passers that
+    also passed the mapped gate, so ``raw_valid - clean`` is exactly the personas the
+    mapped gate rejected among those the raw gate kept. The ``generated - raw_valid``
+    personas the raw gate rejected are generations stopped midway; they are not part of
+    the bar, and their count is printed beside it instead.
+    Every slice is a count difference, never a rate -- the rates on this figure are read
+    from the document.
 
     Raises ``ValueError`` when the counts cannot be partitioned (a negative slice), which
     means the three gate records disagree about the same combination and no honest bar
@@ -232,7 +237,6 @@ def _segment_counts(entry: Mapping[str, Any]) -> dict[str, int]:
     """
     generated, raw_valid, _mapped_valid, clean, selected = _funnel_counts(entry)
     slices = {
-        "failed_raw": generated - raw_valid,
         "failed_mapped": raw_valid - clean,
         "clean_unselected": clean - selected,
         "selected": selected,
@@ -241,7 +245,7 @@ def _segment_counts(entry: Mapping[str, Any]) -> dict[str, int]:
     if negative:
         raise ValueError(
             f"combination {entry['slug']!r}: the gate counts do not partition its "
-            f"generated pool -- {negative} is negative for generated={generated}, "
+            f"finished pool -- {negative} is negative for generated={generated}, "
             f"raw_valid={raw_valid}, clean={clean}, selected={selected}. Re-run the "
             "validation gate for this combination before charting it."
         )
@@ -262,25 +266,25 @@ def _sort_key(entry: Mapping[str, Any]) -> tuple[int, float, str]:
 
 
 def _pooled(entries: Sequence[Mapping[str, Any]]) -> tuple[float | None, int, int]:
-    """``(clean / generated, clean, generated)`` pooled over *entries*.
+    """``(clean / raw_valid, clean, raw_valid)`` pooled over *entries*.
 
     Count-weighted, not a mean of the per-cell rates: the pools behind the cells differ
     by a factor of five on the live grid, and averaging their rates would weight a
     110-persona combination equally with a 549-persona one. Returned with both counts so
     the caller can print the rate beside the base it was taken over.
     """
-    generated = sum(_funnel_counts(entry)[0] for entry in entries)
+    raw_valid = sum(_funnel_counts(entry)[1] for entry in entries)
     clean = sum(_funnel_counts(entry)[3] for entry in entries)
-    if generated == 0:
-        return (None, clean, generated)
-    return (clean / generated, clean, generated)
+    if raw_valid == 0:
+        return (None, clean, raw_valid)
+    return (clean / raw_valid, clean, raw_valid)
 
 
 @house_style
 def plot_attrition_funnel(document: Mapping[str, Any]):
     """Per-combination attrition funnel, normalised, one horizontal bar per combination.
 
-    Each bar is one combination's generated pool cut into the four disjoint slices of
+    Each bar is one combination's finished pool cut into the three disjoint slices of
     :func:`_segment_counts` and drawn on a common 0--100% axis. Normalised because the
     absolute pools are not comparable -- they range from 110 to 549 on the live Swedish
     grid -- so a raw-count funnel would rank pool size and not survival. The count the
@@ -300,7 +304,7 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
 
     Raises:
         ValueError: If the document carries no combination, or if a combination's counts
-            do not partition its generated pool.
+            do not partition its finished pool.
     """
     entries = sorted(_combinations(document), key=_sort_key)
 
@@ -318,36 +322,38 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     labels: list[str] = []
     for index, entry in enumerate(entries):
         y = n_rows - 1 - index  # worst at the top
-        generated = _funnel_counts(entry)[0]
+        generated, raw_valid = _funnel_counts(entry)[:2]
         suffix = "  [withdrawn]" if entry["excluded"] else ""
         labels.append(
             f"{display_models[entry['model']]} / {letters[entry['strategy']]}{suffix}"
         )
 
-        if generated == 0:
+        unfinished = generated - raw_valid
+        unfinished_text = f"   ({unfinished} unfinished ignored)" if unfinished else ""
+        if raw_valid == 0:
             # No composition exists. Drawn as a full-width grey band rather than as an
-            # absent row, so "generated nothing" is visible instead of looking like a
+            # absent row, so "nothing finished" is visible instead of looking like a
             # combination the figure forgot.
             ax.barh(y, 1.0, height=0.72, color=_EMPTY_POOL_COLOR, edgecolor="none")
             ax.text(
-                0.5, y, "generated = 0 -- no pool to partition", ha="center", va="center",
+                0.5, y, "finished = 0 -- no pool to partition", ha="center", va="center",
                 fontsize=ANNOT_FONTSIZE,
                 color=text_color_for_rgb(_to_rgb(_EMPTY_POOL_COLOR)),
             )
-            ax.text(1.02, y, "N=0", ha="left", va="center", fontsize=ANNOTATION)
+            ax.text(1.02, y, f"N=0{unfinished_text}", ha="left", va="center", fontsize=ANNOTATION)
             continue
 
         slices = _segment_counts(entry)
         left = 0.0
         for name, color, _legend in _SEGMENTS:
-            width = slices[name] / generated
+            width = slices[name] / raw_valid
             if width > 0:
                 ax.barh(y, width, left=left, height=0.72, color=color, edgecolor="none")
             left += width
 
         rate = entry["retention_rate"]
         ax.text(
-            1.02, y, f"N={generated}   retained {rate * 100:.1f}%",
+            1.02, y, f"N={raw_valid}   retained {rate * 100:.1f}%{unfinished_text}",
             ha="left", va="center", fontsize=ANNOTATION,
             fontweight="bold" if entry["excluded"] else "normal",
         )
@@ -356,14 +362,14 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     ax.set_yticklabels(list(reversed(labels)), fontsize=TICK_LABEL)
     for label, entry in zip(reversed(ax.get_yticklabels()), entries):
         if entry["excluded"]:
-            label.set_color(_SEGMENTS[3][1])
+            label.set_color(_WITHDRAWN_LABEL_COLOR)
             label.set_fontweight("bold")
 
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(-0.8, n_rows - 0.2)
     ax.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
     ax.set_xticklabels(["0", "25", "50", "75", "100"], fontsize=TICK_LABEL)
-    ax.set_xlabel("share of the combination's generated pool (%)", fontsize=AXIS_TITLE)
+    ax.set_xlabel("share of the combination's finished pool (%)", fontsize=AXIS_TITLE)
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
 
@@ -371,7 +377,7 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     ax.set_title(
         f"{country_label(document['country'])}: validation attrition per combination "
         f"({document['n_combinations']} combinations, {document['n_excluded']} withdrawn)\n"
-        "each bar is one combination's generated pool, normalised -- absolute pools are "
+        "each bar is one combination's finished pool, normalised -- absolute pools are "
         "not comparable",
         fontsize=PANEL_TITLE, fontweight="bold", pad=14,
     )
@@ -382,7 +388,7 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
     ]
     ax.legend(
         handles=handles, loc="upper left", bbox_to_anchor=(0.0, -0.04),
-        ncol=4, fontsize=LEGEND_LABEL, frameon=False,
+        ncol=3, fontsize=LEGEND_LABEL, frameon=False,
     )
 
     pooled_rate = totals["retention_rate"]
@@ -390,15 +396,17 @@ def plot_attrition_funnel(document: Mapping[str, Any]):
         "n/a" if pooled_rate is None else f"{pooled_rate * 100:.1f}%"
     )
     caption = (
-        "Bar, left to right: the four disjoint fates of one combination's generated personas "
+        "Bar, left to right: the three disjoint fates of one combination's finished personas "
         "-- drawn by the seeded cap, clean but not drawn, passed the raw-completeness gate but "
-        "failed the mapped-value gate, failed the raw gate. The four sum to the pool exactly, "
-        "so the bar is a "
-        "partition and not a stack of overlapping counts. N is that pool, printed on every "
-        "row: the percentage axis is a share of it, never of the sweep. 'retained' is the "
-        "document's retention_rate (clean / generated), read from the same record the CSV "
-        f"publishes. Pooled over every combination shown: {totals['clean']} clean of "
-        f"{totals['generated']} generated ({pooled_text}), {totals['selected']} selected. A "
+        "failed the mapped-value gate. The three sum to the finished pool exactly, so the bar "
+        "is a partition and not a stack of overlapping counts. N is that pool (personas whose "
+        "generation completed), printed on every row: the percentage axis is a share of it, "
+        "never of the sweep. Generations stopped midway fail the raw-completeness gate; they "
+        "are an artefact of interrupting a run, are ignored by every rate and are only "
+        "counted beside the bar. 'retained' is the document's retention_rate "
+        "(clean / finished), read from the same record the CSV publishes. Pooled over every "
+        f"combination shown: {totals['clean']} clean of {totals['raw_valid']} finished "
+        f"({pooled_text}; {totals['generated']} generated), {totals['selected']} selected. A "
         "withdrawn combination held fewer clean personas than the requested cap, so the "
         "gate excluded it: its personas were generated and validated but reach no other "
         "artifact in the analysis layer."
@@ -449,7 +457,7 @@ def plot_mapped_validity_grid(
     """Model x method grid of validation survival -- the mapping-survival figure.
 
     Each cell is that combination's ``retention_rate`` read from the document: the share
-    of its generated pool that passed **both** validity gates and so was available to the
+    of its finished pool that passed **both** validity gates and so was available to the
     cap. Columns are methods in
     :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order` -- a
     config fact, not an artifact of this figure -- lettered from the family index, with
@@ -528,8 +536,8 @@ def plot_mapped_validity_grid(
             if state in ("measured", "withdrawn"):
                 rate = float(entry["retention_rate"])
                 values[i, j] = rate
-                generated, _raw_valid, _mapped_valid, clean, _selected = _funnel_counts(entry)
-                row_cells.append({"rate": rate, "numerator": clean, "denominator": generated})
+                _generated, raw_valid, _mapped_valid, clean, _selected = _funnel_counts(entry)
+                row_cells.append({"rate": rate, "numerator": clean, "denominator": raw_valid})
                 # A withdrawn cell is hatched; the patch keeps the hatch off its number.
                 row_fill.append(state == "withdrawn")
             else:
@@ -622,17 +630,17 @@ def plot_mapped_validity_grid(
     horizontal_divider(ax, len(models) - 0.5 + 0.5)
 
     for i, model in enumerate(models):
-        rate, clean, generated = row_pooled[model]
+        rate, clean, finished = row_pooled[model]
         text = "n/a" if rate is None else f"{rate * 100:.1f}%"
         ax.text(
-            n_methods - 0.5 + 0.12, i, f"{text}  ({clean}/{generated})",
+            n_methods - 0.5 + 0.12, i, f"{text}  ({clean}/{finished})",
             ha="left", va="center", fontsize=ANNOTATION, clip_on=False,
         )
     for j, method in enumerate(methods):
-        rate, clean, generated = _pooled([e for e in entries if e["strategy"] == method])
+        rate, clean, finished = _pooled([e for e in entries if e["strategy"] == method])
         text = "n/a" if rate is None else f"{rate * 100:.1f}%"
         ax.text(
-            j, marginal_y, f"{text}\n({clean}/{generated})",
+            j, marginal_y, f"{text}\n({clean}/{finished})",
             ha="center", va="center", fontsize=ANNOTATION, linespacing=1.3,
         )
     ax.text(
@@ -667,7 +675,7 @@ def plot_mapped_validity_grid(
 
     ax.set_title(
         f"{country_label(document['country'])}: validation survival by model x method\n"
-        "share of each combination's generated pool that passed both validity gates -- "
+        "share of each combination's finished pool that passed both validity gates -- "
         f"{document['n_excluded']} of {document['n_combinations']} combinations withdrawn",
         fontsize=PANEL_TITLE, fontweight="bold", pad=30,
     )
@@ -675,7 +683,8 @@ def plot_mapped_validity_grid(
     caption = (
         f"{variant.cell_clause} "
         "'clean' means a persona passed the raw-completeness gate AND the mapped-value "
-        "gate; the colour scale is the full "
+        "gate, out of the personas whose generation finished (a generation stopped midway "
+        "is ignored); the colour scale is the full "
         "0-100% range, not the observed one, so grids from different runs are comparable. "
         "Marginals are pooled over persona counts, not means of the cell rates -- the pools "
         "behind the cells differ by a factor of five, and an unweighted mean would give a "

@@ -58,6 +58,11 @@ half outright).
   `n_personas` all agree, and the whole consumption set must share one `judge_model` /
   `prompt_template_sha256` / `n_rounds` (read from stamped provenance, not from current config —
   ranking units judged by different judges measures the judges).
+- **Amendment (2026-10-04).** Order-independence was *not* held at the persona level until
+  [ADR 2026-10-04](2026-10-04-claude-cli-call-is-a-fresh-process.md): the judge client kept one
+  conversation per worker thread, so a verdict depended on which personas that thread had judged
+  before. The byte-identity tests above use a stateless stub client and could not catch it. The
+  consumption set must now also share one `context_isolation` tag.
 - `{combo}.json` and `{combo}.csv` changed schema. **No re-judging is required**: the verdict caches
   are untouched, and `analyze_persona_realism.py --rewrite-artifacts` rebuilds every derived file
   from the cache already on disk at zero LLM cost. `--force` must not be used for this — it

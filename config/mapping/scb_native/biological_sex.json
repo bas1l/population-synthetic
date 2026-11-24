@@ -3,6 +3,10 @@
     "Male",
     "Female"
   ],
+  "priority": [
+    "Male",
+    "Female"
+  ],
   "real": {
     "Male": {
       "equals": [
@@ -22,6 +26,7 @@
     }
   },
   "synthetic": {
+    "negation": null,
     "Male": {
       "equals": [
         "Male",
@@ -42,7 +47,12 @@
         "pojke",
         "kille",
         "manlig",
-        "kön man"
+        "kön man",
+        "cis man",
+        "herr"
+      ],
+      "none_of": [
+        "female"
       ]
     },
     "Female": {
@@ -53,7 +63,8 @@
         "f",
         "feminin",
         "Frau",
-        "Född kvinna"
+        "Född kvinna",
+        "K"
       ],
       "contains": [
         "female",
@@ -63,7 +74,11 @@
         "flicka",
         "tjej",
         "hona",
-        "woman"
+        "woman",
+        "kvinn"
+      ],
+      "none_of": [
+        "male"
       ]
     }
   }

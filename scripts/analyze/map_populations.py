@@ -179,6 +179,28 @@ def _write_misses(path: Path, misses: list[dict[str, Any]]) -> None:
         writer.writerows(misses)
 
 
+#: Column order of the per-slug tie sidecar (one row per multi-hit resolution or
+#: ambiguous numeric facet; see ``BaseSyntheticMapper.ties``).
+_TIE_COLUMNS = ("persona_id", "attribute", "raw_value", "tier", "candidates", "winner", "criterion")
+
+
+def _write_ties(path: Path, ties: list[dict[str, Any]]) -> None:
+    """Write the per-slug tie log as CSV (always, even when empty).
+
+    One row per (persona, attribute) whose winning tier was hit by more than one value:
+    ``candidates`` lists ``value:score:token`` for every hit, ``winner`` the value the
+    ``tie_break`` criteria chose and ``criterion`` the criterion that decided it
+    (``longest`` or ``priority``). Rows with ``criterion == "facet_ambiguous"`` record a
+    ``numeric_facet`` read that stated hours in several bands (``winner`` is
+    ``__UNMAPPED__``) or behind a comparator (the walked value is kept).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_TIE_COLUMNS)
+        writer.writeheader()
+        writer.writerows(ties)
+
+
 def _skipped_entry(slug: str, country: str) -> dict[str, Any]:
     """The _index.json entry for a target whose synthetic run is not (yet) mappable."""
     return {
@@ -235,9 +257,11 @@ def _map_one_target(
             return _skipped_entry(slug, country)
 
         misses: list[dict[str, Any]] = []
-        synthetic_pop = map_synthetic(raw_synthetic, country=country, misses_out=misses)
+        ties: list[dict[str, Any]] = []
+        synthetic_pop = map_synthetic(raw_synthetic, country=country, misses_out=misses, ties_out=ties)
         _write_json(synthetic_file, synthetic_pop)
         _write_misses(mapped_dir / f"{slug}.misses.csv", misses)
+        _write_ties(mapped_dir / f"{slug}.ties.csv", ties)
         n_mapped = synthetic_pop["metadata"]["n"]
         n_skipped = synthetic_pop["metadata"].get("skipped", 0)
         print(f"  Mapped synthetic -> {synthetic_file} (n={n_mapped}, skipped={n_skipped})")
@@ -247,6 +271,8 @@ def _map_one_target(
                 f"  Unmapped values -> {slug}.misses.csv "
                 f"({len(misses)} total, {masked} masked by an on_miss literal)"
             )
+        if ties:
+            print(f"  Tied / ambiguous resolutions -> {slug}.ties.csv ({len(ties)} total)")
 
     # --- Real side: map once per country, reuse thereafter.
     real_file = mapped_dir / f"real_{country}.json"

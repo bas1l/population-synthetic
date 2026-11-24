@@ -31,7 +31,7 @@ GUI dispatches this task one subprocess per combination and fails the task on th
 nonzero exit, so erroring on a withdrawal would take every later combination and every
 dependent task down with it. Exit 1 is reserved for a selection that matched nothing.
 
-Judge model, rounds, temperature, sampling size, and bootstrap
+Judge model, rounds, sampling size, and bootstrap
 params are config-driven (``config/analysis/persona_realism/``); cost per combo
 reuses ``config/analysis/model_pricing.yaml`` (fail-fast on a missing pricing row).
 
@@ -41,6 +41,9 @@ of combination directories ONLY -- no country-level aggregate file is produced h
     {country}/{combo}/persona_XXXXX.jsonl   per-persona token/timing telemetry (1:1 with the cache)
     {country}/{combo}/{combo}.csv / .json   this combination's stats + cost + validation
     {country}/{combo}/{combo}_personas.csv  per-persona tidy rows (the realism_ranking contract)
+    {country}/{combo}/stage2/persona_XXXXX.json/.jsonl  stage-2 classification cache + telemetry
+    {country}/{combo}/{combo}_stage2.csv    one row per S3 clash: its stage-2 class, reason, raw answers
+    {country}/{combo}/{combo}_stage2_personas.csv  one row per persona with an S3 clash: its class
     {country}/{combo}/typicality.png/.svg/.eps   this combination's typicality distribution
     {country}/{combo}/clash_taxonomy.png/.svg/.eps  this combination's attribute-clash taxonomy
     {country}/real_{country}/...            the real competitor (identical layout)
@@ -89,13 +92,15 @@ from population_synthetic.analysis.model_ranking.loader import scheme_attributes
 from population_synthetic.analysis.persona_realism.artifacts import (
     ComboArtifacts,
     load_realism_hard_rules,
+    log_leftover_persona_files,
     write_combo_artifacts,
 )
 from population_synthetic.analysis.persona_realism.config import JudgeConfig
-from population_synthetic.analysis.persona_realism.reduce import has_cached_verdicts
+from population_synthetic.analysis.persona_realism.reduce import has_cached_verdicts, load_combo_verdicts
 from population_synthetic.analysis.persona_realism.runner import run_combo_judgements
+from population_synthetic.analysis.persona_realism.stage2 import run_combo_stage2
 from population_synthetic.analysis.utils.axes import decompose_slug, diagnose_slug
-from population_synthetic.analysis.utils.capped_source import resolve_mapped_dir
+from population_synthetic.analysis.utils.capped_source import resolve_combo_source, resolve_mapped_dir
 from population_synthetic.analysis.utils.figures import RASTER_DPI
 from population_synthetic.analysis.utils.registry import analysis_output_dir, resolve_output_base
 from population_synthetic.generators.synthetic.manifest_loader import discover_axis_values
@@ -383,6 +388,33 @@ def _load_individuals(path: Path, *, what: str) -> list[dict[str, Any]]:
     return individuals
 
 
+def _raw_identity_reader(combo: _Combo, output_base: Path | None):
+    """``persona_id -> identity.json dict`` for a synthetic combination, ``None`` for the real one.
+
+    Stage 2 reads each persona's raw free-text answers from the population_cap mirror
+    (the same persona dirs the mapped file was capped from). The real reference has no
+    free text, so it gets no reader and its S3 clashes are not applicable. A missing or
+    unreadable identity file raises: the mapped persona exists, so its raw answers must.
+    """
+    if combo.is_real_reference:
+        return None
+    if output_base is None:
+        raise ValueError(f"combo {combo.label!r}: stage 2 needs the output base to find raw identities")
+    root = resolve_combo_source(combo.label, output_base)
+
+    def _read(persona_id: str) -> dict[str, Any]:
+        path = root / persona_id / "identity.json"
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"combo {combo.label!r}: no raw identity for {persona_id} at {path}; the "
+                "population_cap mirror must hold every capped persona."
+            )
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+
+    return _read
+
+
 def _run_one_combo(
     *,
     combo: _Combo,
@@ -395,6 +427,7 @@ def _run_one_combo(
     rewrite_artifacts: bool = False,
     hard_rules: Any,
     pricing: Any,
+    output_base: Path | None = None,
 ) -> ComboArtifacts | None:
     """Judge (top-up if needed) then compute + render one combination's artifacts.
 
@@ -446,7 +479,13 @@ def _run_one_combo(
             combo.label, summary.failed,
         )
 
-    if not has_cached_verdicts(out_dir):
+    # The roster is the persona set stage 1 selected from the capped mapped population.
+    # Every reader below is bounded by it: a leftover cache file of a persona an earlier
+    # cap selected is ignored (and kept), never classified, reduced or costed.
+    selected_ids = list(summary.selected_ids)
+    log_leftover_persona_files(out_dir, combo.label, selected_ids, logger=logger)
+
+    if not has_cached_verdicts(out_dir, selected_ids):
         # Nothing was judged and nothing is cached, so there is nothing to reduce. Writing
         # here would publish a report claiming n_personas=0 -- which downstream reads as a
         # judged competitor holding no data, not as a unit still waiting to be judged, and
@@ -460,7 +499,27 @@ def _run_one_combo(
         )
         return None
 
-    did_work = summary.written > 0 or summary.topped_up > 0
+    # Stage 2 (reporting-only): classify every not-yet-classified S3 round of the selected
+    # personas (the roster, not the folder). Skipped on the
+    # zero-cost --rewrite-artifacts path (it would call the judge); the artifacts then mark
+    # any S3 clash without a cached classification as unclassified.
+    raw_reader = _raw_identity_reader(combo, output_base) if cfg.stage2_enabled else None
+    stage2_classified = 0
+    if cfg.stage2_enabled and not (rewrite_artifacts and not force):
+        loaded = load_combo_verdicts(out_dir, expected_ids=selected_ids)
+        present = [lp for lp in loaded.values() if lp is not None]
+        s2 = run_combo_stage2(
+            present, combo.label, analyzed_attrs, out_dir, cfg,
+            selected_ids=selected_ids, raw_identity=raw_reader, force=force, logger=logger,
+        )
+        stage2_classified = s2.classified
+        if s2.failed:
+            logger.warning(
+                "combo %s: %d stage-2 round(s) failed every attempt (left unclassified, retryable)",
+                combo.label, s2.failed,
+            )
+
+    did_work = summary.written > 0 or summary.topped_up > 0 or stage2_classified > 0
     rewrite = did_work or not report_exists or force or rewrite_artifacts
     if not rewrite:
         logger.info(
@@ -473,8 +532,8 @@ def _run_one_combo(
         cfg=cfg, dpi=dpi, force=rewrite,
         country=combo.country, model=combo.model, strategy=combo.strategy,
         is_real_reference=combo.is_real_reference,
-        expected_ids=list(summary.selected_ids) or None,
-        hard_rules=hard_rules, pricing=pricing, logger=logger,
+        expected_ids=selected_ids,
+        hard_rules=hard_rules, pricing=pricing, raw_identity=raw_reader, logger=logger,
     )
 
 
@@ -589,7 +648,7 @@ def main() -> None:
             out_dir=out_root / combo.country / combo.label,
             cfg=cfg, dpi=args.dpi, force=args.force,
             rewrite_artifacts=args.rewrite_artifacts,
-            hard_rules=hard_rules, pricing=pricing,
+            hard_rules=hard_rules, pricing=pricing, output_base=Path(output_base),
         )
         if ca is None:
             print("    NOT judged: no verdict cache -- no artifacts written")

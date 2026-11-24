@@ -22,6 +22,29 @@
     "Romania",
     "China"
   ],
+  "priority": [
+    "Sweden",
+    "Syria",
+    "Finland",
+    "Iraq",
+    "Poland",
+    "Iran",
+    "Bosnia and Herzegovina",
+    "Somalia",
+    "Afghanistan",
+    "Turkey",
+    "Germany",
+    "Yugoslavia",
+    "India",
+    "Eritrea",
+    "Denmark",
+    "Norway",
+    "Thailand",
+    "United Kingdom",
+    "Ukraine",
+    "Romania",
+    "China"
+  ],
   "real": {
     "Sweden": {
       "equals": [
@@ -193,7 +216,16 @@
         "blekinge",
         "gotland",
         "härjedalen",
-        "småland"
+        "småland",
+        "svensk födelseland",
+        "uplandia"
+      ],
+      "none_of": [
+        "född i utlandet",
+        "utomlands född",
+        "utlandsfödd",
+        "utanlandsfödd",
+        "born abroad"
       ]
     },
     "Syria": {

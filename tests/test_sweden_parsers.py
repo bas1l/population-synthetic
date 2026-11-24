@@ -425,3 +425,232 @@ def test_parse_employment_status_combined_derivation_end_to_end():
     fb = result[("18-24", "upper secondary education 3 years (isced97 3a)", "men")]
     assert fb["Employed"] == pytest.approx(0.6, abs=1e-6)  # 600/1000 age-only
     assert fb["Student"] == pytest.approx(0.2, abs=1e-6)   # 200/1000
+
+
+# --- employment_type: AKU attachment x hours, declared age proxies ------------
+
+
+def _aku_fixtures() -> tuple[dict, dict]:
+    """Attachment (15-24 .. 65-74) and hours (15-19, 20-24 .. 65-74) payloads.
+
+    Laid out like the live AKU responses: attachment id order (Anknytningsgrad,
+    Kon, Alder), hours id order (VeckoarbetstidO, Kon, Alder). Each age band gets
+    a distinct attachment mix so a proxy that copies the wrong cell is visible.
+    """
+    ages_a = ["15-24", "25-34", "35-44", "45-54", "55-64", "65-74"]
+    ages_h = ["15-19", "20-24", "25-34", "35-44", "45-54", "55-64", "65-74"]
+    sex = [("1", "men"), ("2", "women")]
+
+    def attach_cell(sel: dict) -> float:
+        perm = 10.0 * (ages_a.index(sel["Alder"]) + 1)
+        return {"FA": perm, "TA": 100.0 - perm, "FÖ+MH": 5.0}[sel["Anknytningsgrad"]]
+
+    def hours_cell(sel: dict) -> float:
+        return {"1-19": 10.0, "20-34": 20.0, "35+": 70.0}[sel["VeckoarbetstidO"]]
+
+    raw_a = _jsonstat(
+        ["Anknytningsgrad", "Kon", "Alder"],
+        {
+            "Anknytningsgrad": [("FA", "permanent employees"), ("TA", "temporary employees"),
+                                ("FÖ+MH", "self-employed + family workers")],
+            "Kon": sex,
+            "Alder": [(a, f"{a} years") for a in ages_a],
+        },
+        attach_cell,
+    )
+    raw_h = _jsonstat(
+        ["VeckoarbetstidO", "Kon", "Alder"],
+        {
+            "VeckoarbetstidO": [("1-19", "1-19 hours"), ("20-34", "20-34 hours"), ("35+", "35+ hours")],
+            "Kon": sex,
+            "Alder": [(a, f"{a} years") for a in ages_h],
+        },
+        hours_cell,
+    )
+    return raw_a, raw_h
+
+
+def _p_attach(dist: dict[str, float], attach: str) -> float:
+    return sum(p for k, p in dist.items() if k.split("|", 1)[0] == attach)
+
+
+def test_employment_type_maps_aku_15_24_onto_18_24_and_proxies_75_85():
+    from population_synthetic.generators.real.sweden.constants import (
+        AKU_ATTACHMENT_AGE_LABEL_MAP,
+        EMPLOYMENT_TYPE_AGE_PROXIES,
+    )
+
+    raw_a, raw_h = _aku_fixtures()
+    result = P.parse_employment_type_combined(
+        raw_a, raw_h, AKU_ATTACHMENT_AGE_LABEL_MAP, EMPLOYMENT_TYPE_AGE_PROXIES
+    )
+    groups = ("18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85")
+    assert set(result) == {(g, s) for g in groups for s in ("men", "women")}
+    # 18-24 carries the AKU 15-24 attachment mix (FA = 10 of 105), not 65-74's.
+    assert _p_attach(result[("18-24", "men")], "permanent employees") == pytest.approx(10 / 105)
+    # 75-85 is an exact copy of 65-74 (the declared proxy).
+    assert result[("75-85", "women")] == result[("65-74", "women")]
+    assert result[("75-85", "women")] is not result[("65-74", "women")]
+    for dist in result.values():
+        assert _sums_to_one(dist)
+
+
+def test_employment_type_raises_when_an_age_group_is_uncovered():
+    raw_a, raw_h = _aku_fixtures()
+    # Without the 15-24 label map and the 75-85 proxy, 18-24 and 75-85 are gaps.
+    with pytest.raises(ValueError, match="no cell for"):
+        P.parse_employment_type_combined(raw_a, raw_h, {})
+
+
+def test_employment_type_proxy_must_not_overwrite_a_delivered_cell():
+    raw_a, raw_h = _aku_fixtures()
+    with pytest.raises(ValueError, match="already delivered"):
+        P.parse_employment_type_combined(
+            raw_a, raw_h, {"15-24 years": "18-24"}, {"75-85": "65-74", "25-34": "35-44"}
+        )
+
+
+def test_employment_type_proxy_source_must_exist():
+    raw_a, raw_h = _aku_fixtures()
+    with pytest.raises(ValueError, match="source cell"):
+        P.parse_employment_type_combined(raw_a, raw_h, {}, {"75-85": "18-24"})
+
+
+# --- income_source: TabVX13InkStruktN components incl. 325 / 330 ---------------
+
+_INC_COMPONENTS = [
+    ("300", "wage and business income"), ("305", "capital income"), ("310", "pensions"),
+    ("315", "sickness and activity compensation"),
+    ("320", "sickness compensation, parental allowance, labour market assistance etc."),
+    ("325", "general allowance"), ("330", "housing allowance"), ("335", "social assistance"),
+]
+_INC_AGES = [("20-29", "20–29 years"), ("80-", "80– years")]
+_INC_EMP = [("1000", "gainfully employed"), ("1800", "students")]
+
+
+def _income_cell(sel: dict) -> float:
+    comp = [c for c, _ in _INC_COMPONENTS].index(sel["Inkomstkomponenter"]) + 1
+    age = [c for c, _ in _INC_AGES].index(sel["Alder"]) + 1
+    emp = [c for c, _ in _INC_EMP].index(sel["Sysselsattning"]) + 1
+    if sel["Sysselsattning"] == "1800" and sel["Alder"] == "80-":
+        return 0.0  # no students aged 80+: the cell is dropped, not invented
+    return float(comp * 10 + age * 3 + emp)
+
+
+def _income_payload(id_order: list[str]) -> dict:
+    cats = {
+        "Region": [("00", "Sweden")],
+        "Inkomstkomponenter": _INC_COMPONENTS,
+        "Alder": _INC_AGES,
+        "Sysselsattning": _INC_EMP,
+        "ContentsCode": [("000006SV", "Percent")],
+        "Tid": [("2024", "2024")],
+    }
+    return _jsonstat(id_order, cats, _income_cell)
+
+
+def test_income_source_parses_all_eight_components_keyed_by_age_code():
+    raw = _income_payload(["Region", "Inkomstkomponenter", "Alder", "Sysselsattning", "ContentsCode", "Tid"])
+    result = P.parse_income_source(raw)
+    # Age is keyed by its code, so the en-dash labels never reach the sampler.
+    assert set(result) == {("gainfully employed", "20-29"), ("gainfully employed", "80-"), ("students", "20-29")}
+    dist = result[("students", "20-29")]
+    assert set(dist) == {label for _, label in _INC_COMPONENTS}
+    assert _sums_to_one(dist)
+    total = sum(_income_cell({"Inkomstkomponenter": c, "Alder": "20-29", "Sysselsattning": "1800"})
+                for c, _ in _INC_COMPONENTS)
+    assert dist["general allowance"] == pytest.approx(
+        _income_cell({"Inkomstkomponenter": "325", "Alder": "20-29", "Sysselsattning": "1800"}) / total
+    )
+
+
+def test_income_source_is_independent_of_dimension_order():
+    canonical = P.parse_income_source(
+        _income_payload(["Region", "Inkomstkomponenter", "Alder", "Sysselsattning", "ContentsCode", "Tid"])
+    )
+    permuted = P.parse_income_source(
+        _income_payload(["Sysselsattning", "Tid", "Alder", "Region", "Inkomstkomponenter", "ContentsCode"])
+    )
+    assert permuted == canonical
+
+
+def test_income_source_rejects_an_unselected_extra_dimension():
+    raw = _income_payload(["Region", "Inkomstkomponenter", "Alder", "Sysselsattning", "ContentsCode", "Tid"])
+    raw = _jsonstat(
+        raw["id"],
+        {
+            "Region": [("00", "Sweden"), ("01", "Stockholm county")],
+            "Inkomstkomponenter": _INC_COMPONENTS,
+            "Alder": _INC_AGES,
+            "Sysselsattning": _INC_EMP,
+            "ContentsCode": [("000006SV", "Percent")],
+            "Tid": [("2024", "2024")],
+        },
+        _income_cell,
+    )
+    with pytest.raises(ValueError, match="Region"):
+        P.parse_income_source(raw)
+
+
+def test_scb_native_mapping_resolves_every_income_component(sweden_mapper):
+    for _, label in _INC_COMPONENTS:
+        out = sweden_mapper.normalize_individual({"id": "t", "income_source": {"label": label}})
+        assert out["income_source"] is not None, f"income_source: raw label {label!r} did not resolve"
+    out = sweden_mapper.normalize_individual({"id": "t", "income_source": {"label": "general allowance"}})
+    assert out["income_source"] == "General Allowances"
+    out = sweden_mapper.normalize_individual({"id": "t", "income_source": {"label": "housing allowance"}})
+    assert out["income_source"] == "Housing Allowance"
+
+
+def _region_raw():
+    """Tiny json-stat2 county x age x sex table: 2 counties, ages 20/30, 2 sexes."""
+    return {
+        "dimension": {
+            "Region": {"category": {"label": {"01": "Stockholm county", "12": "Skåne county"}}},
+            "Alder": {"category": {"label": {"20": "20 years", "30": "30 years"}}},
+            "Kon": {"category": {"label": {"1": "men", "2": "women"}}},
+        },
+        # order: region, age, sex
+        "value": [10, 20, 30, 40, 50, 60, 70, 80],
+    }
+
+
+def test_parse_region_by_age_sex_conditions_on_the_cell():
+    cells = P.parse_region_by_age_sex(_region_raw(), age_group_map={})
+    # 20 years -> 18-24, 30 years -> 25-34
+    assert set(cells) == {("18-24", "men"), ("18-24", "women"), ("25-34", "men"), ("25-34", "women")}
+    assert cells[("18-24", "men")] == {"Stockholm county": 10 / 60, "Skåne county": 50 / 60}
+    assert cells[("25-34", "women")] == {"Stockholm county": 40 / 120, "Skåne county": 80 / 120}
+    assert all(abs(sum(d.values()) - 1.0) < 1e-12 for d in cells.values())
+
+
+def test_parse_region_by_age_sex_mixes_back_to_the_national_marginal():
+    raw = _region_raw()
+    cells = P.parse_region_by_age_sex(raw, age_group_map={})
+    weights = {(ag, sx): sum(raw["value"][i] for i in idx)
+               for (ag, sx), idx in {("18-24", "men"): (0, 4), ("18-24", "women"): (1, 5),
+                                     ("25-34", "men"): (2, 6), ("25-34", "women"): (3, 7)}.items()}
+    total = sum(weights.values())
+    mix: dict[str, float] = {}
+    for cell, dist in cells.items():
+        for county, p in dist.items():
+            mix[county] = mix.get(county, 0.0) + p * weights[cell] / total
+    marginal = P.parse_region(raw)
+    assert mix.keys() == marginal.keys()
+    assert all(abs(mix[k] - marginal[k]) < 1e-12 for k in marginal)
+
+
+def test_parse_region_by_age_sex_rejects_an_empty_cell():
+    raw = _region_raw()
+    raw["value"] = [0, 20, 30, 40, 0, 60, 70, 80]  # (18-24, men) has no population
+    with pytest.raises(ValueError, match="no population"):
+        P.parse_region_by_age_sex(raw, age_group_map={})
+
+
+def test_aku_attachment_age_label_map_accepts_hyphen_and_en_dash():
+    # SCB switched the AKU band label from "15-24 years" to an en dash spelling; both must
+    # resolve to the 18-24 pipeline group or the employment_type table loses that cell.
+    from population_synthetic.generators.real.sweden.constants import AKU_ATTACHMENT_AGE_LABEL_MAP
+
+    assert AKU_ATTACHMENT_AGE_LABEL_MAP["15-24 years"] == "18-24"
+    assert AKU_ATTACHMENT_AGE_LABEL_MAP["15\u201324 years"] == "18-24"

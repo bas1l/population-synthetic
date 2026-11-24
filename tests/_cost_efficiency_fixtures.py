@@ -91,14 +91,28 @@ def write_raw_pool(
     prompt_tokens: int = 1_000,
     completion_tokens: int = 2_000,
     with_tokens: bool = True,
+    n_unfinished: int = 0,
 ) -> Path:
     """Write ``01_Raw/{slug}/persona_XXX/llm_interactions.jsonl`` for *n_personas*.
 
     One call per persona, with a unique ``(persona_id, call_index)`` so the reader's
     double-counting guard passes. ``with_tokens=False`` writes calls that report no token
     counts at all, which is the *absent* state -- distinct from a zero cost.
+
+    Also writes ``validate_raw/{slug}.csv``: the first ``n_personas - n_unfinished``
+    personas pass (finished), the last *n_unfinished* fail (a generation stopped midway,
+    whose telemetry the cost must ignore).
     """
     pool = base / RAW_STAGE_DIR / slug
+    verdicts = analysis_output_dir("validate_raw", base)
+    verdicts.mkdir(parents=True, exist_ok=True)
+    with open(verdicts / f"{slug}.csv", "w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["persona_id", "passed", "has_identity_json", "n_expected_keys",
+                         "missing_categories"])
+        for index in range(n_personas):
+            finished = index < n_personas - n_unfinished
+            writer.writerow([f"persona_{index:03d}", finished, finished, 14, ""])
     for index in range(n_personas):
         persona_id = f"persona_{index:03d}"
         persona_dir = pool / persona_id
@@ -124,8 +138,13 @@ def make_attrition_row(
     requested_n: int = 8,
     excluded: bool = False,
     exclusion_reason: str = "",
+    raw_valid: int | None = None,
 ) -> AttritionRow:
-    """One attrition row with the two rates derived exactly as the producer derives them."""
+    """One attrition row with the two rates derived exactly as the producer derives them.
+
+    *raw_valid* defaults to *generated* (every generation finished).
+    """
+    raw_valid = generated if raw_valid is None else raw_valid
     return AttritionRow(
         slug=axis_slug(model, strategy, country),
         country=country,
@@ -133,12 +152,12 @@ def make_attrition_row(
         strategy=strategy,
         requested_n=requested_n,
         generated=generated,
-        raw_valid=generated,
+        raw_valid=raw_valid,
         mapped_valid=clean,
         clean=clean,
         selected=selected,
-        retention_rate=None if generated == 0 else clean / generated,
-        generation_multiplier=None if clean == 0 else generated / clean,
+        retention_rate=None if raw_valid == 0 else clean / raw_valid,
+        generation_multiplier=None if clean == 0 else raw_valid / clean,
         excluded=excluded,
         exclusion_reason=exclusion_reason,
         had_surplus=clean > requested_n,

@@ -86,6 +86,7 @@ Given this constraint, there are two possible strategies:
 - **Parser:** Maps deciles to 4 income classes, assigns equal weight per decile
 - **Sampling:** Marginal (Step 4)
 - **Analysis:** Marginal over age, sex, education, and employment. In reality, socioeconomic class correlates strongly with education and employment status. A per-individual query conditioned on (education, employment) would yield very different distributions. This is a modeling limitation, not a bulk-vs-filtered issue.
+- **Current state (2026-10):** The source is now `SamForvInk1a` (persons by income bracket × single-year age × sex), so the class is conditioned on (age_group, sex); still marginal over education and employment. Each cell's median is interpolated linearly inside the bracket that holds the 50th percentile (`income_class.median_from_brackets`); the earlier bracket-midpoint median was off by up to 45 tkr against SCB's published 2024 medians (now ≤ 3.3 tkr in all 20 five-year band × sex cells) and moved single cells' class shares by up to 10 points.
 
 ### 7. parental_structure — MARGINAL BY DESIGN
 
@@ -116,6 +117,7 @@ Given this constraint, there are two possible strategies:
 - **Sampling:** Conditional on (employment_status, age_group) at Step 7
 - **Analysis:** Both queries use `"1+2"` (combined sexes). Full-time vs. part-time employment has one of the largest gender gaps in Swedish labor statistics (~15-25 percentage points). A per-individual query filtered to sex would yield substantially different distributions — women are far more likely to work part-time.
 - **Impact:** High. This is a well-documented and large effect.
+- **Current state (2026-10):** Both queries now request `Kon: ["1", "2"]` separately and the result is conditioned on (age_group, sex). AKU covers ages 15–74, so two declared age proxies fill the pipeline's edge groups (`sweden/constants.py`): attachment's "15–24" band supplies 18–24 (it includes ages 15–17), and 75–85 reuses the 65–74 mix. Before 2026-10 neither cell existed and the sampler fell back to whichever age group a `set` iteration yielded first — 65–74 under `PYTHONHASHSEED=0`, the published reference — so employed 18–24 personas carried the 65–74 attachment × hours mix.
 
 ### 11. housing_tenure — MARGINAL BY DESIGN
 
@@ -126,14 +128,15 @@ Given this constraint, there are two possible strategies:
 
 ### 12. household_size — MARGINAL BY DESIGN
 
-- **Query:** `Region: "00"`, `Hushallsstorlek: [7 size categories]`
+- **Query:** `Region: "00"`, `Hushallsstorlek: [7 size categories]`, `ContentsCode: "BE0101DK"` (number of persons, not households)
 - **Parser:** Normalizes across size categories
 - **Sampling:** Marginal (Step 9)
 - **Analysis:** Marginal over all individual attributes. Household size correlates with age, civil status, and parental structure. A per-individual query could condition on these. This is a modeling limitation.
+- **Residual bias:** The persons series includes children aged 0–17, who are never personas; against adults aged 18–85 it understates 1- and 2-person households and overstates 3+ persons by about 8–13 percentage points combined. SCB publishes no household-size-by-age table that would remove this.
 
 ### 13. income_source — NO DIFFERENCE
 
-- **Query:** `Region: "00"`, `Sysselsattning: [5 employment types]`, `Alder: [5 age bands]`, `Inkomstkomponenter: [6 types]`
+- **Query:** `Region: "00"`, `Sysselsattning: [5 employment types]`, `Alder: [5 age bands]`, `Inkomstkomponenter: [8 positive components]` (300, 305, 310, 315, 320, 325, 330, 335; 325 "general allowance" and 330 "housing allowance" were added in 2026-10 — leaving them out had inflated the other components' shares)
 - **Parser:** Builds conditional distribution `{(employment, age_group) -> {source -> P}}`
 - **Sampling:** Conditional on (employment_status, age_group) at Step 10
 - **Analysis:** The query correctly cross-tabulates employment and age. The parser preserves both conditioning dimensions. Bulk and per-individual produce identical results.

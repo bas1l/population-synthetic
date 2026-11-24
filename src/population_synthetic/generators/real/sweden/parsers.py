@@ -691,6 +691,48 @@ def parse_region(raw: dict) -> dict[str, float]:
     return {k: v / grand_total for k, v in counts.items()}
 
 
+def parse_region_by_age_sex(
+    raw: dict, age_group_map: dict
+) -> dict[tuple[str, str], dict[str, float]]:
+    """County distribution per (age_group, sex) cell from the same table as ``parse_region``.
+
+    ``parse_region`` sums the Alder and Kon axes away; this keeps them, folding the
+    single-year ages into the pipeline age groups, so a person's county can be drawn
+    conditional on the (age_group, sex) already drawn for them. Both functions read
+    the same cells, so mixing these cell distributions over the table's own
+    (age_group, sex) composition gives back ``parse_region`` exactly.
+    """
+    dims = raw.get("dimension", {})
+    values = raw.get("value", [])
+
+    region_labels_raw = list(dims["Region"]["category"]["label"].values())
+    age_labels_raw = list(dims["Alder"]["category"]["label"].values())
+    sex_labels_raw = list(dims["Kon"]["category"]["label"].values())
+    n_age = len(age_labels_raw)
+    n_sex = len(sex_labels_raw)
+
+    counts: dict[tuple[str, str], dict[str, float]] = {}
+    for ri, region_raw in enumerate(region_labels_raw):
+        for ai, age_raw in enumerate(age_labels_raw):
+            age_group = resolve_age_group(age_raw, age_group_map)
+            if age_group not in VALID_AGE_GROUPS:
+                continue
+            for si, sex in enumerate(sex_labels_raw):
+                idx = ri * n_age * n_sex + ai * n_sex + si
+                v = float(values[idx] or 0) if idx < len(values) else 0.0
+                cell = counts.setdefault((age_group, sex), {})
+                cell[region_raw] = cell.get(region_raw, 0.0) + v
+
+    if not counts:
+        raise ValueError("No region-by-age-sex data parsed from response")
+    for key, dist in counts.items():
+        total = sum(dist.values())
+        if total <= 0.0:
+            raise ValueError(f"Region distribution for cell {key!r} has no population")
+        counts[key] = {k: v / total for k, v in dist.items()}
+    return counts
+
+
 def parse_urbanization_by_county(raw: dict, region_label_map: dict) -> dict[str, float]:
     dims = raw.get("dimension", {})
     values = raw.get("value", [])
@@ -924,7 +966,16 @@ def parse_employment_type_combined(
     raw_attach: dict,
     raw_hours: dict,
     age_group_map: dict,
+    age_proxies: dict[str, str] | None = None,
 ) -> dict[tuple[str, str], dict[str, float]]:
+    """Combine AKU attachment x hours into ``(age_group, sex) -> {"att|hrs": p}``.
+
+    ``age_group_map`` maps API age *labels* onto pipeline groups the lower-bound
+    resolver cannot place (AKU's "15-24 years" -> 18-24). ``age_proxies`` maps a
+    pipeline group with no AKU coverage onto the group whose mix it reuses
+    (75-85 -> 65-74). Every pipeline age group x sex must be covered afterwards,
+    else ``ValueError``.
+    """
     # --- Parse attachment by (age_group, sex) ---
     dims_a = raw_attach.get("dimension", {})
     vals_a = raw_attach.get("value", [])
@@ -1025,7 +1076,9 @@ def parse_employment_type_combined(
     # --- Combine: outer-product of attachment x hours per (age_group, sex) ---
     # Distribution keys are composite strings "{attachment_label}|{hours_label}"
     result: dict[tuple[str, str], dict[str, float]] = {}
-    all_keys = set(attach_by_age_sex.keys()) | set(hours_by_age_sex.keys())
+    # Sorted: a bare set union iterates in PYTHONHASHSEED order, which would make
+    # the result's key order (not its content) differ between processes.
+    all_keys = sorted(set(attach_by_age_sex.keys()) | set(hours_by_age_sex.keys()))
     for key in all_keys:
         age_group, sex = key
         if age_group not in VALID_AGE_GROUPS:
@@ -1046,6 +1099,25 @@ def parse_employment_type_combined(
 
     if not result:
         raise ValueError("No employment_type distribution could be built from attachment + hours data")
+
+    # Declared nearest-cell proxies for age groups no AKU table covers. A proxy
+    # may only fill a gap: overwriting a cell the API delivered, or pointing at a
+    # source cell that is itself missing, raises.
+    sexes = sorted({s for (_, s) in result})
+    for target, source in (age_proxies or {}).items():
+        for sex in sexes:
+            if (target, sex) in result:
+                raise ValueError(
+                    f"employment_type proxy {target}->{source}: cell {(target, sex)!r} is already "
+                    "delivered by the API; the proxy must only fill a gap"
+                )
+            if (source, sex) not in result:
+                raise ValueError(f"employment_type proxy {target}->{source}: source cell {(source, sex)!r} missing")
+            result[(target, sex)] = dict(result[(source, sex)])
+
+    missing = [(ag, s) for ag in VALID_AGE_GROUPS for s in sexes if (ag, s) not in result]
+    if missing:
+        raise ValueError(f"employment_type distribution has no cell for {missing}")
     return result
 
 
@@ -1184,19 +1256,45 @@ def parse_income_source(
             f"Could not identify income/age/employment dimensions; dims={list(dims.keys())}"
         )
 
-    inc_labels = list(dims[inc_key]["category"]["label"].values())
-    age_labels = list(dims[age_key]["category"]["label"].values())
-    emp_labels = list(dims[emp_key]["category"]["label"].values())
+    def _labels_in_index_order(key: str) -> list[str]:
+        cat = dims[key]["category"]
+        index = cat["index"]
+        return [cat["label"][code] for code in sorted(index, key=index.__getitem__)]
 
-    n_age = len(age_labels)
-    n_emp = len(emp_labels)
+    inc_labels = _labels_in_index_order(inc_key)
+    # Age is keyed by its API *code* ("20-29", "80-"), not its label: SCB's labels
+    # changed typography ("20-29 years" -> "20–29 years", an en dash) between
+    # fetches, which no label lookup should have to track.
+    age_index = dims[age_key]["category"]["index"]
+    age_labels = sorted(age_index, key=age_index.__getitem__)
+    emp_labels = _labels_in_index_order(emp_key)
+
+    # Row-major strides derived from the response's own ``id`` / ``size`` (the
+    # json-stat2 contract), so the parse does not depend on the dimension order
+    # of the query. Every other dimension (Region, ContentsCode, Tid) must be a
+    # single selected category, else its values would be summed silently.
+    id_list = raw.get("id")
+    size_list = raw.get("size")
+    if not id_list or not size_list or len(id_list) != len(size_list):
+        raise ValueError("income_source response lacks a consistent json-stat2 'id'/'size'")
+    sizes = dict(zip(id_list, size_list))
+    for dim_id, n in sizes.items():
+        if dim_id not in (inc_key, age_key, emp_key) and n != 1:
+            raise ValueError(f"income_source response: dimension {dim_id!r} has {n} categories, expected 1")
+    strides: dict[str, int] = {}
+    acc = 1
+    for dim_id in reversed(id_list):
+        strides[dim_id] = acc
+        acc *= sizes[dim_id]
+    if len(values) != acc:
+        raise ValueError(f"income_source response has {len(values)} values, expected {acc}")
 
     counts: dict[tuple[str, str], dict[str, float]] = {}
     for inc_i, inc_raw in enumerate(inc_labels):
         for age_i, age_raw in enumerate(age_labels):
             for emp_i, emp_raw in enumerate(emp_labels):
-                val_idx = inc_i * n_age * n_emp + age_i * n_emp + emp_i
-                v = values[val_idx] if val_idx < len(values) else None
+                val_idx = inc_i * strides[inc_key] + age_i * strides[age_key] + emp_i * strides[emp_key]
+                v = values[val_idx]
                 if v is None:
                     continue
                 v = float(v)
@@ -1219,9 +1317,6 @@ _SCB_SEX_CODE_TO_LABEL: dict[str, str] = {"1": "men", "2": "women"}
 
 _BRACKET_CODE_TO_EDGES: dict[str, tuple[float, float]] = {
     code: (lo, hi) for code, lo, hi in SCB_INCOME_BRACKETS
-}
-_BRACKET_CODE_TO_MID: dict[str, float] = {
-    code: (lo + hi) / 2.0 for code, lo, hi in SCB_INCOME_BRACKETS
 }
 
 
@@ -1308,11 +1403,10 @@ def parse_socioeconomic(raw: dict) -> dict[tuple[str, str], dict[str, float]]:
                 "cannot compute income class distribution"
             )
         ordered_codes = [c for c in _BRACKET_CODE_TO_EDGES if c in brk_dist]
-        midpoints = [_BRACKET_CODE_TO_MID[c] for c in ordered_codes]
         counts_list = [brk_dist[c] for c in ordered_codes]
         edges = [_BRACKET_CODE_TO_EDGES[c] for c in ordered_codes]
 
-        median = median_from_brackets(midpoints, counts_list)
+        median = median_from_brackets(edges, counts_list)
         result[cell_key] = classify_brackets(edges, counts_list, median)
 
     return result

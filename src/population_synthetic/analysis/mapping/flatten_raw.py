@@ -44,22 +44,27 @@ def _flatten_employment_type(value: object) -> str | None:
     return attachment or hours
 
 
-def _harmonize_sex(sex_raw: str, sex_config: dict) -> str:
+def _harmonize_sex(sex_raw: str, sex_config: dict, matching: dict) -> str:
     """Resolve a raw sex token to the canonical value via the biological-sex config.
 
-    Uses the config's ``real`` rules (raw national-statistics side). Falls back to
-    the raw label when the token is outside the config's vocabulary, mirroring how the
-    other fields keep their native label rather than inventing a value.
+    Uses the config's ``real`` rules (raw national-statistics side) under the mapping
+    directory's ``matching.real`` options. Falls back to the raw label when the token
+    is outside the config's vocabulary, mirroring how the other fields keep their
+    native label rather than inventing a value.
     """
-    resolved = mapping_engine.resolve(sex_raw, sex_config["real"], sex_config["values"])
+    resolved = mapping_engine.resolve(
+        sex_raw, sex_config["real"], sex_config["values"], matching=matching, priority=sex_config["priority"]
+    )
     return resolved if resolved is not None else sex_raw
 
 
-def flatten_individual(raw: dict, *, sex_config: dict) -> dict:
+def flatten_individual(raw: dict, *, sex_config: dict, matching: dict) -> dict:
     """Convert one raw individual record to flat-string format.
 
-    *sex_config* is the ``biological_sex`` mapping block (``values`` + ``real``),
-    supplied by the caller so the sex vocabulary lives in config, not in code.
+    *sex_config* is the ``biological_sex`` mapping block (``values`` + ``priority`` +
+    ``real``) and *matching* the same directory's ``_index.json`` ``matching.real``
+    block, both supplied by the caller so the sex vocabulary and the matching rules
+    live in config, not in code.
     """
     flat: dict = {"id": raw.get("id")}
 
@@ -74,7 +79,7 @@ def flatten_individual(raw: dict, *, sex_config: dict) -> dict:
         flat["age_group"] = None
 
     sex_raw = _extract_label(raw.get("biological_sex"))
-    flat["biological_sex"] = _harmonize_sex(sex_raw, sex_config) if sex_raw else None
+    flat["biological_sex"] = _harmonize_sex(sex_raw, sex_config, matching) if sex_raw else None
 
     flat["employment_type"] = _flatten_employment_type(raw.get("employment_type"))
 
@@ -88,15 +93,18 @@ def flatten_individual(raw: dict, *, sex_config: dict) -> dict:
     return flat
 
 
-def flatten_raw_population(pop: dict, *, sex_config: dict, country_label: str = "Unknown") -> dict:
+def flatten_raw_population(
+    pop: dict, *, sex_config: dict, matching: dict, country_label: str = "Unknown"
+) -> dict:
     """Flatten an entire raw population dict to flat-string format.
 
-    *sex_config* is the ``biological_sex`` mapping block used to harmonize the sex
-    field (see :func:`flatten_individual`). Returns a new dict with the same
-    ``metadata`` plus flattened ``individuals``.
+    *sex_config* is the ``biological_sex`` mapping block and *matching* the
+    directory's ``matching.real`` block, used to harmonize the sex field (see
+    :func:`flatten_individual`). Returns a new dict with the same ``metadata`` plus
+    flattened ``individuals``.
     """
     individuals = pop.get("individuals", [])
-    flat_individuals = [flatten_individual(ind, sex_config=sex_config) for ind in individuals]
+    flat_individuals = [flatten_individual(ind, sex_config=sex_config, matching=matching) for ind in individuals]
 
     metadata = dict(pop.get("metadata", {}))
     metadata["country_label"] = country_label

@@ -131,16 +131,25 @@ JSON file per comparison attribute + an `_index.json` master) and one shared res
 `values` once (the unified category set **and** the scored axis / chart order) plus a `real`
 rules block and a `synthetic` rules block, both keyed by unified value -> matcher. The resolver
 matches with a **global tiered sweep**: each matcher tier is tried across *all* values before the
-next tier, and `values` declared order breaks ties within a tier (so a later value's `equals`
-beats an earlier value's `contains`); a total miss yields the explicit `__UNMAPPED__` sentinel
+next tier (so a later value's `equals` beats an earlier value's `contains`), and within the winning
+tier every hitting value is collected and the side's `tie_break` criteria pick one (see "Matching
+rules" below); a total miss yields the explicit `__UNMAPPED__` sentinel
 (`analysis/utils/mapping_sentinel.py`; always test with `is_unmapped`, never `== "__UNMAPPED__"`,
 since legacy artefacts carry a bare `None`). Matcher vocabulary:
 `equals`/`contains`/`all_of`/`none_of`/`int`/`int_gte` + a composite sub-field matcher (for
-`employment_type`'s attachment x hours). Tier order is `equals` -> `all_of` -> `contains` ->
-numeric (composite in a final pass), with `none_of` a veto (not a tier) that rejects its value in
-every tier. Attribute-level directives: `absent` (missing-input literal), `refine_from` (re-walk a
-sibling's resolved value, e.g. `birth_location` from `birth_country_detail`), `on_miss` (default
-when all miss -- **forbidden on both Swedish tiers**, see below). The `_index.json` master lists the in-scope attributes (`attribute -> filename`,
+`employment_type`'s attachment x hours; the sub-field names must be declared in the side's
+`subfields` directive, so a typo such as `"contain"` raises instead of being read as a sub-field).
+Tier order is `equals` -> `all_of` -> `contains` -> numeric (composite in a final pass), with
+`none_of` a veto (not a tier) that rejects its value in every tier. The one exception is
+`all_of_rules`: a list of self-contained `{all_of, none_of}` rules on a value, swept in the `all_of`
+tier, each honouring only its own `none_of` -- the way to state "a word normally vetoes this value,
+except beside X, unless Y" (used by `scb_native` `employment_type` / `employment_status`). Attribute-level directives:
+`absent` (missing-input literal), `refine_from` (re-walk a sibling's resolved value, e.g.
+`birth_location` from `birth_country_detail`), `on_miss` (default when all miss -- **forbidden on
+both Swedish tiers**, see below), `subfields`, and the per-attribute matching overrides
+`tie_break`, `negation: null` and `numeric_facet` (below). Each attribute file also declares
+`priority`, a permutation of `values` used by the `priority` tie-break criterion, so the axis /
+chart order never decides a tie. The `_index.json` master lists the in-scope attributes (`attribute -> filename`,
 key order = axis order) -- pure mapping scope; country scope is data-driven (Italy's master omits
 `income_source`). An optional sibling `deprecated_attributes` list (of attribute names already in
 `attributes`) marks **analysis-deprecated axes**: the attribute is still mapped and emitted into the
@@ -153,6 +162,49 @@ if a listed name is not in `attributes` or if filtering would empty the axis; `l
 additionally rejects a `deprecated_attributes` that is not a list of strings. Sweden deprecates
 `birth_location` (retained in data, out of analysis; see
 `docs/development/plans/*/deprecate-birth-location-analysis-axis.md`).
+
+### Matching rules: token boundaries, negation, tie-break, numeric facet
+
+Every engine-read `_index.json` (`scb_native`, `scb`, `istat`) declares a required `matching`
+block with one entry per side, `{token_mode, negation, tie_break}`; there is no in-code default.
+`mapping_engine.validate_mappings` runs when a mapper is built and raises (`MappingConfigError`,
+a `ValueError`) on a missing block or side, an unknown `token_mode` or tie criterion, a
+`tie_break` not ending in `priority`, a non-positive negation `window`, an unknown matcher or
+block key, a `priority` list that is not a permutation of `values`, an empty token, or a facet
+whose bands overlap or whose remap target is not a value.
+
+- `token_mode` -- `substring` (anywhere; the historic rule), `prefix` (the character before the
+  match is not alphanumeric, Unicode-aware; digits count, so `0 timmar` does not hit inside
+  `40 timmar`) or `word` (prefix plus a right boundary). It applies to `contains`, every
+  `all_of` member and `none_of`; a single token can override it as `{"token": ..., "mode": ...}`.
+- `negation` -- `null` or `{cues, window, clause_breaks}`: a token occurrence preceded within
+  `window` words of the same clause by a cue is discarded (a negated `none_of` token does not
+  veto). Only text before the occurrence is read, so a cue-initial token ("never married") hits.
+  `equals` is exempt. An attribute opts out with `"negation": null` in its block.
+- `tie_break` -- ordered criteria, ending in `priority`: `longest` (longest matched token; summed
+  group lengths for `all_of`) then `priority` (position in the file's `priority` list). An
+  attribute may override the side's list with its own `tie_break` directive.
+- `numeric_facet` -- an attribute directive that re-bands the walked value from numbers stated in
+  the raw text (`extract` regexes with a `scale`, `bands`, `remap` from walked value to band
+  value); stated numbers spanning two or more bands leave the band undetermined and resolve to
+  `__UNMAPPED__`, a comparator-bound number is not banded and leaves the walked value; both are
+  reported as `facet_ambiguous`.
+
+With `substring` / `null` / `["priority"]` and `priority == values` the engine is exactly the
+historic first-hit-in-declared-order resolver; the global `scb` tier, `istat` and every `real`
+side declare that and are pinned by `tests/test_mapping_config_matching.py` (verified
+identical over the full `01_Raw` pool and the real SCB reference when introduced).
+`scb_native`'s `synthetic` side uses `prefix` + negation + `["longest", "priority"]` + the
+`employment_type` hours facet; the rationale and the substring-override list are in
+`config/mapping/scb_native/README.md`. (`config/mapping/ssb/` is not read by the engine.)
+
+`resolve_traced()` returns the full trace (tier, matched token, every candidate with its score,
+the deciding criterion, the facet outcome). `BaseSyntheticMapper` appends every resolution with
+more than one candidate, and every ambiguous facet read, to `self.ties`, and `map_populations.py`
+writes it beside the mapped file as `03_Analysis/mapping/{slug}.ties.csv` (columns `persona_id,
+attribute, raw_value, tier, candidates, winner, criterion`; `candidates` is
+`value:score:token | ...`, `criterion` is `longest`, `priority` or `facet_ambiguous`), always,
+on the same re-map branch as the miss sidecar below.
 
 ### No `on_miss` sinks on a scored axis, and the miss sidecar
 

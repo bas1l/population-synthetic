@@ -27,7 +27,6 @@ decision, so it can never drift from them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +52,12 @@ from population_synthetic.analysis.utils.labels import (
     method_key_lines,
     method_letters,
     model_labels,
+)
+from population_synthetic.analysis.utils.model_order import (
+    _model_method_rows,
+    _ModelRow,
+    _tier1_sort_key,
+    _tier2_sort_key,
 )
 from population_synthetic.analysis.utils.palette import (
     ANNOTATION_GREY,
@@ -507,136 +512,6 @@ _UNRANKED_CAVEAT = (
     "No part of an unranked row rests on the same evidence as the ranked block, so it "
     "carries no claim about model quality -- it is a statement about sampling."
 )
-
-
-@dataclass(frozen=True)
-class _ModelRow:
-    """One model's row of the grid, with its tier and its ordering key.
-
-    *values* holds the overall TV-similarity per method in column order, ``NaN`` where
-    the ``(model, method)`` combination is absent from the run. *counts* holds the
-    persona count per method (``None`` for an absent combination) and *full* whether
-    that cell met its own slug's requested cap.
-
-    The ordering key is recorded alongside the row rather than recomputed at sort time
-    because the row marginal prints it: the figure must show the quantity the rows were
-    actually sorted by, and a second derivation could disagree with the first.
-    """
-
-    model: str
-    values: np.ndarray
-    counts: list[int | None]
-    full: list[bool]
-    tier: int
-    best_value: float | None
-    best_method: str | None
-    key_mean: float | None
-    key_cells: int
-
-
-def _row_summary(
-    values: np.ndarray,
-    scope: list[int],
-    strategies: list[str],
-) -> tuple[float | None, str | None, float | None, int]:
-    """``(max, argmax method, mean, count)`` over the finite cells of *scope*.
-
-    *scope* is given in column (complexity) order and the comparison is strict, so a
-    within-row tie on the maximum resolves to the first method in
-    :func:`~population_synthetic.analysis.utils.axes.strategy_complexity_order`. NaN
-    cells are excluded from all four outputs -- a missing value is not a zero, and
-    must not enter an ordering key. Returns ``(None, None, None, 0)`` when *scope*
-    holds no finite cell, which is a defined state (the row has no ordering key), not
-    an error.
-    """
-    best_value: float | None = None
-    best_method: str | None = None
-    total = 0.0
-    count = 0
-    for j in scope:
-        v = float(values[j])
-        if np.isnan(v):
-            continue
-        count += 1
-        total += v
-        if best_value is None or v > best_value:
-            best_value = v
-            best_method = strategies[j]
-    if count == 0:
-        return None, None, None, 0
-    return best_value, best_method, total / count, count
-
-
-def _model_method_rows(
-    result: dict[str, Any],
-    requested_n: CapIndex,
-    models: list[str],
-    strategies: list[str],
-) -> list[_ModelRow]:
-    """Regroup ``result["combos"]`` into one :class:`_ModelRow` per model.
-
-    The tier partition and the ordering key are computed here, from ``n`` against each
-    slug's own ``requested_n`` (:class:`~population_synthetic.analysis.utils.cap_index.CapIndex`) --
-    Tier 1 is a model with at least one full-n cell and ranks on those cells only;
-    Tier 2 is a model with none and ranks, provisionally, on all of its cells. A cell
-    the run never produced is neither: it contributes no evidence and no value.
-    """
-    by_cell = {
-        (combo["model"], combo["strategy"]): (slug, combo)
-        for slug, combo in result["combos"].items()
-    }
-
-    rows: list[_ModelRow] = []
-    for model in models:
-        values = np.full(len(strategies), np.nan)
-        counts: list[int | None] = []
-        full: list[bool] = []
-        for j, strategy in enumerate(strategies):
-            entry = by_cell.get((model, strategy))
-            if entry is None:
-                counts.append(None)
-                full.append(False)
-                continue
-            slug, combo = entry
-            values[j] = float(combo["overall"]["tv_similarity_mean"])
-            n = int(combo["n"])
-            counts.append(n)
-            full.append(requested_n.is_full_n(slug, n))
-
-        tier = 1 if any(full) else 2
-        if tier == 1:
-            scope = [j for j in range(len(strategies)) if full[j]]
-        else:
-            scope = [j for j in range(len(strategies)) if counts[j] is not None]
-        best_value, best_method, key_mean, key_cells = _row_summary(values, scope, strategies)
-        rows.append(
-            _ModelRow(
-                model=model, values=values, counts=counts, full=full, tier=tier,
-                best_value=best_value, best_method=best_method,
-                key_mean=key_mean, key_cells=key_cells,
-            )
-        )
-    return rows
-
-
-def _tier1_sort_key(row: _ModelRow) -> tuple[int, float, float, str]:
-    """``(-max_over_full_n, -mean_over_full_n, model_id)``, keyless rows last.
-
-    A row whose full-n cells are all NaN has no defined key: it sorts last *within its
-    tier* by the explicit leading flag rather than by comparing against NaN, and it
-    stays in Tier 1 -- it has full-n cells, their values are missing, which is a
-    different failure from thin evidence.
-    """
-    if row.best_value is None:
-        return (1, 0.0, 0.0, row.model)
-    return (0, -row.best_value, -(row.key_mean or 0.0), row.model)
-
-
-def _tier2_sort_key(row: _ModelRow) -> tuple[int, float, str]:
-    """``(-max_over_all_cells, model_id)``, keyless rows last (same explicit rule)."""
-    if row.best_value is None:
-        return (1, 0.0, row.model)
-    return (0, -row.best_value, row.model)
 
 
 def _column_marginals(

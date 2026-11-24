@@ -50,7 +50,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from population_synthetic.analysis.persona_realism.clash_explanations_csv import ClashExplanationRow
 from population_synthetic.analysis.persona_realism.judge import RoundVerdict, parse_round_verdict
@@ -66,6 +66,7 @@ __all__ = [
     "clash_rows",
     "reduce_persona",
     "reduce_combo",
+    "round_clashes",
     "load_persona_verdicts",
     "load_combo_verdicts",
 ]
@@ -175,13 +176,20 @@ class LoadedPersona:
     hard-rules validation subset), the successful ``rounds`` as re-validated
     :class:`RoundVerdict`s, and ``failed_rounds`` (the round-level failure count
     the runner recorded -- distinct from a persona-level failure, which leaves no
-    file at all).
+    file at all). ``context_isolation`` is the judge-regime tag the runner stamped
+    (``None`` for a cache written before the tag existed, i.e. under the old
+    shared-conversation regime). ``prompt_template_sha256`` /
+    ``persona_rendering_sha256`` identify the prompt the judge read (``None`` for a
+    cache written before the stamps existed).
     """
 
     persona_id: str
     attributes: dict[str, Any]
     rounds: tuple[RoundVerdict, ...]
     failed_rounds: int
+    context_isolation: str | None = None
+    prompt_template_sha256: str | None = None
+    persona_rendering_sha256: str | None = None
 
 
 def _round_clashes(verdict: RoundVerdict) -> dict[ClashKey, str]:
@@ -204,6 +212,15 @@ def _round_clashes(verdict: RoundVerdict) -> dict[ClashKey, str]:
         if key not in clashes:
             clashes[key] = issue.explanation
     return clashes
+
+
+def round_clashes(verdict: RoundVerdict) -> dict[ClashKey, str]:
+    """Public view of the within-round dedupe (:func:`_round_clashes`) for sibling modules.
+
+    ``stage2`` classifies exactly the S3 clashes the per-clash contract carries, so it
+    must read them through the same dedupe rather than re-deriving it.
+    """
+    return _round_clashes(verdict)
 
 
 def reduce_persona(rounds: list[RoundVerdict] | tuple[RoundVerdict, ...], *, persona_id: str = "") -> PersonaVerdict:
@@ -454,6 +471,9 @@ def load_persona_verdicts(path: str | Path) -> LoadedPersona:
         attributes=dict(payload["attributes"]),
         rounds=rounds,
         failed_rounds=int(payload.get("failed_rounds", 0)),
+        context_isolation=payload.get("context_isolation"),
+        prompt_template_sha256=payload.get("prompt_template_sha256"),
+        persona_rendering_sha256=payload.get("persona_rendering_sha256"),
     )
 
 
@@ -462,57 +482,70 @@ def load_persona_verdicts(path: str | Path) -> LoadedPersona:
 VERDICT_CACHE_GLOB = "persona_[0-9]*.json"
 
 
-def has_cached_verdicts(combo_dir: str | Path) -> bool:
+def has_cached_verdicts(combo_dir: str | Path, selected_ids: Sequence[str] | None = None) -> bool:
     """Whether *combo_dir* holds at least one per-persona verdict-cache file.
 
     The cheap predicate behind "is there anything to reduce here?" -- it stats the
-    directory instead of parsing every cache file, and shares
-    :data:`VERDICT_CACHE_GLOB` with :func:`load_combo_verdicts` so the two can never
-    disagree about what a cache file is. A combo directory that fails this holds no
-    judged persona: reducing it would yield a zero-persona report, which reads
+    directory instead of parsing every cache file. A combo directory that fails this
+    holds no judged persona: reducing it would yield a zero-persona report, which reads
     downstream as a judged competitor with no data rather than as an unjudged unit.
+
+    With *selected_ids* (the roster, ``selection.selected_persona_ids``) only the
+    selected personas' cache files count, so a leftover file of a persona the
+    current cap no longer selects can never make an unjudged combination look judged.
+    Without it the folder is globbed with :data:`VERDICT_CACHE_GLOB`.
     """
     combo_dir = Path(combo_dir)
     if not combo_dir.is_dir():
         return False
+    if selected_ids is not None:
+        return any((combo_dir / f"{pid}.json").is_file() for pid in selected_ids)
     return any(combo_dir.glob(VERDICT_CACHE_GLOB))
 
 
 def load_combo_verdicts(
     combo_dir: str | Path,
     *,
-    expected_ids: list[str] | None = None,
+    expected_ids: Sequence[str] | None = None,
 ) -> dict[str, LoadedPersona | None]:
     """Load a combo's per-persona cache into ``{persona_id: LoadedPersona | None}``.
 
-    Globs ``<combo>/persona_[0-9]*.json`` (the leading-digit guard keeps the glob
-    from ever matching a sibling combo output such as ``<combo_label>.json``) and
-    loads each into a :class:`LoadedPersona`. Fully-failed personas are absent from
-    the cache by construction (the runner never writes them); passing
-    ``expected_ids`` -- the roster of persona ids that were *selected* to be judged
-    -- maps every selected id without a cache file to ``None`` (a **failed/absent**
-    persona, kept distinct from a loaded one). Without ``expected_ids`` the result
-    contains only the personas present on disk (all non-``None``), and the caller
-    must supply the failed count some other way.
+    With ``expected_ids`` -- the roster of persona ids that were *selected* to be
+    judged -- exactly those personas are read, each from ``<combo>/{persona_id}.json``,
+    and nothing else: a selected id without a cache file maps to ``None`` (a
+    **failed/absent** persona, kept distinct from a loaded one; fully-failed personas
+    are absent by construction, the runner never writes them), and a cache file of a
+    persona outside the roster is a **leftover** of an earlier cap that is ignored --
+    it is never read, so it can reach no reduction, row or count. Every production
+    consumer passes the roster.
+
+    Without ``expected_ids`` the folder is globbed (``persona_[0-9]*.json``; the
+    leading-digit guard keeps it from matching a sibling ``<combo_label>.json``) and
+    only the personas present on disk are returned (all non-``None``); the caller must
+    then supply the failed count some other way.
 
     The returned dict is ordered by persona id (sorted) so a downstream reduction
     and any seeded subsampling are stable across runs.
     """
     combo_dir = Path(combo_dir)
+    if expected_ids is not None:
+        result: dict[str, LoadedPersona | None] = {}
+        for pid in sorted(set(expected_ids)):
+            cache_file = combo_dir / f"{pid}.json"
+            if not cache_file.is_file():
+                result[pid] = None  # selected-but-failed/absent
+                continue
+            loaded = load_persona_verdicts(cache_file)
+            if loaded.persona_id != pid:
+                raise ValueError(
+                    f"persona cache {cache_file} holds persona_id={loaded.persona_id!r}, not {pid!r}"
+                )
+            result[pid] = loaded
+        return result
+
     found: dict[str, LoadedPersona] = {}
     if combo_dir.is_dir():
         for cache_file in sorted(combo_dir.glob(VERDICT_CACHE_GLOB)):
             loaded = load_persona_verdicts(cache_file)
             found[loaded.persona_id] = loaded
-
-    if expected_ids is None:
-        return {pid: found[pid] for pid in sorted(found)}
-
-    result: dict[str, LoadedPersona | None] = {}
-    for pid in sorted(expected_ids):
-        result[pid] = found.get(pid)  # None == selected-but-failed/absent
-    # Surface any on-disk persona not in the roster rather than dropping it silently.
-    for pid in sorted(found):
-        if pid not in result:
-            result[pid] = found[pid]
-    return result
+    return {pid: found[pid] for pid in sorted(found)}

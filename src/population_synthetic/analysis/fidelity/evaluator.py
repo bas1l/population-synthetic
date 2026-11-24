@@ -18,6 +18,7 @@ import numpy as np
 from scipy.stats import chi2_contingency, chisquare
 
 from population_synthetic.analysis.fidelity.scheme import ComparisonScheme
+from population_synthetic.analysis.utils.distribution_distance import total_variation_distance
 from population_synthetic.analysis.utils.mapping_sentinel import is_unmapped
 from population_synthetic.generators.real.helpers import age_to_group
 
@@ -142,7 +143,7 @@ class StatisticalEvaluator:
         total_b = sum(counts_b.get(c, 0) for c in all_categories) or 1
         q_a = np.array([counts_a.get(c, 0) / total_a for c in all_categories])
         q_b = np.array([counts_b.get(c, 0) / total_b for c in all_categories])
-        tv_dist = float(0.5 * np.sum(np.abs(q_a - q_b)))
+        tv_dist = float(total_variation_distance(q_a, q_b))
 
         max_diff = float(np.max(np.abs(q_a - q_b)))
 

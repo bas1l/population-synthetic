@@ -18,6 +18,47 @@ the ``absent`` / ``on_miss`` directives, and ``refine_from`` cross-field resolut
 
 from __future__ import annotations
 
+import copy
+
+#: Behaviour-preserving matching options (the historic engine): substring tokens,
+#: no negation, ties broken by the ``priority`` list alone.
+SUBSTRING_MATCHING: dict = {"token_mode": "substring", "negation": None, "tie_break": ["priority"]}
+
+_MATCHER_KEYS = {"equals", "contains", "all_of", "none_of", "int", "int_gte"}
+
+
+def with_matching(mappings: dict, *, real: dict | None = None, synthetic: dict | None = None) -> dict:
+    """Return *mappings* completed with what :func:`validate_mappings` requires.
+
+    Adds the ``_index.matching`` block (both sides default to
+    :data:`SUBSTRING_MATCHING`), a ``priority`` list equal to ``values`` on every
+    attribute block that lacks one, and the ``subfields`` directive on every side
+    whose matchers key composite sub-fields. The input is not mutated.
+    """
+    out = copy.deepcopy(mappings)
+    index = out.setdefault("_index", {})
+    index["matching"] = {
+        "real": copy.deepcopy(real or SUBSTRING_MATCHING),
+        "synthetic": copy.deepcopy(synthetic or SUBSTRING_MATCHING),
+    }
+    for stem, block in out.items():
+        if stem == "_index" or not isinstance(block, dict) or "values" not in block:
+            continue
+        block.setdefault("priority", list(block["values"]))
+        for side in ("real", "synthetic"):
+            rules = block.get(side)
+            if not isinstance(rules, dict):
+                continue
+            subs = sorted({
+                key for value, matcher in rules.items()
+                if value in block["values"] and isinstance(matcher, dict)
+                for key in matcher if key not in _MATCHER_KEYS
+            })
+            if subs and "subfields" not in rules:
+                rules["subfields"] = subs
+    return out
+
+
 _INDEX = {
     "attributes": {
         "age_group": "age.json",
@@ -35,6 +76,10 @@ _INDEX = {
 
 def new_shape_mappings() -> dict:
     """Return a fresh unified-symmetric mappings dict (keyed by file stem)."""
+    return with_matching(_raw_mappings())
+
+
+def _raw_mappings() -> dict:
     return {
         "_index": {
             "attributes": dict(_INDEX["attributes"]),

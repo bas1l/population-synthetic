@@ -290,6 +290,29 @@ def _generation_metadata_figures():
         yield f"generation_metadata::{Path(path).stem}", fig
 
 
+def _realism_ranking_figures():
+    """The typicality distribution grid: a point-laid-out glyph grid on real axis ids.
+
+    The fixture holds the live twelve models and five strategies, with one cell in each
+    non-histogram state, so every label, legend entry and mark the figure can print is on
+    the canvas under test.
+    """
+    from population_synthetic.analysis.realism_ranking.charts import (
+        plot_typicality_distribution_grid,
+    )
+    from tests.test_realism_distribution_grid import HOSTING, MODELS, STRATEGIES, _ranking
+
+    ranking = _ranking(states={
+        ("ollama_gemma4_e4b", STRATEGIES[-1]): "withdrawn",
+        ("claude_haiku", STRATEGIES[0]): "unjudged",
+        ("claude_sonnet", STRATEGIES[1]): "no_typicality",
+    })
+    yield (
+        "realism_ranking::plot_typicality_distribution_grid",
+        plot_typicality_distribution_grid(ranking, model_order=list(MODELS), hosting=HOSTING),
+    )
+
+
 def _figures():
     """Every figure this module inspects, as ``(label, Figure)``.
 
@@ -302,6 +325,8 @@ def _figures():
         for label, fig in _model_ranking_figures():
             yield label, fig
         for label, fig in _generation_metadata_figures():
+            yield label, fig
+        for label, fig in _realism_ranking_figures():
             yield label, fig
 
 
@@ -344,6 +369,63 @@ def test_the_compliance_check_catches_what_it_claims_to():
     assert "openrouter_kimi_k3" in message
     assert f"below the {FONT_FLOOR_PT} pt floor" in message
     plt.close(fig)
+
+
+#: The presentation layer: the modules every ``charts.py`` draws through. Named here, not
+#: discovered, because membership is a claim about what a module *may* do -- receive finished
+#: numbers and draw them -- and the test below checks the half of that claim a syntax tree
+#: can check. Eight modules since ``glyph_grid`` joined for the point-laid-out glyph grids.
+PRESENTATION_MODULES = (
+    "palette",
+    "style",
+    "labels",
+    "figures",
+    "grids",
+    "grid_annotations",
+    "table_style",
+    "glyph_grid",
+)
+
+
+def _imported_modules(path) -> set[str]:
+    import ast
+
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            names.add(node.module)
+            if node.module == "population_synthetic.analysis":
+                names.update(f"{node.module}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+    return names
+
+
+@pytest.mark.parametrize("module", PRESENTATION_MODULES)
+def test_a_presentation_module_imports_no_analysis_subpackage(module):
+    """The membership test for the layer: nothing from any analysis subpackage.
+
+    ``analysis/utils`` is shared infrastructure, not a process, so an import from it is
+    allowed; an import from ``analysis/<process>/`` would let a statistic or a process's
+    vocabulary leak behind the boundary.
+    """
+    from pathlib import Path
+
+    import population_synthetic.analysis.utils as utils
+
+    path = Path(utils.__file__).resolve().parent / f"{module}.py"
+    assert path.exists(), f"presentation module {module} is missing"
+    prefix = "population_synthetic.analysis."
+    offenders = sorted(
+        name for name in _imported_modules(path)
+        if name.startswith(prefix) and name[len(prefix):].split(".")[0] != "utils"
+    )
+    assert offenders == [], f"{module} imports {offenders}"
+
+
+def test_the_presentation_layer_has_eight_modules():
+    assert len(set(PRESENTATION_MODULES)) == 8
 
 
 def test_every_written_figure_appears_in_all_three_formats(tmp_path):

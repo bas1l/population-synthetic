@@ -4,3 +4,8 @@ parameters:
   config: "config/synthetic/simulation_configs/simulation_config_005_italian_generative.json"
   reference: "data/istat_api/istat_population.json"
   mappings: "config/mapping/istat"
+display:
+  # Short name of the statistical agency the reference population is drawn from, kept as
+  # provenance (analysis/utils/labels.py::reference_source). Figures call the real population
+  # by the `reference` term of config/analysis/figure_terms.yaml, not by this name.
+  reference_source: "ISTAT"

@@ -98,6 +98,7 @@ def _cap(cells, requested: int = REQUESTED_N) -> CapIndex:
     return CapIndex(
         {_slug(model, strategy): requested for model, strategy, _s, _n in cells},
         source=_FIXTURE_INDEX,
+        withdrawn=(),
     )
 
 
@@ -584,7 +585,7 @@ def test_a_slug_missing_from_the_cap_index_raises(tmp_path):
     cells = _full_grid()
     result = _result(cells)
     partial = CapIndex(
-        {_slug("claude_haiku", S1): REQUESTED_N}, source=_FIXTURE_INDEX
+        {_slug("claude_haiku", S1): REQUESTED_N}, source=_FIXTURE_INDEX, withdrawn=()
     )
 
     with pytest.raises(KeyError):
@@ -706,7 +707,8 @@ def _build_cli_workspace(tmp_path: Path) -> Path:
     index_path = analysis_output_dir("population_cap", tmp_path) / INDEX_FILENAME
     index_path.write_text(
         json.dumps([
-            {"slug": slug, "country": COUNTRY, "requested_n": REQUESTED_N} for slug in slugs
+            {"slug": slug, "country": COUNTRY, "requested_n": REQUESTED_N, "excluded": False}
+            for slug in slugs
         ]),
         encoding="utf-8",
     )

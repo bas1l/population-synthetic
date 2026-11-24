@@ -29,6 +29,13 @@ Three figures:
   reference rather than a series, and it is drawn that way only because this axis has no
   ranking to hold it out of: the line is the same reference its sibling heatmap prints a
   delta against, in a form that shows each method's spread around it.
+* :func:`plot_typicality_distribution_grid` -- every combination's whole round-weighted
+  typicality distribution as a mini histogram on the model x strategy grid (models in the
+  published ``model_ranking`` order, resolved by the caller), the reference's distribution
+  as an outline in every cell and as its own detached column, one ternary of the three
+  score-band shares per strategy, on a fixed 456 pt canvas. Laid out through the
+  ``glyph_grid`` presentation module; withdrawn, unjudged and no-typicality cells each
+  have their own drawing.
 
 **The real population is drawn as an ordinary competitor.** The previous version of the
 map pinned it to ``y = 0`` and marked it with a reference star, which encoded *the real
@@ -51,8 +58,26 @@ this module never touches a display.
 from __future__ import annotations
 
 import textwrap
+from dataclasses import dataclass
 from typing import Any
 
+from population_synthetic.analysis.utils.glyph_grid import (
+    COLORBAR_TICK_LENGTH_PT,
+    COLORBAR_TICK_PAD_PT,
+    TERNARY_HEIGHT_RATIO,
+    PointCanvas,
+    draw_empty_cell,
+    draw_mini_histogram,
+    draw_ternary,
+    draw_withdrawn_cell,
+    outline_handle,
+    point_handle,
+    reference_star_handle,
+    step_colors,
+    stepped_colorbar,
+    swatch_handle,
+    withdrawn_handle,
+)
 from population_synthetic.analysis.utils.grid_annotations import (
     RateOnlyPolicy,
     RateWithCountsPolicy,
@@ -67,6 +92,7 @@ from population_synthetic.analysis.utils.grids import render_grid
 from population_synthetic.analysis.utils.labels import (
     attribute_label,
     country_label,
+    figure_term,
     method_key_lines,
     method_letters,
     model_labels,
@@ -81,6 +107,7 @@ from population_synthetic.analysis.utils.palette import (
     HEATMAP_CMAP,
     HIGHLIGHT_ACCENT,
     HOLLOW_EDGE,
+    HOST_COLORS,
     LARGE_CATEGORICAL_CMAP,
     MISSING_COLOR,
     MUTED_GREY,
@@ -88,6 +115,7 @@ from population_synthetic.analysis.utils.palette import (
     SECONDARY_GREY,
     SURFACE,
     heatmap_cmap,
+    heatmap_levels,
     opaque,
     text_color_on,
 )
@@ -99,17 +127,21 @@ from population_synthetic.analysis.utils.style import (
     CAPTION_MARGIN_IN,
     FIGURE_TITLE,
     FULL,
+    HEADING_WEIGHT,
     LEGEND_LABEL,
     LINE_SPACING,
     POINTS_PER_INCH,
+    TEXT_WIDTH,
     TICK_LABEL,
+    TICK_LABEL_LARGE,
     figure_size,
     grow_height,
     grow_width,
     house_style,
+    text_width_inches,
     wrap_to_width,
 )
-from population_synthetic.analysis.utils.table_style import fit_to_page
+from population_synthetic.analysis.utils.table_style import HOST_LABELS, fit_to_page
 
 __all__ = [
     "RATE_GRID_VARIANTS",
@@ -120,6 +152,7 @@ __all__ = [
     "plot_severity_heatmap",
     "plot_severity_pair_summary",
     "plot_typicality_by_method",
+    "plot_typicality_distribution_grid",
     "plot_typicality_heatmap",
 ]
 
@@ -1471,3 +1504,321 @@ def plot_typicality_by_method(ranking: dict[str, Any]):
     )
     _place_footnote(fig, ax, footnotes)
     return fig
+
+
+# --------------------------------------------------------------------------- #
+# The typicality distribution grid                                              #
+# --------------------------------------------------------------------------- #
+#
+# The approved layout (P20 of the typicality-distribution-grid plan), in points with the
+# origin at the bottom left of a fixed 456 pt canvas. Every value below is that
+# geometry, named once; the layout function derives every box from them and the chart
+# test asserts the boxes, so a change here is a visible change to the published figure.
+
+#: Canvas width: the manuscript text block (``style.TEXT_WIDTH``), fixed.
+_DG_CANVAS_WIDTH_PT = TEXT_WIDTH * POINTS_PER_INCH
+#: Side of a square cell when the columns fit; the side shrinks below it only when more
+#: models than the approved twelve must share the width.
+_DG_MAX_CELL_PT = 26.5
+#: Below this side an 8 pt column label no longer fits its column: raise rather than draw.
+_DG_MIN_CELL_PT = 18.0
+_DG_COLUMN_GAP_PT = 1.5
+_DG_ROW_GAP_PT = 3.0
+#: Left edge of the grid; the strategy letters sit in the margin to its left.
+_DG_GRID_LEFT_PT = 20.0
+_DG_ROW_LETTER_GAP_PT = 5.0
+#: The detached reference column, the ternary column and the colourbar, left to right.
+_DG_REFERENCE_GAP_PT = 6.0
+_DG_TERNARY_GAP_PT = 5.0
+_DG_TERNARY_PAD_PT = 1.5
+_DG_COLORBAR_GAP_PT = 6.0
+_DG_COLORBAR_WIDTH_PT = 7.0
+#: Clearance kept between any ink and the canvas edge (the fixed-canvas writer rejects
+#: ink that touches it).
+_DG_EDGE_MARGIN_PT = 2.0
+#: Vertical model labels above the grid: the block they sit in, and their baseline gap.
+_DG_TOP_BLOCK_PT = 76.0
+_DG_LABEL_GAP_PT = 2.0
+#: Left edge of the bottom block's legend, note and key.
+_DG_TEXT_LEFT_PT = 4.0
+#: The bottom block, stacked from the canvas bottom up: the key's last line, the pitch
+#: between key lines, then the note, the legend and the grid above it. With a one-row
+#: legend and a two-line key this is the approved 60 pt block.
+_DG_KEY_LAST_LINE_TOP_PT = 12.5
+_DG_KEY_LINE_PITCH_PT = 10.5
+_DG_NOTE_ABOVE_KEY_PT = 14.0
+_DG_LEGEND_ABOVE_NOTE_PT = 13.0
+_DG_LEGEND_ROW_PITCH_PT = 11.0
+_DG_GRID_ABOVE_LEGEND_PT = 10.0
+#: Legend entries that share one row before the legend wraps to a second.
+_DG_LEGEND_ROW_ENTRIES = 6
+#: Separators of the strategy key: after its title, and between entries.
+_DG_KEY_TITLE_SEPARATOR = ":  "
+_DG_KEY_ENTRY_SEPARATOR = "   "
+#: The half-mass guide of the ternary's apex band.
+_DG_APEX_GUIDES = (0.5,)
+#: Mark of a judged competitor with no survivor (no distribution to draw).
+_DG_NO_TYPICALITY_MARK = "–"
+
+
+def _text_width_pt(text: str, fontsize: float) -> float:
+    return text_width_inches(text, fontsize=fontsize) * POINTS_PER_INCH
+
+
+def _distribution_cell_side(n_models: int, n_levels: int) -> float:
+    """The square cell side: the approved 26.5 pt, or less when more columns must fit.
+
+    The width is spent left to right on the grid margin, ``n_models`` cells and their
+    gaps, the reference column, the ternary (whose side follows the cell), the colourbar
+    and room for its widest tick label. Solving that sum for the side gives ``fit``.
+    """
+    reserve = (
+        COLORBAR_TICK_LENGTH_PT + COLORBAR_TICK_PAD_PT
+        + _text_width_pt(str(n_levels - 1), TICK_LABEL) + _DG_EDGE_MARGIN_PT
+    )
+    fixed = (
+        _DG_GRID_LEFT_PT + (n_models - 1) * _DG_COLUMN_GAP_PT + _DG_REFERENCE_GAP_PT
+        + _DG_TERNARY_GAP_PT - 2 * _DG_TERNARY_PAD_PT / TERNARY_HEIGHT_RATIO
+        + _DG_COLORBAR_GAP_PT + _DG_COLORBAR_WIDTH_PT + reserve
+    )
+    fit = (_DG_CANVAS_WIDTH_PT - fixed) / (n_models + 1 + 1 / TERNARY_HEIGHT_RATIO)
+    side = min(_DG_MAX_CELL_PT, fit)
+    if side < _DG_MIN_CELL_PT:
+        raise ValueError(
+            f"{n_models} model columns leave a {fit:.1f} pt cell on the fixed "
+            f"{_DG_CANVAS_WIDTH_PT:.0f} pt canvas, below the {_DG_MIN_CELL_PT} pt floor at "
+            "which an 8 pt column label still fits; draw fewer models"
+        )
+    return side
+
+
+def _key_lines(entries: list[str], title: str, width_pt: float) -> list[str]:
+    """Split the strategy key into the fewest balanced lines that fit *width_pt*.
+
+    The first line opens with *title*; later lines hang under the first entry, so every
+    line has the title's width less room. Balanced, earlier lines longer: five entries
+    are set 3 + 2, as the approved layout sets them.
+    """
+    room = width_pt - _text_width_pt(title, LEGEND_LABEL)
+    for n_lines in range(1, len(entries) + 1):
+        per_line = -(-len(entries) // n_lines)
+        lines = [
+            _DG_KEY_ENTRY_SEPARATOR.join(entries[i:i + per_line])
+            for i in range(0, len(entries), per_line)
+        ]
+        if max(_text_width_pt(line, LEGEND_LABEL) for line in lines) <= room:
+            return lines
+    raise ValueError(f"a strategy key entry is wider than the {room:.0f} pt the figure has for it")
+
+
+@dataclass(frozen=True)
+class _DistributionGridLayout:
+    """Every box of the distribution grid, in points (see the P20 constants above)."""
+
+    width: float
+    height: float
+    cell: float
+    column_x0: tuple[float, ...]
+    row_y: tuple[tuple[float, float], ...]
+    reference_x: tuple[float, float]
+    ternary_x0: float
+    ternary_side: float
+    colorbar_box: tuple[float, float, float, float]
+    grid_y: tuple[float, float]
+    legend_top: float
+    note_top: float
+    key_tops: tuple[float, ...]
+
+
+def _distribution_grid_layout(
+    n_models: int, n_methods: int, n_levels: int, *, legend_rows: int, key_lines: int,
+) -> _DistributionGridLayout:
+    """The P20 geometry for *n_models* columns and *n_methods* rows (rows top to bottom)."""
+    cell = _distribution_cell_side(n_models, n_levels)
+    key_tops = tuple(
+        _DG_KEY_LAST_LINE_TOP_PT + (key_lines - 1 - i) * _DG_KEY_LINE_PITCH_PT
+        for i in range(key_lines)
+    )
+    note_top = key_tops[0] + _DG_NOTE_ABOVE_KEY_PT
+    legend_top = note_top + _DG_LEGEND_ABOVE_NOTE_PT + (legend_rows - 1) * _DG_LEGEND_ROW_PITCH_PT
+    y0 = legend_top + _DG_GRID_ABOVE_LEGEND_PT
+    y1 = y0 + n_methods * cell + (n_methods - 1) * _DG_ROW_GAP_PT
+    column_x0 = tuple(_DG_GRID_LEFT_PT + j * (cell + _DG_COLUMN_GAP_PT) for j in range(n_models))
+    reference_x0 = column_x0[-1] + cell + _DG_REFERENCE_GAP_PT
+    ternary_x0 = reference_x0 + cell + _DG_TERNARY_GAP_PT
+    ternary_side = (cell - 2 * _DG_TERNARY_PAD_PT) / TERNARY_HEIGHT_RATIO
+    colorbar_x0 = ternary_x0 + ternary_side + _DG_COLORBAR_GAP_PT
+    row_y = tuple(
+        (y1 - i * (cell + _DG_ROW_GAP_PT) - cell, y1 - i * (cell + _DG_ROW_GAP_PT))
+        for i in range(n_methods)
+    )
+    return _DistributionGridLayout(
+        width=_DG_CANVAS_WIDTH_PT, height=y1 + _DG_TOP_BLOCK_PT, cell=cell,
+        column_x0=column_x0, row_y=row_y, reference_x=(reference_x0, reference_x0 + cell),
+        ternary_x0=ternary_x0, ternary_side=ternary_side,
+        colorbar_box=(colorbar_x0, y0, colorbar_x0 + _DG_COLORBAR_WIDTH_PT, y1),
+        grid_y=(y0, y1), legend_top=legend_top, note_top=note_top, key_tops=key_tops,
+    )
+
+
+def _distribution_block(ranking: dict[str, Any]) -> dict[str, Any]:
+    block = ranking.get("typicality_distribution")
+    if block is None:
+        raise ValueError(
+            "plot_typicality_distribution_grid requires a ranking built with the typicality "
+            "options; this document carries typicality_distribution: null (the reason is in "
+            "skipped_tests)."
+        )
+    return block
+
+
+@house_style
+def plot_typicality_distribution_grid(
+    ranking: dict[str, Any], *, model_order: list[str], hosting: dict[str, str],
+):
+    """Draw every combination's typicality distribution on the model x strategy grid.
+
+    One mini histogram per cell -- strategies down the rows in complexity order (the
+    block's ``grid.methods``, verbatim), models across the columns in *model_order* --
+    with the reference's distribution drawn over each as a step outline, the reference
+    itself in a detached column, one ternary per strategy placing every combination's
+    three band shares beside the reference's star, and a stepped colourbar whose steps
+    are the bars' colours. Laid out on a fixed 456 pt canvas; the caller saves it with
+    ``save_figure(..., fixed_canvas=True)``.
+
+    Each cell state has its own drawing, mapped here and computed nowhere: ``ok`` a
+    histogram, ``withdrawn`` a crossed-out cell (the gate excluded the combination),
+    ``unjudged`` a grey cell, ``no_typicality`` an empty frame with a centred dash. The
+    legend lists "not judged" and "no typicality" only when such a cell is drawn.
+
+    Args:
+        ranking: The built ranking; its ``typicality_distribution`` block is drawn.
+        model_order: The grid's models in the published ``model_ranking`` order
+            (resolved at the edge through ``utils.model_order.ranked_grid_columns``).
+            Must hold exactly the block's grid models.
+        hosting: ``{model: "hosted" | "local"}``, the column-label and point tint,
+            classified at the edge from config.
+
+    Returns the ``Figure`` unsaved and open. Raises ``ValueError`` when the block is
+    absent, the consumption set holds no reference with a distribution (the outline, the
+    column and the star *are* the comparison), *model_order* is not exactly the grid's
+    models, a model has no hosting class, or the layout cannot fit the canvas.
+    """
+    block = _distribution_block(ranking)
+    grid = block["grid"]
+    grid_models: list[str] = list(grid["models"])
+    methods: list[str] = list(grid["methods"])
+    states = grid["states"]
+    n_levels = int(block["n_levels"])
+    band_labels: list[str] = list(block["bands"]["labels"])
+
+    real = grid["real"]
+    if real is None:
+        raise ValueError("no real population in the consumption set")
+    if real["status"] != "ok":
+        raise ValueError(
+            f"the real population {real['slug']!r} has no scored survivor, so there is no "
+            "reference distribution to draw"
+        )
+    if not grid_models or not methods:
+        raise ValueError("the distribution grid holds no model x strategy cell")
+    if len(set(model_order)) != len(model_order) or set(model_order) != set(grid_models):
+        raise ValueError(
+            f"model_order {list(model_order)} must hold exactly the grid's models {sorted(grid_models)}"
+        )
+    unclassified = [m for m in model_order if hosting.get(m) not in HOST_COLORS]
+    if unclassified:
+        raise ValueError(f"model(s) {unclassified} have no hosting class in {sorted(HOST_COLORS)}")
+
+    # Display strings, every one resolved from config.
+    model_names = model_labels(model_order)
+    letters = method_letters(methods)
+    reference_term = figure_term("reference")
+    key_title = figure_term("strategy_key_title") + _DG_KEY_TITLE_SEPARATOR
+    note = (
+        f"Triangles: share of {figure_term('individuals')} in score bands "
+        f"{' / '.join(band_labels)} (corners); bar heights √-scaled"
+    )
+
+    drawn_states = {states[m][s] for m in model_order for s in methods}
+    handles = [
+        swatch_handle(HOST_LABELS["hosted"], color=HOST_COLORS["hosted"]),
+        swatch_handle(HOST_LABELS["local"], color=HOST_COLORS["local"]),
+        outline_handle(f"{reference_term} outline"),
+        withdrawn_handle("withdrawn"),
+    ]
+    if "unjudged" in drawn_states:
+        handles.append(swatch_handle("not judged", color=MISSING_COLOR))
+    if "no_typicality" in drawn_states:
+        handles.append(swatch_handle("no typicality", color=SURFACE, edgecolor=GRID_RULE))
+    handles += [point_handle("combination", color=BASELINE_DARK), reference_star_handle(reference_term)]
+    ncol = min(len(handles), max(_DG_LEGEND_ROW_ENTRIES, -(-len(handles) // 2)))
+    legend_rows = -(-len(handles) // ncol)
+
+    key = _key_lines(method_key_lines(methods), key_title, _DG_CANVAS_WIDTH_PT - 2 * _DG_TEXT_LEFT_PT)
+    layout = _distribution_grid_layout(
+        len(model_order), len(methods), n_levels, legend_rows=legend_rows, key_lines=len(key),
+    )
+    label_room = _DG_TOP_BLOCK_PT - _DG_LABEL_GAP_PT - _DG_EDGE_MARGIN_PT
+    for name in [*model_names.values(), reference_term]:
+        if _text_width_pt(name, TICK_LABEL) > label_room:
+            raise ValueError(f"column label {name!r} is longer than the {label_room:.0f} pt above the grid")
+
+    canvas = PointCanvas(layout.width, layout.height)
+    levels = heatmap_levels(n_levels)
+    colors = step_colors(levels)
+    reference = real["distribution"]
+    reference_x0, reference_x1 = layout.reference_x
+
+    for i, method in enumerate(methods):
+        bottom, top = layout.row_y[i]
+        for j, model in enumerate(model_order):
+            x0 = layout.column_x0[j]
+            ax = canvas.axes(x0, bottom, x0 + layout.cell, top)
+            state = states[model][method]
+            if state == "ok":
+                draw_mini_histogram(ax, grid["cells"][model][method]["distribution"], colors, outline=reference)
+            elif state == "withdrawn":
+                draw_withdrawn_cell(ax)
+            elif state == "unjudged":
+                draw_empty_cell(ax, fill=MISSING_COLOR, mark=None)
+            elif state == "no_typicality":
+                draw_empty_cell(ax, fill=SURFACE, mark=_DG_NO_TYPICALITY_MARK)
+            else:
+                raise ValueError(f"cell ({model}, {method}) has unknown state {state!r}")
+        # The reference's own histogram, without an outline of itself.
+        draw_mini_histogram(canvas.axes(reference_x0, bottom, reference_x1, top), reference, colors)
+        shown = [m for m in model_order if states[m][method] == "ok"]
+        tx0, ty0 = layout.ternary_x0, bottom + _DG_TERNARY_PAD_PT
+        draw_ternary(
+            canvas.axes(tx0, ty0, tx0 + layout.ternary_side, ty0 + layout.ternary_side * TERNARY_HEIGHT_RATIO),
+            [grid["cells"][m][method]["band_shares"] for m in shown],
+            real["band_shares"],
+            point_colors=[HOST_COLORS[hosting[m]] for m in shown],
+            apex_guides=_DG_APEX_GUIDES,
+            apex_label=band_labels[2] if i == 0 else None,
+            base_labels=(band_labels[0], band_labels[1]) if i == len(methods) - 1 else None,
+        )
+        canvas.text(
+            _DG_GRID_LEFT_PT - _DG_ROW_LETTER_GAP_PT, (bottom + top) / 2, letters[method],
+            fontsize=TICK_LABEL_LARGE, fontweight=HEADING_WEIGHT, ha="right", va="center",
+            color=BASELINE_DARK,
+        )
+
+    stepped_colorbar(canvas, layout.colorbar_box, levels, n_levels, "Score")
+    label_y = layout.grid_y[1] + _DG_LABEL_GAP_PT
+    for x0, model in zip(layout.column_x0, model_order):
+        canvas.text(x0 + layout.cell / 2, label_y, model_names[model], fontsize=TICK_LABEL, rotation=90,
+                    ha="center", va="bottom", color=HOST_COLORS[hosting[model]])
+    canvas.text((reference_x0 + reference_x1) / 2, label_y, reference_term, fontsize=TICK_LABEL, rotation=90,
+                ha="center", va="bottom", color=BASELINE_DARK)
+
+    canvas.legend(handles, x=_DG_TEXT_LEFT_PT, y_top=layout.legend_top, ncol=ncol)
+    canvas.text(_DG_TEXT_LEFT_PT, layout.note_top, note, fontsize=LEGEND_LABEL, ha="left", va="top",
+                color=FOOTNOTE_GREY)
+    # Continuation lines hang under the first entry, measured from the title itself.
+    hang = _text_width_pt(key_title, LEGEND_LABEL)
+    for index, (line, line_top) in enumerate(zip(key, layout.key_tops)):
+        text, x = (key_title + line, _DG_TEXT_LEFT_PT) if index == 0 else (line, _DG_TEXT_LEFT_PT + hang)
+        canvas.text(x, line_top, text, fontsize=LEGEND_LABEL, ha="left", va="top", color=FOOTNOTE_GREY)
+    return canvas.figure

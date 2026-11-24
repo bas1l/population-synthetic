@@ -5,6 +5,12 @@
     "Divorced",
     "Widowed"
   ],
+  "priority": [
+    "Single",
+    "Married",
+    "Divorced",
+    "Widowed"
+  ],
   "real": {
     "Single": {
       "equals": [

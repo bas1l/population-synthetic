@@ -5,7 +5,19 @@
     "Pension",
     "Insurance / Allowance",
     "Social Assistance",
-    "Sickness / Activity Compensation"
+    "Sickness / Activity Compensation",
+    "General Allowances",
+    "Housing Allowance"
+  ],
+  "priority": [
+    "Wage / Business",
+    "Capital",
+    "Pension",
+    "Insurance / Allowance",
+    "Social Assistance",
+    "Sickness / Activity Compensation",
+    "General Allowances",
+    "Housing Allowance"
   ],
   "real": {
     "Wage / Business": {
@@ -43,9 +55,24 @@
         "Sickness / Activity Compensation",
         "sickness and activity compensation"
       ]
+    },
+    "General Allowances": {
+      "equals": [
+        "General Allowances",
+        "general allowance"
+      ]
+    },
+    "Housing Allowance": {
+      "equals": [
+        "Housing Allowance",
+        "housing allowance"
+      ]
     }
   },
   "synthetic": {
+    "tie_break": [
+      "priority"
+    ],
     "Wage / Business": {
       "none_of": [
         "unemploy",
@@ -55,25 +82,33 @@
         "jobseeker",
         "job-seeker",
         "jobbsök",
-        "bidrag",
-        "pension",
+        "utan anställning",
+        "jobbgaranti",
+        "jobb- och utveckling",
+        "utvecklingsgaranti",
+        "fas 3",
+        "volontär",
+        "spouse",
+        "partner employment",
+        {
+          "token": "utdelning från",
+          "mode": "substring"
+        },
+        "pension från",
+        "tidigare arbetsgivare",
+        "tjänstepension från",
+        "(tjänstepension)",
+        "avtalspension",
+        "delpension från",
+        "kap-kl",
+        "allmän pension",
+        "labor market",
+        "labour market",
         "parental support",
-        "parental financial support",
-        "parents financial support",
         "parents support",
-        "parent support",
-        "child support",
         "family support",
         "föräldrastöd",
-        "föräldraunderstöd",
-        "föräldraskapspenning",
-        "studentlån",
-        "studielån",
-        "studentfinansier",
-        "studiefinansier",
-        "studiemedel",
-        "studiebidrag",
-        "barnbidrag"
+        "föräldraunderstöd"
       ],
       "equals": [
         "Wage / Business",
@@ -96,38 +131,253 @@
         "Försäljning av konstnärliga verk eller produkter",
         "Tjänst",
         "Konsultuppdrag",
-        "Deltidsinkomst"
+        "Deltidsinkomst",
+        "administrative support income",
+        "arbet",
+        "Arbetstagare",
+        "Biluthyrning med förares tjänster (t.ex. flytthjälp)",
+        "Fast tjänst",
+        "Försäljning via sociala medier",
+        "Heltidsinkomst",
+        "Income from Akademiska Hus",
+        "Income from healthcare management roles",
+        "Inkomst från affärer",
+        "inkomst från deltidstjänst",
+        "Inkomst från deltidstjänst inom transportsektorn",
+        "Inkomst från försäljning av hantverk på marknad",
+        "Inkomst från försäljning av WordPress‑teman",
+        "Inkomst från konstnärligt skapande (försäljning, upphovsrätt)",
+        "Internship income",
+        "Intäkt från tjänst",
+        "Jordbruksstöd",
+        "Konstnärligt verk (försäljer konst)",
+        "Lokala anbud/kontrakt",
+        "Läroboksupphovsrätt",
+        "Management fee for leading teams",
+        "Mikroinkomst från mindre jordbruk",
+        "Part-time income",
+        "Professionell inkomst från Tech",
+        "Revenue from online ventures",
+        "Sal√°r",
+        "Sidoverksamhet",
+        "Skiftpremie från intensivvården",
+        "Statlig tjänst",
+        "Sysselsatt",
+        "Tech lead compensation",
+        "Teknisk expertisavgift",
+        "Temporary contract in public administration",
+        "Temporary IT roles through agencies",
+        "Therapy session charges",
+        "Tjänstinkomst",
+        "Uppdragsbelopp till privatpersoner"
       ],
       "contains": [
         "wage",
         "business",
         "employment",
         "self-employ",
-        "lön",
-        "företag",
+        {
+          "token": "lön",
+          "mode": "substring"
+        },
+        {
+          "token": "företag",
+          "mode": "substring"
+        },
         "egenföretagare",
         "freelan",
         "frilans",
-        "work",
+        {
+          "token": "work",
+          "mode": "substring"
+        },
         "salary",
         "salär",
         "salaried",
         "salaries",
-        "anställ",
-        "arbetsgivare",
-        "arbetsinkomst",
-        "förvärvsinkomst",
-        "job",
-        "jobb",
+        {
+          "token": "anställ",
+          "mode": "substring"
+        },
+        {
+          "token": "arbetsgivare",
+          "mode": "substring"
+        },
+        {
+          "token": "arbetsinkomst",
+          "mode": "substring"
+        },
+        {
+          "token": "förvärvsinkomst",
+          "mode": "substring"
+        },
+        {
+          "token": "job",
+          "mode": "substring"
+        },
+        {
+          "token": "jobb",
+          "mode": "substring"
+        },
         "employee",
         "employed",
-        "arbete",
+        {
+          "token": "arbete",
+          "mode": "substring"
+        },
         "sysselsättning",
         "deltidsarbete",
         "konsultverksamhet",
-        "firma",
-        "arvode",
-        "subcontracting"
+        {
+          "token": "firma",
+          "mode": "substring"
+        },
+        {
+          "token": "arvode",
+          "mode": "substring"
+        },
+        "subcontracting",
+        "övertidsersättning",
+        "semesterersättning",
+        "bonus",
+        "uppdragsersättning",
+        "projektbaserad ersättning",
+        "ersättning för",
+        "översättning",
+        "kontraktsbetalning",
+        "internship stipend",
+        "trainee-stipend",
+        "graduate assistant",
+        "employer sick",
+        "sjuklön",
+        "näringsinkomst",
+        "developer",
+        "manager",
+        "engineer",
+        "consult",
+        {
+          "token": "konsult",
+          "mode": "substring"
+        },
+        "sektor",
+        "sector",
+        {
+          "token": "utvecklare",
+          "mode": "substring"
+        },
+        "teacher",
+        {
+          "token": "lärare",
+          "mode": "substring"
+        },
+        "nurse",
+        "sales",
+        "assistant",
+        "design",
+        "coordinator",
+        "contractor",
+        "specialist",
+        "rådgiv",
+        "research",
+        "director",
+        {
+          "token": "ingenjör",
+          "mode": "substring"
+        },
+        {
+          "token": "sjuksköterska",
+          "mode": "substring"
+        },
+        "chef",
+        "writer",
+        "artist",
+        "driver",
+        "clerk",
+        "operator",
+        "scientist",
+        "project",
+        "projekt",
+        "tjänsteinkomst",
+        "loneinkomst",
+        "lon_",
+        "fees",
+        "overtime",
+        "shift",
+        "professional",
+        "lecturer",
+        "föreläsare",
+        "mekaniker",
+        "electrician",
+        "carpenter",
+        "psycholog",
+        "cashier",
+        "receptionist",
+        "courier",
+        "nanny",
+        "dagmamma",
+        {
+          "token": "lärar",
+          "mode": "substring"
+        },
+        {
+          "token": "säljare",
+          "mode": "substring"
+        },
+        "construction",
+        "manufacturing",
+        {
+          "token": "analyst",
+          "mode": "substring"
+        },
+        {
+          "token": "entrepren",
+          "mode": "substring"
+        },
+        {
+          "token": "salar",
+          "mode": "substring"
+        },
+        {
+          "token": "medarbetare",
+          "mode": "substring"
+        },
+        "intäkter från",
+        "vikariat",
+        "royalties",
+        "content creation",
+        "side hustle",
+        "side_gig",
+        "farming",
+        "labor",
+        "labour",
+        "technology",
+        "teknik",
+        "undervisning",
+        "tutoring",
+        "staff",
+        "statstjän",
+        "tjänsteman",
+        "government official",
+        "private company",
+        "ab-uppdrag",
+        "näringsverksamhet",
+        "arbetsin",
+        "arbetsoinkomst",
+        "arbetsinsats",
+        "arbetskraft",
+        "arbetstillfälle",
+        "arbetar ",
+        "utveckling (",
+        "softwareutveckling",
+        "apputveckling",
+        "forskar",
+        "forskning inom",
+        "sick pay",
+        "service",
+        "egen verksamhet",
+        "egen transport",
+        "production",
+        "crew"
       ]
     },
     "Capital": {
@@ -136,29 +386,55 @@
         "Kapitalinkomster",
         "Kapitalinkomst",
         "Aktieutdelning",
-        "Räntor och utdelningar"
+        "Räntor och utdelningar",
+        "Forsäljningsvinster från fastighet"
       ],
       "contains": [
         "capital",
-        "kapital",
+        {
+          "token": "kapital",
+          "mode": "substring"
+        },
         "dividend",
         "interest",
-        "ränta",
+        {
+          "token": "ränta",
+          "mode": "substring"
+        },
         "räntor",
         "ränte",
         "rente",
         "aktieutdelning",
-        "utdelning",
         "investment",
         "stocks",
-        "avkastning",
+        {
+          "token": "avkastning",
+          "mode": "substring"
+        },
         "real estate",
         "property income",
         "rental income",
         "rental/property",
         "hyresintäkt",
         "hyresinkomst",
-        "hyresintäkter"
+        "hyresintäkter",
+        {
+          "token": "utdelning",
+          "mode": "substring"
+        },
+        "fonder",
+        "fastighets",
+        "sparade tillgångar",
+        "rentor",
+        "financial assets",
+        "uthyrning",
+        "börs",
+        "investering"
+      ],
+      "none_of": [
+        "manager",
+        "pensionskapital",
+        "näringsinkomst"
       ]
     },
     "Pension": {
@@ -170,7 +446,25 @@
         "Ålderspension"
       ],
       "contains": [
-        "pension"
+        {
+          "token": "pension",
+          "mode": "substring"
+        },
+        "annuity",
+        "pensio",
+        "livränta",
+        "phased retirement"
+      ],
+      "none_of": [
+        "förtidspens",
+        "invalidpension",
+        "sjukpens",
+        "disability",
+        "bostadstillägg för pension",
+        "bostadsbidrag för pension",
+        "housing supplement",
+        "housing allowance for pension",
+        "bostadstillägg från pensionsmyndighet"
       ]
     },
     "Insurance / Allowance": {
@@ -180,77 +474,101 @@
         "Arbetslöshetsersättning",
         "Föräldrapenning",
         "Sjukpenning",
-        "Studiemedel",
-        "Studiebidrag",
-        "Bostadsbidrag",
-        "Bostadstillägg",
-        "Parental Support",
-        "Parental financial support",
-        "Parents financial support",
-        "Parents support",
-        "Parent support",
-        "Parents",
-        "Parents/Guardians",
-        "Föräldrar",
-        "Föräldraunderstöd",
         "Föräldraskapspenning",
-        "Studentlån",
-        "Studentfinansiering",
-        "Child support",
-        "Barnbidrag",
-        "Bistånd",
-        "Ekonomiskt stöd från föräldrar",
         "Arbetsförmedlingen",
-        "Financial support from parents",
-        "Försörjning från förälder",
-        "Aktivitetsstöd"
+        "Aktivitetsstöd",
+        "Cultural Grant Recipient",
+        "Försäkringsutbetalningar (t.ex. livförsäkring)"
       ],
       "contains": [
         "insurance",
         "allowance",
         "a-kassa",
-        "sjukpenning",
+        {
+          "token": "sjukpenning",
+          "mode": "substring"
+        },
         "föräldrapenning",
         "allowan",
-        "ersättning",
+        {
+          "token": "ersättning",
+          "mode": "substring"
+        },
         "transfer",
         "benefit",
-        "student loan",
-        "student aid",
-        "student grant",
-        "student finance",
-        "studielån",
-        "studiestöd",
-        "studiemedel",
-        "studiebidrag",
         "study grant",
         "scholarship",
-        "stipend",
-        "csn",
+        {
+          "token": "stipend",
+          "mode": "substring"
+        },
         "grant from",
         "grants from",
         "försäkringskassa",
         "dagpenning",
-        "bidrag",
+        {
+          "token": "bidrag",
+          "mode": "substring"
+        },
         "unemploy",
         "arbetslöshet",
         "arbetslös",
         "arbetssökande",
-        "parental support",
-        "parental financial support",
-        "parents financial support",
-        "parents support",
-        "parent support",
-        "child support",
-        "family support",
-        "föräldrastöd",
-        "föräldraunderstöd",
         "föräldraskapspenning",
-        "studentlån",
+        "utvecklingsersättning",
+        "jobbgaranti",
+        "fas 3",
+        "arbetsmarknadsstöd",
+        "a_kassa",
+        "arbetsmarknadsinsats",
+        "föräldraledig"
+      ],
+      "none_of": [
+        "barnbidrag",
+        "child allowance",
+        "child benefit",
         "studielån",
+        "studentlån",
+        "student loan",
+        "studiemedel",
+        "studiebidrag",
+        "studiestöd",
+        "studiestart",
+        "student grant",
+        "student aid",
+        "student finance",
+        "student allowance",
         "studentfinansier",
         "studiefinansier",
-        "fickpengar"
+        "csn",
+        "underhållsbidrag",
+        "underhållsstöd",
+        "child support",
+        "bostadsbidrag",
+        "bostadstillägg",
+        "housing allowance",
+        "housing supplement",
+        "housing benefit",
+        "allowance from parents",
+        "from parents",
+        "sjukersättning",
+        "aktivitetsersättning",
+        "sickness compensation",
+        "disability",
+        "förtidspens",
+        "socialbidrag",
+        "kommunalt bidrag",
+        "bidrag från kommunen",
+        "kommunal socialbidrag",
+        "socialtjänst",
+        "familj",
+        "mamma",
+        "från föräld",
+        "försörjningsstöd",
+        "ekonomiskt bistånd",
+        "welfare",
+        "agent",
+        "phased retirement"
       ]
     },
     "Social Assistance": {
@@ -258,12 +576,32 @@
         "Social Assistance",
         "Försörjningsstöd",
         "Socialbidrag",
-        "Ekonomiskt bistånd"
+        "Ekonomiskt bistånd",
+        "Bistånd"
       ],
       "contains": [
         "social assistance",
-        "försörjningsstöd",
-        "socialbidrag"
+        {
+          "token": "försörjningsstöd",
+          "mode": "substring"
+        },
+        "socialbidrag",
+        "kommunalt bidrag",
+        "bidrag från kommunen",
+        "kommunal socialbidrag",
+        "socialtjänst",
+        "social welfare",
+        "public assistance",
+        "welfare",
+        "ekonomiskt bistånd",
+        "ekonomiskt stöd via kommunen",
+        "kommunalt ekonomiskt",
+        "forsorjningsstod",
+        "bistånd",
+        "engångsstöd från kommunen"
+      ],
+      "none_of": [
+        "äldreförsörjning"
       ]
     },
     "Sickness / Activity Compensation": {
@@ -277,7 +615,67 @@
         "sickness",
         "activity compensation",
         "sjukersättning",
-        "aktivitetsersättning"
+        "aktivitetsersättning",
+        "disability",
+        "förtidspens",
+        "sjukpens",
+        "invalidpension"
+      ],
+      "none_of": [
+        "sickness benefit",
+        "sjukpenning",
+        "temporary sickness"
+      ]
+    },
+    "General Allowances": {
+      "equals": [
+        "General Allowances",
+        "Studiemedel",
+        "Studiebidrag",
+        "Studentlån",
+        "Studentfinansiering",
+        "Child support",
+        "Barnbidrag",
+        "Komvux‑stöd för vidareutbildning",
+        "Studiehjälp",
+        "Studiestartsstipendium",
+        "Studiestartsstöd"
+      ],
+      "contains": [
+        "barnbidrag",
+        "child allowance",
+        "child benefit",
+        "studielån",
+        "studentlån",
+        "student loan",
+        "studiemedel",
+        "studiebidrag",
+        "studiestöd",
+        "student grant",
+        "student aid",
+        "student finance",
+        "student allowance",
+        "studentfinansier",
+        "studiefinansier",
+        "csn",
+        "studerandebidrag",
+        "underhållsbidrag",
+        "underhållsstöd",
+        "child support"
+      ]
+    },
+    "Housing Allowance": {
+      "equals": [
+        "Housing Allowance",
+        "Bostadsbidrag",
+        "Bostadstillägg"
+      ],
+      "contains": [
+        "bostadsbidrag",
+        "bostadstillägg",
+        "housing allowance",
+        "housing supplement",
+        "housing benefit"
       ]
     }
   }

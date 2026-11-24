@@ -33,6 +33,12 @@ EMPLOYMENT_BY_EDUCATION_TABLE = "AM/AM0210/AM0210D/ArRegArbStatus"
 EMPLOYMENT_STATUS_EDU_TABLE = "AM/AM0210/AM0210A/ArbStatusUtbM"
 INCOME_TABLE = "HE/HE0110/HE0110F/TabVX10InkStrukt"
 INCOME_SOURCE_TABLE = "HE/HE0110/HE0110F/TabVX13InkStruktN"
+# Positive income components (Inkomstkomponenter) of TabVX13InkStruktN, the share
+# of equivalised disposable household income. 325 "general allowance" (child
+# allowance, maintenance support, study grants and study loans) and 330 "housing
+# allowance" (housing allowance and pensioners' housing supplement) were left out
+# until 2026-10; omitting them inflated the other components' shares.
+INCOME_SOURCE_COMPONENTS: tuple[str, ...] = ("300", "305", "310", "315", "320", "325", "330", "335")
 FAMILY_TABLE = "LE/LE0102/LE0102B/LE0102T17"
 URBANIZATION_TABLE = "MI/MI0810/MI0810A/BefLandInvKvmTO"
 CIVIL_STATUS_TABLE = "BE/BE0101/BE0101A/BefolkningNy"
@@ -51,9 +57,11 @@ INCOME_BRACKET_TABLE = "HE/HE0110/HE0110A/SamForvInk1a"
 
 # (bracket_code, low_sek_thousands, high_sek_thousands).
 # All monetary values are in SEK thousands (1 unit = 1 000 SEK).
-# The top bracket "1000+" is open-ended; [1 000, 1 500] is used as the closed
-# approximation for the midpoint — the top bracket holds a small population
-# share so this choice has negligible effect on the computed median.
+# The top bracket "1000+" is open-ended; [1 000, 1 500] is used as its closed
+# upper edge. The median never falls in it, so the choice does not touch the
+# interpolated median. It matters only where classify_brackets splits the top
+# bracket at the 2x-median threshold (cells whose median exceeds 500 tkr), and
+# then only for the small slice of that bracket's count below 2x median.
 SCB_INCOME_BRACKETS: list[tuple[str, float, float]] = [
     ("0",       0,     1),
     ("1-19",    1,    20),
@@ -82,3 +90,19 @@ SCB_INCOME_BRACKETS: list[tuple[str, float, float]] = [
     ("800-999", 800, 1000),
     ("1000+",  1000, 1500),
 ]
+
+# --- employment_type: declared AKU age proxies -------------------------------
+# AKU (AKURLSysAnkAr attachment, NAKUSysselOkArbtidAr hours) covers ages 15-74.
+# Attachment is published for the band "15-24", which the lower-bound age resolver
+# cannot place in the pipeline's 18-24 group; it is mapped there explicitly. The
+# proxy therefore includes ages 15-17 in the 18-24 attachment mix. Hours are
+# published for "20-24", which resolves to 18-24 on its own.
+# SCB serves the AKU band label with an en dash ("15–24 years") since the 2026-11 refetch;
+# earlier fetches (and the October 2026 reference cache) used a hyphen. Both spellings map
+# to the same band.
+AKU_ATTACHMENT_AGE_LABEL_MAP: dict[str, str] = {"15-24 years": "18-24", "15–24 years": "18-24"}
+# No AKU table covers ages 75+. The 75-85 cell reuses the 65-74 attachment x
+# hours mix (plan Open question 17 default: a declared nearest-cell proxy,
+# recorded in the output provenance, rather than dropping the attribute). This is
+# the cell the hash-seed-0 run fell back to, so 75-85 personas are unchanged.
+EMPLOYMENT_TYPE_AGE_PROXIES: dict[str, str] = {"75-85": "65-74"}

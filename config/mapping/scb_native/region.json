@@ -22,6 +22,29 @@
     "Blekinge",
     "Gotland"
   ],
+  "priority": [
+    "Stockholm",
+    "Västra Götaland",
+    "Skåne",
+    "Östergötland",
+    "Uppsala",
+    "Halland",
+    "Örebro",
+    "Jönköping",
+    "Gävleborg",
+    "Södermanland",
+    "Värmland",
+    "Dalarna",
+    "Västerbotten",
+    "Norrbotten",
+    "Kalmar",
+    "Västernorrland",
+    "Västmanland",
+    "Kronoberg",
+    "Jämtland",
+    "Blekinge",
+    "Gotland"
+  ],
   "real": {
     "Stockholm": {
       "equals": [
@@ -160,7 +183,10 @@
         "STH"
       ],
       "contains": [
-        "stockholm",
+        {
+          "token": "stockholm",
+          "mode": "substring"
+        },
         "sthlm",
         "solna",
         "nacka",
@@ -188,14 +214,18 @@
         "Bohuslän County"
       ],
       "contains": [
-        "västra götaland",
+        {
+          "token": "västra götaland",
+          "mode": "substring"
+        },
         "göteborg",
         "gothenburg",
         "borås",
         "mölndal",
         "trollhättan",
         "skövde",
-        "uddevalla"
+        "uddevalla",
+        "västergötland"
       ]
     },
     "Skåne": {
@@ -204,10 +234,14 @@
         "Skåne län",
         "Malmö",
         "Helsingborg",
-        "Lund"
+        "Lund",
+        "Svedala"
       ],
       "contains": [
-        "skåne",
+        {
+          "token": "skåne",
+          "mode": "substring"
+        },
         "skåns",
         "scania",
         "malmö",
@@ -227,7 +261,10 @@
       "contains": [
         "östergötland",
         "linköping",
-        "norrköping"
+        "norrköping",
+        "ostergotland",
+        "östra götaland",
+        "norrk"
       ]
     },
     "Uppsala": {
@@ -281,7 +318,8 @@
       "contains": [
         "gävleborg",
         "gävle",
-        "gästrikland"
+        "gästrikland",
+        "gästrik"
       ]
     },
     "Södermanland": {

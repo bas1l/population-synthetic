@@ -48,7 +48,13 @@ CATEGORY_VALUES = {
     "trend_attr": ["a", "b", "c", "d"],   # 4 levels
     "shift_attr": ["x", "y", "z"],        # 3 levels
 }
-_CMP_CONFIG = {"pairs_mode": "adjacent", "confidence_level": 0.95}
+# star_thresholds is required: the panel's assumption checks judge verdicts at the
+# loosest star cutoff, read fail-fast from the config.
+_CMP_CONFIG = {
+    "pairs_mode": "adjacent",
+    "confidence_level": 0.95,
+    "star_thresholds": [{"max_p": 0.05, "symbol": "*"}],
+}
 
 
 def _trend_tv(m_idx: int, rank: int) -> float:
@@ -548,7 +554,7 @@ def test_panel_carries_groups_and_holm_family_size(identical, family_size, group
         matrix[:, target] = matrix[:, source]
     methods = STRATEGIES
     models = [f"model_{i}" for i in range(10)]
-    panel = _method_panel(matrix, methods, models, [], confidence_level=0.95)
+    panel = _method_panel(matrix, methods, models, [], confidence_level=0.95, alpha=0.05)
     assert panel["correction"]["family_size"] == family_size
     assert panel["identical_method_groups"] == [[methods[i] for i in group] for group in groups]
     assert family_size == sum(1 for rec in panel["pairwise_detail"].values() if rec["p_holm"] is not None)

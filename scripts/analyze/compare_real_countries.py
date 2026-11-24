@@ -228,7 +228,9 @@ def main() -> None:
     scheme = load_scheme(args.reference_country)
     # Sex vocabulary for the generic flattener comes from the reference country's
     # biological_sex config (not a hardcoded map).
-    sex_config = load_mappings(mappings_for_country(args.reference_country))["biological_sex"]
+    reference_mappings = load_mappings(mappings_for_country(args.reference_country))
+    sex_config = reference_mappings["biological_sex"]
+    sex_matching = reference_mappings["_index"]["matching"]["real"]
 
     logger.info("Loading populations...")
     swe_raw = _load_json(args.sweden)
@@ -236,9 +238,9 @@ def main() -> None:
     ita_raw = _load_json(args.italy)
 
     logger.info("Flattening raw records...")
-    swe = flatten_raw_population(swe_raw, sex_config=sex_config, country_label="Sweden")
-    nor = flatten_raw_population(nor_raw, sex_config=sex_config, country_label="Norway")
-    ita = flatten_raw_population(ita_raw, sex_config=sex_config, country_label="Italy")
+    swe = flatten_raw_population(swe_raw, sex_config=sex_config, matching=sex_matching, country_label="Sweden")
+    nor = flatten_raw_population(nor_raw, sex_config=sex_config, matching=sex_matching, country_label="Norway")
+    ita = flatten_raw_population(ita_raw, sex_config=sex_config, matching=sex_matching, country_label="Italy")
 
     populations = {"Sweden": swe, "Norway": nor, "Italy": ita}
     paths = {"Sweden": args.sweden, "Norway": args.norway, "Italy": args.italy}

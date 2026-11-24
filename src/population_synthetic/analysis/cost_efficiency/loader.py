@@ -224,7 +224,7 @@ class WithdrawnCombination:
 
     It has no accuracy score and no capped mirror, so it cannot appear on a
     cost-vs-accuracy figure -- but it was generated and paid for, and the money is
-    measurable over the raw pool. Reporting it is the difference between "these were the
+    measurable over the raw pool's finished personas. Reporting it is the difference between "these were the
     combinations" and "these were the combinations that worked out".
     """
 
@@ -250,6 +250,60 @@ class JoinResult:
     #: three inputs legitimately disagree, so publishing the disagreement is what makes
     #: the output row count auditable instead of merely asserted.
     membership: dict[str, int]
+
+
+#: The raw-completeness validator whose per-combination verdicts decide which personas
+#: finished: its ``{slug}.csv`` carries one row per persona directory.
+RAW_VALIDATOR_PROCESS_ID = "validate_raw"
+_RAW_VERDICT_COLUMNS = ("persona_id", "passed")
+_PASSED_TRUE, _PASSED_FALSE = "True", "False"
+
+
+def finished_persona_ids(sources: CostSources, attrition: AttritionRow) -> frozenset[str]:
+    """The persona ids of *attrition*'s combination that passed ``validate_raw`` (fail-fast).
+
+    Read from the validator's own per-combination CSV, so "finished" means exactly what
+    the attrition contract's ``raw_valid`` counts. The count is checked against that
+    ``raw_valid``: the two are one verdict read twice, and a mismatch means one of the
+    artifacts is stale. Raises on a missing file, a missing column, a ``passed`` value
+    that is not ``True``/``False``, or the count mismatch.
+    """
+    path = (
+        analysis_output_dir(RAW_VALIDATOR_PROCESS_ID, sources.output_base, for_read=True)
+        / f"{attrition.slug}.csv"
+    )
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"validate_raw verdicts not found for {attrition.slug!r}: {path}. The cost is "
+            f"totalled over finished personas only; run {_script(RAW_VALIDATOR_PROCESS_ID)} "
+            "for this combination first."
+        )
+    finished: set[str] = set()
+    with open(path, "r", newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        missing = missing_columns(tuple(reader.fieldnames or ()), _RAW_VERDICT_COLUMNS)
+        if missing:
+            raise ValueError(
+                f"{path}: validate_raw CSV is missing column(s) {missing}. Re-run "
+                f"{_script(RAW_VALIDATOR_PROCESS_ID)} --force for this combination."
+            )
+        for position, row in enumerate(reader):
+            passed = (row["passed"] or "").strip()
+            if passed not in (_PASSED_TRUE, _PASSED_FALSE):
+                raise ValueError(
+                    f"{path}: row {position} has passed={passed!r}; expected "
+                    f"{_PASSED_TRUE!r} or {_PASSED_FALSE!r}."
+                )
+            if passed == _PASSED_TRUE:
+                finished.add(row["persona_id"].strip())
+    if len(finished) != attrition.raw_valid:
+        raise ValueError(
+            f"Combination {attrition.slug!r}: {path} passes {len(finished)} persona(s) but "
+            f"{sources.attrition} records raw_valid={attrition.raw_valid}. One of the two is "
+            f"stale: re-run {_script(RAW_VALIDATOR_PROCESS_ID)}, {_script('population_cap')} and "
+            f"{_script(ATTRITION_PROCESS_ID)}."
+        )
+    return frozenset(finished)
 
 
 def _script(process_id: str) -> str:
@@ -624,7 +678,8 @@ def load_cost_records(
             accuracy=accuracy[slug],
             attrition=by_slug[slug],
             cost=raw_cost_for_slug(sources.output_base, slug, by_slug[slug].model, pricing,
-                                   strategy_id=by_slug[slug].strategy, calibration=calibration),
+                                   strategy_id=by_slug[slug].strategy, calibration=calibration,
+                                   finished=finished_persona_ids(sources, by_slug[slug])),
             capped_has_token_data=telemetry[slug],
         )
         for slug in sorted(expected_slugs)
@@ -660,7 +715,8 @@ def load_cost_records(
             generated=by_slug[slug].generated,
             clean=by_slug[slug].clean,
             cost=raw_cost_for_slug(sources.output_base, slug, by_slug[slug].model, pricing,
-                                   strategy_id=by_slug[slug].strategy, calibration=calibration),
+                                   strategy_id=by_slug[slug].strategy, calibration=calibration,
+                                   finished=finished_persona_ids(sources, by_slug[slug])),
         )
         for slug in sorted(withdrawn_slugs)
     ]

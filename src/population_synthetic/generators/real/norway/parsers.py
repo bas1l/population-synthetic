@@ -955,9 +955,6 @@ def parse_socioeconomic(
     _BRACKET_EDGES: dict[str, tuple[float, float]] = {
         code: (lo, hi) for code, lo, hi in BRUTTOINN_BRACKETS
     }
-    _BRACKET_MIDPOINTS: dict[str, float] = {
-        code: (lo + hi) / 2.0 for code, lo, hi in BRUTTOINN_BRACKETS
-    }
 
     dims = raw.get("dimension", {})
     values = raw.get("value", [])
@@ -1040,9 +1037,8 @@ def parse_socioeconomic(
             national_counts[br_code] = national_counts.get(br_code, 0.0) + cnt
 
     ordered_codes = [code for code, _, _ in BRUTTOINN_BRACKETS if code in national_counts]
-    midpoints = [_BRACKET_MIDPOINTS[c] for c in ordered_codes]
     counts_list = [national_counts[c] for c in ordered_codes]
-    national_median = median_from_brackets(midpoints, counts_list)
+    national_median = median_from_brackets([_BRACKET_EDGES[c] for c in ordered_codes], counts_list)
 
     result: dict[tuple[str, str], dict[str, float]] = {}
     for key, br_dist in cell_counts.items():

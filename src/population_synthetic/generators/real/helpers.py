@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import numpy as np
 
-VALID_AGE_GROUPS = {"18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85"}
+# An ordered tuple, not a set: iterating a set of strings follows the per-process
+# string hash, so any loop over it depended on PYTHONHASHSEED. Membership tests
+# behave the same on a tuple; iteration is now youngest-to-oldest everywhere.
+VALID_AGE_GROUPS: tuple[str, ...] = ("18-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-85")
 AGE_GROUP_BOUNDS = [
     (18, 24, "18-24"), (25, 34, "25-34"), (35, 44, "35-44"),
     (45, 54, "45-54"), (55, 64, "55-64"), (65, 74, "65-74"),

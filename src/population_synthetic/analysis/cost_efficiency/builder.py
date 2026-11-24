@@ -11,10 +11,12 @@ sink).
 
 ``cost_per_usable_persona = total_cost_usd / clean``
     Dollars spent per persona the pipeline could actually **use** -- a persona that
-    passed both validity gates. The numerator is the whole run's spend over the full
-    generated pool, so a model that generated 549 personas to keep 100 is charged for
-    all 549. That is the entire point: measured over the capped mirror instead, the same
-    combination reports 5.7 USD rather than 27.3, and the understatement is largest
+    passed both validity gates. The numerator is the whole run's spend over every
+    *finished* persona of the generated pool, so a model that finished 488 personas to
+    keep 100 is charged for all 488. A generation stopped midway (failed
+    ``validate_raw``) is an artefact of interrupting the run and is not charged.
+    Charging every finished persona is the entire point: measured over the capped mirror
+    instead, the same combination reports 5.7 USD rather than 27.3, and the understatement is largest
     exactly where the waste is largest, which would flatter the wasteful models.
 
     Denominated on ``clean`` rather than on ``selected`` for the reason the attrition
@@ -278,14 +280,15 @@ def build_document(result: JoinResult) -> dict[str, Any]:
                 "capped population of n_scored personas. Higher is better"
             ),
             "generated": (
-                "persona_* directories the cap observed under 01_Raw for this combination "
-                "-- the pool every token in total_cost_usd was spent on"
+                "persona_* directories the cap observed under 01_Raw for this combination, "
+                "including generations stopped midway. Shown for transparency; the cost "
+                "covers only the finished ones (those passing validate_raw)"
             ),
             "clean": "personas passing BOTH validity gates: the pool the seeded cap draws from",
             "generation_multiplier": (
-                "generated / clean, read from the validation_attrition contract rather than "
-                "recomputed. Not used to correct the cost: the cost here is measured over "
-                "the generated pool directly"
+                "raw_valid / clean (finished personas per usable one), read from the "
+                "validation_attrition contract rather than recomputed. Not used to correct "
+                "the cost: the cost here is measured over the finished pool directly"
             ),
             "total_cost_usd": (
                 "the combination's whole LLM spend over the population named by cost_basis, "
@@ -298,7 +301,9 @@ def build_document(result: JoinResult) -> dict[str, Any]:
             ),
             "cost_basis": (
                 "which persona population the cost was totalled over. "
-                f"'{COST_BASIS}' is the full generated pool; the alternative basis (the "
+                f"'{COST_BASIS}' is every finished persona of the generated pool (passed "
+                "validate_raw, whether or not it passed the mapped-value gate); generations "
+                "stopped midway are excluded. The alternative basis (the "
                 "~100-persona capped mirror that generation_metadata measures) differs from "
                 "it by up to 5.5x on the live grid"
             ),

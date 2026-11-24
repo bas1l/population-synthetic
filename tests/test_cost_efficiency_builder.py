@@ -127,7 +127,7 @@ def test_no_composite_key_anywhere_in_the_document(tmp_path) -> None:
 
 def test_document_carries_the_cost_basis_and_the_unmetered_note(tmp_path) -> None:
     document = build_document(_result(tmp_path))
-    assert document["cost_basis"] == "generated_pool_01_raw"
+    assert document["cost_basis"] == "finished_pool_01_raw"
     assert "not free" in document["unmetered_note"]
     assert document["process"] == PROCESS_ID
 

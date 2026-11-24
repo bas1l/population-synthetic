@@ -17,16 +17,28 @@ interrupt keeps every persona already completed. Because each persona owns its
 two distinct files (written atomically via ``tmp``+``replace``), no cross-thread
 write lock or shared telemetry buffer is needed.
 
-The judge client is **per worker thread, not per persona**. ``ClaudeCodeClient``
-is a *persistent* CLI wrapper: its ``_ensure_process`` keeps one live ``claude``
-subprocess and relaunches only when the model or system prompt changes -- and the
-system prompt is invariant across personas (``prompt.build_prompts`` passes it
-through verbatim), so every persona after a thread's first reuses that process.
-Creating a client per persona instead spawned one full ``claude`` process *per
-persona* -- hundreds of ~400 MB process launches per combo, thousands per sweep --
-which starved the host machine. Clients are closed when the pool drains, not
-between personas; the retry path stays correct because a failed call closes the
-underlying process itself and ``_ensure_process`` relaunches on the next call.
+Every judge call is an **independent conversation**. ``ClaudeCodeClient`` spawns
+one fresh, minimal-context ``claude -p`` process per call (no shared history, no
+project instructions), so a round never sees an earlier round of the same persona
+nor any persona the same thread judged before. The client object is still cached
+**per worker thread** -- it now holds only configuration, so caching it is harmless;
+the number of live ``claude`` processes is bounded by ``cfg.workers`` because each
+worker runs one call at a time. (Until 2026-10 the client kept one persistent
+process per thread and every call was the next turn of one growing conversation;
+verdict caches written then carry no ``context_isolation`` tag and are refused by
+the resume gate -- see below.)
+
+Context-isolation gate: every persona cache records the ``context_isolation`` tag
+of the regime that judged it (:data:`JUDGE_CONTEXT_ISOLATION`), and the runner
+verifies that every successful call's client metadata reports that same tag. On
+resume, a cache carrying any other tag (or none: the pre-fix shared-conversation
+regime) is neither skipped nor topped up -- it raises, pointing at ``--force``,
+because reusing it would mix verdicts from two regimes, possibly inside one persona.
+
+The same gate covers the prompt: every cache records the
+:data:`~population_synthetic.analysis.persona_realism.config.PROMPT_IDENTITY_KEYS`
+stamps (template hash + judge-facing category-rendering hash), and a cache whose
+stamps differ from the current config's -- or that has none -- raises on resume.
 
 Resume is *round-count-aware* (not binary-exists): a persona is skipped only when
 its cached file already holds ``>= n_rounds`` successful rounds. A file left by an
@@ -58,31 +70,28 @@ import atexit
 import dataclasses
 import json
 import logging
-import random
-import re
 import threading
-from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from population_synthetic.analysis.persona_realism.config import JudgeConfig
+from population_synthetic.analysis.persona_realism.config import PROMPT_IDENTITY_KEYS, JudgeConfig
 from population_synthetic.analysis.persona_realism.judge import RoundVerdict, parse_round_verdict
 from population_synthetic.analysis.persona_realism.prompt import build_prompts, load_prompt_template
+from population_synthetic.analysis.persona_realism.selection import (
+    _persona_key,
+    selected_indices,
+)
+from population_synthetic.clients.claude_code_client import CONTEXT_ISOLATION as JUDGE_CONTEXT_ISOLATION
 from population_synthetic.generators.synthetic.llm_interaction_log import (
     LLMInteractionCollector,
     LLMInteractionEntry,
 )
 
-__all__ = ["RunnerSummary", "run_combo_judgements"]
+__all__ = ["JUDGE_CONTEXT_ISOLATION", "RunnerSummary", "run_combo_judgements"]
 
 _LOGGER = logging.getLogger(__name__)
-
-# The verdict/telemetry filename shape the sibling readers glob for: ``artifacts.py``
-# on ``persona_*.jsonl`` and ``reduce.py`` on ``persona_[0-9]*.json``. A cache key
-# outside this shape is invisible to both, so :func:`_persona_key` enforces it.
-_PERSONA_KEY_RE = re.compile(r"persona_\d+")
 
 # Bounded number of fan-out passes: one initial pass plus retries of the calls
 # that failed (transient CLI errors the client's own retry did not clear, or a
@@ -167,80 +176,16 @@ class _PersonaOutcome:
 
 
 def _default_client_factory(cfg: JudgeConfig) -> Any:
-    """Construct a real judge client (lazy import; keeps the module CLI-free)."""
+    """Construct a real judge client (lazy import; keeps the module CLI-free).
+
+    No ``temperature`` is passed: the ``claude`` CLI has no sampling-temperature
+    control, so passing one would only record a setting that is never applied.
+    """
     from population_synthetic.clients.claude_code_client import ClaudeCodeClient
 
     return ClaudeCodeClient(
         model_name=cfg.judge_model,
-        default_config={"temperature": cfg.temperature},
         timeout=cfg.timeout_seconds,
-    )
-
-
-def _select_indices(n: int, sample_size: int | None, seed: Any) -> list[int]:
-    """Choose which population indices to judge (seeded sampling; all if unbounded).
-
-    ``sample_size`` null or >= population size -> all personas (no error). Sampling
-    is deterministic in *seed* and returns sorted original indices so the on-disk
-    ``persona_XXXXX.json`` cache is stable across resumed runs.
-    """
-    if sample_size is None or sample_size >= n:
-        return list(range(n))
-    rng = random.Random(seed)
-    return sorted(rng.sample(range(n), sample_size))
-
-
-def _select_prefix_indices(n: int, sample_size: int | None) -> list[int]:
-    """Choose the first *sample_size* population indices (0..N-1); all if unbounded.
-
-    Deterministic FIRST-N prefix, NOT seeded random (contrast :func:`_select_indices`).
-    Used only for the real-reference cap (``sample_size_override``): the SCB population
-    is already an i.i.d. sample, so a prefix is a valid random subsample, it is
-    reproducible across runs, and it reuses any already-cached prefix personas -- so the
-    round-count-aware resume/top-up gate selects the same personas on every run.
-    ``sample_size`` null or >= population size -> all personas (no error).
-    """
-    if sample_size is None or sample_size >= n:
-        return list(range(n))
-    return list(range(sample_size))
-
-
-def _persona_key(population: Sequence[dict[str, Any]], idx: int, combo_label: str) -> str:
-    """Return the verdict-cache key for population index *idx*: the record's OWN id.
-
-    NOT ``f"persona_{idx:05d}"``. The population read by this runner is the **capped**
-    mapped file -- a seeded sparse subset of the clean pool -- so list index k and
-    persona id k are different personas as soon as ``population_cap`` runs. Keying the
-    cache on the index would attribute one persona's rounds to another on any re-draw
-    (a new cap, a grown pool, a changed mapping config), silently and undetectably.
-
-    The key is normalised to the ``persona_<5 digits>`` shape the sibling readers glob
-    for (``artifacts.py`` on ``persona_*.jsonl``, ``reduce.py`` on
-    ``persona_[0-9]*.json``): a synthetic record already carries its raw persona-dir
-    name (``persona_00312``) and is used verbatim; the real reference carries an
-    integer ``id`` (0, 1, 2, ...) and is formatted to match. Anything else raises --
-    a key outside that shape is invisible to the readers, which would look like a
-    combo that judged nothing.
-    """
-    raw = population[idx].get("id")
-    if raw is None or (isinstance(raw, str) and not raw.strip()):
-        raise ValueError(
-            f"combo {combo_label!r}: mapped individual at index {idx} carries no 'id'; "
-            f"the verdict cache is keyed on it."
-        )
-    if isinstance(raw, bool):  # bool is an int subclass; never a persona id
-        raise ValueError(f"combo {combo_label!r}: index {idx} has a boolean 'id' ({raw!r}).")
-    if isinstance(raw, int):
-        return f"persona_{raw:05d}"
-    text = str(raw).strip()
-    if text.isdigit():
-        return f"persona_{int(text):05d}"
-    if _PERSONA_KEY_RE.fullmatch(text):
-        return text
-    raise ValueError(
-        f"combo {combo_label!r}: index {idx} has id {raw!r}, which is neither an integer "
-        f"nor of the form 'persona_<digits>'; the verdict readers glob 'persona_[0-9]*' "
-        f"and would not see it."
     )
 
 
@@ -300,13 +245,17 @@ def _judge_one_round(
     cfg: JudgeConfig,
     entries: list[LLMInteractionEntry],
 ) -> tuple[RoundVerdict | None, str | None]:
-    """Run one judge call for one (persona, round) on *client*; never raises.
+    """Run one judge call for one (persona, round) on *client*.
 
-    Reuses the persona's own client (the persona worker owns its lifecycle), appends
-    the call's telemetry -- success or failure -- to that persona's LOCAL ``entries``
-    list, and returns the verdict or a string error. A parse/contract violation from
-    :func:`parse_round_verdict` is caught here and surfaced as a failed round
-    (retryable), keeping failure distinct from a possible verdict.
+    Uses the worker thread's client (each call is its own independent conversation),
+    appends the call's telemetry -- success or failure -- to that persona's LOCAL
+    ``entries`` list, and returns the verdict or a string error. A parse/contract
+    violation from :func:`parse_round_verdict` is caught here and surfaced as a failed
+    round (retryable), keeping failure distinct from a possible verdict.
+
+    The one thing that raises: a *successful* call whose client metadata does not
+    report :data:`JUDGE_CONTEXT_ISOLATION`. That is a client that cannot vouch for
+    call independence, and caching its verdict under the tag would make the tag a lie.
     """
     raw: str | None = None
     verdict: RoundVerdict | None = None
@@ -319,6 +268,12 @@ def _judge_one_round(
     except Exception as exc:  # noqa: BLE001 -- a failed round is retryable, not fatal
         error = f"{type(exc).__name__}: {exc}"
     meta = getattr(client, "last_metadata", {}) or {}
+    if verdict is not None and meta.get("context_isolation") != JUDGE_CONTEXT_ISOLATION:
+        raise RuntimeError(
+            f"{persona_id} round {round_idx}: the judge client reported context_isolation="
+            f"{meta.get('context_isolation')!r}, not {JUDGE_CONTEXT_ISOLATION!r}. Only a client "
+            "whose every call is an independent conversation may write the verdict cache."
+        )
     entries.append(
         _build_entry(
             persona_id=persona_id, round_idx=round_idx, attempt=attempt,
@@ -328,7 +283,16 @@ def _judge_one_round(
     return verdict, error
 
 
-def _read_cached_rounds(path: Path, *, expected_id: str) -> list[dict[str, Any]]:
+def _read_cached_rounds(
+    path: Path,
+    *,
+    expected_id: str,
+    persona: dict[str, Any],
+    analyzed_attrs: list[str],
+    judge_model: str,
+    check_isolation: bool = True,
+    prompt_identity: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     """Return the successful round dicts already cached for a persona (fail-fast).
 
     Used by the round-count-aware resume gate to decide skip vs top-up. The list
@@ -341,7 +305,20 @@ def _read_cached_rounds(path: Path, *, expected_id: str) -> list[dict[str, Any]]
     so reusing them would silently mis-attribute verdicts. That raises rather than
     being repaired, because the correct repair (re-judge, or restore the matching
     cap) is a decision about cost that this layer cannot make.
+
+    The same holds for the persona's *values*: the stored ``attributes`` snapshot must
+    equal the current mapped record over ``analyzed_attrs``, resolved through the same
+    :func:`attr_value` accessor :func:`_write_persona_file` stamps it with. A persona
+    re-mapped since it was judged keeps its id but is no longer the persona the judge
+    read, so its rounds are refused -- on every path, plan-only included, because they
+    would be mis-attributed whether or not anything is judged. A missing or extra
+    snapshot key is the same refusal. ``judge_model`` must equal the configured one on
+    every path that may write: topping up under another judge would mix two judges
+    inside one persona.
     """
+    # Lazy import (mirrors _write_persona_file): keep the statistics stack off import time.
+    from population_synthetic.analysis.fidelity.evaluator import attr_value
+
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -356,6 +333,56 @@ def _read_cached_rounds(path: Path, *, expected_id: str) -> list[dict[str, Any]]
     rounds = payload.get("rounds")
     if not isinstance(rounds, list):
         raise ValueError(f"persona cache {path} has no 'rounds' list to resume from")
+    snapshot = payload.get("attributes")
+    if not isinstance(snapshot, dict):
+        raise ValueError(f"persona cache {path} has no 'attributes' snapshot to verify the persona against")
+    current = {attr: attr_value(persona, attr) for attr in analyzed_attrs}
+    missing = sorted(set(current) - set(snapshot))
+    extra = sorted(set(snapshot) - set(current))
+    changed = {
+        attr: {"cached": snapshot[attr], "current": current[attr]}
+        for attr in analyzed_attrs
+        if attr in snapshot and snapshot[attr] != current[attr]
+    }
+    if missing or extra or changed:
+        raise ValueError(
+            f"persona cache {path} was judged against other mapped values than {expected_id!r} now "
+            f"holds (changed: {changed}; missing from the snapshot: {missing}; not on the analyzed "
+            f"axis: {extra}). The persona was re-mapped, or the analyzed axis changed, after it was "
+            "judged, so its rounds describe another persona -- re-run with --force to re-judge."
+        )
+    stored_model = payload.get("judge_model")
+    if check_isolation and stored_model != judge_model:
+        raise ValueError(
+            f"persona cache {path} was judged by judge_model={stored_model!r}, not the configured "
+            f"{judge_model!r}. It can be neither reused nor topped up without mixing judges -- "
+            "re-run with --force to re-judge."
+        )
+    # ``check_isolation`` is off only for the plan-only path, which judges nothing and
+    # so cannot mix regimes; every path that may write must refuse a foreign regime.
+    stored_isolation = payload.get("context_isolation")
+    if check_isolation and stored_isolation != JUDGE_CONTEXT_ISOLATION:
+        raise ValueError(
+            f"persona cache {path} was judged under context_isolation={stored_isolation!r}, "
+            f"not the current {JUDGE_CONTEXT_ISOLATION!r} (a cache without the tag predates "
+            "the fix that made every judge call an independent conversation: its rounds "
+            "shared one conversation with other rounds and personas). It can be neither "
+            "reused nor topped up without mixing regimes -- re-run with --force to re-judge."
+        )
+    # The same rule for the prompt the judge read: a cache judged under another
+    # template or category rendering (or before the stamps existed) is a different
+    # measurement, so topping it up would mix two prompts inside one persona.
+    if check_isolation and prompt_identity is not None:
+        stale = {
+            key: payload.get(key) for key in PROMPT_IDENTITY_KEYS if payload.get(key) != prompt_identity[key]
+        }
+        if stale:
+            raise ValueError(
+                f"persona cache {path} was judged under a different prompt ({stale} != the current "
+                f"{ {key: prompt_identity[key] for key in stale} }; a missing stamp predates "
+                "persona_rendering). It can be neither reused nor topped up without mixing "
+                "prompts -- re-run with --force to re-judge."
+            )
     return rounds
 
 
@@ -395,6 +422,8 @@ def _write_persona_file(
         "persona_id": persona_id,
         "combo": combo_label,
         "judge_model": cfg.judge_model,
+        "context_isolation": JUDGE_CONTEXT_ISOLATION,
+        **cfg.prompt_identity(),
         "n_rounds": cfg.n_rounds,
         "successful_rounds": successful,
         "failed_rounds": max(cfg.n_rounds - successful, 0),
@@ -488,13 +517,12 @@ def run_combo_judgements(
             return _default_client_factory(cfg)
 
     system_str, user_template = load_prompt_template(cfg.prompt_template)
+    prompt_identity = cfg.prompt_identity()
 
     # The real-reference cap (sample_size_override) uses a deterministic first-N prefix;
-    # synthetic combos use the seeded random draw governed by cfg.sample_size.
-    if sample_size_override is not None:
-        selected = _select_prefix_indices(len(population), sample_size_override)
-    else:
-        selected = _select_indices(len(population), cfg.sample_size, cfg.bootstrap.get("seed"))
+    # synthetic combos use the seeded random draw governed by cfg.sample_size. The one
+    # selection rule every consumer of the cache shares (selection.selected_persona_ids).
+    selected = selected_indices(len(population), cfg, sample_size_override=sample_size_override)
 
     # Round-count-aware resume gate. For each selected persona decide skip / top-up /
     # fresh, recording the already-cached rounds (``existing[idx]``) to extend and
@@ -507,7 +535,11 @@ def run_combo_judgements(
     for idx in selected:
         persona_file = out_dir / f"{keys[idx]}.json"
         if persona_file.exists() and not force:
-            cached = _read_cached_rounds(persona_file, expected_id=keys[idx])
+            cached = _read_cached_rounds(
+                persona_file, expected_id=keys[idx], persona=population[idx],
+                analyzed_attrs=analyzed_attrs, judge_model=cfg.judge_model,
+                check_isolation=not plan_only, prompt_identity=prompt_identity,
+            )
             if len(cached) >= cfg.n_rounds:
                 skipped += 1  # already at/above the target round count
                 continue
@@ -542,19 +574,22 @@ def run_combo_judgements(
     prompts: dict[int, tuple[str, str]] = {}
     for idx in to_judge:
         try:
-            prompts[idx] = build_prompts(population[idx], analyzed_attrs, system_str, user_template)
-        except KeyError as exc:
+            prompts[idx] = build_prompts(
+                population[idx], analyzed_attrs, system_str, user_template,
+                rendering=cfg.persona_rendering,
+            )
+        except (KeyError, ValueError) as exc:
             raise RuntimeError(
                 f"combo {combo_label!r} {keys[idx]}: {exc}"
             ) from exc
 
     total_new_rounds = sum(cfg.n_rounds - len(existing[idx]) for idx in to_judge)
 
-    # One judge client PER WORKER THREAD (see the module docstring): created on that
-    # thread's first persona and reused for every later one, so the live `claude`
-    # subprocess count is bounded by `cfg.workers` instead of scaling with the
-    # persona count. Registered in `_ACTIVE_CLIENTS` for the atexit drain and closed
-    # in `_close_pool_clients` once the executor has drained.
+    # One judge client object PER WORKER THREAD (see the module docstring): it holds
+    # only configuration -- every call spawns its own fresh `claude` process -- so
+    # reusing it across personas shares no conversation. Registered in
+    # `_ACTIVE_CLIENTS` for the atexit drain (which kills an in-flight call's process)
+    # and closed in `_close_pool_clients` once the executor has drained.
     thread_state = threading.local()
     pool_clients: list[Any] = []
     pool_clients_lock = threading.Lock()
@@ -591,8 +626,8 @@ def run_combo_judgements(
     def _judge_and_write_persona(idx: int) -> _PersonaOutcome:
         """Judge one persona's shortfall rounds, then write ITS OWN files immediately.
 
-        Owns a single judge client for this persona (created here, ``close()``d in a
-        ``finally``); judges rounds ``range(len(existing[idx]), n_rounds)`` sequentially
+        Uses this worker thread's judge client (every call an independent
+        conversation); judges rounds ``range(len(existing[idx]), n_rounds)`` sequentially
         with per-round retry up to ``_MAX_JUDGE_PASSES`` of only the rounds that fail;
         collects verdicts + telemetry into LOCAL lists. On >= 1 successful round it
         atomically writes ``persona_XXXXX.json`` and flushes ``persona_XXXXX.jsonl``

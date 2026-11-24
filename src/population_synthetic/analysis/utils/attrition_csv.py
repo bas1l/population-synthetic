@@ -114,11 +114,14 @@ class AttritionRow:
         Personas the cap drew. **Zero for every excluded combination**, by design --
         which is why no rate here is denominated on it.
 
-    ``retention_rate`` is ``clean / generated``; ``generation_multiplier`` is
-    ``generated / clean`` -- personas generated per *usable* persona. The multiplier is
-    deliberately not ``generated / selected``: that denominator is zero for every
-    withdrawn combination, i.e. undefined exactly where the number matters most. Both
-    are ``None`` when their own denominator is zero, never ``0.0`` and never infinite.
+    ``retention_rate`` is ``clean / raw_valid``; ``generation_multiplier`` is
+    ``raw_valid / clean`` -- finished personas per *usable* persona. Neither divides by
+    ``generated``: a persona failing the raw-completeness gate is a generation stopped
+    midway, an artefact of interrupting the run, so it is counted in ``generated`` but
+    ignored by both rates. The multiplier is deliberately not ``raw_valid / selected``:
+    that denominator is zero for every withdrawn combination, i.e. undefined exactly
+    where the number matters most. Both are ``None`` when their own denominator is zero,
+    never ``0.0`` and never infinite.
 
     ``excluded`` is the gate's verdict: the combination held fewer than ``requested_n``
     clean personas and was withdrawn, so it has no capped mirror and no capped mapped
