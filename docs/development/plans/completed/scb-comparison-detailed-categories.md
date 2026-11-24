@@ -235,7 +235,7 @@ The change is self-contained to one normalizer function, one fetch query, three 
 
 - Source audit: `docs/scb02_comparison_category_mapping_2026-05-11.md`
 - Companion audit: `docs/audit_scb_comparison_api_rooting_2026-05-11.md`
-- Internal plan scratch: `C:\Users\basil\.claude\plans\analyse-docs-scb02-comparison-category-m-harmonic-wolf.md`
+- Internal plan scratch: `<home>\.claude\plans\analyse-docs-scb02-comparison-category-m-harmonic-wolf.md`
 - Related plan (this branch's parent): `docs/development/plans/active/socioeconomic-class-from-real-income-brackets.md`
 - Related future plan: SSB parity for the same changes — to be opened in `pending/` after this lands
 - Related future plan: scb03 regeneration with widened `birth_location` query — to be opened separately

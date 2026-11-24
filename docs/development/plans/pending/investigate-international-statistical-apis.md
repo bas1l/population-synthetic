@@ -272,4 +272,4 @@ After Norway, the next-best Tier-1 candidates are Switzerland (15/16 ✓, 4-lang
 
 - SCB baseline implementation: `anxiety_synthetic/utils/scb_client.py:24-53`, `anxiety_synthetic/scb_population/fetch_service.py:4-334`
 - Companion findings document: `investigate-international-statistical-apis-findings.md`
-- Internal scratch (batch 1 raw): `C:\Users\basil\.claude\plans\analyse-scb02-api-and-melodic-jellyfish.md`
+- Internal scratch (batch 1 raw): `<home>\.claude\plans\analyse-scb02-api-and-melodic-jellyfish.md`

@@ -222,6 +222,6 @@ This is a pure removal with no data migration. Rollback is `git revert` of the m
 
 ## References
 
-- Approved planning document (internal scratch): `C:\Users\basil\.claude\plans\generate-a-plan-to-glimmering-lagoon.md`
+- Approved planning document (internal scratch): `<home>\.claude\plans\generate-a-plan-to-glimmering-lagoon.md`
 - Related historical plan: `docs/development/plans/completed/configurable-identity-pipeline.md` (introduced the `configurable` strategy that supersedes `sequential`)
 - Related historical plan: `docs/development/plans/completed/generative-identity-methods.md` (added the per-category methods that close the capability gap with `sequential`)

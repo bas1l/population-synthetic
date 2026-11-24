@@ -207,4 +207,4 @@ widgets/
 
 - Reference architecture: `docs/architecture/dag-graph-view-reference.md`
 - Approved internal plan: `.claude/plans/analyse-dag-graph-view-reference-md-plan-fluttering-tiger.md`
-- Parent repo (original implementation): `F:\GitHub\clinical_projects\anxiety-synthetic`
+- Parent repo (original implementation): `<github>\clinical_projects\anxiety-synthetic`

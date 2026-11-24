@@ -319,7 +319,7 @@ Each kind is a factory `(attr, block, engine) -> callable(identity) -> value`; t
 
 - Reference engine (read-only template): `src/population_synth/comparison/reference_mapper/base.py`, `factory.py`
 - Related plans: `docs/development/plans/pending/fix-identity-comparison-divergences.md`, `docs/development/plans/pending/report-unmapped.md`
-- Approved design scratch: `C:\Users\basil\.claude\plans\analyse-how-the-database-encapsulated-frog.md`
+- Approved design scratch: `<home>\.claude\plans\analyse-how-the-database-encapsulated-frog.md`
 
 ---
 

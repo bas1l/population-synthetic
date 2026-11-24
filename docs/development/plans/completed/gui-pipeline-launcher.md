@@ -299,4 +299,4 @@ No database, no migrations, no breaking changes to existing APIs.
 - Existing manifest loader: `src/population_synth/identity/manifest_loader.py`
 - Existing DAG builder: `src/population_synth/identity/identity_generator_configurable.py` (`_build_dag()`)
 - Strategy files: `config/assets/identity/configurable/strategies/*.json`
-- Claude Code plan analysis: `C:\Users\basil\.claude\plans\analyse-gui-dag-launcher-reference-md-ho-noble-cookie.md`
+- Claude Code plan analysis: `<home>\.claude\plans\analyse-gui-dag-launcher-reference-md-ho-noble-cookie.md`
