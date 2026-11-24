@@ -600,3 +600,12 @@ def test_scb_native_mapping_resolves_every_income_component(sweden_mapper):
     assert out["income_source"] == "General Allowances"
     out = sweden_mapper.normalize_individual({"id": "t", "income_source": {"label": "housing allowance"}})
     assert out["income_source"] == "Housing Allowance"
+
+
+def test_aku_attachment_age_label_map_accepts_hyphen_and_en_dash():
+    # SCB switched the AKU band label from "15-24 years" to an en dash spelling; both must
+    # resolve to the 18-24 pipeline group or the employment_type table loses that cell.
+    from population_synthetic.generators.real.sweden.constants import AKU_ATTACHMENT_AGE_LABEL_MAP
+
+    assert AKU_ATTACHMENT_AGE_LABEL_MAP["15-24 years"] == "18-24"
+    assert AKU_ATTACHMENT_AGE_LABEL_MAP["15\u201324 years"] == "18-24"

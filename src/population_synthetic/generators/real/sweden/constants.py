@@ -97,7 +97,10 @@ SCB_INCOME_BRACKETS: list[tuple[str, float, float]] = [
 # cannot place in the pipeline's 18-24 group; it is mapped there explicitly. The
 # proxy therefore includes ages 15-17 in the 18-24 attachment mix. Hours are
 # published for "20-24", which resolves to 18-24 on its own.
-AKU_ATTACHMENT_AGE_LABEL_MAP: dict[str, str] = {"15-24 years": "18-24"}
+# SCB serves the AKU band label with an en dash ("15–24 years") since the 2026-11 refetch;
+# earlier fetches (and the October 2026 reference cache) used a hyphen. Both spellings map
+# to the same band.
+AKU_ATTACHMENT_AGE_LABEL_MAP: dict[str, str] = {"15-24 years": "18-24", "15–24 years": "18-24"}
 # No AKU table covers ages 75+. The 75-85 cell reuses the 65-74 attachment x
 # hours mix (plan Open question 17 default: a declared nearest-cell proxy,
 # recorded in the output provenance, rather than dropping the attribute). This is
