@@ -4,7 +4,12 @@
     "Tenant-owned apartment (bostadsrätt)",
     "Rental apartment"
   ],
-  "database": {
+  "priority": [
+    "Owner-occupied (villa/house)",
+    "Tenant-owned apartment (bostadsrätt)",
+    "Rental apartment"
+  ],
+  "real": {
     "Owner-occupied (villa/house)": {
       "equals": [
         "Owner-occupied (villa/house)",

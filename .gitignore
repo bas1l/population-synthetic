@@ -23,3 +23,18 @@ config/gui/state.json
 /llm_interactions.jsonl
 /run_metadata.json
 /logs/
+
+# Manuscript drafting: the deliverable lives in OneDrive
+# (…/Gauss/04_Dissemination/Manuscripts/40_llm-population-fidelity-benchmark/),
+# which is outside this repo. Keep the local drafting source out of git too.
+docs/paper/
+
+# Large, regenerable SCB catalog artifacts (rebuild with the scripts in that folder)
+docs/reference/scb-pxweb-catalog/scb-am-uf-metadata.jsonl
+docs/reference/scb-pxweb-catalog/scb-am-uf-catalog.html
+
+# Generated per-persona DAG SVGs (render_persona_dags.py) — potentially huge, never tracked
+persona_dags/
+
+# Generated claim-DAG renders (rebuild with scripts/dev/render_claim_dag.py)
+docs/claims/diagrams/

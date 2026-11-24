@@ -21,7 +21,29 @@
     "Campania",
     "Valle d'Aosta"
   ],
-  "database": {
+  "priority": [
+    "Lombardia",
+    "Abruzzo",
+    "Puglia",
+    "Friuli-Venezia Giulia",
+    "Piemonte",
+    "Toscana",
+    "Umbria",
+    "Basilicata",
+    "Sicilia",
+    "Lazio",
+    "Liguria",
+    "Sardegna",
+    "Molise",
+    "Emilia-Romagna",
+    "Marche",
+    "Trentino-Alto Adige/Südtirol",
+    "Calabria",
+    "Veneto",
+    "Campania",
+    "Valle d'Aosta"
+  ],
+  "real": {
     "Lombardia": {
       "equals": [
         "Lombardia"

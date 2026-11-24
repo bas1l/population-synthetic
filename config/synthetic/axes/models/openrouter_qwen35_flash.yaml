@@ -1,0 +1,18 @@
+id: "openrouter_qwen35_flash"
+label: "OpenRouter Qwen 3.5 Flash"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "Qwen 3.5 Flash"
+model_config:
+  provider: "openrouter"
+  model: "qwen/qwen3.5-flash-02-23"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+parameters:
+  parallel:
+    workers: 4

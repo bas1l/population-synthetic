@@ -1,0 +1,390 @@
+# Analysis registry -- the single source of truth mapping each analysis process's
+# canonical id to its human metadata, output folder, backing script, and GUI
+# dispatch mode. Both the GUI workflow and the analysis scripts read from here so
+# that a process's GUI task key and its on-disk 03_Analysis/ output folder always
+# derive from one canonical id.
+#
+# Contract (enforced by analysis/utils/registry.py, fail-fast on violation):
+#   - `stage_dir`  : the parent stage folder under output_base for the analysis stage
+#                    (one place this lives).
+#   - `figures_stage_dir`
+#                  : the sibling stage folder for the figures stage -- the published
+#                    figure sets, selected out of the analysis stage (one place this
+#                    lives). Both literals are read ONLY by analysis/utils/registry.py.
+#   - `processes`  : mapping of canonical id -> entry. Each entry MUST provide
+#                    label, description, script, dispatch.
+#   - stage        : which stage folder the process writes into -- `analysis` (the
+#                    default when the key is absent) or `figures`. Any other value raises.
+#   - folder       : the process's subfolder under {output_base}/{stage_dir}/. REQUIRED
+#                    for an `analysis`-stage process; FORBIDDEN for a `figures`-stage
+#                    one, which owns {output_base}/{figures_stage_dir}/ itself.
+#   - dispatch     : how the GUI fans the task out over combos
+#                    (per_combo | slugs | per_country | cli).
+#
+# NOTE: folder values are the canonical on-disk folder names. `mapping.folder` is
+# `mapping` (aligned to its canonical id); its `legacy_folder: mapped` records the
+# pre-rename folder so READERS transparently fall back to any existing on-disk
+# `mapped/` data (deprecation-logged) until it is re-mapped. See
+# analysis/utils/registry.analysis_output_dir(..., for_read=True).
+
+stage_dir: "03_Analysis"
+figures_stage_dir: "04_Figures"
+
+processes:
+  validate_raw:
+    label: "Validate Raw Personas"
+    description: >
+      Atomistic per-combo completeness check of the raw generated personas. For each
+      persona_* directory it records whether identity.json exists and whether every expected
+      category has a non-empty value (any value; correctness is NOT judged here). Writes one
+      CSV per combo (row per persona: passed + failure detail). Non-destructive; the analysis
+      DAG root -- mapping depends on it, and population_cap consumes its verdict.
+    folder: "validate_raw"
+    script: "scripts/analyze/validate_raw_personas.py"
+    dispatch: "per_combo"
+
+  population_cap:
+    label: "Cap Population (N)"
+    description: >
+      Seeded cap of each combination to N VALIDATED personas, and the pass/fail verdict on
+      whether it reached N at all. Runs last of the validation gate (validate_raw -> mapping
+      -> validate_mapped -> population_cap): it selects N personas that pass BOTH validity
+      CSVs, copies the selected raw persona directories (identity + telemetry + combo
+      logs/metadata) into the capped mirror, and writes a capped mapped file
+      (_mapped/{slug}.json) for the same N. A combination that cannot supply N clean personas
+      is EXCLUDED outright: it gets no capped mirror and no capped mapped file (any left by an
+      earlier run are removed), and its _mapped/_index.json entry carries the shortfall as a
+      skip reason, so it is invisible to every downstream analysis. The full counts stay on
+      record in this stage's own _index.json. Every downstream analysis consumes the capped
+      clean set, so no task analyzes more than N personas, none analyzes an incomplete or
+      unmapped one, and none analyzes a combination that never reached N.
+    folder: "population_cap"
+    script: "scripts/analyze/cap_populations.py"
+    dispatch: "per_combo"
+
+  mapping:
+    label: "Map Populations"
+    description: >
+      Maps the raw generated synthetic populations and their real reference
+      populations to the canonical comparison schema, writing one mapped file per
+      run (plus a deduped real file per country) that every downstream analysis
+      consumes.
+    folder: "mapping"
+    legacy_folder: "mapped"
+    script: "scripts/analyze/map_populations.py"
+    dispatch: "per_combo"
+
+  validate_mapped:
+    label: "Validate Mapped Personas"
+    description: >
+      Atomistic per-combo check of the mapped personas. For each mapped record it records
+      whether any canonical field is left as the __UNMAPPED__ sentinel (a value the mappers
+      could not resolve, e.g. a city where a country was expected). Writes one CSV per combo
+      (row per persona: passed + the unmapped fields). Non-destructive; runs between mapping
+      and population_cap, whose seeded cap consumes its verdict.
+    folder: "validate_mapped"
+    script: "scripts/analyze/validate_mapped_personas.py"
+    dispatch: "per_combo"
+
+  fidelity:
+    label: "Compare Synthetic to Real"
+    description: >
+      Scores each synthetic population against its real reference: per-attribute
+      total-variation similarity, joint chi-squared, and coherence. Writes one
+      fidelity report per (country, strategy, model) combo.
+    folder: "fidelity"
+    script: "scripts/analyze/score_fidelity_all.py"
+    dispatch: "slugs"
+
+  multivariate_fidelity:
+    label: "Multivariate Joint Fidelity"
+    description: >
+      Recomputes the multivariate (joint-distribution) fidelity block over the
+      mapped populations -- e.g. classifier two-sample tests / MMD -- into a
+      standalone folder, without touching the univariate fidelity reports.
+    folder: "multivariate_fidelity"
+    script: "scripts/analyze/score_multivariate_fidelity.py"
+    dispatch: "slugs"
+
+  consistency:
+    label: "Consistency Scan (unrealistic combos)"
+    description: >
+      Scans each mapped synthetic population for internally inconsistent or
+      demographically implausible attribute combinations, reporting the flagged
+      records per country.
+    folder: "consistency"
+    script: "scripts/analyze/scan_consistency.py"
+    dispatch: "slugs"
+
+  model_ranking:
+    label: "Model Performance (models x methods)"
+    description: >
+      Aggregates the per-combo fidelity reports into a cross-model ranking,
+      comparing every model x strategy (method) combination per country to surface
+      which generation approach reproduces the real distribution best.
+    folder: "model_ranking"
+    script: "scripts/analyze/rank_models.py"
+    dispatch: "slugs"
+
+  method_significance:
+    label: "Method Significance (per-category)"
+    description: >
+      Tests, per attribute category, whether the generation method or the model
+      drives total-variation fidelity -- Page's L / Friedman / Nemenyi critical
+      difference plus a mixed-model interaction, with categories as blocks.
+    folder: "method_significance"
+    script: "scripts/analyze/analyze_method_significance.py"
+    dispatch: "slugs"
+
+  pairwise_comparison:
+    label: "Compare Two Populations"
+    description: >
+      Compares two already-mapped populations directly, deriving the country from
+      the slugs and emitting a single fidelity report for that pair -- the ad-hoc
+      two-population counterpart to the batch fidelity scoring.
+    folder: "pairwise_comparison"
+    script: "scripts/analyze/score_fidelity.py"
+    dispatch: "slugs"
+
+  cross_country:
+    label: "Cross-Country (real vs real)"
+    description: >
+      Compares the real reference populations of two countries against each other
+      (real vs real), quantifying how much the national distributions differ.
+      CLI-only; not exposed as a GUI workflow task.
+    folder: "cross_country"
+    script: "scripts/analyze/compare_real_countries.py"
+    dispatch: "cli"
+
+  real_population_stats:
+    label: "Real Reference Population Stats"
+    description: >
+      Per-category proportion figures (PNG+SVG+CSV) of the real, API-sourced
+      reference population for each selected country, plus a combined overview.
+      Runs once per country on the mapped real population; ignores model and
+      strategy selections.
+    folder: "real_population_stats"
+    script: "scripts/analyze/analyze_real_population_stats.py"
+    dispatch: "per_country"
+
+  generation_metadata:
+    label: "Generation Metadata (country x model x method)"
+    description: >
+      The single LLM-metrics task. Per country x model x method(strategy), the
+      mean/spread (median/q1/q3)/n of the per-persona generation cost: wall-clock
+      time, input/output/total tokens, LLM calls, retry & error rates, latency
+      p95/max, success rate, and estimated USD cost (from
+      config/analysis/model_pricing.yaml). Also emits per-combo deep diagnostics
+      (error taxonomy, entropy, latency percentiles, token budgets) and
+      per-country cross-factor significance (Kruskal-Wallis + Dunn/Holm across the
+      model and method factors). Reads 01_Raw LLM-call telemetry; emits one
+      per-country CSV + JSON + charts.
+    folder: "generation_metadata"
+    script: "scripts/analyze/summarize_generation_metadata.py"
+    dispatch: "slugs"
+
+  persona_realism:
+    label: "Persona Realism Judge (LLM-as-judge)"
+    description: >
+      LLM-as-judge scoring of each individual persona's internal coherence: per
+      persona, N independent judge rounds (one fresh claude process per call) return can_exist (binary
+      possibility) and typicality (0-10 ordinal) plus severity-tagged
+      attribute-clash issues. Aggregates round -> persona -> combination into that
+      combination's OWN impossibility rate (bootstrap CI), typicality dispersion,
+      and judge self-reliability metric (ICC / Krippendorff's alpha across rounds),
+      plus two tidy CSV contracts read by realism_ranking -- a per-persona one
+      ({combo}_personas.csv) and a per-clash one ({combo}_clashes.csv, one row per
+      persona x round x sorted attribute pair x severity, carrying that persona's own
+      category values) -- and a {combo}_clash_explanations.csv side file holding the
+      judge's free text at the same key, which nothing downstream reads.
+      Strictly per-combination: nothing is compared,
+      ranked, or accumulated across combinations here, so each combination's output
+      is reproducible in isolation and independent of processing order. The real
+      API-sourced population is enumerated as an ORDINARY competitor with no
+      reference role. Cross-combination claims belong to realism_ranking. Judge
+      model, rounds, sampling size, and bootstrap params are
+      config-driven (config/analysis/persona_realism/); cost per combo reuses
+      config/analysis/model_pricing.yaml.
+    folder: "persona_realism"
+    script: "scripts/analyze/analyze_persona_realism.py"
+    dispatch: "per_combo"
+
+  realism_ranking:
+    label: "Realism Ranking (combinations vs the real population)"
+    description: >
+      Cross-combination half of the persona-realism pipeline. Consumes the
+      per-combination judge artifacts (report + per-persona tidy CSV) and makes
+      every claim that needs more than one combination, performing NO LLM work.
+      Axis A (validity): each competitor's impossibility rate with a seeded
+      bootstrap CI, ranked, with the real population as an ORDINARY ranked
+      competitor -- so whether conditional chained sampling itself produces
+      incoherent personas is asked rather than assumed. Axis B (coverage):
+      typicality dispersion, where the real population IS the target and distance
+      near zero is better (the failure mode guarded against is mode collapse).
+      Adds Holm-corrected pairwise contrasts against the real population with
+      effect sizes, Kruskal-Wallis + Dunn/Holm on the model and method factors
+      (real population held out), and a logit mixed model on can_exist where the
+      [analysis] extra resolves. Gates on completeness and on a single
+      judge_model / prompt hash / n_rounds across the consumption set. Emits
+      realism_ranking.json, realism_summary.csv, scb_contrast.csv, headline_map
+      impossibility_forest and impossibility_heatmap (model x method, with the real
+      population as a separate band) figures per country. Also reports a separate,
+      purely descriptive SEVERITY dimension: one model x method heatmap per clash
+      level (S3 / S2 / S1) showing the share of a combination's personas carrying at
+      least one clash at that level, counted independently so a persona with both an
+      S3 and an S2 appears on both. It feeds no ranking or test and leaves the binary
+      impossibility rate untouched; S3/S2 are defects (lower is better) while S1 is
+      unusual-but-possible and is reported, never penalised. Alongside each heatmap it
+      emits the attribution the heatmap cannot give: severity_drivers.csv ranks the
+      attribute pairs that drove each cell and severity_driver_values.csv the category
+      pairs beneath them, over the same denominator as the heatmap cell. One table per
+      grain covering all three levels, with severity as a column beside penalised (the
+      heatmaps stay one figure per level); ranks are within (competitor, severity) and
+      are never renumbered across levels. Counts are PERSONAS, not clashes, and are NOT
+      additive (a persona may carry several clashes, each names two attributes, and the
+      levels are not a partition), so every row carries its counting unit, its
+      denominator and the level's penalised flag.
+      --driver-top-n / --driver-min-count bound the tables; what falls below either is
+      counted, never silently dropped. The same question asked country-wide is a third
+      figure per level, severity_pair_summary_s3/s2/s1: the attribute pairs that clashed
+      at that level, ranked descending and pooled across the synthetic combinations,
+      computed from EVERY per-clash row and deliberately not from the per-cell-truncated
+      severity_drivers tables. The real population is drawn as its own series over its own
+      denominator and is never pooled into the bars; the denominator, the persona counting
+      unit, the non-additivity warning and the count of what the top-N cut all appear on
+      the figure. --pair-summary-top-n bounds the bars.
+      Alongside them a second reporting-only dimension, TYPICALITY, read on its own rather
+      than as Axis B's distance: one SELF-CONTAINED statistic per competitor, a function of
+      that competitor's own judge scores alone (default Berry-Mielke IOV, ordinal-valid and
+      invariant to any strictly increasing relabelling of the 0-10 levels;
+      --typicality-metric mean selects the interval-assuming mean level, whose caveat is
+      then published as a column on every row). It feeds no ranking and no test, and
+      axis_b.dispersion_contrast remains the tested contrast against the real population.
+      Emits typicality_summary.csv (one row per competitor: value, bootstrap CI, BOTH
+      persona counts under distinct names -- denominator, the personas carrying a
+      typicality, vs n_personas, the combination's full count -- the under_powered and
+      boundary flags, and the secondary P(typicality <= k0) column with a Wilson interval,
+      k0 from --typicality-tail-threshold), typicality_histogram.csv (one row per
+      competitor x level over the full 0-10 scale, the published object the scalar
+      summarises), typicality_heatmap (the model x method grid on the shared sequential
+      ramp anchored at the statistic's true zero; there is no better/worse direction, the
+      optimum is interior, and the ramp orders cells by MAGNITUDE ONLY, so the side of the
+      real population is carried by a signed delta printed in every cell and a rule across
+      the colourbar at the real population's own value read from the document -- with no
+      real population both markings drop and the figure prints the reason, and the side is
+      readable from the sign and from nothing else) and typicality_by_method (methods on x in
+      complexity order, one mark per model, the real population as a horizontal reference
+      line -- the only figure here that draws it as a reference rather than a series,
+      because this axis ranks nothing). --typicality-min-n (default 30) gates a cell as
+      under-powered: it is flagged, hatched on the heatmap, drawn hollow on the method
+      figure and counted in the block's excluded map, never dropped and never confused with
+      an unjudged pair.
+      The WHOLE typicality distribution beside that statistic: a typicality_distribution
+      block (one round-weighted 0-10 distribution per competitor -- each can_exist survivor
+      spreads weight 1 over its scored rounds, so --rounds 1 gives the first-round
+      histogram -- with the three --typicality-bands shares and the grid's four cell
+      states ok / no_typicality / withdrawn / unjudged, a withdrawn cell read from
+      population_cap/_index.json, never inferred), a typicality_effects block (epsilon^2 of
+      the model and strategy Kruskal-Wallis tests, Cliff's delta with a bootstrap CI beside
+      every Dunn model pair, and every combination and pooled model against the real
+      population: medians, delta + CI, Mann-Whitney U, Holm per family) and a
+      typicality_closeness block (per combination the TV similarity of its distribution to
+      the real population's, with Cliff's delta and the Cramer distance as sensitivity
+      outcomes, each with a joint-bootstrap CI and the reference-vs-itself noise baseline;
+      the additive model + strategy decomposition with its permutation and complete-block
+      tests). Nine CSVs carry them (typicality_distribution, typicality_bands, three
+      typicality_effect_* and four typicality_closeness* tables). The figure
+      typicality_distribution_by_model_strategy draws one mini histogram per model x
+      strategy cell with the real population's distribution as an outline and as its own
+      column, a ternary of the band shares per strategy, on a fixed 456 pt canvas. Its
+      columns follow model_ranking's published order, read from
+      model_ranking/{country}_performance.json -- the only input this process takes from
+      another analysis process, read only when charts are on (a missing file fails the run
+      before anything is written; --no-charts skips the read). The JSON and the CSVs never
+      use that order, so they stay reproducible from the persona_realism outputs and the
+      gate's index alone.
+    folder: "realism_ranking"
+    script: "scripts/analyze/rank_persona_realism.py"
+    dispatch: "slugs"
+
+  validation_attrition:
+    label: "Validation Attrition (where the personas went)"
+    description: >
+      Publishes the validation gate's per-combination attrition: the five-stage
+      funnel (generated -> raw-valid -> mapped-valid -> clean -> selected) read
+      back out of population_cap/_index.json and the two validator roll-ups, plus
+      the two rates derived from it -- retention_rate (clean / raw_valid) and
+      generation_multiplier (raw_valid / clean, finished personas per USABLE
+      persona, deliberately not denominated on selected, which is zero for every
+      withdrawn combination; a persona failing validate_raw is a generation
+      stopped midway and is ignored by both rates). Re-reads what the gate already wrote, performing no
+      validation, no capping and no LLM work. Its row grain is EVERY combination
+      the gate recorded, INCLUDING the ones the full-N rule withdrew: an excluded
+      combination has no capped mirror, no capped mapped file and no
+      generation_metadata row, so this is the only artifact in the analysis layer
+      on which it appears at all. Emits one tidy CSV + JSON per country plus two
+      figures -- a normalised per-combination funnel (absolute pools are not
+      comparable; N is printed on every bar) and a model x method
+      validation-survival grid that draws four cell states without collapsing any
+      of them: a measured rate, a measured rate that was withdrawn, a combination
+      recorded with an empty pool, and a pair that was never generated.
+    folder: "validation_attrition"
+    script: "scripts/analyze/analyze_validation_attrition.py"
+    dispatch: "slugs"
+
+  cost_efficiency:
+    label: "Cost Efficiency (fidelity vs generation cost)"
+    description: >
+      Joins the fidelity ranking's accuracy with the LLM cost of the runs that produced
+      it, per country x model x method, and emits a tidy CSV, a JSON report and an
+      accuracy-vs-cost scatter. THE DENOMINATOR IS THE POINT: generation_metadata totals
+      its cost over the capped mirror -- the ~100 personas each combination was
+      subsampled down to -- whereas this task totals the same per-call telemetry over
+      every FINISHED persona of the generated pool in 01_Raw (passed validate_raw; a
+      generation stopped midway is excluded), because the discarded personas were paid for. The
+      two bases differ by up to 4.8x on the live grid, and the gap is largest exactly
+      where retention is worst, so a capped figure flatters the models that wasted the
+      most tokens. The basis travels as a CSV column and is printed on the figure. The
+      join key is the run slug, reconstructed from generation_metadata's slug-less
+      model + method columns through manifest_loader.axis_slug and verified on every
+      read against the slug model_ranking publishes for the same pair; any unmatched key
+      on either side raises naming the key and both files, and an empty join raises
+      rather than writing an empty CSV. The three inputs legitimately disagree on
+      membership -- validation_attrition records every combination the gate saw,
+      including the withdrawals, while a withdrawn combination has neither a fidelity
+      report nor a capped mirror -- so the output row set is the attrition set MINUS the
+      withdrawals, and each withdrawn combination is reported with the money it cost and
+      the personas it kept rather than being inner-joined away. NO composite score is
+      computed: about a third of the model axis is unmetered (priced {in: 0, out: 0}, the
+      local ollama_* models), so accuracy-per-dollar is undefined for it, and a composite
+      would bury an exchange rate between fidelity and dollars inside arithmetic no
+      reader can inspect. Unmetered is not free either -- local inference has a real cost
+      the pricing config does not model -- so the flag is a data column and the scatter
+      draws those models in a labelled zero-cost band on a symlog x-axis, the only
+      scaling that can show a measured zero beside a four-order-of-magnitude spread.
+    folder: "cost_efficiency"
+    script: "scripts/analyze/analyze_cost_efficiency.py"
+    dispatch: "slugs"
+
+  figure_selection:
+    label: "Select Figures (publish to 04_Figures)"
+    description: >
+      Terminal node of the analysis DAG, and the one process that COMPUTES NOTHING: it
+      draws no figure, imports no chart module and makes no publication decision. It
+      reads a config-declared roster (config/analysis/figure_selection.yaml), resolves
+      each entry against the analysis stage, and copies the files the presentation layer
+      already wrote into the figures stage -- in EVERY published format, so the EPS the
+      target venues accept can never be left behind the way hand-copying left it. Each
+      set is emitted under two namings: as_generated/ keeps the source filenames, so a
+      staged image is traceable by name alone, and numbered/ carries the manuscript's own
+      figure numbers, so a citation resolves to a file. Beside them, _index.json records
+      which output_base, country, set and run produced each file, with the source's size,
+      mtime and SHA-256, so drift against a re-run analysis stage is detectable without
+      re-reading it. Resolve-all, validate-all, THEN copy: an unknown set, an unregistered
+      process id, a stem with nothing behind it, a partial format set, a duplicate figure
+      number or a destination-filename collision each raise before a byte moves, so a run
+      that is going to fail leaves the figures stage untouched. A figures-stage process,
+      so it declares no folder: it owns the figures stage root itself.
+    stage: "figures"
+    script: "scripts/analyze/select_figures.py"
+    dispatch: "per_country"

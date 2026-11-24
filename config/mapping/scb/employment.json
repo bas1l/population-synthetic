@@ -3,7 +3,11 @@
     "Employed",
     "Unemployed"
   ],
-  "database": {
+  "priority": [
+    "Employed",
+    "Unemployed"
+  ],
+  "real": {
     "Employed": {
       "equals": [
         "Employed",

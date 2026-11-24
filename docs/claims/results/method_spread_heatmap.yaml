@@ -1,0 +1,122 @@
+# The claim the model x method heatmap is built to carry.
+#
+# The figure's plan states its purpose outright -- "the study's headline claim, how you
+# elicit dominates which model you pick, is emitted as a first-class artifact" -- and the
+# prototype computes it on its last line:
+#     spread rows(models): X   cols(methods): Y
+# So the root below is that comparison, and this ladder asks what it rests on.
+#
+# Prototype: figures/swedish_02_model_method_tv_heatmap.py (external, hand-made)
+# Plan:      docs/development/plans/pending/model-method-tv-heatmap.md
+
+root: C2
+
+meta:
+  title: "Method spreads the outcome more than model"
+  short: "method-spread-heatmap"
+  grid: swedish_02
+  statement: "On the Swedish v2 grid, variation across methods exceeds variation across models in overall TV-similarity."
+  figure: "{country}_model_method_heatmap.{png,svg}"
+
+nodes:
+
+  # --- rung 1: the marginals -------------------------------------------------
+  D20:
+    type: derived
+    text: "Per-method column means over 10 models, and per-model row means over 5 methods"
+    law:
+      id: L20
+      subtype: statistical
+      block: calculation
+      text: "The mean over one axis of a complete two-factor grid estimates that axis level's central tendency, provided the cells averaged are comparable estimates"
+      backing: "Arithmetic mean of exchangeable estimates; standard marginal of a crossed design"
+    from: [F30, A20]
+    context: [K20]
+    qualifier: weak
+
+  UC20_1:
+    type: defeater
+    kind: undercutting
+    target: D20
+    text: "Unless the cells averaged are not comparable -- seven rest on 7 to 49 personas, not 100"
+    status: uneliminated
+    evidence: [D22]
+    note: "The plan fixes the column marginal (full-n cells only, printing the count). The shipped prototype does not, and averages every cell."
+
+  UM20_2:
+    type: defeater
+    kind: undermining
+    target: F30
+    text: "But the surviving personas are selected for mappability -- the gate discards on exactly that, and it correlates with fidelity"
+    status: uneliminated
+    evidence: [D22]
+    note: "A 7-persona cell is not a noisy estimate of the same quantity; it is an estimate over a selected subpopulation. Three of the seven thin cells sit in the winning method's column (F34), so the headline column is the most exposed."
+
+  # --- rung 2: the spread comparison ----------------------------------------
+  D21:
+    type: derived
+    text: "The range across method means exceeds the range across model means"
+    law:
+      id: L21
+      subtype: statistical
+      block: calculation
+      text: "The peak-to-peak range of a marginal vector measures how much that factor moves the outcome"
+      backing: null
+    from: [D20, A23]
+    qualifier: weak
+
+  R21_1:
+    type: defeater
+    kind: rebutting
+    target: D21
+    text: "Unless the comparison is biased by unequal sample counts -- a range over 10 numbers against a range over 5"
+    status: eliminated
+    note: "Both biases run the same way and against the claim: expected range grows with sample count (10 models vs 5 methods), and column means average 10 cells against the row means' 5, so column means are the less dispersed by construction. A surviving column>row result is robust to both. Worth stating explicitly rather than leaving implicit."
+
+  UC21_2:
+    type: defeater
+    kind: undercutting
+    target: D21
+    text: "Unless the two marginals answer different questions and so cannot be compared"
+    status: uneliminated
+    note: "Instantiated by the plan itself: it replaces the row mean with an ordering key (best full-n score, argmax method, cell count) and defends the asymmetry against the column mean. Both defences are sound alone, but together they make the spreads incommensurable -- and that comparison is the whole reason the plan gives for the figure existing. Fix: keep the max-based ordering key AND add a full-n row mean drawn in the same channel as the column marginal."
+
+  UC21_3:
+    type: defeater
+    kind: undercutting
+    target: D21
+    text: "Unless range is the wrong statistic for the claim"
+    status: uneliminated
+    note: "The quantity that actually licenses the claim is the eta-squared decomposition. The figure should carry the range as illustration and cite eta-squared as the claim."
+
+  # --- rung 3: the root ------------------------------------------------------
+  C2:
+    type: claim
+    text: "On the Swedish v2 grid, method varies overall TV-similarity more than model does"
+    figure: "swedish_02_model_method_tv_heatmap.png"
+    figure_caption: "The hand-made prototype. Cells ringed in cyan are below the n=100 cap -- the seven cells UC20_1 turns on."
+    law:
+      id: L22
+      subtype: inductive
+      block: substitution
+      text: "If one factor's marginal spread exceeds the other's on a complete crossed grid of comparable cells, that factor accounts for more of the outcome variation"
+      backing: null
+    from: [D21, F35, A22, A21]
+    context: [K20]
+    qualifier: weak
+    note: "Weakest link over {D21 weak, A21 unargued, A22 unargued}. F35 (complete grid) is the one premise fully discharged."
+
+  # --- the leaves that carry the honesty of the figure ----------------------
+  D22:
+    type: derived
+    text: "Seven of fifty cells are below the requested cap, and one model has no full-n cell at all"
+    law:
+      id: L23
+      subtype: deductive
+      block: concretion
+      text: "A cell is thin iff n < the slug's own requested_n; a model is unrankable iff it has zero full-n cells"
+      backing: "Definitional -- the threshold is the gate's own per-slug record, never a literal"
+    from: [F31, F32, F33, F34]
+    context: [K20]
+    qualifier: established
+    note: "Feeds nothing above it by design. It is the evidence base for UC20_1 and UM20_2 -- ancillary evidence, which attaches to an arc rather than joining the main chain."

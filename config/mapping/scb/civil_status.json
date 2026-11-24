@@ -5,7 +5,13 @@
     "Divorced",
     "Widowed"
   ],
-  "database": {
+  "priority": [
+    "Single/Never Married",
+    "Married",
+    "Divorced",
+    "Widowed"
+  ],
+  "real": {
     "Single/Never Married": {
       "equals": [
         "Single/Never Married",

@@ -29,19 +29,33 @@ Modes:
     configurable  Configurable strategy with simulation config file (requires --strategy).
 
 Providers:
-    gemini  Use Google Gemini via GeminiClient (default model: gemini-2.5-flash).
-    claude  Use Claude via ClaudeCodeClient subprocess wrapper (default model: sonnet).
+    gemini        Use Google Gemini via GeminiClient (default model: gemini-2.5-flash).
+    claude        Use Claude via ClaudeCodeClient subprocess wrapper (default model: sonnet).
+    ollama        Use a self-hosted Ollama server (default model: llama3.2). The endpoint comes
+                  from config/synthetic/ollama_hosts.yaml, selected with --ollama-host
+                  (default: the registry's default_host); --base-url overrides it.
+    openai_compat Use any OpenAI-compatible endpoint (default model: mistral-large-latest; requires --base-url).
+    openrouter    Use OpenRouter's aggregated catalog (default model: openai/gpt-4o; requires OPENROUTER_API_KEY).
 """
 
 import argparse
-import json
 import logging
 import sys
 import time
 from pathlib import Path
 
+from population_synthetic.clients.retry_policy import MAX_RETRY_ATTEMPTS
+from population_synthetic.generators.synthetic import ollama_hosts
 from population_synthetic.generators.synthetic.factory_identity_generator import FactoryIdentityGenerator
-from population_synthetic.generators.synthetic.llm_interaction_log import LLMInteractionCollector
+from population_synthetic.generators.synthetic.identity_generator_configurable import resolve_category_order
+from population_synthetic.generators.synthetic.manifest_loader import (
+    compose_manifest,
+    load_manifest,
+    serialize_manifest,
+)
+from population_synthetic.generators.synthetic.persona_writer import PersonaWriter
+from population_synthetic.generators.synthetic.run_fingerprint import build_run_fingerprint
+from population_synthetic.utils.atomic_io import atomic_write_json
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -84,13 +98,21 @@ def main() -> None:
     parser.add_argument(
         "--provider",
         default=None,
-        choices=["gemini", "claude", "ollama", "openai_compat"],
-        help="LLM provider to use: gemini, claude, ollama, or openai_compat (default: gemini)",
+        choices=["gemini", "claude", "ollama", "openai_compat", "openrouter"],
+        help="LLM provider to use: gemini, claude, ollama, openai_compat, or openrouter (default: gemini)",
     )
     parser.add_argument(
         "--base-url",
         default=None,
-        help="Base URL for Ollama or OpenAI-compatible provider (overrides manifest)",
+        help="Base URL for Ollama or OpenAI-compatible provider (overrides manifest and --ollama-host)",
+    )
+    parser.add_argument(
+        "--ollama-host",
+        default=None,
+        choices=ollama_hosts.host_ids(),
+        help="Ollama inference host id from config/synthetic/ollama_hosts.yaml. Selects the "
+             "endpoint to generate against. Omitted: the registry's default_host. Inert for "
+             "non-Ollama providers.",
     )
     parser.add_argument(
         "--api-key-env",
@@ -105,7 +127,10 @@ def main() -> None:
     parser.add_argument(
         "--model",
         default=None,
-        help="Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet",
+        help=(
+            "Model name override. Defaults: gemini -> gemini-2.5-flash, claude -> sonnet, "
+            "ollama -> llama3.2, openai_compat -> mistral-large-latest, openrouter -> openai/gpt-4o"
+        ),
     )
     parser.add_argument(
         "--log-llm",
@@ -117,13 +142,16 @@ def main() -> None:
         "--force",
         action="store_true",
         default=False,
-        help="Overwrite the output file if it already exists",
+        help="Discard any checkpoint left by an aborted run and regenerate every "
+             "category from scratch (the output file is overwritten either way)",
     )
     parser.add_argument(
         "--retry-until-success",
         action="store_true",
         default=False,
-        help="Retry LLM evaluation calls indefinitely until correct (default: cap at 3)",
+        help=f"Retry every layer (transport, JSON parse, weight reconcile) up to "
+             f"{MAX_RETRY_ATTEMPTS} times instead of each layer's small default "
+             f"(default: cap at 3)",
     )
     parser.add_argument(
         "--structured-output",
@@ -141,7 +169,6 @@ def main() -> None:
     _composed_manifest = None
 
     if args.manifest:
-        from population_synthetic.generators.synthetic.manifest_loader import load_manifest
         m = load_manifest(args.manifest)
         logger.info("Loaded manifest: %s", m.name)
         if args.provider is None:
@@ -167,8 +194,7 @@ def main() -> None:
     elif args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
-        from population_synthetic.generators.synthetic.manifest_loader import compose_manifest
-        m = compose_manifest(args.model_id, args.strategy_id, args.country_id)
+        m = compose_manifest(args.model_id, args.strategy_id, args.country_id, args.ollama_host)
         _composed_manifest = m
         logger.info("Composed manifest: %s", m.name)
         if args.provider is None:
@@ -185,6 +211,9 @@ def main() -> None:
             args.log_llm = m.log_llm
         if args.output is None:
             args.output = m.output
+        # Composition set m.base_url from the selected Ollama host; an explicit
+        # --base-url is the documented escape hatch and outranks it (this branch
+        # only fills the value in when the flag was omitted).
         if args.base_url is None and m.base_url is not None:
             args.base_url = m.base_url
         if args.api_key_env is None and m.api_key_env_var is not None:
@@ -202,6 +231,34 @@ def main() -> None:
         args.output = "data/single_run/identity.json"
     if args.structured_output is None:
         args.structured_output = False
+
+    # Ollama endpoint resolution happens here, in the orchestration layer -- the
+    # client is configuration-free and never picks a machine on its own. The axis
+    # path already resolved the same host inside compose_manifest; this also covers
+    # the --manifest and explicit-CLI paths, where nothing else supplies an endpoint.
+    ollama_host = None
+    if args.provider == "ollama":
+        _resolved_host = ollama_hosts.resolve_host(args.ollama_host)
+        if args.base_url is None:
+            args.base_url = _resolved_host.base_url
+        if args.base_url == _resolved_host.base_url:
+            ollama_host = _resolved_host
+            logger.info(
+                "Ollama host: %s (%s) -> %s",
+                _resolved_host.id,
+                _resolved_host.label,
+                _resolved_host.base_url,
+            )
+        else:
+            # The run is not hitting the registry host, so recording its id would
+            # attribute the output to a machine it never touched.
+            logger.warning(
+                "--base-url %s overrides Ollama host '%s' (%s); this run is not attributed "
+                "to any registry host.",
+                args.base_url,
+                _resolved_host.id,
+                _resolved_host.base_url,
+            )
 
     if not args.mode or not args.config:
         parser.error("Either --manifest or both --mode and --config are required")
@@ -235,7 +292,6 @@ def main() -> None:
     logger.info("Config: %s", config_path)
 
     if _composed_manifest is not None:
-        from population_synthetic.generators.synthetic.manifest_loader import serialize_manifest
         snapshot_path = output_path.parent / "manifest_snapshot.yaml"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         snapshot_path.write_text(serialize_manifest(_composed_manifest), encoding="utf-8")
@@ -243,6 +299,11 @@ def main() -> None:
 
     generation_config = m.generation_config if m is not None else {}
 
+    # The client imports below stay function-local on purpose (unlike the
+    # module-scope imports at the top of this file): gemini_client pulls the
+    # `google` SDK and openai_compat_client pulls `openai`. Hoisting them would
+    # make every run import both third-party SDKs -- including --provider ollama,
+    # which needs neither -- and hard-fail when either is not installed.
     if args.provider == "gemini":
         from population_synthetic.clients.gemini_client import GeminiClient
         client = GeminiClient(model_name=args.model or "gemini-2.5-flash", default_config=generation_config)
@@ -262,33 +323,61 @@ def main() -> None:
             api_key_env_var=args.api_key_env or "OPENAI_API_KEY",
             default_config=generation_config,
         )
+    elif args.provider == "openrouter":
+        from population_synthetic.clients.openai_compat_client import OpenAICompatClient
+        # base_url and api_key_env_var are structural defaults; axis files may override.
+        client = OpenAICompatClient(
+            model_name=args.model or "openai/gpt-4o",
+            base_url=args.base_url or "https://openrouter.ai/api/v1",
+            api_key_env_var=args.api_key_env or "OPENROUTER_API_KEY",
+            default_config=generation_config,
+            provider_tag="openrouter",
+            default_headers={"X-Title": "population-synthetic"},
+        )
     else:
-        raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini', 'claude', 'ollama', or 'openai_compat'.")
+        raise ValueError(f"Unknown provider: {args.provider!r}. Expected 'gemini', 'claude', 'ollama', 'openai_compat', or 'openrouter'.")
 
     logger.info("Model: %s", client.get_current_configuration()["model"])
+    # The transport layer honours the same flag as the generator (see
+    # clients/retry_policy.py); clients without a retry loop never read it.
+    client.retry_until_success = args.retry_until_success
     generator = FactoryIdentityGenerator.create_generator(args.mode, client)
     generator.retry_until_success = args.retry_until_success
     generator.use_structured_output = args.structured_output
-
-    if args.log_llm:
-        llm_log_path = output_path.parent / "llm_interactions.jsonl"
-        generator.interaction_collector = LLMInteractionCollector(llm_log_path)
 
     kwargs = {}
     if args.strategy:
         kwargs["strategy_file"] = str(Path(args.strategy))
 
+    resolved_category_order = resolve_category_order(kwargs["strategy_file"]) if args.strategy else None
+
+    # Same durable-persistence contract as the parallel runner, on the one-persona
+    # path: the writer owns identity/checkpoint/telemetry together, and --force is
+    # the only thing that discards a checkpoint left by an aborted run.
+    fingerprint = build_run_fingerprint(
+        strategy_path=Path(args.strategy) if args.strategy else None,
+        schema_path=config_path,
+        provider=args.provider,
+        model=client.get_current_configuration()["model"],
+        category_order=resolved_category_order,
+    )
+    writer = PersonaWriter(
+        output_path.parent,
+        fingerprint,
+        discard=args.force,
+        identity_filename=output_path.name,
+    )
+    generator.writer = writer
+    if args.log_llm:
+        generator.interaction_collector = writer.telemetry
+
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     try:
         identity_data, level_strings = generator.generate_identity(str(config_path), **kwargs)
+        writer.finalize(identity_data)
     finally:
-        if generator.interaction_collector:
-            generator.interaction_collector.close()
+        writer.close()
     completed_at = time.strftime("%Y-%m-%dT%H:%M:%S")
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(identity_data, f, indent=2, ensure_ascii=False)
 
     logger.info("Identity written to %s", output_path)
 
@@ -307,6 +396,9 @@ def main() -> None:
             "log_llm": args.log_llm,
             "output": args.output,
             "force": args.force,
+            # Which GPU produced this persona; the endpoint itself is recorded
+            # above as model_config.base_url.
+            "ollama_host": ollama_host.id if ollama_host is not None else None,
         },
         "started_at": started_at,
         "completed_at": completed_at,
@@ -318,8 +410,7 @@ def main() -> None:
             "country_id": args.country_id,
         }
     metadata_path = output_path.parent / "run_metadata.json"
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+    atomic_write_json(metadata_path, run_metadata)
     logger.info("Run metadata written to %s", metadata_path)
 
     if level_strings:

@@ -1,4 +1,6 @@
 id: "all_pick_dag"
+family: "all_pick_dag"
+version: 1
 label: "All Pick DAG"
 description: "All fields use pick method. LLM selects directly from a predefined list. 1 LLM call per category. Uses dependency DAG so prior resolved values are passed as context."
 categories:

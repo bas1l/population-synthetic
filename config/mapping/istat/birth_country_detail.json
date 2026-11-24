@@ -28,7 +28,36 @@
     "Serbia",
     "France"
   ],
-  "database": {
+  "priority": [
+    "Italy",
+    "Romania",
+    "Other",
+    "Albania",
+    "Morocco",
+    "China",
+    "Ukraine",
+    "Pakistan",
+    "Egypt",
+    "Nigeria",
+    "Bangladesh",
+    "India",
+    "Philippines",
+    "Peru",
+    "Tunisia",
+    "Senegal",
+    "Brazil",
+    "Moldova",
+    "North Macedonia",
+    "Ecuador",
+    "Poland",
+    "Russia",
+    "Germany",
+    "Turkey",
+    "Spain",
+    "Serbia",
+    "France"
+  ],
+  "real": {
     "Italy": {
       "equals": [
         "Italy",

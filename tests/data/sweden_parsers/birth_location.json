@@ -1,0 +1,224 @@
+{
+ "version": "2.0",
+ "class": "dataset",
+ "label": "Population, number by country of birth, Human Development Index, sex, age, observations and year",
+ "source": "Statistics Sweden",
+ "updated": "2026-02-24T07:00:00Z",
+ "note": [
+  "From the reference year 2025 onwards, a small controlled random uncertainty is introduced in all reported data. The uncertainty has been added to protect individuals so that no one risks being exposed in the statistics. As a result, the reported totals are not always equal to the sum of their reported components.  \r\n \r\n  \r\nIf reported statistical values are added together to create a new total, the uncertainty is also added. There is therefore a risk that the new total contains greater uncertainty than that which – under the method – would have been added to a single value. \r\n \r\n  \r\nThe method used for disclosure control is called Cell Key Method (CKM). You can read more about the method here: [Protection methods for disclosure control](https://www.scb.se/en/documentation/statististical-methods/protection-methods-for-disclosure-control/) and here: [Development of disclosure protection](https://www.scb.se/en/documentation/statistical-areas-under-change/development-of-disclosure-protection/).",
+  "The Human Development Index (HDI) is a welfare index produced annually by the UN. Countries are sorted by very high, high, medium, and low HDI. The index measures the average performance of different countries in three basic areas: 1. Life expectancy, 2. Education, and 3. Income (GDP per inhabitant)."
+ ],
+ "role": {
+  "time": [
+   "Tid"
+  ],
+  "metric": [
+   "ContentsCode"
+  ]
+ },
+ "id": [
+  "Fodelseland",
+  "HDI",
+  "Kon",
+  "Alder",
+  "ContentsCode",
+  "Tid"
+ ],
+ "size": [
+  4,
+  1,
+  2,
+  3,
+  1,
+  1
+ ],
+ "dimension": {
+  "Fodelseland": {
+   "label": "country of birth",
+   "category": {
+    "index": {
+     "FSV": 0,
+     "FEU": 1,
+     "FUEU": 2,
+     "OKANT": 3
+    },
+    "label": {
+     "FSV": "born in Sweden",
+     "FEU": "born in another EU Member State",
+     "FUEU": "born outside the EU",
+     "OKANT": "unknown country of birth"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "HDI": {
+   "label": "Human Development Index",
+   "category": {
+    "index": {
+     "TOT": 0
+    },
+    "label": {
+     "TOT": "total"
+    }
+   },
+   "extension": {
+    "elimination": true,
+    "eliminationValueCode": "TOT",
+    "show": "value"
+   }
+  },
+  "Kon": {
+   "label": "sex",
+   "category": {
+    "index": {
+     "2": 0,
+     "1": 1
+    },
+    "label": {
+     "2": "women",
+     "1": "men"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "Alder": {
+   "label": "age",
+   "category": {
+    "index": {
+     "18": 0,
+     "40": 1,
+     "70": 2
+    },
+    "label": {
+     "18": "18 years",
+     "40": "40 years",
+     "70": "70 years"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "ContentsCode": {
+   "label": "observations",
+   "category": {
+    "index": {
+     "000000N6": 0
+    },
+    "label": {
+     "000000N6": "Number"
+    },
+    "unit": {
+     "000000N6": {
+      "base": "number",
+      "decimals": 0
+     }
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "refperiod": {
+     "000000N6": "31 December each year"
+    },
+    "show": "value",
+    "measuringType": {
+     "000000N6": "Stock"
+    },
+    "priceType": {
+     "000000N6": "NotApplicable"
+    },
+    "adjustment": {
+     "000000N6": "None"
+    }
+   }
+  },
+  "Tid": {
+   "label": "year",
+   "category": {
+    "index": {
+     "2025": 0
+    },
+    "label": {
+     "2025": "2025"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "code"
+   }
+  }
+ },
+ "extension": {
+  "noteMandatory": {
+   "0": true,
+   "1": true
+  },
+  "px": {
+   "infofile": "BE0101",
+   "tableid": "TAB4636",
+   "decimals": 0,
+   "official-statistics": true,
+   "aggregallowed": true,
+   "copyright": false,
+   "language": "en",
+   "contents": "Population, number",
+   "descriptiondefault": false,
+   "heading": [
+    "ContentsCode",
+    "Tid"
+   ],
+   "stub": [
+    "Fodelseland",
+    "HDI",
+    "Kon",
+    "Alder"
+   ],
+   "matrix": "000000N6",
+   "subject-code": "BE",
+   "subject-area": "Population"
+  },
+  "discontinued": null,
+  "contact": [
+   {
+    "name": "Statistikservice",
+    "organization": "Statistics Sweden",
+    "phone": "010-479 50 00",
+    "mail": "information@scb.se",
+    "raw": " Statistikservice, Statistics Sweden# +46 010-479 50 00#information@scb.se"
+   }
+  ]
+ },
+ "value": [
+  50815,
+  44269,
+  43534,
+  53856,
+  46858,
+  42725,
+  1557,
+  4099,
+  4221,
+  1664,
+  4803,
+  3040,
+  8183,
+  19677,
+  5822,
+  9186,
+  20312,
+  5735,
+  6,
+  16,
+  0,
+  6,
+  18,
+  3
+ ]
+}

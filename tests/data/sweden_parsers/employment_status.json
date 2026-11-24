@@ -1,0 +1,293 @@
+{
+ "version": "2.0",
+ "class": "dataset",
+ "label": "Labour market status. Annual register by region, sex, age, region of birth, observations and year",
+ "source": "Statistics Sweden",
+ "updated": "2025-11-28T07:00:00Z",
+ "note": [
+  "A statistical method is used to protect the data of individuals in the statistics presented. For this reason, the presented totals do not always equal the sum of their reported components. See also section 2.2.6 Model assumptions in the quality declaration documentation on Statistics Sweden’s website.",
+  "As of 2023, the retirement age was raised from 65 to 66 years. For this reason, statistics are reported for age groups 16-64 and 20-64 as well as for age groups 16-65 and 20-65.",
+  ".. = Means that information is not available, too uncertain to be presented or removed for reasons of confidentiality."
+ ],
+ "role": {
+  "time": [
+   "Tid"
+  ],
+  "metric": [
+   "ContentsCode"
+  ]
+ },
+ "id": [
+  "Region",
+  "Kon",
+  "Alder",
+  "Fodelseregion",
+  "ContentsCode",
+  "Tid"
+ ],
+ "size": [
+  1,
+  2,
+  3,
+  1,
+  6,
+  1
+ ],
+ "dimension": {
+  "Region": {
+   "label": "region",
+   "category": {
+    "index": {
+     "00": 0
+    },
+    "label": {
+     "00": "Sweden"
+    }
+   },
+   "extension": {
+    "elimination": true,
+    "eliminationValueCode": "00",
+    "show": "code_value"
+   }
+  },
+  "Kon": {
+   "label": "sex",
+   "category": {
+    "index": {
+     "1": 0,
+     "2": 1
+    },
+    "label": {
+     "1": "men",
+     "2": "women"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "Alder": {
+   "label": "age",
+   "category": {
+    "index": {
+     "20-24": 0,
+     "060-64": 1,
+     "70-74": 2
+    },
+    "label": {
+     "20-24": "20–24 years",
+     "060-64": "60–64 years",
+     "70-74": "70–74 years"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "Fodelseregion": {
+   "label": "region of birth",
+   "category": {
+    "index": {
+     "tot": 0
+    },
+    "label": {
+     "tot": "total"
+    }
+   },
+   "extension": {
+    "elimination": true,
+    "eliminationValueCode": "tot",
+    "show": "value"
+   }
+  },
+  "ContentsCode": {
+   "label": "observations",
+   "category": {
+    "index": {
+     "000002NT": 0,
+     "000002NM": 1,
+     "000002NR": 2,
+     "000002NP": 3,
+     "000002NQ": 4,
+     "000002NO": 5
+    },
+    "label": {
+     "000002NT": "number of employed",
+     "000002NM": "number of unemployed",
+     "000002NR": "number of students",
+     "000002NP": "number of retirees",
+     "000002NQ": "number of sick",
+     "000002NO": "number of others"
+    },
+    "unit": {
+     "000002NT": {
+      "base": "number",
+      "decimals": 0
+     },
+     "000002NM": {
+      "base": "number",
+      "decimals": 0
+     },
+     "000002NR": {
+      "base": "number",
+      "decimals": 0
+     },
+     "000002NP": {
+      "base": "number",
+      "decimals": 0
+     },
+     "000002NQ": {
+      "base": "number",
+      "decimals": 0
+     },
+     "000002NO": {
+      "base": "number",
+      "decimals": 0
+     }
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "refperiod": {
+     "000002NT": "Year",
+     "000002NM": "Year",
+     "000002NR": "Year",
+     "000002NP": "Year",
+     "000002NQ": "Year",
+     "000002NO": "Year"
+    },
+    "show": "value",
+    "measuringType": {
+     "000002NT": "Stock",
+     "000002NM": "Stock",
+     "000002NR": "Stock",
+     "000002NP": "Stock",
+     "000002NQ": "Stock",
+     "000002NO": "Stock"
+    },
+    "priceType": {
+     "000002NT": "NotApplicable",
+     "000002NM": "NotApplicable",
+     "000002NR": "NotApplicable",
+     "000002NP": "NotApplicable",
+     "000002NQ": "NotApplicable",
+     "000002NO": "NotApplicable"
+    },
+    "adjustment": {
+     "000002NT": "None",
+     "000002NM": "None",
+     "000002NR": "None",
+     "000002NP": "None",
+     "000002NQ": "None",
+     "000002NO": "None"
+    }
+   }
+  },
+  "Tid": {
+   "label": "year",
+   "category": {
+    "index": {
+     "2024": 0
+    },
+    "label": {
+     "2024": "2024"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "code"
+   }
+  }
+ },
+ "extension": {
+  "noteMandatory": {
+   "0": true,
+   "1": true
+  },
+  "px": {
+   "infofile": "AM0210",
+   "tableid": "TAB3200",
+   "decimals": 0,
+   "official-statistics": true,
+   "aggregallowed": false,
+   "copyright": false,
+   "language": "en",
+   "contents": "Labour market status. Annual register",
+   "descriptiondefault": false,
+   "heading": [
+    "ContentsCode",
+    "Tid"
+   ],
+   "stub": [
+    "Region",
+    "Kon",
+    "Alder",
+    "Fodelseregion"
+   ],
+   "matrix": "000002NT",
+   "subject-code": "AM",
+   "subject-area": "Labour market"
+  },
+  "discontinued": null,
+  "contact": [
+   {
+    "name": "Sofia Löfgren",
+    "organization": "Statistics Sweden",
+    "phone": "010-479 65 86",
+    "mail": "sofia.lofgren@scb.se",
+    "raw": "Sofia Löfgren, Statistics Sweden# +46 010-479 65 86#sofia.lofgren@scb.se"
+   },
+   {
+    "name": "Frida Vingren",
+    "organization": "Statistics Sweden",
+    "phone": "010-479 65 84",
+    "mail": "frida.vingren@scb.se",
+    "raw": "Frida Vingren, Statistics Sweden# +46 010-479 65 84#frida.vingren@scb.se"
+   }
+  ]
+ },
+ "value": [
+  192915,
+  17026,
+  62180,
+  0,
+  7117,
+  29263,
+  234039,
+  15135,
+  243,
+  20260,
+  21283,
+  14934,
+  60040,
+  null,
+  229,
+  185679,
+  0,
+  1338,
+  178886,
+  10762,
+  69808,
+  0,
+  6086,
+  22076,
+  224154,
+  11846,
+  406,
+  19848,
+  30231,
+  16104,
+  37858,
+  null,
+  250,
+  220376,
+  0,
+  1423
+ ],
+ "status": {
+  "13": "..",
+  "31": ".."
+ }
+}

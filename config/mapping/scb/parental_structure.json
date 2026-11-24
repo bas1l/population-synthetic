@@ -4,7 +4,12 @@
     "Single Parent",
     "Living Alone"
   ],
-  "database": {
+  "priority": [
+    "Nuclear Family",
+    "Single Parent",
+    "Living Alone"
+  ],
+  "real": {
     "Nuclear Family": {
       "equals": [
         "Nuclear Family"

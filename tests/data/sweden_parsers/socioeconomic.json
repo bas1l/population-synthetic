@@ -1,0 +1,409 @@
+{
+ "version": "2.0",
+ "class": "dataset",
+ "label": "Number of persons with total earned income for those registered in the national population register during the whole year by sex, income bracket, age, observations and year",
+ "source": "Statistics Sweden",
+ "updated": "2026-01-20T07:00:00Z",
+ "note": [
+  "Total earned income \r\n Total earned income is the sum of taxable income from employment, business income, pensions, sickness benefit and other taxable transfers. Capital income is not included in total earned income.",
+  "The statistics include salaries and pension income from other Nordic countries from income year 2011. As of the publication of income year 2020, the statistics for the years 2011-2019 have been revised. \r\nThe extent of the total income from the other Nordic countries varies over time. For the years 2011–2014, data availability is limited, which is largely due to deficiencies in data from Norway. For 2011, there is basically no income from Norway. For the years 2012–2014, the macro amount for Norway is approximately half of the amount for 2015.\r\nFurther information can be found in the statistics quality declaration on Statistics Sweden website.",
+  "The population consists of people who have been registered in Sweden both 1 January and 31 December of each year and who are part of a household with disposable household income different from zero (0) SEK. As of 2021, people with no information on which household they belong to are also excluded if their disposable family income is zero (0) SEK. This change is also applied retroactively back to 2011, and means that an additional 3 000–4 000 people per year are excluded from the reporting, which can be assumed to be overcoverage in the Total Population Register.",
+  "Statistical methods is used to protect the data of individuals in the statistics presented. For this reason, the presented totals do not always equal the sum of their reported components. See also section 2.2.6 Model assumptions in the quality declaration documentation on Statistics Sweden’s website.",
+  ".. = Means that information is not available, too uncertain to be presented or removed for reasons of confidentiality."
+ ],
+ "role": {
+  "time": [
+   "Tid"
+  ],
+  "metric": [
+   "ContentsCode"
+  ]
+ },
+ "id": [
+  "Kon",
+  "Inkomstklass",
+  "Alder",
+  "ContentsCode",
+  "Tid"
+ ],
+ "size": [
+  2,
+  26,
+  3,
+  1,
+  1
+ ],
+ "dimension": {
+  "Kon": {
+   "label": "sex",
+   "category": {
+    "index": {
+     "1": 0,
+     "2": 1
+    },
+    "label": {
+     "1": "men",
+     "2": "women"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "Inkomstklass": {
+   "label": "income bracket",
+   "category": {
+    "index": {
+     "0": 0,
+     "1-19": 1,
+     "20-39": 2,
+     "40-59": 3,
+     "60-79": 4,
+     "80-99": 5,
+     "100-119": 6,
+     "120-139": 7,
+     "140-159": 8,
+     "160-179": 9,
+     "180-199": 10,
+     "200-219": 11,
+     "220-239": 12,
+     "240-259": 13,
+     "260-279": 14,
+     "280-299": 15,
+     "500-599": 16,
+     "300-319": 17,
+     "320-339": 18,
+     "340-359": 19,
+     "360-379": 20,
+     "380-399": 21,
+     "400-499": 22,
+     "600-799": 23,
+     "800-999": 24,
+     "1000+": 25
+    },
+    "label": {
+     "0": "0",
+     "1-19": "1–19 SEK thousands",
+     "20-39": "20–39 SEK thousands",
+     "40-59": "40–59 SEK thousands",
+     "60-79": "60–79 SEK thousands",
+     "80-99": "80–99 SEK thousands",
+     "100-119": "100–119 SEK thousands",
+     "120-139": "120–139 SEK thousands",
+     "140-159": "140–159 SEK thousands",
+     "160-179": "160–179 SEK thousands",
+     "180-199": "180–199 SEK thousands",
+     "200-219": "200–219 SEK thousands",
+     "220-239": "220–239 SEK thousands",
+     "240-259": "240–259 SEK thousands",
+     "260-279": "260–279 SEK thousands",
+     "280-299": "280–299 SEK thousands",
+     "500-599": "500–599 SEK thousands",
+     "300-319": "300–319 SEK thousands",
+     "320-339": "320–339 SEK thousands",
+     "340-359": "340–359 SEK thousands",
+     "360-379": "360–379 SEK thousands",
+     "380-399": "380–399 SEK thousands",
+     "400-499": "400–499 SEK thousands",
+     "600-799": "600–799 SEK thousands",
+     "800-999": "800–999 SEK thousands",
+     "1000+": "1000+ SEK thousands"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "Alder": {
+   "label": "age",
+   "category": {
+    "index": {
+     "18": 0,
+     "40": 1,
+     "70": 2
+    },
+    "label": {
+     "18": "18 years",
+     "40": "40 years",
+     "70": "70 years"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "value"
+   }
+  },
+  "ContentsCode": {
+   "label": "observations",
+   "category": {
+    "index": {
+     "HE0110AD": 0
+    },
+    "label": {
+     "HE0110AD": "Number of persons"
+    },
+    "unit": {
+     "HE0110AD": {
+      "base": "number",
+      "decimals": 0
+     }
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "refperiod": {
+     "HE0110AD": "Calender year"
+    },
+    "show": "value",
+    "measuringType": {
+     "HE0110AD": "Flow"
+    },
+    "priceType": {
+     "HE0110AD": "NotApplicable"
+    },
+    "adjustment": {
+     "HE0110AD": "None"
+    }
+   }
+  },
+  "Tid": {
+   "label": "year",
+   "category": {
+    "index": {
+     "2024": 0
+    },
+    "label": {
+     "2024": "2024"
+    }
+   },
+   "extension": {
+    "elimination": false,
+    "show": "code"
+   }
+  }
+ },
+ "extension": {
+  "noteMandatory": {
+   "1": true,
+   "2": true,
+   "3": true
+  },
+  "px": {
+   "infofile": "HE0110",
+   "tableid": "TAB3555",
+   "decimals": 0,
+   "official-statistics": true,
+   "aggregallowed": false,
+   "copyright": false,
+   "language": "en",
+   "contents": "Number of persons with total earned income for those registered in the national population register during the whole year",
+   "descriptiondefault": false,
+   "heading": [
+    "ContentsCode",
+    "Tid"
+   ],
+   "stub": [
+    "Kon",
+    "Inkomstklass",
+    "Alder"
+   ],
+   "matrix": "HE0110AD",
+   "subject-code": "HE",
+   "subject-area": "Household finances"
+  },
+  "discontinued": null,
+  "contact": [
+   {
+    "name": "Peter Gärdqvist",
+    "organization": "Statistics Sweden",
+    "phone": "010-479 67 85",
+    "mail": "peter.gardqvist@scb.se",
+    "raw": "Peter Gärdqvist, Statistics Sweden# +46 010-479 67 85#peter.gardqvist@scb.se"
+   },
+   {
+    "name": "Inkomststatistik",
+    "organization": "Statistics Sweden",
+    "phone": ".",
+    "mail": "inkomststat@scb.se",
+    "raw": " Inkomststatistik, Statistics Sweden# +46 .#inkomststat@scb.se"
+   },
+   {
+    "name": "Johan Lindberg",
+    "organization": "Statistics Sweden",
+    "phone": "010-479 60 64",
+    "mail": "johan.lindberg@scb.se",
+    "raw": "Johan Lindberg, Statistics Sweden# +46 010-479 60 64#johan.lindberg@scb.se"
+   }
+  ]
+ },
+ "value": [
+  16806,
+  3048,
+  252,
+  21018,
+  561,
+  136,
+  10877,
+  488,
+  153,
+  6235,
+  415,
+  205,
+  3242,
+  351,
+  237,
+  1781,
+  325,
+  310,
+  1083,
+  385,
+  408,
+  685,
+  489,
+  1395,
+  419,
+  1313,
+  1331,
+  298,
+  697,
+  1407,
+  203,
+  771,
+  1858,
+  131,
+  758,
+  2106,
+  104,
+  811,
+  2136,
+  98,
+  943,
+  2363,
+  30,
+  1023,
+  2498,
+  38,
+  1106,
+  2516,
+  6,
+  11030,
+  4580,
+  38,
+  1454,
+  2418,
+  26,
+  1673,
+  2405,
+  20,
+  1939,
+  2186,
+  13,
+  2253,
+  2042,
+  null,
+  2528,
+  1772,
+  34,
+  13529,
+  6950,
+  5,
+  12621,
+  5134,
+  null,
+  3956,
+  1703,
+  null,
+  3359,
+  1848,
+  11091,
+  2947,
+  232,
+  19081,
+  1021,
+  115,
+  11541,
+  728,
+  186,
+  7860,
+  738,
+  271,
+  4470,
+  582,
+  291,
+  2435,
+  509,
+  427,
+  1235,
+  608,
+  473,
+  757,
+  703,
+  1655,
+  409,
+  1440,
+  1884,
+  247,
+  1016,
+  2431,
+  153,
+  1227,
+  3110,
+  110,
+  1102,
+  3679,
+  58,
+  1316,
+  3931,
+  46,
+  1472,
+  4212,
+  18,
+  1655,
+  3975,
+  18,
+  1993,
+  3365,
+  4,
+  8046,
+  2571,
+  14,
+  2437,
+  3056,
+  null,
+  2688,
+  2514,
+  8,
+  2923,
+  2067,
+  5,
+  3025,
+  1780,
+  null,
+  2973,
+  1513,
+  9,
+  13376,
+  4923,
+  null,
+  6735,
+  2326,
+  null,
+  1883,
+  590,
+  null,
+  1309,
+  511
+ ],
+ "status": {
+  "63": "..",
+  "72": "..",
+  "75": "..",
+  "132": "..",
+  "141": "..",
+  "147": "..",
+  "150": "..",
+  "153": ".."
+ }
+}

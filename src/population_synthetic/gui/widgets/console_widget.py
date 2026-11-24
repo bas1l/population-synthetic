@@ -9,7 +9,7 @@ import re
 import subprocess
 
 from PyQt5.QtCore import QThread, pyqtSignal
-from PyQt5.QtGui import QFont, QPalette, QColor
+from PyQt5.QtGui import QColor, QFont, QPalette
 from PyQt5.QtWidgets import QCheckBox, QHBoxLayout, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 _ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')

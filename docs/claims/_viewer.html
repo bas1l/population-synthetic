@@ -1,0 +1,599 @@
+<title>Claim Ladder</title>
+<style>
+/* ---------------------------------------------------------------------------
+   Palette is inherited from docs/claims/_style.yaml -- the node classes are the
+   project's existing design system and the page defers to them. Neutrals are
+   biased toward the steel-blue finding colour rather than pure grey, so the
+   ground reads as chosen alongside them.
+
+   Type pairing encodes something true about the content: monospace for the
+   formal layer (node ids, law ids, rule notation), serif for the natural-
+   language layer (the propositions themselves). Formal vs prose, visible in the
+   type. No webfonts -- the Artifact CSP blocks font CDNs and a silent fallback
+   would break exactly that distinction.
+--------------------------------------------------------------------------- */
+:root{
+  --ground:#f2f5f7; --panel:#ffffff; --sunken:#e8edf0;
+  --ink:#131b21; --ink-2:#485762; --ink-3:#7d8d98;
+  --rule:#d2dbe1; --rule-soft:#e3eaee;
+  --accent:#2e6f95; --focus:#1f3a5f;
+  --warn:#c06c3e; --crit:#8c3b4a; --ok:#4f7f46;
+  --shadow:0 1px 2px rgba(19,27,33,.06),0 8px 24px rgba(19,27,33,.06);
+  --mono:ui-monospace,"SF Mono","Cascadia Mono","Segoe UI Mono",Consolas,monospace;
+  --serif:"Iowan Old Style","Charter",Georgia,"Times New Roman",serif;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0e151a; --panel:#151e25; --sunken:#0a1015;
+    --ink:#e6eef3; --ink-2:#9dafba; --ink-3:#6b7d89;
+    --rule:#26333c; --rule-soft:#1c272f;
+    --accent:#6ba7c9; --focus:#8fc0dd;
+    --warn:#d98f5f; --crit:#c8697a; --ok:#7fae74;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0e151a; --panel:#151e25; --sunken:#0a1015;
+  --ink:#e6eef3; --ink-2:#9dafba; --ink-3:#6b7d89;
+  --rule:#26333c; --rule-soft:#1c272f;
+  --accent:#6ba7c9; --focus:#8fc0dd;
+  --warn:#d98f5f; --crit:#c8697a; --ok:#7fae74;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--ui); font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0; text-wrap:balance; font-weight:600}
+button,select,input{font:inherit; color:inherit}
+
+/* --- shell ---------------------------------------------------------------- */
+.shell{display:grid; grid-template-columns:250px minmax(0,1fr) 330px; height:100vh}
+@media (max-width:1100px){
+  .shell{grid-template-columns:1fr; height:auto}
+  .rail,.detail{position:static; height:auto; border:0; border-bottom:1px solid var(--rule)}
+  .stage{min-height:70vh}
+}
+.rail,.detail{background:var(--panel); overflow-y:auto; padding:18px 16px}
+.rail{border-right:1px solid var(--rule)}
+.detail{border-left:1px solid var(--rule)}
+.stage{position:relative; overflow:hidden; background:var(--sunken)}
+
+/* --- masthead ------------------------------------------------------------- */
+.mast{display:flex; flex-direction:column; gap:3px; padding-bottom:14px;
+      border-bottom:1px solid var(--rule); margin-bottom:16px}
+.mast h1{font-family:var(--serif); font-size:20px; letter-spacing:-.01em}
+.mast p{margin:0; color:var(--ink-3); font-size:11.5px}
+
+.group{margin-bottom:20px; display:flex; flex-direction:column; gap:8px}
+.lbl{font-family:var(--mono); font-size:10px; letter-spacing:.09em;
+     text-transform:uppercase; color:var(--ink-3)}
+
+select,input[type=search]{
+  width:100%; padding:7px 9px; background:var(--ground);
+  border:1px solid var(--rule); border-radius:5px; font-size:13px;
+}
+input[type=search]{font-family:var(--mono); font-size:12px}
+select:focus-visible,input:focus-visible,button:focus-visible{
+  outline:2px solid var(--accent); outline-offset:1px
+}
+
+.seg{display:flex; border:1px solid var(--rule); border-radius:5px; overflow:hidden}
+.seg button{
+  flex:1; padding:6px 4px; background:var(--ground); border:0; cursor:pointer;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.04em; color:var(--ink-2);
+  border-right:1px solid var(--rule);
+}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed=true]{background:var(--accent); color:#fff}
+
+.legend{display:flex; flex-direction:column; gap:5px}
+.legend div{display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--ink-2)}
+.legend i{width:20px; height:11px; border-radius:2px; border:1px solid rgba(0,0,0,.22); flex:none}
+
+/* --- graph ---------------------------------------------------------------- */
+svg.graph{width:100%; height:100%; display:block; cursor:grab; touch-action:none}
+svg.graph.drag{cursor:grabbing}
+.node rect{stroke-width:1.5px}
+.node .id{font-family:var(--mono); font-size:12.5px; font-weight:700; letter-spacing:.02em}
+.node .tx{font-family:var(--serif); font-size:10.5px}
+.node .q{font-family:var(--mono); font-size:8.5px; opacity:.75}
+.node .cap{font-family:var(--mono); font-size:8px; opacity:.62}
+.node image{image-rendering:auto}
+.node{cursor:pointer}
+.node.dim{opacity:.14}
+.node.sel rect{stroke:var(--focus); stroke-width:4px}
+.node.up rect{stroke:var(--accent); stroke-width:3px}
+.node.down rect{stroke:var(--crit); stroke-width:3.4px; stroke-dasharray:6 3}
+.edge{fill:none}
+.edge.dim{opacity:.07}
+.edge.hot{stroke-width:2.4px}
+
+.hint{
+  position:absolute; left:14px; bottom:12px; z-index:2;
+  font-family:var(--mono); font-size:10.5px; color:var(--ink-3);
+  background:color-mix(in srgb,var(--panel) 88%,transparent);
+  padding:5px 9px; border-radius:5px; border:1px solid var(--rule-soft);
+}
+.zoom{position:absolute; right:14px; top:12px; z-index:2; display:flex; gap:5px}
+.zoom button{
+  width:28px; height:28px; border:1px solid var(--rule); border-radius:5px;
+  background:var(--panel); cursor:pointer; font-family:var(--mono); font-size:13px;
+  color:var(--ink-2); box-shadow:var(--shadow);
+}
+.zoom button:hover{color:var(--ink); border-color:var(--accent)}
+
+/* --- detail --------------------------------------------------------------- */
+.chip{
+  display:inline-flex; align-items:center; gap:5px; padding:2px 7px; border-radius:3px;
+  font-family:var(--mono); font-size:10px; letter-spacing:.05em; text-transform:uppercase;
+}
+.chip.warn{background:color-mix(in srgb,var(--warn) 17%,transparent); color:var(--warn)}
+.chip.crit{background:color-mix(in srgb,var(--crit) 17%,transparent); color:var(--crit)}
+.chip.ok{background:color-mix(in srgb,var(--ok) 17%,transparent); color:var(--ok)}
+.chip.mute{background:var(--sunken); color:var(--ink-3)}
+
+.d-id{font-family:var(--mono); font-size:17px; font-weight:700; letter-spacing:-.01em}
+.d-text{font-family:var(--serif); font-size:15px; line-height:1.45; margin:9px 0 0}
+.d-fig{margin:16px 0 0; display:flex; flex-direction:column; gap:7px}
+.d-fig img{width:100%; height:auto; display:block; border-radius:5px;
+           background:#fff; padding:6px; border:1px solid var(--rule)}
+.d-fig figcaption{font-size:11.5px; color:var(--ink-3); line-height:1.45;
+                  display:flex; flex-direction:column; gap:4px; align-items:flex-start}
+.d-sec{margin-top:18px; padding-top:14px; border-top:1px solid var(--rule-soft)}
+.d-sec .lbl{margin-bottom:6px; display:block}
+.d-body{font-size:12.5px; color:var(--ink-2); line-height:1.5}
+.d-body.serif{font-family:var(--serif); font-size:13.5px; color:var(--ink)}
+code{font-family:var(--mono); font-size:11.5px; background:var(--sunken);
+     padding:1px 4px; border-radius:3px; word-break:break-all}
+
+.reflist{display:flex; flex-wrap:wrap; gap:4px; margin-top:6px}
+.reflist button{
+  font-family:var(--mono); font-size:10.5px; padding:2px 6px; cursor:pointer;
+  background:var(--sunken); border:1px solid var(--rule); border-radius:3px; color:var(--ink-2);
+}
+.reflist button:hover{border-color:var(--accent); color:var(--ink)}
+
+.impact{border-left:3px solid var(--crit); padding-left:11px}
+.impact strong{font-size:22px; font-family:var(--mono); line-height:1.1;
+               font-variant-numeric:tabular-nums; display:block}
+.impact span{font-size:11.5px; color:var(--ink-3)}
+.empty{color:var(--ink-3); font-size:12.5px; font-style:italic}
+@media (prefers-reduced-motion:no-preference){
+  .node,.edge{transition:opacity .18s ease}
+}
+</style>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="mast">
+      <h1>Claim Ladder</h1>
+      <p id="mast-sub"></p>
+    </div>
+
+    <div class="group">
+      <label class="lbl" for="root">Result</label>
+      <select id="root"></select>
+    </div>
+
+    <div class="group">
+      <label class="lbl" for="q">Find a node</label>
+      <input type="search" id="q" placeholder="F30, attrition, Friedman…" autocomplete="off">
+      <div class="reflist" id="hits"></div>
+    </div>
+
+    <div class="group">
+      <span class="lbl">Trace from selection</span>
+      <div class="seg" id="dir">
+        <button data-d="up" aria-pressed="true">rests on</button>
+        <button data-d="down" aria-pressed="false">breaks</button>
+        <button data-d="both" aria-pressed="false">both</button>
+      </div>
+      <div class="d-body" id="dir-note"></div>
+    </div>
+
+    <div class="group">
+      <span class="lbl">Node classes</span>
+      <div class="legend" id="legend"></div>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <div class="zoom">
+      <button id="zin" title="Zoom in">+</button>
+      <button id="zout" title="Zoom out">−</button>
+      <button id="zfit" title="Fit to view">⤢</button>
+    </div>
+    <svg class="graph" id="svg"><g id="cam"></g></svg>
+    <div class="hint">click a node · drag to pan · scroll to zoom</div>
+  </main>
+
+  <aside class="detail" id="detail"></aside>
+</div>
+
+<script>
+const DATA = /*__GRAPH_DATA__*/null;
+const NS = "http://www.w3.org/2000/svg";
+const S = DATA.style, N = DATA.nodes, ROOTS = DATA.roots;
+
+const EDGE_STYLE = {
+  premise:{c:"var(--ink-2)", w:1.1, d:""},
+  law_out:{c:"var(--ink)",   w:1.5, d:""},
+  context:{c:"var(--ink-3)", w:.9,  d:"4 3"},
+  attack:{c:"var(--crit)",   w:1.2, d:"1.6 2"},
+  evidence:{c:"var(--crit)", w:1.0, d:"5 2 1 2"}
+};
+const STATUS_CHIP = {
+  "conceded-false":["crit","conceded false"], "unsupported":["crit","unsupported"],
+  "unargued":["warn","unargued"], "addressed":["ok","addressed"],
+  "uneliminated":["crit","open"], "eliminated":["ok","eliminated"]
+};
+
+let root = ROOTS[0], sel = null, dir = "up";
+let cam = {x:0, y:0, k:1};
+
+const el = id => document.getElementById(id);
+const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* --- wrap text the same way the static renderer does, so the two agree ----- */
+function wrap(text, width){
+  const out = [], words = (text||"").split(/\s+/);
+  let line = "";
+  for(const w of words){
+    if((line + " " + w).trim().length > width){ if(line) out.push(line); line = w; }
+    else line = (line ? line + " " : "") + w;
+  }
+  if(line) out.push(line);
+  return out;
+}
+
+/* --- render --------------------------------------------------------------- */
+/* Box metrics, in SVG user units == CSS px. Owned by this renderer; Python sends
+   only rank and order. Wrap widths are tuned so a full line just fills the box at
+   the body size below. */
+const M = {
+  w:196, lawW:220, figW:360, xGap:76, yGap:16,
+  padTop:7, idH:15, idGap:5, lineH:13, padBot:9,
+  figPad:8, figCap:11, figMaxH:250,
+  wrapNode:36, wrapLaw:42, wrapFig:62
+};
+
+function metrics(id){
+  const n = N[id];
+  const law = n.type === "law";
+  const w = n.figure ? M.figW : law ? M.lawW : M.w;
+  const lines = wrap(n.text, n.figure ? M.wrapFig : law ? M.wrapLaw : M.wrapNode);
+  let h = M.padTop + M.idH + M.idGap + lines.length * M.lineH + M.padBot;
+  let fig = null;
+  if(n.figure){
+    const iw = w - M.figPad * 2;
+    const ih = Math.min(iw * n.figure.h / n.figure.w, M.figMaxH);
+    fig = {x:M.figPad, y:h - M.padBot + 2, w:iw, h:ih};
+    h = fig.y + ih + (n.figure_caption ? M.figCap + 4 : 0) + M.padBot;
+  }
+  return {lines, w, h, fig};
+}
+
+/* Column x comes from the widest box in each rank, not from a constant. A node
+   carrying a figure is nearly twice the width of a bare one, and a fixed column
+   pitch would drive it straight through its neighbour. */
+function layout(){
+  const byRank = {};
+  for(const id in root.nodes){
+    const r = root.nodes[id].rank;
+    (byRank[r] ||= []).push(id);
+  }
+  const ranks = Object.keys(byRank).map(Number).sort((a,b) => a - b);
+  const boxes = {};
+  for(const id in root.nodes) boxes[id] = metrics(id);
+
+  const colX = {};
+  let cursorX = 0;
+  for(const r of ranks){
+    const wMax = Math.max(...byRank[r].map(id => boxes[id].w));
+    colX[r] = cursorX + wMax / 2;
+    cursorX += wMax + M.xGap;
+  }
+
+  const place = {};
+  for(const r of ranks){
+    const ids = byRank[r].sort((a,b) => root.nodes[a].order - root.nodes[b].order);
+    const span = ids.reduce((s,id) => s + boxes[id].h, 0) + M.yGap * (ids.length - 1);
+    let cursorY = -span / 2;
+    for(const id of ids){
+      const b = boxes[id];
+      place[id] = {x: colX[r], y: cursorY + b.h/2, w: b.w, h: b.h, lines: b.lines, fig: b.fig};
+      cursorY += b.h + M.yGap;
+    }
+  }
+  return place;
+}
+
+function draw(){
+  const cams = el("cam");
+  cams.textContent = "";
+  const P = layout();
+
+  const gE = document.createElementNS(NS,"g");
+  const gN = document.createElementNS(NS,"g");
+  cams.append(gE, gN);
+
+  for(const e of root.edges){
+    const a = P[e.s], b = P[e.t];
+    if(!a || !b) continue;
+    const st = EDGE_STYLE[e.k] || EDGE_STYLE.premise;
+    const x1 = a.x + a.w/2, y1 = a.y, x2 = b.x - b.w/2, y2 = b.y;
+    const mx = (x1 + x2) / 2;
+    const path = document.createElementNS(NS,"path");
+    path.setAttribute("d", `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`);
+    path.setAttribute("stroke", st.c);
+    path.setAttribute("stroke-width", st.w);
+    if(st.d) path.setAttribute("stroke-dasharray", st.d);
+    path.setAttribute("class","edge");
+    path.dataset.s = e.s; path.dataset.t = e.t;
+    gE.append(path);
+  }
+
+  for(const id in P){
+    const p = P[id], n = N[id], cls = S.node_class[n.type];
+    const g = document.createElementNS(NS,"g");
+    g.setAttribute("class","node"); g.dataset.id = id;
+    g.setAttribute("transform", `translate(${p.x - p.w/2},${p.y - p.h/2})`);
+
+    const r = document.createElementNS(NS,"rect");
+    r.setAttribute("width", p.w); r.setAttribute("height", p.h);
+    r.setAttribute("rx", 6); r.setAttribute("fill", cls.fill);
+    r.setAttribute("stroke", statusStroke(n));
+    g.append(r);
+
+    const idt = document.createElementNS(NS,"text");
+    idt.setAttribute("class","id"); idt.setAttribute("x", p.w/2);
+    idt.setAttribute("y", M.padTop + M.idH - 3); idt.setAttribute("text-anchor","middle");
+    idt.setAttribute("fill", cls.text);
+    idt.textContent = n.display + statusMark(n);
+    g.append(idt);
+
+    const top = M.padTop + M.idH + M.idGap + M.lineH - 3;
+    p.lines.forEach((ln,i) => {
+      const t = document.createElementNS(NS,"text");
+      t.setAttribute("class","tx"); t.setAttribute("x", p.w/2);
+      t.setAttribute("y", top + i * M.lineH); t.setAttribute("text-anchor","middle");
+      t.setAttribute("fill", cls.text); t.textContent = ln;
+      g.append(t);
+    });
+
+    if(p.fig){
+      const plate = document.createElementNS(NS,"rect");
+      plate.setAttribute("x", p.fig.x - 2); plate.setAttribute("y", p.fig.y - 2);
+      plate.setAttribute("width", p.fig.w + 4); plate.setAttribute("height", p.fig.h + 4);
+      plate.setAttribute("rx", 3); plate.setAttribute("fill", "#ffffff");
+      plate.setAttribute("opacity", ".9");
+      g.append(plate);
+
+      const img = document.createElementNS(NS,"image");
+      img.setAttribute("x", p.fig.x); img.setAttribute("y", p.fig.y);
+      img.setAttribute("width", p.fig.w); img.setAttribute("height", p.fig.h);
+      img.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      img.setAttribute("href", n.figure.uri);
+      g.append(img);
+
+      if(n.figure_caption){
+        const c = document.createElementNS(NS,"text");
+        c.setAttribute("class","cap"); c.setAttribute("x", p.w/2);
+        c.setAttribute("y", p.fig.y + p.fig.h + M.figCap);
+        c.setAttribute("text-anchor","middle"); c.setAttribute("fill", cls.text);
+        c.textContent = n.figure.src;
+        g.append(c);
+      }
+    }
+
+    if(n.qualifier){
+      const q = document.createElementNS(NS,"text");
+      q.setAttribute("class","q"); q.setAttribute("x", p.w - 7);
+      q.setAttribute("y", p.fig ? M.padTop + M.idH - 3 : p.h - 4);
+      q.setAttribute("text-anchor","end");
+      q.setAttribute("fill", cls.text); q.textContent = n.qualifier;
+      g.append(q);
+    }
+    gN.append(g);
+  }
+  applyFocus();
+}
+
+function statusStroke(n){
+  if(n.type === "assumption" && n.status) return S.assumption_status[n.status].edge;
+  if(n.type === "defeater" && n.status)  return S.defeater_status[n.status].edge;
+  return "rgba(0,0,0,.25)";
+}
+function statusMark(n){
+  if(n.type === "assumption" && n.status) return S.assumption_status[n.status].marker || "";
+  if(n.type === "defeater" && n.status)  return S.defeater_status[n.status].marker || "";
+  return "";
+}
+
+/* --- focus: the ancestors / descendants query the whole page exists for ---- */
+function applyFocus(){
+  const up = new Set(), down = new Set();
+  if(sel){
+    if(dir === "up" || dir === "both") N[sel].upstream.forEach(x => up.add(x));
+    if(dir === "down" || dir === "both") N[sel].downstream.forEach(x => down.add(x));
+  }
+  const lit = new Set(sel ? [sel, ...up, ...down] : []);
+
+  document.querySelectorAll(".node").forEach(g => {
+    const id = g.dataset.id;
+    g.classList.toggle("dim", !!sel && !lit.has(id));
+    g.classList.toggle("sel", id === sel);
+    g.classList.toggle("up", up.has(id));
+    g.classList.toggle("down", down.has(id));
+  });
+  document.querySelectorAll(".edge").forEach(p => {
+    const on = !sel || (lit.has(p.dataset.s) && lit.has(p.dataset.t));
+    p.classList.toggle("dim", !on);
+    p.classList.toggle("hot", !!sel && on);
+  });
+  el("dir-note").textContent = sel
+    ? (dir === "up" ? `${N[sel].upstream.length} nodes upstream of ${sel}.`
+     : dir === "down" ? `${N[sel].downstream.length} nodes downstream of ${sel}.`
+     : `${N[sel].upstream.length} up · ${N[sel].downstream.length} down.`)
+    : "Select a node to trace its dependencies.";
+}
+
+/* --- detail panel --------------------------------------------------------- */
+function detail(){
+  const d = el("detail");
+  if(!sel){
+    d.innerHTML = `<div class="mast"><h1>${esc(root.title)}</h1>
+      <p>${esc(root.grid)}</p></div>
+      <p class="d-text">${esc(root.statement)}</p>
+      <div class="d-sec"><span class="lbl">Reading this</span>
+      <div class="d-body">Leaves on the left, the root claim on the right. Every arrow
+      passes through a <strong>law</strong> — the rule that licenses the step — so no
+      inference is an unlabelled arrow. Select any node to trace what it rests on, or
+      switch to <em>breaks</em> to see what fails if it is wrong.</div></div>`;
+    return;
+  }
+  const n = N[sel];
+  const chips = [];
+  if(n.status && STATUS_CHIP[n.status])
+    chips.push(`<span class="chip ${STATUS_CHIP[n.status][0]}">${STATUS_CHIP[n.status][1]}</span>`);
+  if(n.kind) chips.push(`<span class="chip mute">${esc(n.kind)}</span>`);
+  if(n.qualifier) chips.push(`<span class="chip mute">${esc(n.qualifier)}</span>`);
+  chips.push(`<span class="chip mute">${esc(n.type)}</span>`);
+
+  let h = `<div class="d-id">${esc(n.display)}</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${chips.join("")}</div>
+    <p class="d-text">${esc(n.text)}</p>`;
+
+  if(n.figure){
+    h += `<figure class="d-fig">
+      <img src="${n.figure.uri}" alt="${esc(n.figure_caption || n.display)}">
+      <figcaption>${esc(n.figure_caption)}
+        <code>${esc(n.figure.src)}</code></figcaption></figure>`;
+  }
+
+  if(n.law){
+    h += `<div class="d-sec"><span class="lbl">Law · ${esc(n.law.id)}</span>
+      <div class="d-body serif">${esc(n.law.text)}</div>
+      <div class="d-body" style="margin-top:9px">
+        <strong>Type</strong> ${esc(n.law.subtype||"—")} · <strong>Block</strong> ${esc(n.law.block||"—")}</div>
+      <div class="d-body" style="margin-top:7px"><strong>Backing</strong> ${
+        n.law.backing ? esc(n.law.backing)
+        : `<span class="chip crit" style="margin-left:4px">none stated</span>`}</div></div>`;
+  }
+  if(n.artifact)
+    h += `<div class="d-sec"><span class="lbl">Recomputable from</span><code>${esc(n.artifact)}</code></div>`;
+  if(n.where)
+    h += `<div class="d-sec"><span class="lbl">Where the paper says so</span>
+      <div class="d-body">${esc(n.where)}</div></div>`;
+  if(n.premises.length)
+    h += `<div class="d-sec"><span class="lbl">Discharges</span>
+      <div class="reflist">${n.premises.map(p => `<button data-go="${p}">${p}</button>`).join("")}</div></div>`;
+
+  h += `<div class="d-sec"><span class="lbl">If this is wrong</span>
+    <div class="impact"><strong>${n.roots.length}</strong>
+    <span>${n.roots.length === 1 ? "published result depends on it" : "published results depend on it"}</span>
+    <div class="reflist">${n.roots.map(r => `<button data-root="${esc(r)}">${esc(r)}</button>`).join("") ||
+      `<span class="empty">nothing depends on this node</span>`}</div></div></div>`;
+
+  if(n.note)
+    h += `<div class="d-sec"><span class="lbl">Note</span><div class="d-body">${esc(n.note)}</div></div>`;
+  d.innerHTML = h;
+}
+
+/* --- camera --------------------------------------------------------------- */
+function apply(){ el("cam").setAttribute("transform",
+  `translate(${cam.x},${cam.y}) scale(${cam.k})`); }
+
+function fit(){
+  const svg = el("svg"), b = el("cam").getBBox();
+  const r = svg.getBoundingClientRect();
+  if(!b.width || !b.height) return;
+  // Cap at 1: past 1:1 the boxes just get bigger without revealing anything, and a
+  // two-node result would otherwise open absurdly zoomed in.
+  cam.k = Math.min(r.width / (b.width + 80), r.height / (b.height + 80), 1);
+  cam.x = r.width/2 - (b.x + b.width/2) * cam.k;
+  cam.y = r.height/2 - (b.y + b.height/2) * cam.k;
+  apply();
+}
+
+/* --- wiring --------------------------------------------------------------- */
+function selectNode(id){ sel = id; applyFocus(); detail(); }
+
+function loadRoot(short){
+  root = ROOTS.find(r => r.short === short) || ROOTS[0];
+  el("mast-sub").textContent = `${Object.keys(root.nodes).length} nodes · ${root.grid}`;
+  sel = null; draw(); detail(); requestAnimationFrame(fit);
+}
+
+el("root").innerHTML = ROOTS.map(r =>
+  `<option value="${esc(r.short)}">${esc(r.title)}</option>`).join("");
+el("root").onchange = e => loadRoot(e.target.value);
+
+el("legend").innerHTML = Object.entries(S.node_class).map(([k,v]) =>
+  `<div><i style="background:${v.fill}"></i>${esc(v.label)}</div>`).join("");
+
+el("dir").onclick = e => {
+  const b = e.target.closest("button"); if(!b) return;
+  dir = b.dataset.d;
+  [...el("dir").children].forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  applyFocus();
+};
+
+el("q").oninput = e => {
+  const q = e.target.value.trim().toLowerCase();
+  const hits = !q ? [] : Object.values(N).filter(n =>
+    n.id.toLowerCase().includes(q) || (n.text||"").toLowerCase().includes(q)).slice(0,10);
+  el("hits").innerHTML = hits.map(n => `<button data-go="${n.id}">${n.id}</button>`).join("");
+};
+
+document.body.addEventListener("click", e => {
+  const go = e.target.closest("[data-go]");
+  if(go){
+    const id = go.dataset.go;
+    if(!root.nodes[id]){
+      const owner = ROOTS.find(r => r.nodes[id]);
+      if(owner){ el("root").value = owner.short; loadRoot(owner.short); }
+    }
+    selectNode(id);
+    return;
+  }
+  const jump = e.target.closest("[data-root]");
+  if(jump){ el("root").value = jump.dataset.root; loadRoot(jump.dataset.root); }
+});
+
+el("svg").addEventListener("click", e => {
+  const g = e.target.closest(".node");
+  selectNode(g ? g.dataset.id : null);
+});
+
+let drag = null;
+el("svg").addEventListener("pointerdown", e => {
+  drag = {x:e.clientX, y:e.clientY, cx:cam.x, cy:cam.y};
+  el("svg").classList.add("drag"); el("svg").setPointerCapture(e.pointerId);
+});
+el("svg").addEventListener("pointermove", e => {
+  if(!drag) return;
+  cam.x = drag.cx + (e.clientX - drag.x); cam.y = drag.cy + (e.clientY - drag.y); apply();
+});
+el("svg").addEventListener("pointerup", () => { drag = null; el("svg").classList.remove("drag"); });
+el("svg").addEventListener("wheel", e => {
+  e.preventDefault();
+  const r = el("svg").getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const f = e.deltaY < 0 ? 1.12 : 1/1.12;
+  cam.x = mx - (mx - cam.x) * f; cam.y = my - (my - cam.y) * f; cam.k *= f; apply();
+}, {passive:false});
+
+el("zin").onclick  = () => { cam.k *= 1.25; apply(); };
+el("zout").onclick = () => { cam.k /= 1.25; apply(); };
+el("zfit").onclick = fit;
+addEventListener("keydown", e => { if(e.key === "Escape") selectNode(null); });
+addEventListener("resize", fit);
+
+loadRoot(ROOTS[0].short);
+</script>

@@ -1,0 +1,46 @@
+# Figure terms -- the single source of truth for the manuscript-controlled words a
+# published figure prints that are neither an axis id nor an attribute.
+#
+# Why these words live in config. The manuscript's TERMINOLOGY-RULES.md, rule T1, decides
+# which word names each object in published artwork: an "individual", never a persona,
+# record or person (2026-08-31); a "strategy", never a method or methodology
+# (2026-08-28). The repository's own dialect is the opposite -- code identifiers, CSV
+# columns and JSON keys say `persona` and `method`, and T1 does not cover them -- so a
+# word typed into a chart module would be the repository's word, and a later decision
+# in the manuscript would have to be chased through every call site. Held here, the
+# word is read at render time by `analysis/utils/labels.py::figure_term`, and changing
+# it is a one-line edit to this file.
+#
+# Conventions:
+#   - Every value is a non-empty display string with no underscore. The resolver RAISES
+#     on a missing file, an unknown key, an empty value or an underscored one; there is
+#     no fallback to the key.
+#   - A word is stored in the form it is printed in: lower case where it runs inside a
+#     sentence ("share of individuals ..."), capitalised where it opens a heading.
+#   - The real population is called "the reference" in manuscript-facing text, never
+#     by its agency ("SCB", "ISTAT"). The agency's short name is still held per country
+#     (`display.reference_source` in config/synthetic/axes/countries/) for provenance,
+#     but a figure's reference column and legend entry print `reference` below.
+
+terms:
+  # The members of a population, reference or generated (T1, "individual").
+  individuals: "individuals"
+  # The heading of the in-figure A-E key (T1, "strategy").
+  strategy_key_title: "Strategies"
+  # The real population, as its column heading and legend entry print it.
+  reference: "Reference"
+
+  # Worst clash per individual (config/analysis/realism_ranking/worst_clash_split.yaml),
+  # one label per category id, as the legend prints it. The "R" ranks are the
+  # manuscript's atypicality ranks (the repository's S1-S3 severities). Stage 2 keeps an
+  # impossible individual as R3 and moves a clash of the SCB categories themselves to C,
+  # which is not a rank (not a generation issue); R3 stays "not split" where stage 2 could
+  # not classify it (the reference, which has no free text, or a failed stage-2 call).
+  worst_clash_title: "Atypicality rank:"
+  worst_clash_none: "no clash"
+  worst_clash_S1: "R1: unusual"
+  worst_clash_S2: "R2: implausible"
+  worst_clash_r3_impossible: "R3: impossible"
+  worst_clash_c_scb_category_limitation: "C: SCB category limitation"
+  worst_clash_S3: "R3: not split"
+  worst_clash_pipeline: "pipeline"

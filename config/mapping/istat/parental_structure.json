@@ -6,7 +6,14 @@
     "Single Parent",
     "Extended Family"
   ],
-  "database": {
+  "priority": [
+    "Living Alone",
+    "Couple without Children",
+    "Nuclear Family",
+    "Single Parent",
+    "Extended Family"
+  ],
+  "real": {
     "Living Alone": {
       "equals": [
         "Living Alone"

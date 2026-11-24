@@ -1,0 +1,367 @@
+{
+  "values": [
+    "Sweden",
+    "Syria",
+    "Finland",
+    "Iraq",
+    "Poland",
+    "Iran",
+    "Bosnia and Herzegovina",
+    "Somalia",
+    "Afghanistan",
+    "Turkey",
+    "Germany",
+    "Yugoslavia",
+    "India",
+    "Eritrea",
+    "Denmark",
+    "Norway",
+    "Thailand",
+    "United Kingdom",
+    "Ukraine",
+    "Romania",
+    "China"
+  ],
+  "priority": [
+    "Sweden",
+    "Syria",
+    "Finland",
+    "Iraq",
+    "Poland",
+    "Iran",
+    "Bosnia and Herzegovina",
+    "Somalia",
+    "Afghanistan",
+    "Turkey",
+    "Germany",
+    "Yugoslavia",
+    "India",
+    "Eritrea",
+    "Denmark",
+    "Norway",
+    "Thailand",
+    "United Kingdom",
+    "Ukraine",
+    "Romania",
+    "China"
+  ],
+  "real": {
+    "Sweden": {
+      "equals": [
+        "Sweden",
+        "born in Sweden",
+        "Sverige",
+        "födda i sverige"
+      ]
+    },
+    "Syria": {
+      "equals": [
+        "Syria",
+        "SY",
+        "Syrian Arab Republic"
+      ]
+    },
+    "Finland": {
+      "equals": [
+        "Finland",
+        "FI"
+      ]
+    },
+    "Iraq": {
+      "equals": [
+        "Iraq",
+        "IQ"
+      ]
+    },
+    "Poland": {
+      "equals": [
+        "Poland",
+        "PL"
+      ]
+    },
+    "Iran": {
+      "equals": [
+        "Iran",
+        "IR",
+        "Iran (Islamic Republic of)"
+      ]
+    },
+    "Bosnia and Herzegovina": {
+      "equals": [
+        "Bosnia and Herzegovina",
+        "BA"
+      ]
+    },
+    "Somalia": {
+      "equals": [
+        "Somalia",
+        "SO"
+      ]
+    },
+    "Afghanistan": {
+      "equals": [
+        "Afghanistan",
+        "AF"
+      ]
+    },
+    "Turkey": {
+      "equals": [
+        "Turkey",
+        "TR",
+        "Türkiye"
+      ]
+    },
+    "Germany": {
+      "equals": [
+        "Germany",
+        "DE"
+      ]
+    },
+    "Yugoslavia": {
+      "equals": [
+        "Yugoslavia",
+        "YU"
+      ]
+    },
+    "India": {
+      "equals": [
+        "India",
+        "IN"
+      ]
+    },
+    "Eritrea": {
+      "equals": [
+        "Eritrea",
+        "ER"
+      ]
+    },
+    "Denmark": {
+      "equals": [
+        "Denmark",
+        "DK"
+      ]
+    },
+    "Norway": {
+      "equals": [
+        "Norway",
+        "NO"
+      ]
+    },
+    "Thailand": {
+      "equals": [
+        "Thailand",
+        "TH"
+      ]
+    },
+    "United Kingdom": {
+      "equals": [
+        "United Kingdom",
+        "GB"
+      ]
+    },
+    "Ukraine": {
+      "equals": [
+        "Ukraine",
+        "UA"
+      ]
+    },
+    "Romania": {
+      "equals": [
+        "Romania",
+        "RO"
+      ]
+    },
+    "China": {
+      "equals": [
+        "China",
+        "CN"
+      ]
+    }
+  },
+  "synthetic": {
+    "Sweden": {
+      "equals": [
+        "Sweden",
+        "Sverige",
+        "SE",
+        "Kingdom of Sweden",
+        "Konungariket Sverige",
+        "Göteborg",
+        "Täby"
+      ],
+      "contains": [
+        "sverige",
+        "sweden",
+        "svensk född",
+        "född i sverige",
+        "stockholm",
+        "västra götaland",
+        "skåne",
+        "östergötland",
+        "uppsala",
+        "halland",
+        "örebro",
+        "jönköping",
+        "gävleborg",
+        "södermanland",
+        "värmland",
+        "dalarna",
+        "västerbotten",
+        "norrbotten",
+        "kalmar",
+        "västernorrland",
+        "västmanland",
+        "kronoberg",
+        "jämtland",
+        "blekinge",
+        "gotland",
+        "härjedalen",
+        "småland",
+        "svensk födelseland",
+        "uplandia"
+      ],
+      "none_of": [
+        "född i utlandet",
+        "utomlands född",
+        "utlandsfödd",
+        "utanlandsfödd",
+        "born abroad"
+      ]
+    },
+    "Syria": {
+      "equals": [
+        "Syria",
+        "Syrien"
+      ]
+    },
+    "Finland": {
+      "equals": [
+        "Finland",
+        "Suomi",
+        "Åland",
+        "Åland Islands",
+        "Åland (Finland)"
+      ]
+    },
+    "Iraq": {
+      "equals": [
+        "Iraq",
+        "Irak"
+      ]
+    },
+    "Poland": {
+      "equals": [
+        "Poland",
+        "Polen"
+      ],
+      "contains": [
+        "poland",
+        "polen",
+        "polska"
+      ]
+    },
+    "Iran": {
+      "equals": [
+        "Iran"
+      ]
+    },
+    "Bosnia and Herzegovina": {
+      "equals": [
+        "Bosnia and Herzegovina",
+        "Bosnien och Hercegovina",
+        "Bosnien"
+      ]
+    },
+    "Somalia": {
+      "equals": [
+        "Somalia"
+      ]
+    },
+    "Afghanistan": {
+      "equals": [
+        "Afghanistan"
+      ]
+    },
+    "Turkey": {
+      "equals": [
+        "Turkey",
+        "Turkiet"
+      ],
+      "contains": [
+        "turkey",
+        "turkiet",
+        "türkiye",
+        "turkiye"
+      ]
+    },
+    "Germany": {
+      "equals": [
+        "Germany",
+        "Tyskland"
+      ]
+    },
+    "Yugoslavia": {
+      "equals": [
+        "Yugoslavia",
+        "Jugoslavien",
+        "Former Yugoslavia",
+        "Forna Jugoslavien",
+        "Ex-Yugoslavia",
+        "Yugoslavia (former)"
+      ]
+    },
+    "India": {
+      "equals": [
+        "India",
+        "Indien"
+      ]
+    },
+    "Eritrea": {
+      "equals": [
+        "Eritrea"
+      ]
+    },
+    "Denmark": {
+      "equals": [
+        "Denmark",
+        "Danmark"
+      ]
+    },
+    "Norway": {
+      "equals": [
+        "Norway",
+        "Norge"
+      ]
+    },
+    "Thailand": {
+      "equals": [
+        "Thailand"
+      ]
+    },
+    "United Kingdom": {
+      "equals": [
+        "United Kingdom",
+        "Storbritannien",
+        "England"
+      ]
+    },
+    "Ukraine": {
+      "equals": [
+        "Ukraine",
+        "Ukraina"
+      ]
+    },
+    "Romania": {
+      "equals": [
+        "Romania",
+        "Rumänien"
+      ]
+    },
+    "China": {
+      "equals": [
+        "China",
+        "Kina"
+      ]
+    }
+  }
+}

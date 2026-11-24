@@ -1,0 +1,173 @@
+# The manuscript's headline claim, as a derivation ladder.
+#
+# Read bottom-up: leaves (leaves.yaml) -> laws -> derived claims -> the root.
+# Each derived node names the LAW that licenses it and the premises it discharges.
+# A law is stated as a general rule; if it cannot be stated without referring to
+# these numbers, the rung is circular and must be rewritten.
+#
+# Node contract
+#   type       derived | claim | defeater
+#   law        the inference rule: id, subtype, block, text, backing
+#              subtype  deductive | statistical | inductive | abductive
+#              block    evidence-incorporation | calculation | decomposition
+#                       | substitution | concretion
+#              backing  why the rule holds, independent of these data (null = unbacked)
+#   from       premise ids -- must each be a leaf, a lower derived node, or an assumption
+#   context    scope restrictions carried by this claim (drawn as context edges)
+#   qualifier  established | strong | moderate | weak | conjectural
+#              inherited as the MINIMUM over the law and every premise (weakest link)
+#   defeater   kind (rebutting | undermining | undercutting), target, status
+#              status  eliminated | uneliminated
+
+root: C1
+
+meta:
+  title: "Method dominates model"
+  short: "method-dominates-model"
+  grid: swedish_8x5
+  statement: "How a model is queried matters far more than which model is used."
+  venue_location: "Abstract M6-M7; Introduction P4; Results R2-R3; Discussion P2; Conclusion P1"
+
+nodes:
+
+  # --- rung 1: pooled omnibus ------------------------------------------------
+  D1:
+    type: derived
+    text: "Strategy level separates the pooled per-attribute score distributions; sampling exceeds all others"
+    law:
+      id: L1
+      subtype: statistical
+      block: evidence-incorporation
+      text: "KW omnibus rejects + Dunn/Holm separates one level from all others + units exchangeable => that factor has a detectable effect with that level best"
+      backing: "Kruskal-Wallis is a valid omnibus over independent samples; Holm controls FWER"
+    from: [F6, F7, A2]
+    context: [K2, K4]
+    qualifier: weak
+    note: "Re-scoped to a descriptive statement: UC1.1 is uneliminated because A2 is conceded false."
+
+  UC1_1:
+    type: defeater
+    kind: undercutting
+    target: D1
+    text: "Unless the pooled units are non-exchangeable"
+    status: uneliminated
+    note: "Preference-free: no additional evidence for D1 repairs it. A2 states it is true."
+
+  # --- rung 2: variance decomposition ---------------------------------------
+  D2:
+    type: derived
+    text: "Method accounts for about 4x the score variance attributable to model (0.17 vs 0.04); attribute difficulty (0.41) dominates both"
+    law:
+      id: L2
+      subtype: statistical
+      block: calculation
+      text: "A correctly specified mixed model over a crossed, near-balanced design partitions outcome variance; relative eta-squared measures relative explanatory contribution"
+      backing: "Standard variance-components interpretation for crossed random-effects designs"
+    from: [F13, F25, A4]
+    qualifier: moderate
+
+  UC2_1:
+    type: defeater
+    kind: undercutting
+    target: D2
+    text: "Unless 39/40 completion unbalances the design enough to bias the shares"
+    status: eliminated
+    note: "One missing cell of 40; the imbalance is negligible."
+
+  UC2_2:
+    type: defeater
+    kind: undercutting
+    target: D2
+    text: "Unless the random-effect structure is misspecified"
+    status: uneliminated
+
+  # --- rung 3: attribute-blocked ranking ------------------------------------
+  D3:
+    type: derived
+    text: "Under attribute-blocking a model effect is detectable but small: rank spread 3.0-5.9 against CD = 1.36"
+    law:
+      id: L3
+      subtype: statistical
+      block: decomposition
+      text: "When one factor dominates outcome variance, blocking on it and ranking within blocks yields a test robust to that heterogeneity"
+      backing: "Friedman/Nemenyi is the standard blocked-design nonparametric procedure; blocking is the textbook remedy for the dependence that undercuts L1"
+    from: [F11, F12, F13, F17]
+    context: [K2, K4]
+    qualifier: strong
+    note: "The paper's strongest rung -- blocking is the structural repair for the dependence UC1.1 exploits. Carries no analogous undercutter."
+
+  # --- rung 4: corroboration -------------------------------------------------
+  D4:
+    type: derived
+    text: "The method-over-model ordering is stable across a pooled and an attribute-blocked analysis of the same score matrix"
+    law:
+      id: L4
+      subtype: inductive
+      block: decomposition
+      text: "Agreement across analytic strategies raises confidence in the ordering they agree on"
+      backing: null
+    from: [D1, D2, D3]
+    qualifier: moderate
+    note: "Stated in the weak form. Corroboration, not convergence."
+
+  UC4_1:
+    type: defeater
+    kind: undercutting
+    target: D4
+    text: "Unless the analyses share the dependency that drives the result"
+    status: uneliminated
+    note: "Known true: all three run over the same 585 numbers. Refuting the shared input refutes all three."
+
+  # --- rung 5: mechanism -----------------------------------------------------
+  D5:
+    type: derived
+    text: "The advantage concentrates at the rung replacing model argmax with code-side sampling -- but that rung is a compound manipulation"
+    law:
+      id: L5
+      subtype: abductive
+      block: substitution
+      text: "If each rung isolates one manipulation and only one rung shifts the median, that manipulation is the operative one"
+      backing: null
+    from: [F8]
+    context: [K4]
+    qualifier: moderate
+
+  R5_1:
+    type: defeater
+    kind: rebutting
+    target: D5
+    text: "Unless the gain tracks LLM call count rather than the sampling step"
+    status: eliminated
+    note: "Eliminated by F8: rung 4 uses three calls and scores 0.635; rung 5 uses two plus sampling and scores 0.787. A design strength worth stating."
+
+  R5_2:
+    type: defeater
+    kind: rebutting
+    target: D5
+    text: "Unless the gain tracks prompt length or output format"
+    status: uneliminated
+
+  R5_3:
+    type: defeater
+    kind: rebutting
+    target: D5
+    text: "Unless the gain tracks the numeric-field change introduced at the same rung"
+    status: uneliminated
+    note: "Rung 4->5 changes two things at once. Dischargeable with one additional arm; does not need the v2 grid."
+
+  # --- the root --------------------------------------------------------------
+  C1:
+    type: claim
+    text: "How a model is queried matters far more than which model is used, for demographic fidelity"
+    figure: "F6b_factor_dominance.png"
+    figure_caption: "Factor dominance: eta-squared shares from the mixed-effects model -- attribute 0.41, method 0.17, model 0.04."
+    law:
+      id: L_top
+      subtype: inductive
+      block: substitution
+      text: "If method level explains substantially more outcome variance than model on a crossed design, AND the outcome validly measures the construct, AND estimates are stable under replication, AND the levels span the relevant space, THEN method matters more than model for the construct"
+      backing: null
+    from: [D4, D5, A1, A3, A4]
+    context: [K2, K5]
+    qualifier: weak
+    note: "Weakest link over {D4 moderate, D5 moderate, A1 unargued, A3 unsupported, A4 addressed}. Stated unqualified in Abstract and Conclusion."

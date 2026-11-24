@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading the coherence score: the plausibility threshold — comparison metrics</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<main class="note-wrap">
+<p class="breadcrumb"><a href="../comparison-metrics-report.html">&#9666; Comparison metrics — field guide</a></p>
+<h1>Reading the coherence score: the plausibility threshold</h1>
+<p>The coherence score asks a blunt question: <strong>what fraction of the synthetic people are demographically possible?</strong> A population can match every marginal and still be built out of impossible individuals — a 7-year-old with a PhD and a full-time job. Coherence catches those by checking each synthetic person's <em>combination</em> of attributes against the real population.</p>
+<pre><code>score = n_plausible / n_total_B</code></pre>
+<p>This note explains what the "plausibility" test actually is: the joint table it is built from, the <strong>threshold</strong> that decides plausible-vs-flagged, the two ways a person gets flagged, and how the score relates to the newer k-way plausibility metric (§4d). It is the coherence counterpart to the <a href="tv-distance-half-factor.html">TV ½-factor</a> and <a href="kl-divergence-bits-and-log.html">KL bits &amp; log-ratio</a> notes.</p>
+<h2>The equations</h2>
+<p>Three quantities, and only one of them is computed from the data.</p>
+<p><strong>1. The real-population probability of a combination <code>c</code></strong> — the empirical relative frequency in A, un-smoothed:</p>
+<pre><code>p_A(c) = N_A(c) / Σ_c' N_A(c')</code></pre>
+<p>where <code>N_A(c)</code> is the number of real individuals whose combination equals <code>c</code>, and the denominator sums over every combination — i.e. <code>total_A</code>, counting only real individuals with <strong>no missing</strong> coherence attribute. A combination unseen in A has <code>p_A(c) = 0</code>.</p>
+<p><strong>2. The threshold <code>τ</code></strong> — <em>not calculated from the data.</em> It is a fixed config constant, <code>τ = coherence_threshold</code> (<code>0.001</code> for the Swedish scheme; defaults to <code>0.001</code> when the key is absent). It is the same value regardless of population size, so <code>τ = 0.001</code> means "occurs in ≥ 0.1 % of real A" — the corresponding head-count (≈ 10 people when |A| = 10,000) scales with A, but <code>τ</code> itself does not.</p>
+<p><strong>3. The score</strong> — the fraction of synthetic people B whose combination clears the bar:</p>
+<pre><code>score = n_plausible / N_B
+      = ( 1 / N_B ) · Σ_{i ∈ B}  𝟙[ p_A(cᵢ) ≥ τ ]</code></pre>
+<p>where <code>cᵢ</code> is synthetic person <code>i</code>'s combination, <code>𝟙[·]</code> is 1 when the condition holds and 0 otherwise, and <code>N_B</code> is the size of <strong>all</strong> of B (<code>self.n_b</code>). Two edge conventions: <code>p_A(cᵢ) = 0</code> when <code>cᵢ</code> is unseen in A <em>or</em> person <code>i</code> has any missing coherence attribute (so they are flagged); and <code>score = 0.0</code> when <code>N_B = 0</code>. The returned value is rounded to 4 decimals. Equivalently: <code>score = 1 − (n_flagged / N_B)</code>.</p>
+<h2>The joint table is empirical, from A, and un-smoothed</h2>
+<p>From the <strong>real</strong> population A the evaluator counts every occurrence of the coherence tuple — for the Swedish scheme that tuple is <code>(age_group, education_level, employment_status)</code> — and normalises the counts to probabilities:</p>
+<pre><code>joint_probs[combination] = count_in_A(combination) / total_A</code></pre>
+<p>Two details matter:</p>
+<ul><li><strong>No smoothing.</strong> Unlike KL divergence (which Laplace-smooths so no cell is ever exactly zero), coherence uses the raw empirical frequency. A combination that <strong>never appears in A</strong> therefore has probability <strong>exactly 0</strong> — which is the whole point: it lets the metric distinguish "impossible" from merely "rare".</li><li><strong>Real individuals with a missing coherence attribute are dropped</strong> from the table (a <code>None</code> in the tuple is not counted), so the table is built only from fully-specified real people.</li></ul>
+<h2>The threshold is the whole ballgame</h2>
+<p>Each synthetic person is looked up in that table and compared against a single number, the <strong>coherence threshold</strong>:</p>
+<ul><li>probability <strong>≥ threshold</strong> → <strong>plausible</strong> (counted toward the score);</li><li>probability <strong>&lt; threshold</strong> → <strong>flagged</strong> (recorded for inspection).</li></ul>
+<p>The Swedish scheme sets <code>coherence_threshold = 0.001</code>. Read literally: <em>a combination must occur in at least 0.1 % of the real population to count as plausible.</em> For a real population of 10,000 people that means a combination needs <strong>≥ 10 real occurrences</strong>; anything rarer is flagged. Raising the threshold makes the test stricter (more synthetic people flagged); lowering it toward 0 makes it lenient, until at the limit only genuinely <strong>zero-support</strong> combinations are flagged.</p>
+<p>The threshold and the tuple both live in config (<code>config/analysis/fidelity/{country}.json</code>), never in code. <code>coherence_attributes</code> is a <strong>required</strong> key — a missing one raises loudly rather than falling back to a baked-in list — while <code>coherence_threshold</code> defaults to <code>0.001</code> when absent.</p>
+<h2>Two ways to be flagged (and a missing-value trap)</h2>
+<p>A synthetic person falls below the threshold for one of two reasons, and the distinction is worth keeping in mind even though the legacy score collapses them into one "flagged" bucket:</p>
+<div class="table-wrap"><table><thead><tr><th>Reason</th><th class="center">Real-data probability</th><th>Meaning</th></tr></thead><tbody><tr><td><strong>Impossible</strong></td><td class="center">exactly <code>0</code></td><td>The combination never occurs in A — the real population <em>never produced it</em>.</td></tr><tr><td><strong>Rare</strong></td><td class="center"><code>0 &lt; p &lt; threshold</code></td><td>The combination exists in A but is rarer than 0.1 %.</td></tr></tbody></table></div>
+<p>There is also a <strong>missing-value trap</strong>: if a synthetic person has a <code>None</code> in any coherence attribute, their probability is set to <code>0</code> and they are flagged as if impossible. So an incomplete synthetic profile counts <em>against</em> coherence — a fail-fast choice, not an oversight.</p>
+<p>Every flagged person is recorded with their <code>id</code>, the three attribute values, and the looked-up <code>probability</code> (to 6 decimals), and the run summary prints the list so you can inspect exactly <em>which</em> individuals and <em>which</em> combinations tripped the check.</p>
+<h2>Worked example</h2>
+<p>Take a real population A of 10,000 people (so the 0.001 threshold is "≥ 10 occurrences") and a synthetic B of 1,000:</p>
+<div class="table-wrap"><table><thead><tr><th>Synthetic person's combination</th><th class="center">occurrences in A</th><th class="center">probability</th><th>verdict</th></tr></thead><tbody><tr><td>age 30–39 · Tertiary · Employed</td><td class="center">1,800</td><td class="center">0.1800</td><td>✅ plausible</td></tr><tr><td>age 85+ · Tertiary · Employed full-time</td><td class="center">6</td><td class="center">0.0006</td><td>⚠️ flagged (<strong>rare</strong>)</td></tr><tr><td>age 7–12 · Tertiary · Employed</td><td class="center">0</td><td class="center">0.0000</td><td>❌ flagged (<strong>impossible</strong>)</td></tr></tbody></table></div>
+<p>If 920 of the 1,000 synthetic people land in cells at or above the threshold, then <code>score = 920 / 1000 = 0.92</code>, and the other 80 — a mix of rare and impossible — go to the flagged list.</p>
+<h2>Why the tuple is deliberately small — the curse of dimensionality</h2>
+<p>Coherence is a <em>joint</em> check, so it inherits the curse of dimensionality. Each attribute you add to the tuple multiplies the number of possible cells and thins the counts spread across them, so more and more real combinations fall below any fixed threshold — and more synthetic people get flagged even when they are marginally unremarkable. A three-attribute tuple keeps the joint dense enough that "below 0.1 %" still means "genuinely uncommon" rather than "the real sample simply didn't happen to contain 10 of this otherwise-ordinary type." Widening the tuple without lowering the threshold would inflate the flagged count for a reason that has nothing to do with B's quality.</p>
+<h2>The ground-truth caveat: A is itself a finite sample</h2>
+<p>Coherence treats A as ground truth, but A is a <em>sample</em>, not the true population. A perfectly valid but uncommon real combination that A's draw happened to under-represent (or miss) will be flagged as rare or impossible even though a real person like that exists. So a non-perfect score is not automatically B's fault — it can reflect thin coverage in A. Read a coherence score in the context of how large and well-covered A is, and treat the flagged list as "combinations to look at," not "combinations that are definitely wrong."</p>
+<h2>Relationship to §4d k-way combination plausibility</h2>
+<p>Coherence is the <strong>legacy, binary</strong> ancestor of the newer §4d metric. Both build the same kind of empirical joint table over a tuple and compare against a threshold; the difference is what they report:</p>
+<ul><li><strong>Coherence (§3a)</strong> collapses everything below the threshold into a single <strong>flagged</strong> bucket and reports one number, <code>score = n_plausible / n_B</code>.</li><li><strong>K-way plausibility (§4d)</strong> generalises the tuple to arbitrary <em>k</em> attributes <strong>and splits the failures by severity</strong> — <code>n_impossible</code> (zero support / missing) vs <code>n_rare</code> (below threshold) — reporting <code>fraction_impossible</code> and <code>fraction_rare</code> separately.</li></ul>
+<p>For the same tuple and threshold, coherence's <code>1 − score</code> is essentially §4d's <code>fraction_impossible + fraction_rare</code>. If you want to know <em>how bad</em> the flagged people are — truly impossible versus merely rare — read §4d; coherence gives you the single headline number.</p>
+<h2>How to read it</h2>
+<ul><li><strong>0 to 1, higher is better.</strong> <code>score = 1.0</code> means every synthetic person's combination is at least as common as the threshold in the real data.</li><li>A high score is <strong>cheap when the threshold is low</strong> — it mostly rules out the <em>impossible</em>, not the <em>unusual</em>. Read it together with the threshold value and with §4d's severity split.</li><li>Use the <strong>flagged list</strong> for debugging: it points straight at the individuals and the exact combinations that a downstream reviewer should sanity-check.</li></ul>
+</main>
+</body>
+</html>

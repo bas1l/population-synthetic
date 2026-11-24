@@ -1,0 +1,21 @@
+id: "all_pick_v2"
+family: "all_pick"
+version: 2
+label: "All Pick (v2)"
+description: "All fields use pick method. LLM picks each value with NO persona context (true context-free baseline): no previously-resolved attribute is passed into any prompt. 1 LLM call per category. v2: 14 categories aligned to the SCB scored axis set -- birth_location, ethnicity_broad_global_approx and current_environment_type are not generated. The birth-chain rewire is a deliberate structural no-op here: every depends_on stays empty so the context-free baseline is preserved."
+context: none
+categories:
+  age:                   { method: pick, depends_on: [] }
+  biological_sex:        { method: pick, depends_on: [] }
+  region:                { method: pick, depends_on: [] }
+  birth_country_detail:  { method: pick, depends_on: [] }
+  civil_status:          { method: pick, depends_on: [] }
+  household_size:        { method: pick, depends_on: [] }
+  education_level:       { method: pick, depends_on: [] }
+  employment_status:     { method: pick, depends_on: [] }
+  employment_type:       { method: pick, depends_on: [] }
+  industry_sector:       { method: pick, depends_on: [] }
+  socioeconomic_class:   { method: pick, depends_on: [] }
+  income_source:         { method: pick, depends_on: [] }
+  housing_tenure:        { method: pick, depends_on: [] }
+  parental_structure:    { method: pick, depends_on: [] }

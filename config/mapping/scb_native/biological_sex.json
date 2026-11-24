@@ -1,0 +1,85 @@
+{
+  "values": [
+    "Male",
+    "Female"
+  ],
+  "priority": [
+    "Male",
+    "Female"
+  ],
+  "real": {
+    "Male": {
+      "equals": [
+        "Male",
+        "men",
+        "male",
+        "1"
+      ]
+    },
+    "Female": {
+      "equals": [
+        "Female",
+        "women",
+        "female",
+        "2"
+      ]
+    }
+  },
+  "synthetic": {
+    "negation": null,
+    "Male": {
+      "equals": [
+        "Male",
+        "man",
+        "xy",
+        "m",
+        "män",
+        "han",
+        "hane",
+        "hanne",
+        "Mann",
+        "Född man",
+        "maskulin",
+        "mänlig"
+      ],
+      "contains": [
+        "male",
+        "pojke",
+        "kille",
+        "manlig",
+        "kön man",
+        "cis man",
+        "herr"
+      ],
+      "none_of": [
+        "female"
+      ]
+    },
+    "Female": {
+      "equals": [
+        "Female",
+        "xx",
+        "hon",
+        "f",
+        "feminin",
+        "Frau",
+        "Född kvinna",
+        "K"
+      ],
+      "contains": [
+        "female",
+        "kvinna",
+        "kvinnlig",
+        "kvinnor",
+        "flicka",
+        "tjej",
+        "hona",
+        "woman",
+        "kvinn"
+      ],
+      "none_of": [
+        "male"
+      ]
+    }
+  }
+}

@@ -1,0 +1,551 @@
+"""reduce.py -- pure reduction round -> persona -> combination.
+
+The first pure layer downstream of the judge-call cache (pipe-and-filter, guide
+02 sect. 8). It consumes the frozen ``RoundVerdict`` DTOs produced by
+:mod:`population_synthetic.analysis.persona_realism.judge` -- read back from the
+durable ``<combo>/persona_XXXXX.json`` cache the runner wrote (at the combo root,
+no ``raw/`` subdir) -- and reduces them in two nested steps:
+
+    list[RoundVerdict]      -> PersonaVerdict     (per-persona)
+    list[PersonaVerdict|None] -> ComboRealism     (per-combination)
+
+It also carries the one derivation that deliberately does **not** reduce:
+:func:`clash_rows` (and its free-text twin :func:`clash_explanation_rows`) expand a
+loaded persona into one record per clash, keeping the round index, the attribute
+pair and the persona's own category values that the reductions above collapse. Both
+are pure functions of a :class:`LoadedPersona`, and both share
+:func:`_round_clashes` with :func:`reduce_persona`, so the within-round dedupe is one
+piece of knowledge held in one place rather than two implementations kept in step by
+test.
+
+Both reductions are total functions of their inputs with no side effects. This
+module must NOT know about the CLI, the LLM client, matplotlib, paths, or the
+analysis registry. It names the two per-clash **row DTOs** it builds, which are
+defined by their schema modules; it knows nothing about how or where those rows are
+serialised. The one disk touch is :func:`load_combo_verdicts`, a thin
+pure read of the cache the runner wrote, assigned to this input-boundary layer
+(it round-trips Phase 2's ``dataclasses.asdict`` back through the *same*
+``judge.parse_round_verdict`` validation boundary, so a corrupted cache fails
+loud rather than yielding a malformed verdict).
+
+Statistical-rigor invariants carried through (guide 03):
+
+* **N and the successful count travel on every record.** A per-persona statistic
+  carries ``n_rounds`` (the successful rounds actually present -- the honest
+  denominator, since fully-failed rounds are absent from the cache); a
+  per-combination record carries ``n_personas`` (successful) *and* ``n_failed``
+  (personas whose calls all failed / whose cache file is absent), so a rate is
+  never silently computed over a shrunken, unreported base.
+* **"Judged possible" (a real zero) stays distinct from "call failed / absent"**
+  -- a failed persona enters :func:`reduce_combo` as ``None`` and is counted in
+  ``n_failed``, never folded into the possibility base.
+* **Typicality is treated as ordinal.** Per-persona we retain the raw per-round
+  ordinal values (not only a mean) so the stats layer can pick a rank-aware
+  reliability metric; the mean/SD are convenience summaries, gated to ``None``
+  when undefined (no scored round / a single scored round) rather than ``NaN``.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Mapping, Sequence
+
+from population_synthetic.analysis.persona_realism.clash_explanations_csv import ClashExplanationRow
+from population_synthetic.analysis.persona_realism.judge import RoundVerdict, parse_round_verdict
+from population_synthetic.analysis.utils import _stats
+from population_synthetic.analysis.utils.realism_clash_csv import RealismClashRow
+
+__all__ = [
+    "ClashKey",
+    "PersonaVerdict",
+    "ComboRealism",
+    "LoadedPersona",
+    "clash_explanation_rows",
+    "clash_rows",
+    "reduce_persona",
+    "reduce_combo",
+    "round_clashes",
+    "load_persona_verdicts",
+    "load_combo_verdicts",
+]
+
+
+@dataclass(frozen=True)
+class ClashKey:
+    """A canonical attribute-pair x severity clash identity (hashable dict key).
+
+    ``pair`` is the two clashing axes as a **sorted** tuple, so the judge naming
+    ``(a, b)`` in one round and ``(b, a)`` in another counts as the *same* clash.
+    ``severity`` is one of ``S1``/``S2``/``S3``. Used as the key of the per-persona
+    :attr:`PersonaVerdict.clash_frequency` and the per-combo
+    :attr:`ComboRealism.clash_taxonomy` maps.
+    """
+
+    pair: tuple[str, str]
+    severity: str
+
+
+@dataclass(frozen=True)
+class PersonaVerdict:
+    """One persona reduced across its N judge rounds.
+
+    ``n_rounds`` is the number of *successful* rounds present in the cache (the
+    denominator for every field below); a fully-failed persona never reaches this
+    reduction (it is absent from the cache and enters :func:`reduce_combo` as
+    ``None``). ``p_possible`` is the share of those rounds with ``can_exist=True``
+    (the retained per-round fraction ``p_i``); ``possible_majority`` is the
+    majority verdict (``p_possible >= 0.5`` -- a tie on an even N resolves to
+    *possible*, the conservative direction for an impossibility count).
+
+    ``typicality_mean``/``typicality_sd`` summarise the ordinal typicality over
+    the rounds where it is present (i.e. ``can_exist`` rounds); both are ``None``
+    when undefined -- ``mean`` when no round scored a typicality, ``sd`` for fewer
+    than two scored rounds (a single point has no spread) -- never ``NaN``.
+
+    ``can_exist_rounds`` and ``typicality_rounds`` retain the raw per-round values
+    (``typicality_rounds`` holds ``None`` for an impossible round) so the stats
+    layer can compute reliability across rounds directly. ``clash_frequency`` maps
+    each :class:`ClashKey` to the count of rounds (of ``n_rounds``) in which it
+    appeared at least once.
+    """
+
+    persona_id: str
+    n_rounds: int
+    n_possible: int
+    p_possible: float
+    possible_majority: bool
+    typicality_mean: float | None
+    typicality_sd: float | None
+    can_exist_rounds: tuple[bool, ...]
+    typicality_rounds: tuple[int | None, ...]
+    clash_frequency: dict[ClashKey, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ComboRealism:
+    """One combination reduced across its personas.
+
+    Identity + counts: ``combo_label`` (a synthetic ``{slug}`` or ``real_{country}``),
+    ``n_personas`` (personas with a successful verdict -- the base for the
+    impossibility rate) and ``n_failed`` (personas dropped because every judge call
+    failed / the cache file was absent; surfaced so a rate over a shrunken base is
+    never silently reported).
+
+    Impossibility: ``impossible_count`` is the number of majority-impossible
+    personas; ``impossibility_rate`` is ``impossible_count / n_personas`` (``None``
+    when ``n_personas == 0``). ``impossible_indicators`` is the per-persona 0/1
+    impossibility series -- **the sampling unit for the bootstrap CI** (one element
+    = one persona), so the stats layer resamples personas, not rounds.
+    ``possibility_fractions`` retains each persona's ``p_i``.
+
+    Typicality distribution: ``typicality_means`` holds the per-persona mean
+    typicality over the **majority-possible** personas only -- the ``can_exist``
+    subset whose spread the stats layer characterises against the SCB reference.
+
+    Clash taxonomy: ``clash_taxonomy`` maps each :class:`ClashKey` to the number of
+    personas that exhibited it in at least one round (a persona-presence count, not
+    a round-occurrence count).
+
+    Reliability inputs: ``can_exist_rounds_by_persona`` and
+    ``typicality_rounds_by_persona`` are the ragged per-persona round series
+    (one row per successful persona) the stats layer feeds to Krippendorff's alpha
+    / ICC. ``typicality_rounds_by_persona`` rows carry ``None`` for impossible
+    rounds (no typicality), handled natively by the alpha computation.
+    """
+
+    combo_label: str
+    n_personas: int
+    n_failed: int
+    impossible_count: int
+    impossibility_rate: float | None
+    impossible_indicators: tuple[int, ...]
+    possibility_fractions: tuple[float, ...]
+    typicality_means: tuple[float, ...]
+    clash_taxonomy: dict[ClashKey, int] = field(default_factory=dict)
+    can_exist_rounds_by_persona: tuple[tuple[bool, ...], ...] = ()
+    typicality_rounds_by_persona: tuple[tuple[int | None, ...], ...] = ()
+
+
+@dataclass(frozen=True)
+class LoadedPersona:
+    """One persona read back from its ``<combo>/persona_XXXXX.json`` cache file.
+
+    Carries the persona identity, the mapped ``attributes`` dict (needed by the
+    hard-rules validation subset), the successful ``rounds`` as re-validated
+    :class:`RoundVerdict`s, and ``failed_rounds`` (the round-level failure count
+    the runner recorded -- distinct from a persona-level failure, which leaves no
+    file at all). ``context_isolation`` is the judge-regime tag the runner stamped
+    (``None`` for a cache written before the tag existed, i.e. under the old
+    shared-conversation regime). ``prompt_template_sha256`` /
+    ``persona_rendering_sha256`` identify the prompt the judge read (``None`` for a
+    cache written before the stamps existed).
+    """
+
+    persona_id: str
+    attributes: dict[str, Any]
+    rounds: tuple[RoundVerdict, ...]
+    failed_rounds: int
+    context_isolation: str | None = None
+    prompt_template_sha256: str | None = None
+    persona_rendering_sha256: str | None = None
+
+
+def _round_clashes(verdict: RoundVerdict) -> dict[ClashKey, str]:
+    """One round's **distinct** clashes, mapped to the judge's explanation for each.
+
+    The single definition of the within-round dedupe: an issue becomes a
+    :class:`ClashKey` (attribute pair sorted, so ``(a, b)`` and ``(b, a)`` are one
+    clash), and a key the judge raised more than once inside the same round collapses
+    to one entry. Both the per-round clash *frequency* in :func:`reduce_persona` and
+    the per-clash *rows* in :func:`clash_rows` read this, so the row grain and the
+    counts they are reconciled against can never drift apart.
+
+    Insertion order is the judge's own issue order and the **first** explanation wins
+    a repeated key, so the text is a deterministic function of the cached verdict
+    rather than of iteration luck.
+    """
+    clashes: dict[ClashKey, str] = {}
+    for issue in verdict.issues:
+        key = ClashKey(pair=tuple(sorted(issue.attributes)), severity=issue.severity)
+        if key not in clashes:
+            clashes[key] = issue.explanation
+    return clashes
+
+
+def round_clashes(verdict: RoundVerdict) -> dict[ClashKey, str]:
+    """Public view of the within-round dedupe (:func:`_round_clashes`) for sibling modules.
+
+    ``stage2`` classifies exactly the S3 clashes the per-clash contract carries, so it
+    must read them through the same dedupe rather than re-deriving it.
+    """
+    return _round_clashes(verdict)
+
+
+def reduce_persona(rounds: list[RoundVerdict] | tuple[RoundVerdict, ...], *, persona_id: str = "") -> PersonaVerdict:
+    """Reduce one persona's successful rounds into a :class:`PersonaVerdict`.
+
+    ``rounds`` must be non-empty: a persona with zero successful rounds is a
+    *failed* persona, which is never cached and must be represented as ``None`` at
+    the combo layer instead (:func:`reduce_combo`). Passing an empty list here is a
+    programming error and raises, rather than silently producing a degenerate
+    record that would corrupt the possibility base.
+    """
+    n = len(rounds)
+    if n == 0:
+        raise ValueError(
+            f"reduce_persona requires >=1 successful round for persona {persona_id!r}; "
+            "a fully-failed persona must enter reduce_combo as None, not here"
+        )
+
+    can_exist_rounds = tuple(r.can_exist for r in rounds)
+    typicality_rounds = tuple(r.typicality for r in rounds)
+    n_possible = sum(1 for c in can_exist_rounds if c)
+    p_possible = n_possible / n
+
+    scored = [t for t in typicality_rounds if t is not None]
+    typicality_mean = _stats.mean(scored)  # None when no round scored a typicality
+    typicality_sd = _stats.stddev(scored)  # None for <2 scored rounds (sample SD)
+
+    # Per-round clash detection frequency: count the rounds in which each
+    # (sorted-pair, severity) clash appeared at least once (a clash repeated
+    # within one round still counts that round once -- _round_clashes dedupes it).
+    clash_frequency: dict[ClashKey, int] = {}
+    for r in rounds:
+        for key in _round_clashes(r):
+            clash_frequency[key] = clash_frequency.get(key, 0) + 1
+
+    return PersonaVerdict(
+        persona_id=persona_id,
+        n_rounds=n,
+        n_possible=n_possible,
+        p_possible=float(p_possible),
+        possible_majority=p_possible >= 0.5,
+        typicality_mean=typicality_mean,
+        typicality_sd=typicality_sd,
+        can_exist_rounds=can_exist_rounds,
+        typicality_rounds=typicality_rounds,
+        clash_frequency=clash_frequency,
+    )
+
+
+def reduce_combo(personas: list[PersonaVerdict | None], combo_label: str) -> ComboRealism:
+    """Reduce a combination's personas into a :class:`ComboRealism`.
+
+    ``personas`` is the list of per-persona reductions, with a ``None`` entry for
+    every persona whose judge calls all failed / whose cache file was absent (the
+    caller supplies these ``None`` slots -- typically from
+    :func:`load_combo_verdicts` with an ``expected_ids`` roster). ``None`` slots
+    are counted in ``n_failed`` and excluded from every rate/distribution, keeping
+    "call failed" distinct from "judged possible".
+    """
+    present = [pv for pv in personas if pv is not None]
+    n_failed = sum(1 for pv in personas if pv is None)
+    n_personas = len(present)
+
+    indicators = tuple(0 if pv.possible_majority else 1 for pv in present)
+    impossible_count = sum(indicators)
+    impossibility_rate = impossible_count / n_personas if n_personas else None
+    possibility_fractions = tuple(pv.p_possible for pv in present)
+
+    # Typicality distribution over the can_exist (majority-possible) subset only.
+    typicality_means = tuple(
+        pv.typicality_mean
+        for pv in present
+        if pv.possible_majority and pv.typicality_mean is not None
+    )
+
+    # Clash taxonomy: number of personas exhibiting each clash in >=1 round.
+    clash_taxonomy: dict[ClashKey, int] = {}
+    for pv in present:
+        for key in pv.clash_frequency:
+            clash_taxonomy[key] = clash_taxonomy.get(key, 0) + 1
+
+    return ComboRealism(
+        combo_label=combo_label,
+        n_personas=n_personas,
+        n_failed=n_failed,
+        impossible_count=impossible_count,
+        impossibility_rate=impossibility_rate,
+        impossible_indicators=indicators,
+        possibility_fractions=possibility_fractions,
+        typicality_means=typicality_means,
+        clash_taxonomy=clash_taxonomy,
+        can_exist_rounds_by_persona=tuple(pv.can_exist_rounds for pv in present),
+        typicality_rounds_by_persona=tuple(pv.typicality_rounds for pv in present),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Per-clash expansion (the derivation that does not reduce)                    #
+# --------------------------------------------------------------------------- #
+
+
+def _attribute_value(attributes: Mapping[str, Any], name: str) -> str | None:
+    """The persona's category value for axis *name* as text, or ``None`` if it has none.
+
+    ``None`` is the *failed join* marker, and it covers all three ways the join can
+    fail: the judge named an axis the persona does not carry (a hallucinated name --
+    ``judge.py`` validates the issue's shape, never its attribute names against the
+    persona), the axis is present but holds no value, or its value renders empty.
+    All three mean "there is no category value to attribute this clash to", and the
+    caller marks the row ``unresolved`` rather than writing ``'None'`` or an empty
+    string that would read as a real, and false, category.
+    """
+    if name not in attributes:
+        return None
+    raw = attributes[name]
+    if raw is None:
+        return None
+    return str(raw) or None
+
+
+def clash_rows(
+    persona: LoadedPersona,
+    *,
+    slug: str,
+    country: str = "",
+    model: str = "",
+    strategy: str = "",
+    is_real_reference: bool = False,
+) -> list[RealismClashRow]:
+    """Expand one loaded persona into its per-clash contract rows.
+
+    One row per ``(round_index, sorted attribute pair, severity)``, with the pair's
+    values joined from *persona*'s own ``attributes`` map. ``round_index`` is the
+    0-based position among the persona's **successful** rounds (the only ones the
+    cache holds), so it indexes the same series the per-persona CSV's
+    ``typicality_rounds`` does.
+
+    Takes the whole :class:`LoadedPersona` rather than its rounds and attributes
+    separately because the two must describe the same persona: passing them apart
+    would make a silent mis-pairing -- one persona's clashes joined against another's
+    values -- expressible, and the result would look entirely plausible.
+
+    A persona with zero clashes returns ``[]``; a clash whose value join fails is
+    returned as an ``unresolved`` row with empty values, never dropped -- the clash is
+    real and is counted, only its values are unknown. A partial join (one name
+    resolves, the other does not) is unresolved as a whole: the row's claim is about
+    a *pair* of values, and half of one is not a weaker version of it.
+    """
+    rows: list[RealismClashRow] = []
+    for round_index, verdict in enumerate(persona.rounds):
+        for key in _round_clashes(verdict):
+            attr_a, attr_b = key.pair
+            value_a = _attribute_value(persona.attributes, attr_a)
+            value_b = _attribute_value(persona.attributes, attr_b)
+            unresolved = value_a is None or value_b is None
+            rows.append(
+                RealismClashRow(
+                    persona_id=persona.persona_id,
+                    slug=slug,
+                    country=country,
+                    model=model,
+                    strategy=strategy,
+                    is_real_reference=is_real_reference,
+                    round_index=round_index,
+                    attr_a=attr_a,
+                    attr_b=attr_b,
+                    value_a="" if unresolved else str(value_a),
+                    value_b="" if unresolved else str(value_b),
+                    severity=key.severity,
+                    unresolved=unresolved,
+                )
+            )
+    return rows
+
+
+def clash_explanation_rows(persona: LoadedPersona) -> list[ClashExplanationRow]:
+    """Expand one loaded persona into its per-clash **explanation** rows.
+
+    Keyed identically to :func:`clash_rows` -- same rounds, same dedupe, same sorted
+    pair -- so the two outputs join row-for-row on
+    ``(persona_id, round_index, attr_a, attr_b, severity)``. It carries no values and
+    no combination identity: this is the judge's free text and nothing else, held out
+    of the contract row so no downstream count can accidentally depend on it.
+    """
+    rows: list[ClashExplanationRow] = []
+    for round_index, verdict in enumerate(persona.rounds):
+        for key, explanation in _round_clashes(verdict).items():
+            attr_a, attr_b = key.pair
+            rows.append(
+                ClashExplanationRow(
+                    persona_id=persona.persona_id,
+                    round_index=round_index,
+                    attr_a=attr_a,
+                    attr_b=attr_b,
+                    severity=key.severity,
+                    explanation=explanation,
+                )
+            )
+    return rows
+
+
+# --------------------------------------------------------------------------- #
+# Cache loader (input boundary; round-trips Phase 2's asdict cache)           #
+# --------------------------------------------------------------------------- #
+
+
+def _round_from_cache(raw_round: dict[str, Any]) -> RoundVerdict:
+    """Rebuild one :class:`RoundVerdict` from a cached round dict.
+
+    The cache stored each verdict via ``dataclasses.asdict`` + ``json.dump``, so a
+    round dict has the *same* shape as a raw judge response (``can_exist``,
+    ``typicality``, ``issues[{attributes, severity, explanation}]``, ``reasoning``).
+    Rather than re-implement validation, we re-dump and route it back through
+    :func:`judge.parse_round_verdict` -- the single normalization boundary -- so a
+    corrupted cache fails loud with the same contract as a live judge response.
+    """
+    return parse_round_verdict(json.dumps(raw_round))
+
+
+def load_persona_verdicts(path: str | Path) -> LoadedPersona:
+    """Read one ``<combo>/persona_XXXXX.json`` cache file into a :class:`LoadedPersona`.
+
+    Raises ``ValueError`` (with file context) on a malformed cache file or a
+    contract-violating round -- the cache is durable analysis input and a silent
+    default here would corrupt every downstream statistic.
+    """
+    path = Path(path)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"could not read persona cache {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"persona cache {path} did not parse to a mapping")
+    for key in ("persona_id", "attributes", "rounds"):
+        if key not in payload:
+            raise ValueError(f"persona cache {path} is missing required key {key!r}")
+    raw_rounds = payload["rounds"]
+    if not isinstance(raw_rounds, list):
+        raise ValueError(f"persona cache {path} 'rounds' must be a list")
+    try:
+        rounds = tuple(_round_from_cache(r) for r in raw_rounds)
+    except ValueError as exc:
+        raise ValueError(f"persona cache {path} has a contract-violating round: {exc}") from exc
+    if not rounds:
+        raise ValueError(f"persona cache {path} holds zero rounds (a cached persona must have >=1)")
+    return LoadedPersona(
+        persona_id=str(payload["persona_id"]),
+        attributes=dict(payload["attributes"]),
+        rounds=rounds,
+        failed_rounds=int(payload.get("failed_rounds", 0)),
+        context_isolation=payload.get("context_isolation"),
+        prompt_template_sha256=payload.get("prompt_template_sha256"),
+        persona_rendering_sha256=payload.get("persona_rendering_sha256"),
+    )
+
+
+#: Glob matching one combo's per-persona verdict-cache files. The leading-digit guard
+#: keeps it from ever matching a sibling combo output such as ``<combo_label>.json``.
+VERDICT_CACHE_GLOB = "persona_[0-9]*.json"
+
+
+def has_cached_verdicts(combo_dir: str | Path, selected_ids: Sequence[str] | None = None) -> bool:
+    """Whether *combo_dir* holds at least one per-persona verdict-cache file.
+
+    The cheap predicate behind "is there anything to reduce here?" -- it stats the
+    directory instead of parsing every cache file. A combo directory that fails this
+    holds no judged persona: reducing it would yield a zero-persona report, which reads
+    downstream as a judged competitor with no data rather than as an unjudged unit.
+
+    With *selected_ids* (the roster, ``selection.selected_persona_ids``) only the
+    selected personas' cache files count, so a leftover file of a persona the
+    current cap no longer selects can never make an unjudged combination look judged.
+    Without it the folder is globbed with :data:`VERDICT_CACHE_GLOB`.
+    """
+    combo_dir = Path(combo_dir)
+    if not combo_dir.is_dir():
+        return False
+    if selected_ids is not None:
+        return any((combo_dir / f"{pid}.json").is_file() for pid in selected_ids)
+    return any(combo_dir.glob(VERDICT_CACHE_GLOB))
+
+
+def load_combo_verdicts(
+    combo_dir: str | Path,
+    *,
+    expected_ids: Sequence[str] | None = None,
+) -> dict[str, LoadedPersona | None]:
+    """Load a combo's per-persona cache into ``{persona_id: LoadedPersona | None}``.
+
+    With ``expected_ids`` -- the roster of persona ids that were *selected* to be
+    judged -- exactly those personas are read, each from ``<combo>/{persona_id}.json``,
+    and nothing else: a selected id without a cache file maps to ``None`` (a
+    **failed/absent** persona, kept distinct from a loaded one; fully-failed personas
+    are absent by construction, the runner never writes them), and a cache file of a
+    persona outside the roster is a **leftover** of an earlier cap that is ignored --
+    it is never read, so it can reach no reduction, row or count. Every production
+    consumer passes the roster.
+
+    Without ``expected_ids`` the folder is globbed (``persona_[0-9]*.json``; the
+    leading-digit guard keeps it from matching a sibling ``<combo_label>.json``) and
+    only the personas present on disk are returned (all non-``None``); the caller must
+    then supply the failed count some other way.
+
+    The returned dict is ordered by persona id (sorted) so a downstream reduction
+    and any seeded subsampling are stable across runs.
+    """
+    combo_dir = Path(combo_dir)
+    if expected_ids is not None:
+        result: dict[str, LoadedPersona | None] = {}
+        for pid in sorted(set(expected_ids)):
+            cache_file = combo_dir / f"{pid}.json"
+            if not cache_file.is_file():
+                result[pid] = None  # selected-but-failed/absent
+                continue
+            loaded = load_persona_verdicts(cache_file)
+            if loaded.persona_id != pid:
+                raise ValueError(
+                    f"persona cache {cache_file} holds persona_id={loaded.persona_id!r}, not {pid!r}"
+                )
+            result[pid] = loaded
+        return result
+
+    found: dict[str, LoadedPersona] = {}
+    if combo_dir.is_dir():
+        for cache_file in sorted(combo_dir.glob(VERDICT_CACHE_GLOB)):
+            loaded = load_persona_verdicts(cache_file)
+            found[loaded.persona_id] = loaded
+    return {pid: found[pid] for pid in sorted(found)}

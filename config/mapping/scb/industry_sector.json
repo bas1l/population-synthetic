@@ -10,7 +10,18 @@
     "Other",
     "Not Applicable"
   ],
-  "database": {
+  "priority": [
+    "Agriculture & Forestry",
+    "Manufacturing & Industry",
+    "Retail & Service",
+    "IT & Technology",
+    "Public Administration",
+    "Education",
+    "Healthcare & Social",
+    "Other",
+    "Not Applicable"
+  ],
+  "real": {
     "Agriculture & Forestry": {
       "equals": [
         "Agriculture & Forestry",
@@ -359,7 +370,6 @@
         "unemployed",
         "arbetslös"
       ]
-    },
-    "on_miss": "Other"
+    }
   }
 }

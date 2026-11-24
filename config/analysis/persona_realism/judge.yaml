@@ -1,0 +1,192 @@
+# Persona-realism LLM-as-judge configuration -- the single source of truth for the
+# persona_realism analysis process. Read (fail-fast) by the judge-call layer and
+# the aggregation/stats layer; a missing or malformed value must RAISE, never
+# silently default.
+#
+# The judge scores each individual mapped persona N times (n_rounds), each call an
+# independent conversation (a fresh `claude -p` process with no shared history and
+# no project context), returning can_exist (binary possibility) and typicality (0-10
+# ordinal) plus severity-tagged attribute-clash issues. See judge_prompt.md for
+# the prompt contract and hard_rules.yaml for the deterministic can_exist audit.
+
+# Judge model: the raw string passed to `claude -p ... --model <judge_model>`.
+# Must match a row key in config/analysis/model_pricing.yaml for cost lookup.
+# Default is Sonnet 5: it is the best coherence-judge tier (coherence judging
+# peaks at the Sonnet tier and inverts above it) with low latency and low cost.
+# Fable remains a selectable option but is the slowest and most expensive.
+judge_model: "claude-sonnet-5"
+
+# GUI dropdown options (Claude family only). judge_model must be one of these.
+# Each must resolve on the account before use (Fable is plan-dependent; smoke-test
+# before wiring -- see the plan Manual Verification).
+model_options:
+  - "claude-fable-5"
+  - "claude-opus-4-8"
+  - "claude-sonnet-5"
+  - "claude-haiku-4-5"
+
+# Number of independent judge calls per persona (each its own conversation). N>=2 is required for any
+# reliability (ICC / Krippendorff's alpha) or per-persona SD to be defined.
+n_rounds: 3
+
+# NO `temperature` KEY, deliberately. The judge runs through the `claude` CLI, which
+# exposes no sampling-temperature control (no flag, no settings key; `--effort` is
+# not a temperature). Until 2026-10 this file declared `temperature: 0.0` and every
+# report stamped it into provenance although it never reached the model. The loader
+# now RAISES if a `temperature` key is declared here, so the config can never again
+# assert a setting the provider cannot honour; reports stamp `temperature: null`
+# and `temperature_applied: false`. The judge samples at the CLI's own default.
+
+# DECLARED BUT NOT WIRED (both keys below). They are loaded, validated and stamped
+# into every report's `provenance` block, but no computation reads them: a persona's
+# impossibility is decided solely by the majority of the boolean `can_exist` across
+# rounds (reduce.reduce_persona -> possible_majority), and clashes are reported as an
+# unweighted per-severity taxonomy. They are kept -- rather than deleted -- so the
+# declared intent survives, and the provenance block carries an explicit
+# `severity_config_status` note saying they gate nothing, so a reader can never
+# mistake them for an active knob. Wiring severity gating into `reduce_persona` would
+# change every existing impossibility rate and is a deliberate, separate decision.
+#
+# Weight of each issue severity when folding clashes into a per-persona clash
+# score. S1 (unusual-but-possible) is reported but never penalized (weight 0).
+severity_weights:
+  S3: 1.0
+  S2: 0.5
+  S1: 0.0
+
+# Which severities would force can_exist=false at aggregation. A hard contradiction
+# (S3) is the only intended impossibility driver; S2/S1 are near/possible.
+impossibility_severities:
+  - "S3"
+
+# Personas to judge per combination (nullable). null -> judge every persona; an
+# integer caps the count via seeded sampling (bounds judge cost). If larger than
+# the population, all personas are used with no error. Governs the SYNTHETIC combos
+# only; the real reference is capped separately by `real_sample_size` below.
+sample_size: null
+
+# Personas to judge for the REAL reference combo (`real_{country}`) only (nullable).
+# The real API-sourced population (~10,000 individuals) dwarfs the synthetic combos,
+# so it is capped independently of `sample_size` to keep the competitor comparable.
+# null -> judge every real persona; an integer caps the count via a deterministic
+# FIRST-N prefix (indices 0..N-1, NOT seeded random): the SCB population is already
+# an i.i.d. sample so a prefix is a valid random subsample, it is reproducible across
+# runs, and it reuses any already-cached prefix personas. Distinct from `sample_size`.
+real_sample_size: 100
+
+# Bootstrap parameters for the impossibility-rate confidence interval. The RNG is
+# seeded with `seed` (recorded in run metadata) via numpy.random.default_rng.
+bootstrap:
+  iterations: 2000
+  seed: 20260723
+  ci_level: 0.95
+
+# Judge self-consistency (reliability) + dispersion settings for the stats layer.
+# Every key here is read FAIL-FAST (no in-code default): a missing key raises, so a
+# tunable can never be silently different from what this file says.
+#
+# `typicality_level` is the Krippendorff's-alpha measurement level for the ordinal
+# 0-10 typicality across rounds: "ordinal" (a rating is a rank, not an interval --
+# the principled choice) or "interval" (treat the 0-10 scale as evenly spaced). The
+# can_exist reliability is always nominal (a boolean has no interval meaning) and is
+# not configurable. It measures the judge's precision, NOT its correctness --
+# validity is anchored only by hard_rules.yaml.
+#
+# `tail_threshold` is the mean typicality at or below which a persona counts toward
+# `tail_coverage` (the rank-based reach into the unusual-but-possible tail) and below
+# which the per-combination typicality chart shades its bars. 3.0 on the 0-10 scale
+# puts the cut just under the bottom third: low enough that an ordinary-but-plain
+# persona (4-6) is not counted as unusual, high enough that the tail is not a handful
+# of 0-1 outliers. Changing it moves `tail_coverage` and the Axis-B contrast.
+#
+# `variance_center` is the centring of the Levene variance-equality test comparing a
+# combination's typicality spread with the real reference's: "median" is the
+# Brown-Forsythe variant (robust to the skewed, non-normal typicality distribution --
+# the safe default), "mean" is the classic Levene test.
+reliability:
+  typicality_level: "ordinal"
+  tail_threshold: 3.0
+  variance_center: "median"
+
+# Parallel judge-call fan-out (ThreadPoolExecutor max_workers). Each worker runs one
+# `claude -p` process at a time (~250 MB peak working set measured 2026-10-04), so at
+# most `workers` processes are alive at once (~2 GB at 8).
+workers: 8
+
+# Subprocess wall-clock timeout (seconds) per judge call, threaded into the
+# ClaudeCodeClient the judge factory constructs. 600 s is a generous ceiling that
+# also covers the slowest *selectable* judge (Fable/Opus single turns can run for
+# minutes on hard personas) if one is chosen; Sonnet (the new default) finishes in
+# seconds. The client's own 120 s default was too tight for the slow tiers and
+# caused whole rounds to fail, so the config threads this value in explicitly.
+timeout_seconds: 600
+
+# Prompt template, resolved relative to this config file's directory.
+prompt_template: "judge_prompt.md"
+
+# Judge-facing rendering of canonical category values. Applied ONLY to the persona
+# lines the judge reads (prompt.render_persona_block); the stored values -- mapped
+# populations, verdict caches' `attributes`, the per-persona and per-clash CSVs, the
+# hard rules -- keep the canonical labels untouched. Prompt tuning (2026-10-04, judge
+# prompt v5) showed the coded schema labels misled the judge: "Post-Graduate (ISCED
+# 6)" was read as any postgraduate study, and "Post-Secondary 3+ yrs (ISCED 5A)" as
+# a fixed course length. Plain Swedish-statistics wording plus the ISCED 1997 level
+# removed both misreadings without a glossary in the system prompt.
+#
+# `mapping_tier` (relative to this file's directory) is the mapping tier whose
+# `_index.json` names each attribute's category file; `labels` maps attribute ->
+# {canonical value -> rendered label}. The loader RAISES unless, per attribute:
+#   - the attribute is declared in the tier's `_index.json`;
+#   - the label keys are EXACTLY that file's canonical `values` -- every canonical
+#     category has an entry and no key is foreign. Total coverage is required (not
+#     merely "known keys") because a partial map would show the judge a mix of
+#     rendered and coded labels for one attribute, and a category falling through
+#     unrendered is an in-code fallback. A category that should read as-is
+#     (`Unknown / Not reported`) is therefore listed explicitly, mapped to itself;
+#   - every rendered label is a non-empty string, and no two categories share one
+#     (rendering must not merge categories).
+# At render time a persona value that is neither a key nor the UNMAPPED sentinel
+# raises: judging a population mapped through another tier (e.g. Italy) requires
+# declaring its own rendering here first.
+#
+# Provenance: the map's SHA-256 (`persona_rendering_sha256`) is stamped into every
+# verdict cache and report beside `prompt_template_sha256`, and both are judge-
+# identity keys -- editing a label invalidates the caches exactly as editing the
+# template does (resume refuses them; realism_ranking refuses to mix them).
+persona_rendering:
+  mapping_tier: "../../mapping/scb_native"
+  labels:
+    education_level:
+      "Pre-Secondary < 9 yrs (ISCED 1)": "Compulsory school not completed (under 9 years) (ISCED 1997 level 1)"
+      "Pre-Secondary 9-10 yrs (ISCED 2)": "Compulsory school (9-10 years) (ISCED 1997 level 2)"
+      "Upper Secondary ≤ 2 yrs (ISCED 3C)": "Upper secondary school, at most 2 years (ISCED 1997 level 3C)"
+      "Upper Secondary 3 yrs (ISCED 3A)": "Upper secondary school, 3 years (ISCED 1997 level 3A)"
+      "Post-Secondary < 3 yrs (ISCED 4+5B)": "Post-secondary education under 3 years (ISCED 1997 level 4+5B)"
+      "Post-Secondary 3+ yrs (ISCED 5A)": "Higher education of 3 years or more (bachelor's or master's level) (ISCED 1997 level 5A)"
+      "Post-Graduate (ISCED 6)": "Research degree (licentiate or doctorate) (ISCED 1997 level 6)"
+      "Unknown / Not reported": "Unknown / Not reported"
+
+# Stage 2: classify WHY each stage-1 S3 clash arose. Runs after stage 1 on every
+# persona holding >= 1 S3 clash in a round (one call per such round, same judge
+# model, same fresh-process-per-call client), reading the persona's raw free-text
+# answers (identity.json in the population_cap mirror) beside the mapped categories
+# and stage 1's explanations. Classes (defined in the prompt): raw_impossible,
+# label_clash, ambiguous, mapping_error, judge_error. The real reference has no free
+# text: its S3 clashes are not_applicable_no_free_text and cost no call. Outputs:
+# {combo}_stage2.csv (one row per S3 clash) and {combo}_stage2_personas.csv. Stage 2
+# is REPORTING-ONLY: it changes no impossibility rate, ranking or test.
+#
+# `persona_class_order` ranks the issue classes into one class per persona (the
+# highest-ranked issue wins). The prompt states the same order verbatim and the
+# loader raises unless it does. Its SHA-256 (`stage2_prompt_sha256`) is stamped into
+# every stage-2 cache and report; a cache written under another stage-2 prompt is
+# refused on resume (re-run with --force).
+stage2:
+  enabled: true
+  prompt_template: "stage2_prompt.md"
+  persona_class_order:
+    - "raw_impossible"
+    - "label_clash"
+    - "ambiguous"
+    - "mapping_error"
+    - "judge_error"

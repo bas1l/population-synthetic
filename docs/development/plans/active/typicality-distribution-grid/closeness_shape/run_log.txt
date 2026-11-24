@@ -1,0 +1,201 @@
+{
+ "100_vs_100": {
+  "tv": {
+   "mean": 0.17185950000000003,
+   "median": 0.17,
+   "q95": 0.24000000000000005,
+   "mean_abs": 0.17185950000000003
+  },
+  "js": {
+   "mean": 0.19068890027540766,
+   "median": 0.1888381949021585,
+   "q95": 0.2643862843689312,
+   "mean_abs": 0.19068890027540766
+  },
+  "cramer": {
+   "mean": 0.17172748560181986,
+   "median": 0.15700310393429912,
+   "q95": 0.3157530680769389,
+   "mean_abs": 0.17172748560181986
+  },
+  "delta": {
+   "mean": -0.0005257100000000072,
+   "median": -0.0005000000000001303,
+   "q95": 0.1319,
+   "mean_abs": 0.06520821
+  }
+ },
+ "88_vs_100": {
+  "tv": {
+   "mean": 0.1782764318181818,
+   "median": 0.17590909090909088,
+   "q95": 0.25363636363636366,
+   "mean_abs": 0.1782764318181818
+  },
+  "js": {
+   "mean": 0.19708158024135478,
+   "median": 0.1954255274578288,
+   "q95": 0.2732397510365933,
+   "mean_abs": 0.19708158024135478
+  },
+  "cramer": {
+   "mean": 0.17668715042014885,
+   "median": 0.16165690374432096,
+   "q95": 0.32339321330660287,
+   "mean_abs": 0.17668715042014885
+  },
+  "delta": {
+   "mean": 0.0001413863636363531,
+   "median": -0.0003409090909090722,
+   "q95": 0.13852272727272727,
+   "mean_abs": 0.06719117045454545
+  }
+ },
+ "99_vs_100": {
+  "tv": {
+   "mean": 0.17261233333333334,
+   "median": 0.16752525252525252,
+   "q95": 0.24626262626262627,
+   "mean_abs": 0.17261233333333334
+  },
+  "js": {
+   "mean": 0.19096080322284845,
+   "median": 0.18931899961006987,
+   "q95": 0.26385649250992305,
+   "mean_abs": 0.19096080322284845
+  },
+  "cramer": {
+   "mean": 0.17208725975773873,
+   "median": 0.1563615645949883,
+   "q95": 0.3156846490956433,
+   "mean_abs": 0.17208725975773873
+  },
+  "delta": {
+   "mean": -0.00038418181818184756,
+   "median": -0.0009090909090909019,
+   "q95": 0.135959595959596,
+   "mean_abs": 0.06582272727272728
+  }
+ }
+}
+   outcome                               stat  estimate   ci_lo   ci_hi  boot_mean
+0       tv                     share_strategy     0.638   0.520   0.676      0.602
+1       tv                        share_model     0.238   0.190   0.296      0.243
+2       tv                        share_resid     0.180   0.157   0.267      0.207
+3       tv                         F_strategy    37.185  20.864  43.942     31.234
+4       tv                            F_model     5.032   3.181   6.327      4.566
+6       tv                   pomega2_strategy     0.714   0.578   0.748      0.670
+8       tv                      pomega2_model     0.433   0.293   0.503      0.398
+10      tv       ratio_ss_strategy_over_model     2.687   1.819   3.437      2.516
+11      tv  pomega2_diff_strategy_minus_model     0.281   0.188   0.364      0.272
+12      js                     share_strategy     0.679   0.575   0.706      0.644
+13      js                        share_model     0.227   0.186   0.276      0.230
+14      js                        share_resid     0.142   0.131   0.224      0.173
+15      js                         F_strategy    50.066  27.511  55.174     40.062
+16      js                            F_model     6.099   3.649   7.066      5.183
+18      js                   pomega2_strategy     0.772   0.646   0.789      0.725
+20      js                      pomega2_model     0.492   0.334   0.535      0.438
+22      js       ratio_ss_strategy_over_model     2.985   2.134   3.716      2.835
+23      js  pomega2_diff_strategy_minus_model     0.280   0.215   0.364      0.287
+24  cramer                     share_strategy     0.603   0.549   0.631      0.591
+25  cramer                        share_model     0.269   0.234   0.306      0.269
+26  cramer                        share_resid     0.152   0.133   0.196      0.164
+27  cramer                         F_strategy    41.733  30.097  48.455     38.299
+28  cramer                            F_model     6.777   4.850   8.203      6.330
+30  cramer                   pomega2_strategy     0.737   0.667   0.766      0.718
+32  cramer                      pomega2_model     0.523   0.422   0.577      0.499
+34  cramer       ratio_ss_strategy_over_model     2.239   1.833   2.648      2.214
+35  cramer  pomega2_diff_strategy_minus_model     0.215   0.166   0.274      0.218
+36   delta                     share_strategy     0.605   0.538   0.651      0.593
+37   delta                        share_model     0.243   0.196   0.286      0.241
+38   delta                        share_resid     0.170   0.146   0.221      0.184
+39   delta                         F_strategy    37.384  26.022  45.934     34.408
+40   delta                            F_model     5.449   3.791   6.680      5.076
+42   delta                   pomega2_strategy     0.715   0.633   0.756      0.694
+44   delta                      pomega2_model     0.458   0.346   0.519      0.432
+46   delta       ratio_ss_strategy_over_model     2.495   1.919   3.268      2.488
+47   delta  pomega2_diff_strategy_minus_model     0.257   0.193   0.339      0.262
+  outcome  F_strategy  p_perm_strategy   F_model  p_perm_model  p_F_strategy  p_F_model
+0      tv   37.185076           0.0001  5.032005        0.0001  2.747203e-13   0.000059
+1      js   50.065619           0.0001  6.099087        0.0001  1.914619e-15   0.000007
+2  cramer   41.732964           0.0001  6.777050        0.0001  4.149855e-14   0.000002
+3   delta   37.383533           0.0001  5.448987        0.0001  2.520529e-13   0.000026
+tv Fr strat chi2=22.44 p=0.00016 W=0.561 [0.52 0.62] | Fr model chi2=16.90 p=0.05 W=0.375 [0.22 0.54] | ranks {'A': 3.0, 'B': 4.0, 'C': 3.8, 'D': 3.3, 'E': 1.0} | E<D 10/10, E best 10/10
+js Fr strat chi2=23.92 p=8.3e-05 W=0.598 [0.54 0.66] | Fr model chi2=18.38 p=0.031 W=0.408 [0.26 0.53] | ranks {'A': 2.9, 'B': 4.2, 'C': 3.7, 'D': 3.2, 'E': 1.0} | E<D 10/10, E best 10/10
+cramer Fr strat chi2=28.48 p=1e-05 W=0.712 [0.6  0.77] | Fr model chi2=22.75 p=0.0068 W=0.505 [0.42 0.64] | ranks {'A': 2.7, 'B': 4.7, 'C': 3.7, 'D': 2.8, 'E': 1.1} | E<D 9/10, E best 9/10
+delta Fr strat chi2=27.20 p=1.8e-05 W=0.680 [0.58 0.76] | Fr model chi2=23.01 p=0.0062 W=0.511 [0.39 0.61] | ranks {'A': 2.7, 'B': 4.5, 'C': 3.9, 'D': 2.8, 'E': 1.1} | E<D 9/10, E best 9/10
+   outcome  a  b  mean_b_minus_a  b_closer_in  a_closer_in  p_paired_t_holm      dz  p_conover_holm
+0       tv  A  B          0.0790            3            7           0.5011  0.6153          0.3663
+1       tv  A  C          0.0380            3            7           1.0000  0.3592          0.6781
+2       tv  A  D          0.0030            4            6           1.0000  0.0221          1.0000
+3       tv  A  E         -0.3162           10            0           0.0000 -3.5678          0.0017
+4       tv  B  C         -0.0410            5            5           1.0000 -0.2805          1.0000
+5       tv  B  D         -0.0760            7            2           0.7712 -0.4919          0.7767
+6       tv  B  E         -0.3952           10            0           0.0001 -2.8995          0.0000
+7       tv  C  D         -0.0350            5            4           1.0000 -0.2718          1.0000
+8       tv  C  E         -0.3542           10            0           0.0000 -3.1858          0.0000
+9       tv  D  E         -0.3192           10            0           0.0000 -3.5720          0.0003
+10      js  A  B          0.0797            2            8           0.1043  0.9194          0.0555
+11      js  A  C          0.0361            3            7           0.6805  0.4715          0.3965
+12      js  A  D          0.0047            4            6           0.8922  0.0441          0.8913
+13      js  A  E         -0.2783           10            0           0.0000 -3.2997          0.0020
+14      js  B  C         -0.0436            6            4           0.6805 -0.4104          0.8913
+15      js  B  D         -0.0750            8            2           0.2624 -0.7060          0.2066
+16      js  B  E         -0.3580           10            0           0.0000 -3.0868          0.0000
+17      js  C  D         -0.0314            6            4           0.6805 -0.3278          0.8913
+18      js  C  E         -0.3144           10            0           0.0000 -3.2894          0.0000
+19      js  D  E         -0.2830           10            0           0.0000 -3.9480          0.0003
+20  cramer  A  B          0.2852            0           10           0.0018  1.8377          0.0001
+21  cramer  A  C          0.1540            2            8           0.1674  0.7497          0.0685
+22  cramer  A  D          0.0494            5            5           0.5913  0.1761          0.8040
+23  cramer  A  E         -0.5801           10            0           0.0005 -2.1954          0.0015
+24  cramer  B  C         -0.1312            8            2           0.2497 -0.6160          0.0685
+25  cramer  B  D         -0.2358            9            1           0.0361 -1.0925          0.0002
+26  cramer  B  E         -0.8653           10            0           0.0000 -3.7597          0.0000
+27  cramer  C  D         -0.1045            7            3           0.4182 -0.4278          0.0685
+28  cramer  C  E         -0.7341           10            0           0.0000 -3.0507          0.0000
+29  cramer  D  E         -0.6295            9            1           0.0018 -1.8415          0.0009
+30   delta  A  B          0.1378            0           10           0.0030  1.7108          0.0011
+31   delta  A  C          0.0869            2            8           0.1162  0.8202          0.0291
+32   delta  A  D          0.0417            5            5           0.5463  0.2916          0.8139
+33   delta  A  E         -0.2655           10            0           0.0012 -1.9661          0.0027
+34   delta  B  C         -0.0509            6            4           0.3574 -0.5446          0.3267
+35   delta  B  D         -0.0961            9            1           0.0504 -1.0260          0.0019
+36   delta  B  E         -0.4033           10            0           0.0000 -3.3733          0.0000
+37   delta  C  D         -0.0452            7            3           0.5463 -0.3691          0.0394
+38   delta  C  E         -0.3525           10            0           0.0000 -3.0077          0.0000
+39   delta  D  E         -0.3072            9            1           0.0030 -1.6879          0.0019
+   outcome method                              strategy  ls_mean  ci_lo  ci_hi  raw_mean
+0       tv      A                           all_pick_v2    0.678  0.631  0.748     0.678
+1       tv      B                       all_pick_dag_v2    0.754  0.706  0.819     0.754
+2       tv      C                  all_generate_pick_v2    0.712  0.662  0.783     0.712
+3       tv      D         all_generate_evaluate_pick_v2    0.680  0.632  0.751     0.680
+4       tv      E  all_generate_evaluate_random_pick_v2    0.360  0.318  0.483     0.382
+5       js      A                           all_pick_v2    0.685  0.649  0.755     0.685
+6       js      B                       all_pick_dag_v2    0.763  0.722  0.826     0.763
+7       js      C                  all_generate_pick_v2    0.719  0.680  0.789     0.719
+8       js      D         all_generate_evaluate_pick_v2    0.692  0.654  0.766     0.692
+9       js      E  all_generate_evaluate_random_pick_v2    0.406  0.375  0.515     0.423
+10  cramer      A                           all_pick_v2    1.302  1.112  1.508     1.302
+11  cramer      B                       all_pick_dag_v2    1.583  1.392  1.785     1.583
+12  cramer      C                  all_generate_pick_v2    1.465  1.275  1.669     1.465
+13  cramer      D         all_generate_evaluate_pick_v2    1.377  1.192  1.579     1.377
+14  cramer      E  all_generate_evaluate_random_pick_v2    0.730  0.539  0.953     0.758
+15   delta      A                           all_pick_v2    0.648  0.539  0.752     0.648
+16   delta      B                       all_pick_dag_v2    0.784  0.695  0.864     0.784
+17   delta      C                  all_generate_pick_v2    0.738  0.647  0.823     0.738
+18   delta      D         all_generate_evaluate_pick_v2    0.699  0.606  0.787     0.699
+19   delta      E  all_generate_evaluate_random_pick_v2    0.385  0.254  0.516     0.396
+{'tv~js': 0.9814937508782978, 'tv~cramer': 0.8781478523421954, 'tv~delta': 0.8394123696815962, 'js~cramer': 0.9280814543664833, 'js~delta': 0.8930142422098496, 'cramer~delta': 0.987880279307269}
+tv CLOSEST: Mistral Medium 3.5/E 0.265 (x1.5 floor); Mistral Nemo 12B/E 0.330 (x1.9 floor); GPT-OSS 120B/E 0.362 (x2.0 floor); Claude Opus 5/E 0.370 (x2.1 floor); Claude Sonnet/E 0.370 (x2.1 floor)
+tv FURTHEST: Qwen 3.5 Flash/C 0.870 (x5.1 floor); GPT-OSS 120B/B 0.870 (x5.1 floor); Claude Sonnet/A 0.890 (x5.2 floor); Claude Sonnet/C 0.900 (x5.2 floor); Claude Sonnet/B 0.920 (x5.3 floor)
+tv min over-floor ratio 1.53 n combos within null q95(100v100): 0
+js CLOSEST: Mistral Medium 3.5/E 0.282 (x1.5 floor); Mistral Nemo 12B/E 0.392 (x2.1 floor); Claude Sonnet/E 0.399 (x2.1 floor); GPT-OSS 120B/E 0.406 (x2.1 floor); Claude Haiku/E 0.410 (x2.2 floor)
+js FURTHEST: GPT-OSS 120B/B 0.839 (x4.4 floor); Claude Sonnet/A 0.853 (x4.5 floor); Qwen 3.5 Flash/C 0.856 (x4.5 floor); Claude Sonnet/C 0.867 (x4.6 floor); Claude Sonnet/B 0.891 (x4.7 floor)
+js min over-floor ratio 1.47 n combos within null q95(100v100): 0
+cramer CLOSEST: Mistral Medium 3.5/E 0.551 (x3.2 floor); GPT-OSS 120B/E 0.589 (x3.3 floor); Claude Sonnet/E 0.671 (x3.9 floor); Mistral Nemo 12B/E 0.705 (x4.1 floor); GLM-5.2/E 0.736 (x4.3 floor)
+cramer FURTHEST: Qwen 3.5 Flash/B 1.770 (x10.4 floor); Qwen 3.5 Flash/C 1.789 (x10.5 floor); Claude Sonnet/A 1.789 (x10.5 floor); Claude Sonnet/C 1.803 (x10.6 floor); Claude Sonnet/B 1.817 (x10.6 floor)
+cramer min over-floor ratio 3.22 n combos within null q95(100v100): 0
+delta CLOSEST: Mistral Medium 3.5/E 0.296 (x4.6 floor); GPT-OSS 120B/E 0.300 (x4.5 floor); Claude Sonnet/E 0.337 (x5.2 floor); GLM-5.2/E 0.362 (x5.6 floor); Mistral Nemo 12B/E 0.370 (x5.8 floor)
+delta FURTHEST: Qwen 3.5 Flash/B 0.864 (x13.4 floor); Claude Sonnet/A 0.870 (x13.5 floor); Qwen 3.5 Flash/C 0.873 (x13.6 floor); Claude Sonnet/C 0.875 (x13.6 floor); Claude Sonnet/B 0.880 (x13.7 floor)
+delta min over-floor ratio 4.49 n combos within null q95(100v100): 0

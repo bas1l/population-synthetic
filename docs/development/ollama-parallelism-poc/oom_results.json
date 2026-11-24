@@ -1,0 +1,65 @@
+{
+ "gemma4:e4b": {
+  "max_ok": 64,
+  "min_fail": null,
+  "error": "no OOM up to hard cap 64",
+  "note": "ceiling above probe range"
+ },
+ "llama3.2:3b-instruct-q4_K_M": {
+  "max_ok": 64,
+  "min_fail": null,
+  "error": "no OOM up to hard cap 64",
+  "note": "ceiling above probe range"
+ },
+ "OpenLLM-France/Lucie-7B-Instruct:latest": {
+  "max_ok": 64,
+  "min_fail": null,
+  "error": "no OOM up to hard cap 64",
+  "note": "ceiling above probe range"
+ },
+ "llama3.1:8b-instruct-q4_K_M": {
+  "max_ok": 64,
+  "min_fail": null,
+  "error": "no OOM up to hard cap 64",
+  "note": "ceiling above probe range"
+ },
+ "mistral-nemo:12b": {
+  "max_ok": 64,
+  "min_fail": null,
+  "error": "no OOM up to hard cap 64",
+  "note": "ceiling above probe range"
+ },
+ "deepseek-r1:14b": {
+  "max_ok": 64,
+  "min_fail": null,
+  "error": "no OOM up to hard cap 64",
+  "note": "ceiling above probe range"
+ },
+ "gemma2:9b": {
+  "max_ok": 22,
+  "min_fail": 23,
+  "error": "HTTP 500: {\"error\":\"llama runner process has terminated: %!w(\\u003cnil\\u003e)\"}"
+ },
+ "llama3.3:70b-instruct-q4_K_M": {
+  "max_ok": 17,
+  "min_fail": 18,
+  "error": "requires more system memory (69.0 GiB) than available \u2014 RAM offload"
+ },
+ "deepseek-r1:70b": {
+  "max_ok": 17,
+  "min_fail": 18,
+  "error": "requires more system memory (69.0 GiB) than available \u2014 RAM offload"
+ },
+ "qwen2.5:72b-instruct-q4_K_M": {
+  "max_ok": null,
+  "min_fail": 1,
+  "error": "HTTP 500: {\"error\":\"timed out waiting for llama runner to start - progress 0.00 - \"}",
+  "note": "even server-rec failed"
+ },
+ "qwen3:14b": {
+  "max_ok": 64,
+  "min_fail": null,
+  "error": "no OOM up to hard cap 64",
+  "note": "ceiling above probe range"
+ }
+}

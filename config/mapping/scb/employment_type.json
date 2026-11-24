@@ -7,7 +7,19 @@
     "Self-Employed",
     "Not Applicable"
   ],
-  "database": {
+  "priority": [
+    "Permanent Full-time",
+    "Permanent Part-time",
+    "Temporary Full-time",
+    "Temporary Part-time",
+    "Self-Employed",
+    "Not Applicable"
+  ],
+  "real": {
+    "subfields": [
+      "attachment",
+      "hours"
+    ],
     "Permanent Full-time": {
       "attachment": {
         "contains": [

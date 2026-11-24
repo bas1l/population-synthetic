@@ -1,0 +1,18 @@
+id: "openrouter_glm_52"
+label: "OpenRouter GLM-5.2"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "GLM-5.2"
+model_config:
+  provider: "openrouter"
+  model: "z-ai/glm-5.2"
+  generation_config:
+    temperature: null
+    top_p: null
+    top_k: null
+    max_output_tokens: null
+parameters:
+  parallel:
+    workers: 4

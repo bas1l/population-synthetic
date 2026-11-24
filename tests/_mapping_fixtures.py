@@ -1,8 +1,8 @@
 """Shared in-memory mapping config for the mapper base-class tests.
 
-Both ``BaseReferenceMapper`` and ``BaseSyntheticMapper`` are now thin loaders over
+Both ``BaseRealMapper`` and ``BaseSyntheticMapper`` are now thin loaders over
 the shared :mod:`population_synthetic.analysis.mapping.mapping_engine`, driven by the unified
-symmetric per-attribute config (``values`` / ``database`` / ``synthetic``) plus an
+symmetric per-attribute config (``values`` / ``real`` / ``synthetic``) plus an
 ``_index.json`` master. :func:`new_shape_mappings` returns a small, self-contained
 config in exactly the shape :func:`load_mappings` produces (one entry per file stem,
 keyed by stem, plus the ``_index`` master) so the concrete base classes can be driven
@@ -17,6 +17,47 @@ the ``absent`` / ``on_miss`` directives, and ``refine_from`` cross-field resolut
 """
 
 from __future__ import annotations
+
+import copy
+
+#: Behaviour-preserving matching options (the historic engine): substring tokens,
+#: no negation, ties broken by the ``priority`` list alone.
+SUBSTRING_MATCHING: dict = {"token_mode": "substring", "negation": None, "tie_break": ["priority"]}
+
+_MATCHER_KEYS = {"equals", "contains", "all_of", "none_of", "int", "int_gte"}
+
+
+def with_matching(mappings: dict, *, real: dict | None = None, synthetic: dict | None = None) -> dict:
+    """Return *mappings* completed with what :func:`validate_mappings` requires.
+
+    Adds the ``_index.matching`` block (both sides default to
+    :data:`SUBSTRING_MATCHING`), a ``priority`` list equal to ``values`` on every
+    attribute block that lacks one, and the ``subfields`` directive on every side
+    whose matchers key composite sub-fields. The input is not mutated.
+    """
+    out = copy.deepcopy(mappings)
+    index = out.setdefault("_index", {})
+    index["matching"] = {
+        "real": copy.deepcopy(real or SUBSTRING_MATCHING),
+        "synthetic": copy.deepcopy(synthetic or SUBSTRING_MATCHING),
+    }
+    for stem, block in out.items():
+        if stem == "_index" or not isinstance(block, dict) or "values" not in block:
+            continue
+        block.setdefault("priority", list(block["values"]))
+        for side in ("real", "synthetic"):
+            rules = block.get(side)
+            if not isinstance(rules, dict):
+                continue
+            subs = sorted({
+                key for value, matcher in rules.items()
+                if value in block["values"] and isinstance(matcher, dict)
+                for key in matcher if key not in _MATCHER_KEYS
+            })
+            if subs and "subfields" not in rules:
+                rules["subfields"] = subs
+    return out
+
 
 _INDEX = {
     "attributes": {
@@ -35,6 +76,10 @@ _INDEX = {
 
 def new_shape_mappings() -> dict:
     """Return a fresh unified-symmetric mappings dict (keyed by file stem)."""
+    return with_matching(_raw_mappings())
+
+
+def _raw_mappings() -> dict:
     return {
         "_index": {
             "attributes": dict(_INDEX["attributes"]),
@@ -42,14 +87,14 @@ def new_shape_mappings() -> dict:
         "age": {"values": ["18-24", "25-44", "45-64", "65+"]},
         "biological_sex": {
             "values": ["Male", "Female"],
-            "database": {"Male": {"equals": ["men", "1"]}, "Female": {"equals": ["women", "2"]}},
+            "real": {"Male": {"equals": ["men", "1"]}, "Female": {"equals": ["women", "2"]}},
             "synthetic": {
                 "Male": {"contains": ["male", "pojke"], "equals": ["man", "m"]},
                 "Female": {"contains": ["female", "kvinna"], "equals": ["f"]},            },
         },
         "education": {
             "values": ["Primary", "Secondary", "Tertiary"],
-            "database": {
+            "real": {
                 "Primary": {"equals": ["grundskola"]},
                 "Secondary": {"equals": ["gymnasium"]},
                 "Tertiary": {"equals": ["universitet"]},            },
@@ -61,7 +106,7 @@ def new_shape_mappings() -> dict:
         },
         "employment_type": {
             "values": ["Permanent Full-time", "Permanent Part-time", "Not Applicable"],
-            "database": {
+            "real": {
                 "Permanent Full-time": {
                     "attachment": {"contains": ["permanent employees"]},
                     "hours": {"contains": ["35+ hours"]},
@@ -79,7 +124,7 @@ def new_shape_mappings() -> dict:
         },
         "socioeconomic": {
             "values": ["Poverty", "Working Class", "Middle Class", "Upper Class"],
-            "database": {
+            "real": {
                 "Poverty": {"equals": ["Decile 1", "Decile 2"]},
                 "Working Class": {"equals": ["Decile 3", "Decile 4", "Decile 5"]},
                 "Middle Class": {"equals": ["Decile 6", "Decile 7", "Decile 8"]},
@@ -93,7 +138,7 @@ def new_shape_mappings() -> dict:
         },
         "industry_sector": {
             "values": ["Health", "Education", "Other"],
-            "database": {
+            "real": {
                 "Health": {"equals": ["q"]},
                 "Education": {"equals": ["p"]},
                 "absent": "Not Applicable",            },
@@ -105,7 +150,7 @@ def new_shape_mappings() -> dict:
         },
         "birth_location": {
             "values": ["Sweden", "Nordic Country", "Europe (Other)", "Outside Europe"],
-            "database": {
+            "real": {
                 "Sweden": {"equals": ["sweden", "sverige"]},
                 "Nordic Country": {"equals": ["norway", "denmark"]},            },
             "synthetic": {
@@ -117,7 +162,7 @@ def new_shape_mappings() -> dict:
         },
         "birth_country_detail": {
             "values": ["Sweden", "Norway", "Germany", "Syria"],
-            "database": {
+            "real": {
                 "Sweden": {"equals": ["sweden"]},
                 "Norway": {"equals": ["norway"]},
                 "Germany": {"equals": ["germany"]},
@@ -131,7 +176,7 @@ def new_shape_mappings() -> dict:
         },
         "household_size": {
             "values": ["1 person", "2 persons", "3 persons", "4+ persons"],
-            "database": {
+            "real": {
                 "1 person": {"equals": ["1"]},
                 "2 persons": {"equals": ["2"]},
                 "3 persons": {"equals": ["3"]},

@@ -28,20 +28,45 @@ class LLMInteractionEntry:
     # ``None`` for legacy entries and single-run callers that don't set it.
     persona_id: str | None = None
     call_index: int | None = None
+    # Standardized per-call telemetry (mirrors the client's ``last_metadata`` contract).
+    # ``None`` for legacy entries and providers that don't populate a given field.
+    provider: str | None = None
+    model: str | None = None
+    request_sent_at: str | None = None
+    response_received_at: str | None = None
+    elapsed_ms: float | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    # Prompt-cache token telemetry (Anthropic). Optional/None-default so existing
+    # writers are unaffected; populated from ``last_metadata`` where available.
+    cache_read_tokens: int | None = None
+    cache_creation_tokens: int | None = None
+    error_category: str | None = None
 
 
 class LLMInteractionCollector:
     """Collects LLM interaction entries and writes each one to disk immediately as JSONL."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, append: bool = False) -> None:
+        """Collect entries for one ``.jsonl``.
+
+        ``append`` selects the file-open mode: False (the default) truncates, so a
+        fresh unit of work owns the whole file; True appends, so a resumed or
+        topped-up unit keeps the calls a previous pass already paid for. Appending
+        is only correct when the caller also continues that unit's ``call_index``
+        -- otherwise ``(persona_id, call_index)`` stops being unique and every
+        consumer that sums the file double-counts.
+        """
         self._path = path
+        self._mode = "a" if append else "w"
         self._file: IO[str] | None = None
         self._count = 0
 
     def _ensure_open(self) -> None:
         if self._file is None:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._file = open(self._path, "w", encoding="utf-8")
+            self._file = open(self._path, self._mode, encoding="utf-8")
 
     def record(self, entry: LLMInteractionEntry) -> None:
         self._ensure_open()

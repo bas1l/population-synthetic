@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading k-way combination plausibility: the severity split — comparison metrics</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<main class="note-wrap">
+<p class="breadcrumb"><a href="../comparison-metrics-report.html">&#9666; Comparison metrics — field guide</a></p>
+<h1>Reading k-way combination plausibility: the severity split</h1>
+<p>K-way combination plausibility generalises the <a href="coherence-score-explained.html">coherence score</a> in two ways: it works for an <strong>arbitrary k-attribute tuple</strong> (not just the fixed triple), and it <strong>splits the failures by severity</strong> — impossible vs rare — instead of collapsing them into a single "flagged" bucket. This note gives the equations, the exact classification rule, and the precise relationship back to coherence. Code: <code>evaluator.py:_compute_combination_plausibility</code>.</p>
+<h2>The joint table (same as coherence)</h2>
+<p>For each configured check — a tuple of <code>k</code> attributes plus a <code>threshold</code> — the evaluator builds the <strong>empirical, un-smoothed</strong> joint probability table from the real population A, exactly as <a href="coherence-score-explained.html">coherence</a> does:</p>
+<pre><code>p_A(c) = N_A(c) / Σ_c' N_A(c')</code></pre>
+<p>counting only real individuals with no missing value in the tuple. A combination unseen in A has <code>p_A(c) = 0</code>.</p>
+<h2>The three-way classification</h2>
+<p>Each synthetic person's combination <code>cᵢ</code> is sorted into one of three buckets — note the <strong>boundaries</strong> carefully:</p>
+<pre><code>p_A(cᵢ) ≤ 0            → impossible   (zero real support, or a missing value in the tuple)
+0 &lt; p_A(cᵢ) &lt; threshold → rare         (present in A, but below the threshold)
+p_A(cᵢ) ≥ threshold     → plausible</code></pre>
+<p>So <code>impossible</code> is the <code>p = 0</code> boundary (including any <code>None</code> in the tuple, which forces <code>p = 0</code>), <code>rare</code> is the open interval below the threshold, and <code>plausible</code> is at or above it. The reported fractions are over <strong>all</strong> of B:</p>
+<pre><code>fraction_impossible = n_impossible / N_B
+fraction_rare       = n_rare / N_B</code></pre>
+<p>both <code>NaN</code> when <code>N_B = 0</code>. The check also reports the raw counts <code>n_impossible</code>, <code>n_rare</code>, <code>n_plausible</code>, the tuple <code>attributes</code>, <code>k</code>, and the <code>threshold</code> used.</p>
+<h2>Worked example</h2>
+<p>For the tuple <code>(age_group, education_level, employment_status)</code> at <code>threshold = 0.001</code> with 1,000 synthetic people: 950 plausible, 30 rare, 20 impossible → <code>fraction_impossible = 0.020</code>, <code>fraction_rare = 0.030</code>. The <strong>2 % impossible</strong> are the ones to worry about — combinations the real population <em>never</em> produced; the 3 % rare are a softer flag.</p>
+<h2>Exact relationship to the coherence score (§3a)</h2>
+<p>Both build the same table and compare to a threshold, so for the <strong>same tuple and threshold</strong> the counts line up exactly:</p>
+<pre><code>n_plausible (§4d)               = n_plausible (§3a)
+n_impossible + n_rare (§4d)     = n_flagged (§3a)
+fraction_impossible + fraction_rare (§4d) = 1 − coherence.score (§3a)</code></pre>
+<p>In other words, §4d is coherence with the flagged bucket <strong>split by severity</strong> and generalised to any <code>k</code>. The Swedish scheme configures one check — the coherence triple, <code>k = 3</code>, <code>threshold = 0.001</code> — so here §4d is precisely the severity-resolved view of the coherence score. Add more <code>combination_checks</code> in config to probe other tuples (all fail loud if malformed; the block is optional and defaults to empty).</p>
+<h2>How to read it</h2>
+<ul><li><code>fraction_impossible</code> and <code>fraction_rare</code> are <strong>≥ 0, lower is better</strong>; <code>fraction_impossible = 0</code> means every synthetic profile is at least <em>possible</em> in reality.</li><li>Weight <code>fraction_impossible</code> more heavily than <code>fraction_rare</code>: impossible means "never seen in real data," while rare can partly reflect thin coverage in A (the same finite-sample caveat as coherence — A is a sample, not the true population).</li><li>Read it together with the coherence score: coherence gives the headline "% plausible," §4d tells you how bad the rest are.</li></ul>
+</main>
+</body>
+</html>

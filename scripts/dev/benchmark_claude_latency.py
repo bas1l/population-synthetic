@@ -14,12 +14,10 @@ import json
 import queue
 import statistics
 import subprocess
-import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
-
 
 PROMPT = "Reply with exactly one word: PONG"
 

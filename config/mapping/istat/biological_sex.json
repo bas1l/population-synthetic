@@ -3,7 +3,11 @@
     "Male",
     "Female"
   ],
-  "database": {
+  "priority": [
+    "Male",
+    "Female"
+  ],
+  "real": {
     "Male": {
       "equals": [
         "Male",

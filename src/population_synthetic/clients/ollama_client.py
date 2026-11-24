@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 import random
 import time
 from datetime import datetime
@@ -18,8 +17,7 @@ import requests
 
 from population_synthetic.clients.call_context import format_corr_token
 from population_synthetic.clients.llm_protocol import LLMClient  # noqa: F401  # for type-checking
-
-_DEFAULT_BASE_URL = "http://192.168.0.19:11434"
+from population_synthetic.clients.retry_policy import max_attempts
 
 
 class OllamaClient:
@@ -29,25 +27,41 @@ class OllamaClient:
     Targets the native POST /api/chat endpoint on a self-hosted Ollama server.
     Each generate_content() call is stateless from the server's perspective
     (no multi-turn conversation state is maintained across calls).
+
+    The client is configuration-free: it speaks HTTP to exactly the endpoint it is
+    handed and knows nothing about the host registry, host ids, YAML or the
+    environment. ``base_url`` is therefore **required** -- there is no default and
+    no ``OLLAMA_BASE_URL`` read. Both were removed deliberately: a client that can
+    pick a machine on its own dispatches a whole sweep to the wrong GPU while the
+    outputs look perfectly normal, and a silently wrong number is worse than a
+    crash. The endpoint is resolved in the orchestration layer, where all other
+    configuration is resolved.
     """
 
     def __init__(
         self,
         model_name: str = "llama3.1",
-        base_url: str | None = None,
+        *,
+        base_url: str,
         default_config: dict[str, Any] | None = None,
         max_retries: int = 3,
         base_delay: float = 2.0,
         max_delay: float = 30.0,
         timeout: int | None = None,
     ):
+        if not base_url:
+            raise ValueError(
+                f"OllamaClient requires an explicit base_url, got {base_url!r}. "
+                f"Resolve it from the Ollama host registry "
+                f"(config/synthetic/ollama_hosts.yaml) before constructing the client."
+            )
         self.default_model_name = model_name
-        self.base_url = (
-            base_url
-            or os.environ.get("OLLAMA_BASE_URL")
-            or _DEFAULT_BASE_URL
-        ).rstrip("/")
+        self.base_url = base_url.rstrip("/")
         self._max_retries = max_retries
+        # Lifted to the shared ceiling once the run turns on retry_until_success.
+        # Assigned post-construction by the generation scripts, like the
+        # generator's flag of the same name.
+        self.retry_until_success: bool = False
         self._base_delay = base_delay
         self._max_delay = max_delay
         self._timeout = timeout
@@ -74,22 +88,26 @@ class OllamaClient:
         )
 
     def _validate_server(self) -> None:
+        # Name the exact endpoint probed, not just the base URL: with the host
+        # selectable per run, "which machine did this run actually talk to" must be
+        # answerable from the failure message alone.
+        endpoint = f"{self.base_url}/api/tags"
         try:
-            resp = self._session.get(f"{self.base_url}/api/tags", timeout=10)
+            resp = self._session.get(endpoint, timeout=10)
             resp.raise_for_status()
         except requests.exceptions.ConnectionError as e:
             raise ConnectionError(
-                f"Ollama server unreachable at {self.base_url}. "
+                f"Ollama server unreachable at {endpoint}. "
                 f"Ensure the server is running and the URL is correct. Original error: {e}"
             ) from e
         except requests.exceptions.Timeout as e:
             raise ConnectionError(
-                f"Ollama server timed out at {self.base_url} during startup validation. "
+                f"Ollama server timed out at {endpoint} during startup validation. "
                 f"Original error: {e}"
             ) from e
         except requests.exceptions.HTTPError as e:
             raise ConnectionError(
-                f"Ollama server at {self.base_url} returned HTTP {e.response.status_code} "
+                f"Ollama server at {endpoint} returned HTTP {e.response.status_code} "
                 f"during startup validation. Original error: {e}"
             ) from e
 
@@ -191,13 +209,31 @@ class OllamaClient:
             "base_url": self.base_url,
             "timestamp": datetime.now().isoformat(),
             "options": options,
+            "request_sent_at": None,
+            "response_received_at": None,
+            "elapsed_ms": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "status": None,
+            "error_category": None,
+            "error": None,
         }
         self._last_execution_metadata = metadata
         self._execution_history.append(metadata)
 
+        def _fail(category: str, message: str) -> RuntimeError:
+            metadata["status"] = "error"
+            metadata["error_category"] = category
+            metadata["error"] = message
+            return RuntimeError(message)
+
         last_error: Exception | None = None
-        for attempt in range(self._max_retries):
+        last_error_category: str = "unknown"
+        attempts = max_attempts(self.retry_until_success, self._max_retries)
+        for attempt in range(attempts):
             try:
+                metadata["request_sent_at"] = datetime.now().isoformat()
                 t0 = time.perf_counter()
                 resp = self._session.post(
                     f"{self.base_url}/api/chat",
@@ -205,23 +241,30 @@ class OllamaClient:
                     timeout=self._timeout,
                 )
                 elapsed_ms = (time.perf_counter() - t0) * 1000
+                metadata["response_received_at"] = datetime.now().isoformat()
+                metadata["elapsed_ms"] = elapsed_ms
 
                 if resp.status_code == 404:
                     body = _safe_json(resp)
                     err_msg = body.get("error", "") if isinstance(body, dict) else str(body)
                     if "model" in err_msg.lower() or "not found" in err_msg.lower():
-                        raise RuntimeError(
+                        raise _fail(
+                            "model_limitation",
                             f"Model '{target_model}' not found on Ollama server at {self.base_url}. "
-                            f"Run 'ollama pull {target_model}' on the server."
+                            f"Run 'ollama pull {target_model}' on the server.",
                         )
-                    raise RuntimeError(
-                        f"Ollama returned 404: {err_msg}"
-                    )
+                    raise _fail("model_limitation", f"Ollama returned 404: {err_msg}")
 
                 if 400 <= resp.status_code < 500:
                     body = _safe_json(resp)
-                    raise RuntimeError(
-                        f"Ollama returned client error HTTP {resp.status_code}: {body}"
+                    if resp.status_code in (401, 403):
+                        category = "auth"
+                    elif resp.status_code == 429:
+                        category = "rate_limit"
+                    else:
+                        category = "model_limitation"
+                    raise _fail(
+                        category, f"Ollama returned client error HTTP {resp.status_code}: {body}"
                     )
 
                 resp.raise_for_status()
@@ -229,15 +272,23 @@ class OllamaClient:
                 data = resp.json()
                 content = data["message"]["content"]
                 if not isinstance(content, str):
-                    raise RuntimeError(
-                        f"Unexpected content type from Ollama: {type(content)!r}"
+                    raise _fail(
+                        "invalid_response", f"Unexpected content type from Ollama: {type(content)!r}"
                     )
 
                 prompt_tokens = data.get("prompt_eval_count")
                 completion_tokens = data.get("eval_count")
+                total_tokens = (
+                    prompt_tokens + completion_tokens
+                    if prompt_tokens is not None and completion_tokens is not None
+                    else None
+                )
                 metadata["prompt_tokens"] = prompt_tokens
                 metadata["completion_tokens"] = completion_tokens
-                metadata["elapsed_ms"] = elapsed_ms
+                metadata["total_tokens"] = total_tokens
+                metadata["status"] = "ok"
+                metadata["error_category"] = None
+                metadata["error"] = None
 
                 self.logger.info(
                     "ollama call: model=%s base_url=%s elapsed_ms=%.0f "
@@ -254,32 +305,44 @@ class OllamaClient:
             except RuntimeError:
                 raise
 
-            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            except requests.exceptions.ConnectionError as e:
                 last_error = e
+                last_error_category = "network"
+            except requests.exceptions.Timeout as e:
+                last_error = e
+                last_error_category = "timeout"
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and 400 <= e.response.status_code < 500:
-                    raise RuntimeError(
-                        f"Ollama returned client error HTTP {e.response.status_code}: {e}"
+                    if e.response.status_code in (401, 403):
+                        category = "auth"
+                    elif e.response.status_code == 429:
+                        category = "rate_limit"
+                    else:
+                        category = "model_limitation"
+                    raise _fail(
+                        category, f"Ollama returned client error HTTP {e.response.status_code}: {e}"
                     ) from e
                 last_error = e
+                last_error_category = "network"
 
-            if attempt < self._max_retries - 1:
+            if attempt < attempts - 1:
                 delay = min(self._base_delay * (2 ** attempt), self._max_delay)
                 delay *= random.uniform(0.75, 1.25)
                 self.logger.warning(
                     "generate_content attempt %d/%d failed: %s — retrying in %.1fs",
                     attempt + 1,
-                    self._max_retries,
+                    attempts,
                     last_error,
                     delay,
                 )
                 time.sleep(delay)
 
         self.logger.error(
-            "generate_content failed after %d attempts: %s", self._max_retries, last_error
+            "generate_content failed after %d attempts: %s", attempts, last_error
         )
-        raise RuntimeError(
-            f"Ollama generation failed after {self._max_retries} attempts: {last_error}"
+        raise _fail(
+            last_error_category,
+            f"Ollama generation failed after {attempts} attempts: {last_error}",
         )
 
 

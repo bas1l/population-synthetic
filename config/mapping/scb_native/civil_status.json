@@ -1,0 +1,277 @@
+{
+  "values": [
+    "Single/Never Married",
+    "Married",
+    "Divorced",
+    "Widowed"
+  ],
+  "priority": [
+    "Single/Never Married",
+    "Married",
+    "Divorced",
+    "Widowed"
+  ],
+  "real": {
+    "Single/Never Married": {
+      "equals": [
+        "Single/Never Married",
+        "single"
+      ]
+    },
+    "Married": {
+      "equals": [
+        "Married",
+        "married"
+      ]
+    },
+    "Divorced": {
+      "equals": [
+        "Divorced",
+        "divorced"
+      ]
+    },
+    "Widowed": {
+      "equals": [
+        "Widowed",
+        "widowers/widows"
+      ]
+    }
+  },
+  "synthetic": {
+    "Single/Never Married": {
+      "equals": [
+        "Single/Never Married",
+        "Ogift",
+        "Singel",
+        "Ensamstående",
+        "Singlar",
+        "Singular",
+        "Singly",
+        "Single",
+        "Förlovad",
+        "Ugift",
+        "Unmarried",
+        "engaged",
+        "ogrift",
+        "Singe",
+        "Engagerad",
+        "Sambo",
+        "Sammanboende",
+        "Sammboende",
+        "Samlevande",
+        "Samlevare",
+        "Samlever",
+        "Samlivsboende",
+        "Samboförhållande",
+        "Sammanboende med partner",
+        "Sammanboende med barn",
+        "Sammanboende utan barn",
+        "Samsbo",
+        "Sammanlevande",
+        "Sammanboendesituation",
+        "Co-habiter",
+        "Enskild",
+        "Enskildstående",
+        "싱글",
+        "單身",
+        "Ugiffrad",
+        "Ej gifvener",
+        "Ingle",
+        "Umarrietad",
+        "Dating",
+        "living apart together (LAT)",
+        "Bor tillsammans",
+        "dating casually",
+        "De Facto Spouse",
+        "en sammanboende",
+        "Living Apart Together",
+        "living together",
+        "ogieft",
+        "Samliv",
+        "Sammanboende i Sverige",
+        "Sammanlevande par",
+        "sammänbor",
+        "Unattached"
+      ],
+      "contains": [
+        "gemensamt boende",
+        "singel",
+        {
+          "token": "ogift",
+          "mode": "substring"
+        },
+        "single",
+        "never married",
+        "ensamstående",
+        "ensam",
+        "cohabiting",
+        "cohabit",
+        "habiting",
+        "habitant",
+        {
+          "token": "sambo",
+          "mode": "substring"
+        },
+        "samboende",
+        "särbo",
+        "partner",
+        "relation",
+        "förhållande",
+        "ej gift",
+        "icke gift",
+        "icke-gift",
+        "inte gift",
+        "aldrig gift",
+        "ungift",
+        "oggift",
+        "unmarried",
+        "never-married",
+        "not married",
+        "utan giftermål",
+        "utan äktenskap",
+        "ingen partner",
+        "no partner",
+        "without marriage",
+        "ingen relation",
+        "utan sambo",
+        "utan registrerad",
+        "ej registrerad",
+        "separerad från sambo",
+        "ej längre sambo"
+      ],
+      "none_of": [
+        "divorc",
+        "frånskild",
+        "skild",
+        "skilsmäss",
+        "äktenskapsskillnad",
+        "widow",
+        "änka",
+        "änkling",
+        "änkeman",
+        "efterlevande",
+        "previously married",
+        "tidigare gift",
+        "efter att ha varit gift"
+      ]
+    },
+    "Married": {
+      "equals": [
+        "Married",
+        "Gift",
+        "Registrerat partnerskap",
+        "Registrerad partner",
+        "Giftermål",
+        "Gifit",
+        "Äktenskaplig",
+        "Äktenskap",
+        "Gifta",
+        "Civilstånd: Gift",
+        "Civilstånd: Giftermål",
+        "Samregistrerad",
+        "Gift (sambo)",
+        "Äktenskap (samboförhållande)",
+        "Äktig partner",
+        "In a same-sex marriage",
+        "Vigd",
+        "Ehe",
+        "Maried",
+        "Separerad",
+        "Separat",
+        "Separerad under process",
+        "Separerat"
+      ],
+      "contains": [
+        "remarried",
+        "omgift",
+        {
+          "token": "gift",
+          "mode": "substring"
+        },
+        {
+          "token": "married",
+          "mode": "substring"
+        },
+        "registrerad partner",
+        "äktenskap",
+        "registrer",
+        "registered",
+        "reģistererad",
+        "civil partner",
+        "civilpartner",
+        "civilly partnered",
+        "civilpartnerskap",
+        "partnerskapsregist",
+        "domestic partnership",
+        "separated",
+        "separerad",
+        "divorce pending"
+      ],
+      "none_of": [
+        "previously married",
+        "tidigare gift",
+        "utgift",
+        "ogift"
+      ]
+    },
+    "Divorced": {
+      "equals": [
+        "Divorced",
+        "Skild",
+        "Frånskild",
+        "skilsedd",
+        "Skiljd",
+        "Skiljad",
+        "Skilt",
+        "Skilsde",
+        "Divorcerad",
+        "Divorciert",
+        "이혼"
+      ],
+      "contains": [
+        "skild",
+        "frånskild",
+        "divorced",
+        "skilsmäss",
+        "äktenskapsskillnad",
+        "previously married",
+        "tidigare gift",
+        "efter att ha varit gift"
+      ],
+      "none_of": [
+        "widow",
+        "änka",
+        "änkling",
+        "änkeman",
+        "efterlevande",
+        "dödsfall"
+      ]
+    },
+    "Widowed": {
+      "equals": [
+        "Widowed",
+        "Änka",
+        "Änkling",
+        "Änklig",
+        "Änkeman",
+        "Änkja",
+        "Änkla",
+        "Enka",
+        "Vidövad",
+        "Vidöd",
+        "Enke"
+      ],
+      "contains": [
+        "änka",
+        "änkling",
+        "änklig",
+        "änkeman",
+        "widow",
+        "efterlevande",
+        "överlevande make",
+        "förlorat sin make",
+        "dödsfall i äktenskap"
+      ]
+    }
+  }
+}

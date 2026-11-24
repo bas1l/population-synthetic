@@ -13,7 +13,7 @@ all real logic lives in the `population_synthetic.*` package (installed via
 | `generate_scb_population.py` | Sample a Swedish population from live SCB PxWeb data |
 | `generate_ssb_population.py` | Sample a Norwegian population from live SSB PxWebApi data |
 | `generate_istat_population.py` | Sample an Italian population from ISTAT SDMX + Eurostat |
-| `generate_db_population.py` | Dispatcher: `--source scb\|ssb` runs the matching generator above |
+| `generate_real_population.py` | Dispatcher: `--source scb\|ssb` runs the matching generator above |
 | `generate_identity.py` | Generate a single LLM persona identity (manifest / axis IDs / explicit CLI) |
 | `generate_identities_parallel.py` | Generate N identities in parallel with retry rounds |
 | `extract_population_from_pipeline.py` | Extract demographic profiles from pipeline `identity.json` files into a population JSON |
@@ -22,13 +22,12 @@ all real logic lives in the `population_synthetic.*` package (installed via
 ### `analyze/` — compare and evaluate
 | Script | Purpose |
 | --- | --- |
-| `compare_populations.py` | Generic two-file statistical comparison |
-| `compare_pipeline_to_scb.py` | Compare LLM pipeline output against an SCB reference |
-| `compare_pipeline_to_istat.py` | Compare LLM pipeline output against an ISTAT reference |
-| `compare_all_pipelines.py` | Batch comparison over every model × strategy × country |
-| `compare_countries.py` | Cross-country marginals (Sweden vs Norway vs Italy) |
-| `analyze_run.py` | Per-run LLM interaction analytics (call counts, retries, tokens, latency) |
-| `compare_runs.py` | Cross-run scientific comparison of run analytics (Kruskal-Wallis + Dunn) |
+| `score_fidelity.py` | Generic two-file statistical comparison |
+| `score_fidelity_sweden.py` | Compare LLM pipeline output against an SCB real population |
+| `score_fidelity_italy.py` | Compare LLM pipeline output against an ISTAT real population |
+| `score_fidelity_all.py` | Batch comparison over every model × strategy × country |
+| `compare_real_countries.py` | Cross-country marginals (Sweden vs Norway vs Italy) |
+| `summarize_generation_metadata.py` | The single LLM-metrics task: per country × model × method(strategy) cost/token/latency/retry summaries + per-combo deep diagnostics + cross-factor significance (Kruskal-Wallis + Dunn) |
 
 ### `dev/` — exploratory / one-off tooling
 | Script | Purpose |
@@ -38,15 +37,16 @@ all real logic lives in the `population_synthetic.*` package (installed via
 | `benchmark_claude_latency.py` | Benchmark one-shot vs persistent Claude CLI subprocess latency |
 
 ### Root
-- `launch_gui.py` — launches the PyQt5 GUI (`python -m population_synthetic.gui.main`).
+- `launch_gui.py` — launches the primary Flow Runner GUI (`python -m population_synthetic.gui.main`).
 
 ## Pipeline chains
 
 - **Generate → evaluate population quality:**
-  `generate/generate_identities_parallel.py` → `analyze/compare_pipeline_to_{scb,istat}.py`
-  (or `analyze/compare_all_pipelines.py` for the full matrix).
+  `generate/generate_identities_parallel.py` → `analyze/score_fidelity_{sweden,italy}.py`
+  (or `analyze/score_fidelity_all.py` for the full matrix).
 - **Analyze LLM-call behaviour across runs:**
-  `analyze/analyze_run.py --all` → `analyze/compare_runs.py`.
+  `analyze/summarize_generation_metadata.py` (one command over `01_Raw` emits the enriched
+  per-country summary — cost, means±spread, distribution, significance, deep diagnostics).
 
 These are standalone CLIs, not an importable package — there is intentionally no
 `__init__.py` here.

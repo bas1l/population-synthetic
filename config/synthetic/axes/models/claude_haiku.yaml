@@ -1,5 +1,10 @@
 id: "claude_haiku"
 label: "Claude Haiku"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "Claude Haiku"
 model_config:
   provider: "claude"
   model: "haiku"

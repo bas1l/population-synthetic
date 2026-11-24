@@ -1,5 +1,10 @@
 id: "gemini_flash"
 label: "Gemini Flash"
+# Figure display name -- the model as its maker names it, with the serving
+# provider dropped. That provenance is not lost: it is emitted by
+# scripts/analyze/export_model_provenance.py into the provenance table.
+display:
+  name: "Gemini Flash"
 model_config:
   provider: "gemini"
   model: "gemini-2.5-flash"

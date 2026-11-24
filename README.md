@@ -10,7 +10,7 @@ Standalone toolkit for generating synthetic population profiles from real nation
 - **Identity Generation** -- LLM-based persona identity creation across multiple providers (Gemini, Claude CLI, Ollama, OpenAI-compatible European providers), with batch and configurable strategy modes, manifest bundles, and composable model x strategy x country axes
 - **Population Comparison** -- Statistical evaluation (chi-squared, total variation distance) and visual comparison (bar charts, radar plots) between any two population files, or between pipeline output and a national reference
 - **Run Analytics** -- Post-processing analytics on LLM generation runs (call counts, retry rates, token/latency distributions, value diversity) plus cross-run scientific comparison (Kruskal-Wallis + Dunn)
-- **GUI Launcher** -- PyQt5 desktop launcher to run generation and comparison tasks across the cartesian product of selected models, strategies, and countries
+- **GUI (Flow Runner)** -- Config-driven PyQt5 desktop launcher (`gui`) to run generation, comparison, and DAG-based analysis workflows across the cartesian product of selected models, strategies, and countries.
 
 ## Installation
 
@@ -25,10 +25,17 @@ For development tools (ruff linting, pytest):
 pip install -e ".[dev]"
 ```
 
-For the PyQt5 GUI launcher:
+For the PyQt5 GUI (the Flow Runner):
 
 ```bash
 pip install -e ".[gui]"
+```
+
+For the scikit-learn backend of the C2ST multivariate-fidelity metric (a numpy/scipy MMD
+fallback is used when it is absent):
+
+```bash
+pip install -e ".[analysis]"
 ```
 
 Requires Python 3.10+.
@@ -90,20 +97,20 @@ Modes:
 
 ```bash
 # Compare two population files
-python scripts/analyze/compare_populations.py pop_a.json pop_b.json --output report.json
+python scripts/analyze/score_fidelity.py pop_a.json pop_b.json --output report.json
 
 # Compare pipeline output against an SCB reference (via manifest)
-python scripts/analyze/compare_pipeline_to_scb.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
+python scripts/analyze/score_fidelity_sweden.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
 
 # Compare pipeline output against an SCB reference (via explicit path)
-python scripts/analyze/compare_pipeline_to_scb.py --seed-root path/to/pipeline_output/ \
+python scripts/analyze/score_fidelity_sweden.py --seed-root path/to/pipeline_output/ \
     --reference scb_population.json --output comparison_report.json
 
 # Compare pipeline output against an ISTAT reference (Italy)
-python scripts/analyze/compare_pipeline_to_istat.py --model-id claude_haiku --strategy-id all_pick --country-id italian
+python scripts/analyze/score_fidelity_italy.py --model-id claude_haiku --strategy-id all_pick --country-id italian
 
 # Compare every model x strategy x country combination against country references (batch)
-python scripts/analyze/compare_all_pipelines.py --country swedish --country italian
+python scripts/analyze/score_fidelity_all.py --country swedish --country italian
 ```
 
 Comparison produces per-field chi-squared tests, total variation distances, similarity scores, a bar chart per demographic attribute, a radar chart, a JSON report, and a CSV marginals summary.
@@ -118,20 +125,18 @@ python scripts/generate/extract_population_from_pipeline.py \
 ### Analyse generation runs
 
 ```bash
-# Analyse a single run directory (prints summary table)
-python scripts/analyze/analyze_run.py path/to/run_dir/
+# The single LLM-metrics task: one command over {output_base}/01_Raw/ emits one enriched
+# per-country summary (cost, means +/- spread, distribution, cross-factor significance, and
+# deep per-combo diagnostics) as {country}_summary.{csv,json} + charts/.
+python scripts/analyze/summarize_generation_metadata.py --country swedish
 
-# Analyse a batch run and export full analytics
-python scripts/analyze/analyze_run.py path/to/batch_run_dir/ --output run_analytics.json
-
-# Batch-analyse every run under {output_base}/01_Raw/
-python scripts/analyze/analyze_run.py --all
-
-# Cross-run scientific comparison of LLM metrics (requires --all first)
-python scripts/analyze/compare_runs.py
+# Print per-combo deep diagnostics and restrict the comparison to a metric subset
+python scripts/analyze/summarize_generation_metadata.py --country swedish --verbose --metrics time cost
 ```
 
 ### Launch the GUI
+
+The primary GUI is the config-driven Flow Runner (`gui`):
 
 ```bash
 python -m population_synthetic.gui.main
@@ -167,7 +172,7 @@ src/population_synthetic/
             manifest_loader.py                Manifest + axis-composition loader
             llm_interaction_log.py            Incremental JSONL interaction logging
 
-    comparison/           Statistical evaluation and charting (population quality vs reference)
+    fidelity/             Statistical evaluation and charting (population quality vs reference)
         evaluator.py      StatisticalEvaluator (chi-squared, TV distance)
         normalizer.py     Schema normalization (raw -> canonical field names; country-agnostic)
         charts.py         Bar-chart and radar-chart generation
@@ -178,7 +183,7 @@ src/population_synthetic/
         per_run/          Single-run pipeline (parse -> join -> aggregate -> visualize/report)
         cross_run/        Cross-run pipeline (load -> test -> build -> visualize)
 
-    gui/                  PyQt5 desktop launcher (cartesian-product experiment runner)
+    gui/               PyQt5 Flow Runner -- sole GUI (menu.yaml + per-flow YAML, DAG workflow); execution.py holds the runner/kill-tree substrate
 
     utils/                Pipeline utilities (should_process_task skip-if-done logic)
 
@@ -215,8 +220,8 @@ The output slug is `{country_id}_{strategy_id}_{model_id}`, and the run director
 - **Axis configs:** `config/synthetic/axes/models/`, `config/synthetic/axes/strategies/`, `config/synthetic/axes/countries/`
 - **API response caches (git-ignored):** `config/database/caches/scb/`, `config/database/caches/ssb/`, `config/database/caches/eurostat/`, `config/database/caches/istat/`
 - **Category label mappings:** `config/mapping/{scb,ssb,istat}/` -- one JSON file per demographic attribute (filename stem == top-level key), grouped by source agency. The loader merges every `*.json` in a country directory into a single dict
-- **Experiment / analytics defaults:** `config/synthetic/experiment_defaults.yaml`, `config/analysis/analyze_defaults.yaml`
-- **GUI launcher config:** `config/gui/launcher.yaml`
+- **Experiment defaults:** `config/synthetic/experiment_defaults.yaml`
+- **GUI config:** `config/gui/menu.yaml` + `config/gui/flows/*.yaml` (the Flow Runner GUI)
 
 ## Data Sources
 

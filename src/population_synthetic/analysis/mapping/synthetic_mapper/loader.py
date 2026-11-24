@@ -1,10 +1,10 @@
 """Two-step synthetic-population pipeline: load raw from disk, then map to schema.
 
-``load_raw_population`` reads the ``persona_*/identity.json`` files verbatim (the
+``load_synthetic_population`` reads the ``persona_*/identity.json`` files verbatim (the
 population *as it is on the harddrive*); ``map_population`` applies the
 country-specific synthetic mapper to produce the canonical schema population.
-Keeping the two steps separate mirrors the reference side
-(``load_reference_population`` -> ``normalize_population``).
+Keeping the two steps separate mirrors the real side
+(``load_real_population`` -> ``map_population``).
 """
 
 from __future__ import annotations
@@ -16,13 +16,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from population_synthetic.analysis.mapping.synthetic_mapper.base import BaseSyntheticMapper
 from population_synthetic.analysis.mapping.synthetic_mapper.factory import get_synthetic_mapper
-from population_synthetic.analysis.mapping.synthetic_mapper.base import  BaseSyntheticMapper
 
 logger = logging.getLogger(__name__)
 
 
-def load_raw_population(seed_root: Path) -> dict[str, Any]:
+def load_synthetic_population(seed_root: Path) -> dict[str, Any]:
     """Load ``persona_*/identity.json`` files verbatim from disk (no mapping).
 
     Each individual is the raw identity dict with its ``id`` (the persona
@@ -58,12 +58,24 @@ def load_raw_population(seed_root: Path) -> dict[str, Any]:
     }
 
 
-def map_population(raw_pop: dict[str, Any], country: str = "swedish") -> dict[str, Any]:
+def map_population(
+    raw_pop: dict[str, Any],
+    country: str = "swedish",
+    *,
+    misses_out: list[dict[str, Any]] | None = None,
+    ties_out: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Map a raw pipeline population to the canonical schema for *country*.
 
     Skips critically-incomplete personas (``map_individual`` returns ``None``)
-    and folds disk-unreadable files (from :func:`load_raw_population`) into the
+    and folds disk-unreadable files (from :func:`load_synthetic_population`) into the
     skip count, so the returned ``metadata`` matches the legacy one-shot path.
+
+    When *misses_out* is given, the mapper's total-miss log is extended onto it. The
+    returned payload is unchanged either way -- the miss log is a diagnostic sidecar,
+    deliberately kept out of the mapped population file so every downstream reader of
+    that file keeps its existing shape. *ties_out* is the same for the mapper's tie /
+    ambiguous-facet log (:attr:`BaseSyntheticMapper.ties`).
     """
     mapper: BaseSyntheticMapper = get_synthetic_mapper(country)
     individuals: list[dict[str, Any]] = []
@@ -76,6 +88,11 @@ def map_population(raw_pop: dict[str, Any], country: str = "swedish") -> dict[st
             skipped += 1
         else:
             individuals.append({"id": persona_id, **mapped})
+
+    if misses_out is not None:
+        misses_out.extend(mapper.misses)
+    if ties_out is not None:
+        ties_out.extend(mapper.ties)
 
     if skipped:
         print(f"WARNING: Skipped {skipped} persona(s) due to errors or missing data", file=sys.stderr)

@@ -2,7 +2,7 @@
 """Render the synthetic-population generation workflow / conditional-sampling DAG
 for each country (Sweden / Norway / Italy).
 
-For every country this emits three artefacts into ``docs/architecture/diagrams/database/``:
+For every country this emits three artefacts into ``docs/architecture/diagrams/real/``:
 
 * ``{country}_generation_dag.svg`` -- vectorised figure (scalable)
 * ``{country}_generation_dag.png`` -- raster image (300 dpi)
@@ -12,7 +12,7 @@ The figure has two parts: a top ETL band (clients/APIs -> load_all -> parsers ->
 PopulationDistributions -> sampler) and the conditional chained-sampling DAG below
 it (the order in which ``sample_one`` draws each attribute and what each draw is
 conditioned on). Data is hand-derived from the source modules under
-``src/population_synthetic/generators/reference/{sweden,norway,italy}/``.
+``src/population_synthetic/generators/real/{sweden,norway,italy}/``.
 
 Run: ``python scripts/dev/draw_generation_dags.py``
 """
@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-OUT_DIR = PROJECT_ROOT / "docs" / "architecture" / "diagrams" / "database"
+OUT_DIR = PROJECT_ROOT / "docs" / "architecture" / "diagrams" / "real"
 
 # ---------------------------------------------------------------------------
 # Palette (colour-blind friendly, muted)
@@ -99,22 +99,43 @@ def _base_dag():
 
 def sweden_spec():
     nodes, edges, marginals = _base_dag()
+    # --- Sweden-specific conditioning, verified against sweden/sample_service.py (2026-07) ---
+    # employment_status default path is the (age x education x sex) odds-merge of two register
+    # tables (ArRegArbStatus x ArbStatusUtbM); --no-merge-status-education reverts to the
+    # (age, sex)-only ArRegArbStatus table.
+    nodes["employment"]["detail"] = "| age, education, sex (merge)"
+    edges.append(("agesex", "employment", "solid"))
+    # industry_sector conditions on (age_group, sex) as well as the employed gate.
+    edges.append(("agesex", "industry", "age"))
+    # birth_location is now an (age_group, sex) conditional (FolkmFodlandHVD age x sex query),
+    # no longer a national marginal; it still parents birth_country_detail.
+    nodes["birthloc"] = dict(x=8.9, y=9.3, kind="cond",
+                             label="birth_location", detail="| age_group, sex")
+    edges.append(("agesex", "birthloc", "solid"))
+    # housing_tenure is now an (age_group, sex) conditional (person-level register HushallT31);
+    # promote it out of the pure-marginals strip.
+    marginals = [m for m in marginals if m != "housing_tenure"]
+    nodes["housing_tenure"] = dict(x=9.5, y=7.3, kind="cond",
+                                   label="housing_tenure", detail="| age_group, sex")
+    edges.append(("agesex", "housing_tenure", "solid"))
     return dict(
         key="sweden",
         title="Sweden  -  SCB synthetic population generation",
-        subtitle="src/population_synthetic/generators/reference/sweden/  |  SampleService.sample_one  "
+        subtitle="src/population_synthetic/generators/real/sweden/  |  SampleService.sample_one  "
                  "(conditional chained sampling, ~14 draws)",
         etl=[
             ("SCBPxWebClient", "PxWeb\njson-stat2 (POST)", C_SRC),
-            ("12 SCB tables", "BE / UF / AM\nHE / LE / BO", C_SRC),
-            ("load_all", "single client\n14x fetch_*", C_SRC),
+            ("13 SCB tables", "BE / UF / AM\nHE / LE", C_SRC),
+            ("load_all", "single client\nstatus x edu merge", C_SRC),
             ("parsers", "json-stat2\n-> prob dicts", C_SRC),
-            ("PopulationDistributions", "all 16 fields\n(income_source real)", C_DIST),
+            ("PopulationDistributions", "16 fields; employment\nage x edu x sex", C_DIST),
             ("SampleService", "sample_population", C_HUB),
         ],
         nodes=nodes, edges=edges, marginals=marginals,
-        notes="Most data-rich: only country with a real income_source conditional table "
-              "and employment_type built from two tables (attachment x hours) at true (age,sex) cells.",
+        notes="Most data-rich: employment_status is an (age x education x sex) two-table odds-merge "
+              "(default; --no-merge-status-education opts out), a real income_source conditional table, "
+              "and employment_type from two tables (attachment x hours). birth_location & housing_tenure "
+              "are (age,sex) conditionals.",
     )
 
 
@@ -132,7 +153,7 @@ def norway_spec():
     return dict(
         key="norway",
         title="Norway  -  SSB synthetic population generation",
-        subtitle="src/population_synthetic/generators/reference/norway/  |  SSBSampleService.sample_one  "
+        subtitle="src/population_synthetic/generators/real/norway/  |  SSBSampleService.sample_one  "
                  "(11-step chain, income_source omitted)",
         etl=[
             ("SSBPxWebClient", "PxWebApi v2\nGET (>=2.1s limit)", C_SRC),
@@ -165,7 +186,7 @@ def italy_spec():
     return dict(
         key="italy",
         title="Italy  -  ISTAT + Eurostat synthetic population generation",
-        subtitle="src/population_synthetic/generators/reference/italy/  |  ISTATSampleService.sample_one  "
+        subtitle="src/population_synthetic/generators/real/italy/  |  ISTATSampleService.sample_one  "
                  "(10-step chain, no income_source)",
         etl=[
             ("EurostatClient", "JSON-stat 2.0", C_SRC),

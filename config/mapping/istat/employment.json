@@ -3,7 +3,11 @@
     "Employed",
     "Not Employed"
   ],
-  "database": {
+  "priority": [
+    "Employed",
+    "Not Employed"
+  ],
+  "real": {
     "Employed": {
       "equals": [
         "Employed"

@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading the C2ST: how the classifier two-sample test is built — comparison metrics</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<main class="note-wrap">
+<p class="breadcrumb"><a href="../comparison-metrics-report.html">&#9666; Comparison metrics — field guide</a></p>
+<h1>Reading the C2ST: how the classifier two-sample test is built</h1>
+<p>The Classifier Two-Sample Test (C2ST) is the strongest single fidelity check in the stack. Its logic: <strong>if a classifier cannot tell real profiles from synthetic ones, the two are statistically indistinguishable.</strong> This note walks the four steps behind the two headline numbers — <code>auc</code> and <code>p_value</code> — with a worked example and a visual for each, because several non-obvious steps (class balancing, the rank-based AUC, the permutation p-value, the two backends) determine what those numbers mean. It lives alongside the <a href="tv-distance-half-factor.html">TV ½-factor</a>, <a href="kl-divergence-bits-and-log.html">KL bits &amp; log-ratio</a>, and <a href="coherence-score-explained.html">coherence-score</a> notes. Code: <code>multivariate.py:c2st</code> and <code>evaluator.py:_compute_c2st</code>.</p>
+<blockquote><p><strong>Try it hands-on.</strong> Every step below has a live, interactive twin in the <a href="c2st-playground.html">C2ST playground</a> — drive the one-hot encoding, class balancing, the rank-based AUC, and the permutation p-value yourself and watch the two headline numbers respond.</p></blockquote>
+<h2>The running example</h2>
+<p>To make each step concrete, one example runs through the whole note:</p>
+<ul><li><strong>Real A</strong> = 10,000 people, <strong>synthetic B</strong> = 1,000 people (real vastly outnumbers synthetic — the usual case).</li><li>Four illustrative attributes: <code>age_group</code> (4 categories), <code>sex</code> (2), <code>education_level</code> (3), <code>employment_status</code> (3) → a <strong>12-column</strong> one-hot space. (The real Swedish scheme has 15 attributes and far more columns; four keeps the pictures legible.)</li><li>The observed cross-validated AUC comes out <strong>0.52</strong>, and the permutation test returns <strong>p ≈ 0.40</strong> — a faithful synthetic population.</li></ul>
+<h2>Step 1 — encode the whole profile (one-hot)</h2>
+<blockquote><p><strong>What's "one-hot"?</strong> A classifier needs numbers, not category labels like "Tertiary". One-hot encoding turns an attribute with <em>N</em> categories into <em>N</em> 0/1 columns and sets the column matching the person's value to <strong>1</strong>, all the others to <strong>0</strong> — exactly one column is "hot" (on), which is where the name comes from. It is used instead of numbering the categories <code>1, 2, 3</code> because that would invent a false order and spacing (implying Tertiary is "3× Primary"); one-hot keeps the categories on equal, independent footing.</p></blockquote>
+<p>Each individual becomes a fixed-width feature vector via <code>one_hot_encode</code>. Columns are laid out block-by-block in <code>scheme.attributes</code> order; within a block, one column per category in <code>scheme.categories[attr]</code> order, so the encoding is <strong>identical across both populations</strong>. A value outside an attribute's category set — a synthetic-only value or a <code>None</code> — leaves that attribute's whole block <strong>all-zero</strong> (an implicit "other"), rather than growing the matrix. So the classifier sees complete joint profiles, not one attribute at a time.</p>
+<blockquote><p><strong>What's a "block"?</strong> Not a demographics term — it is the <strong>contiguous run of one-hot columns that encodes a single attribute</strong> (one column per category of that attribute). So <code>education_level</code> (3 categories) is a 3-column block. The whole vector is these per-attribute blocks laid end to end, and each person has <strong>exactly one lit column per block</strong> (or an all-zero block if their value isn't a known category). In short: attribute → a block; category → one column within it.</p></blockquote>
+<p><strong>Example.</strong> A real 35-year-old employed woman with a tertiary degree encodes to a 12-long vector with exactly <strong>four</strong> 1s — one lit column per attribute block. A synthetic person whose <code>employment_status</code> is <code>"student"</code> (not a scheme category) gets an <strong>all-zero employment block</strong>: the classifier simply sees "none of the known employment categories."</p>
+<figure class="viz">
+<div class="plot-wrap">
+<svg viewBox="0 0 560 210" role="img" aria-label="One profile encoded as a 12-column one-hot vector, one lit cell per attribute block">
+  <text x="20" y="20" class="mono ax">ONE PROFILE &#8594; ONE FIXED-WIDTH VECTOR (4 attributes &#8594; 12 columns)</text>
+  <!-- profile chips -->
+  <g font-size="12">
+    <rect x="20"  y="34" width="118" height="26" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="30"  y="51">age: 30&#8211;39</text>
+    <rect x="146" y="34" width="70"  height="26" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="156" y="51">sex: F</text>
+    <rect x="224" y="34" width="140" height="26" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="234" y="51">edu: Tertiary</text>
+    <rect x="372" y="34" width="150" height="26" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="382" y="51">emp: Employed</text>
+  </g>
+  <!-- vector cells: 4 + 2 + 3 + 3 -->
+  <g font-size="11" text-anchor="middle">
+    <!-- age block: cells 30,64,98,132 ; lit = 2nd (64) -->
+    <rect x="30"  y="104" width="30" height="30" rx="4" fill="var(--surface)" stroke="var(--line)"/><text x="45"  y="124">0</text>
+    <rect x="64"  y="104" width="30" height="30" rx="4" fill="var(--real)"/><text x="79" y="124" fill="#fff" class="hi">1</text>
+    <rect x="98"  y="104" width="30" height="30" rx="4" fill="var(--surface)" stroke="var(--line)"/><text x="113" y="124">0</text>
+    <rect x="132" y="104" width="30" height="30" rx="4" fill="var(--surface)" stroke="var(--line)"/><text x="147" y="124">0</text>
+    <!-- sex block: 176,210 ; lit = 2nd (210) -->
+    <rect x="176" y="104" width="30" height="30" rx="4" fill="var(--surface)" stroke="var(--line)"/><text x="191" y="124">0</text>
+    <rect x="210" y="104" width="30" height="30" rx="4" fill="var(--real)"/><text x="225" y="124" fill="#fff" class="hi">1</text>
+    <!-- edu block: 254,288,322 ; lit = 3rd (322) -->
+    <rect x="254" y="104" width="30" height="30" rx="4" fill="var(--surface)" stroke="var(--line)"/><text x="269" y="124">0</text>
+    <rect x="288" y="104" width="30" height="30" rx="4" fill="var(--surface)" stroke="var(--line)"/><text x="303" y="124">0</text>
+    <rect x="322" y="104" width="30" height="30" rx="4" fill="var(--real)"/><text x="337" y="124" fill="#fff" class="hi">1</text>
+    <!-- emp block: 366,400,434 ; lit = 1st (366) -->
+    <rect x="366" y="104" width="30" height="30" rx="4" fill="var(--real)"/><text x="381" y="124" fill="#fff" class="hi">1</text>
+    <rect x="400" y="104" width="30" height="30" rx="4" fill="var(--surface)" stroke="var(--line)"/><text x="415" y="124">0</text>
+    <rect x="434" y="104" width="30" height="30" rx="4" fill="var(--surface)" stroke="var(--line)"/><text x="449" y="124">0</text>
+  </g>
+  <!-- block braces / labels -->
+  <g class="ax mono" font-size="11" text-anchor="middle">
+    <text x="96"  y="152">age_group</text>
+    <text x="208" y="152">sex</text>
+    <text x="303" y="152">education</text>
+    <text x="415" y="152">employment</text>
+  </g>
+  <!-- out-of-vocab illustration -->
+  <text x="30" y="184" font-size="11.5" fill="var(--muted)">out-of-vocabulary value (e.g. emp = "student") &#8594; whole block stays</text>
+  <g>
+    <rect x="470" y="172" width="24" height="16" rx="3" fill="var(--surface)" stroke="var(--line)"/>
+    <rect x="496" y="172" width="24" height="16" rx="3" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="470" y="200" font-size="10.5" fill="var(--muted)">0 0 0 (other)</text>
+  </g>
+</svg>
+</div>
+<figcaption>One person &#8594; a 12-long vector with one lit cell per attribute block. The same
+column layout is used for <b>both</b> populations, so the classifier compares like with like.</figcaption>
+</figure>
+<h2>Step 2 — balance the classes</h2>
+<p>Real usually vastly outnumbers synthetic, and a classifier can score a high AUC just by exploiting that imbalance. So the classes are <strong>balanced by subsampling the larger down</strong> to:</p>
+<pre><code>balanced_n = min(n_real, n_syn)</code></pre>
+<p>drawn <strong>without replacement</strong>. This is repeated <code>n_repeats = 5</code> times (fresh subsample each time) and the results averaged. If <code>balanced_n &lt; 2</code> (a tiny or failed synthetic population) both numbers degrade to <code>NaN</code> without error.</p>
+<p><strong>Example.</strong> With <code>n_real = 10,000</code> and <code>n_syn = 1,000</code>, <code>balanced_n = 1,000</code>: each repeat draws 1,000 real rows to sit beside all 1,000 synthetic rows — a 50/50 mix the classifier can't game by guessing "real." Five such balanced draws are averaged.</p>
+<figure class="viz">
+<div class="plot-wrap">
+<svg viewBox="0 0 560 200" role="img" aria-label="Balancing: subsample 10000 real down to 1000 to match 1000 synthetic">
+  <text x="20" y="22" class="mono ax">BEFORE &#183; imbalanced</text>
+  <line x1="30" y1="165" x2="250" y2="165" stroke="var(--line-strong)"/>
+  <rect x="60"  y="45"  width="54" height="120" rx="4" fill="var(--real)"/>
+  <text x="87"  y="182" text-anchor="middle" font-size="11" fill="var(--muted)">real</text>
+  <text x="87"  y="40"  text-anchor="middle" font-size="11" class="mono">10,000</text>
+  <rect x="150" y="135" width="54" height="30"  rx="4" fill="var(--syn)"/>
+  <text x="177" y="182" text-anchor="middle" font-size="11" fill="var(--muted)">syn</text>
+  <text x="177" y="130" text-anchor="middle" font-size="11" class="mono">1,000</text>
+  <text x="275" y="110" font-size="24" fill="var(--muted)">&#8594;</text>
+  <text x="320" y="22" class="mono ax">AFTER &#183; balanced (&#215;5 repeats, averaged)</text>
+  <line x1="330" y1="165" x2="540" y2="165" stroke="var(--line-strong)"/>
+  <rect x="365" y="105" width="54" height="60" rx="4" fill="var(--real)"/>
+  <text x="392" y="182" text-anchor="middle" font-size="11" fill="var(--muted)">real*</text>
+  <text x="392" y="100" text-anchor="middle" font-size="11" class="mono">1,000</text>
+  <rect x="455" y="105" width="54" height="60" rx="4" fill="var(--syn)"/>
+  <text x="482" y="182" text-anchor="middle" font-size="11" fill="var(--muted)">syn</text>
+  <text x="482" y="100" text-anchor="middle" font-size="11" class="mono">1,000</text>
+</svg>
+</div>
+<figcaption>Subsample the larger class down to <b>balanced_n = min(n_real, n_syn) = 1,000</b>
+(heights schematic). Repeated 5&#215; with fresh draws; the AUC and p-value are the means.</figcaption>
+</figure>
+<h2>Step 3 — cross-validated AUC</h2>
+<p>Now the encoded, balanced rows are put to the classifier. Real (label <code>0</code>) and synthetic (label <code>1</code>) are stacked and run through <a href="k-fold-cross-validation-explained.html"><strong>stratified k-fold cross-validation</strong></a> (<code>eff_folds = max(2, min(folds, balanced_n))</code>, folds from config, default 5). Cross-validation is what keeps the result honest: every row is <strong>scored while it is held out</strong> of training, so no row is judged by a model that already learned from it. The output of this pass is one out-of-fold <strong>score</strong> per person — and the rest of the step explains what that score is and how the scores become an AUC.</p>
+<blockquote><p><strong>Two different 0/1s — don't mix them up.</strong> The one-hot columns from Step 1 use 0/1 as <em>feature values</em> ("does this person have this category?"). The <strong>labels</strong> <code>0</code>/<code>1</code> here are something else: the classifier's <em>target</em>, marking which population a row came from — <strong>real = 0, synthetic = 1</strong>. Making synthetic the <code>1</code> means it is the class the test is trying to detect, so the AUC reads as "how well can a random <em>synthetic</em> profile be ranked as <em>more synthetic</em> than a random real one." The specific assignment is a convention — swapping the two labels flips the scores but leaves <code>|AUC − 0.5|</code> unchanged — but it must be consistent, and the code fixes real = 0 / synthetic = 1. Note the scale, too: a label is <strong>one number per person</strong> (the target), while the one-hot 0/1s are <strong>many numbers per person</strong> (the features); they never interact.</p></blockquote>
+<figure class="viz">
+<div class="plot-wrap">
+<svg viewBox="0 0 340 188" role="img" aria-label="5-fold cross-validation grid: each fold is the held-out test set exactly once">
+  <text x="24" y="20" class="mono ax">5-FOLD CV &#183; each row scores 1 held-out fold</text>
+  <g>
+    <!-- row0 --><rect x="30"  y="34" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="58" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="34" width="26" height="20" rx="3" fill="var(--real-soft)"/>
+    <!-- row1 --><rect x="30"  y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="58" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="86" y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="58" width="26" height="20" rx="3" fill="var(--real-soft)"/>
+    <!-- row2 --><rect x="30"  y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="82" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="114" y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="82" width="26" height="20" rx="3" fill="var(--real-soft)"/>
+    <!-- row3 --><rect x="30"  y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="106" width="26" height="20" rx="3" fill="var(--syn)"/><rect x="142" y="106" width="26" height="20" rx="3" fill="var(--real-soft)"/>
+    <!-- row4 --><rect x="30"  y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="58" y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="86" y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="114" y="130" width="26" height="20" rx="3" fill="var(--real-soft)"/><rect x="142" y="130" width="26" height="20" rx="3" fill="var(--syn)"/>
+  </g>
+  <rect x="30" y="164" width="12" height="12" rx="3" fill="var(--syn)"/><text x="48" y="174" font-size="11" fill="var(--muted)">test fold</text>
+  <rect x="110" y="164" width="12" height="12" rx="3" fill="var(--real-soft)"/><text x="128" y="174" font-size="11" fill="var(--muted)">train folds</text>
+</svg>
+</div>
+<figcaption>Stratified 5-fold CV rotates which fold is held out; every row is scored exactly once,
+out of fold. Those pooled out-of-fold scores are what the AUC (below) is computed from (the linked
+k-fold cross-validation note above has the full mechanics).</figcaption>
+</figure>
+<h3>Where each per-person score comes from</h3>
+<p>The "scores" that get ranked are <strong>the classifier's output for each held-out person</strong> — a single number saying "how synthetic does this profile look?" How it is computed depends on the backend:</p>
+<ul><li><strong>sklearn (logistic regression)</strong> — the score is <code>predict_proba(...)[:, 1]</code>, the model's estimated <strong>probability that the profile is synthetic</strong>:</li></ul>
+<pre><code>  z     = b + Σ (weight of each active one-hot column)      # the "logit"
+  score = σ(z) = 1 / (1 + e^(−z))                           # squashed into (0, 1)</code></pre>
+<p>Training picks the bias <code>b</code> and one weight per one-hot column; because the features are one-hot, only the person's <strong>active</strong> columns (one per attribute block) contribute to the sum. A higher <code>z</code> → a score nearer 1 → "looks synthetic."</p>
+<ul><li><strong>numpy / MMD (nearest-centroid)</strong> — the score is the raw projection <code>x · (μ_syn − μ_real)</code>, i.e. summing, over the person's active columns, how much more common that category is in synthetic than in real. It is <strong>not</strong> a probability in (0, 1) — but since the AUC only uses the <em>ranking</em>, that is fine.</li></ul>
+<p><strong>Example — how a <code>0.20</code> is produced (logistic backend).</strong> Take the real 35-year-old from Step 1 (active columns: age 30–39, sex F, edu Tertiary, emp Employed). Suppose training learned bias <code>b = −0.50</code> and column weights <code>−0.30, −0.20, −0.10, −0.29</code> for her four active columns. Then <code>z = −0.50 − 0.30 − 0.20 − 0.10 − 0.29 = −1.39</code>, and <code>score = σ(−1.39) = 1/(1 + e^{1.39}) ≈ 0.20</code>. A synthetic person scoring <code>0.30</code> simply had active-column weights summing to <code>z ≈ −0.85</code> (<code>σ(−0.85) = 0.30</code>). <strong>Every one of the six scores below is one person's <code>σ(z)</code> computed this same way</strong> — they are outputs, not inputs.</p>
+<figure class="viz">
+<div class="plot-wrap">
+<svg viewBox="0 0 560 232" role="img" aria-label="Scoring one person: sum the learned weights of the active one-hot columns to a logit, then apply the sigmoid to get 0.20">
+  <text x="20" y="20" class="mono ax">SCORING ONE PERSON &#183; logistic-regression backend</text>
+  <!-- left: weights of the active columns -->
+  <g class="mono" font-size="12">
+    <text x="30" y="52">age = 30&#8211;39</text><text x="272" y="52" text-anchor="end" fill="var(--muted)">&#8722;0.30</text>
+    <text x="30" y="72">sex = F</text><text x="272" y="72" text-anchor="end" fill="var(--muted)">&#8722;0.20</text>
+    <text x="30" y="92">education = Tertiary</text><text x="272" y="92" text-anchor="end" fill="var(--muted)">&#8722;0.10</text>
+    <text x="30" y="112">employment = Employed</text><text x="272" y="112" text-anchor="end" fill="var(--muted)">&#8722;0.29</text>
+    <text x="30" y="132">bias</text><text x="272" y="132" text-anchor="end" fill="var(--muted)">&#8722;0.50</text>
+  </g>
+  <line x1="30" y1="144" x2="272" y2="144" stroke="var(--line)"/>
+  <text x="30" y="166" class="mono hi" font-size="12.5">logit z = w&#183;x + b = &#8722;1.39</text>
+  <text x="292" y="120" font-size="22" fill="var(--muted)">&#8594;</text>
+  <!-- right: sigmoid -->
+  <text x="320" y="42" class="mono ax">&#963;(z) = 1 / (1 + e^&#8722;z)</text>
+  <line x1="320" y1="200" x2="530" y2="200" stroke="var(--line-strong)"/>
+  <line x1="320" y1="200" x2="320" y2="54"  stroke="var(--line-strong)"/>
+  <polyline points="320,197 346,193 372,183 399,161 425,127 451,93 478,71 504,61 530,57" fill="none" stroke="var(--real)" stroke-width="2.5"/>
+  <!-- mark z=-1.39 -> 0.20 -->
+  <line x1="388" y1="200" x2="388" y2="171" stroke="var(--syn)" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <line x1="320" y1="171" x2="388" y2="171" stroke="var(--syn)" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <circle cx="388" cy="171" r="4" fill="var(--syn)"/>
+  <text x="316" y="175" text-anchor="end" font-size="11.5" class="mono hi" fill="var(--syn)">0.20</text>
+  <text x="388" y="216" text-anchor="middle" font-size="11" class="mono" fill="var(--muted)">z = &#8722;1.39</text>
+  <text x="425" y="228" text-anchor="middle" font-size="10.5" fill="var(--muted)">logit z</text>
+  <text x="312" y="52" text-anchor="end" font-size="10.5" fill="var(--muted)">P(syn)</text>
+</svg>
+</div>
+<figcaption>The score is the classifier's output, not a raw input. sklearn sums the learned
+weights of the person's active one-hot columns into a logit <b>z</b>, then the sigmoid maps it to a
+probability: <b>z = &#8722;1.39 &#8594; &#963;(&#8722;1.39) &#8776; 0.20</b>. The MMD backend instead
+uses <b>x&#183;(&#956;_syn &#8722; &#956;_real)</b>; only the ranking feeds the AUC.</figcaption>
+</figure>
+<h3>From scores to the AUC</h3>
+<p>With one score per person, the AUC measures <strong>how well those scores separate the two classes</strong> — the classifier's ability to rank a random synthetic person above a random real one. It is computed by the <strong>rank-based Mann–Whitney identity</strong> (not a threshold sweep):</p>
+<pre><code>AUC = ( Σ ranks(synthetic scores) − n_syn·(n_syn + 1)/2 ) / (n_syn · n_real)</code></pre>
+<p>with tie-aware average ranks (<code>scipy.rankdata</code>). A useful consequence: if the two populations are identical the scores are effectively constant, ties dominate, and the AUC comes out <strong>exactly 0.5</strong> — no spurious signal from a degenerate model.</p>
+<p><strong>Example (the rank formula on 6 people).</strong> Say the held-out "more synthetic" scores are, for 3 real and 3 synthetic people: real <code>{0.20, 0.40, 0.55}</code>, synthetic <code>{0.30, 0.60, 0.70}</code>. Ranking all six low→high, the synthetic scores land at ranks 2, 5, 6 (sum = 13). Then <code>AUC = (13 − 3·4/2) / (3·3) = (13 − 6)/9 = 0.78</code>. On our running example the classifier does far worse than that — <code>AUC ≈ 0.52</code>, a whisker above chance.</p>
+<figure class="viz">
+<div class="plot-wrap">
+<svg viewBox="0 0 560 218" role="img" aria-label="Mann-Whitney AUC from ranking six scores: synthetic ranks 2+5+6=13 give AUC 7/9 = 0.78">
+  <text x="20" y="20" class="mono ax">RANK ALL 6 SCORES LOW &#8594; HIGH</text>
+  <text x="40"  y="44" font-size="10.5" fill="var(--muted)">lower &#183; "looks real"</text>
+  <text x="500" y="44" font-size="10.5" fill="var(--muted)" text-anchor="end">"looks synthetic" &#183; higher</text>
+  <!-- score cells, sorted ascending, coloured by class -->
+  <g text-anchor="middle" font-size="13">
+    <rect x="40"  y="52" width="70" height="38" rx="5" fill="var(--real)"/><text x="75"  y="76" fill="#fff">0.20</text>
+    <rect x="118" y="52" width="70" height="38" rx="5" fill="var(--syn)"/><text x="153" y="76" fill="#fff">0.30</text>
+    <rect x="196" y="52" width="70" height="38" rx="5" fill="var(--real)"/><text x="231" y="76" fill="#fff">0.40</text>
+    <rect x="274" y="52" width="70" height="38" rx="5" fill="var(--real)"/><text x="309" y="76" fill="#fff">0.55</text>
+    <rect x="352" y="52" width="70" height="38" rx="5" fill="var(--syn)"/><text x="387" y="76" fill="#fff">0.60</text>
+    <rect x="430" y="52" width="70" height="38" rx="5" fill="var(--syn)"/><text x="465" y="76" fill="#fff">0.70</text>
+  </g>
+  <!-- class + rank under each cell -->
+  <g text-anchor="middle" font-size="11" class="mono">
+    <text x="75"  y="106" fill="var(--real)">real</text><text x="75"  y="122" fill="var(--muted)">rank 1</text>
+    <text x="153" y="106" fill="var(--syn)">syn</text><text x="153" y="122" class="hi" fill="var(--syn)">rank 2</text>
+    <text x="231" y="106" fill="var(--real)">real</text><text x="231" y="122" fill="var(--muted)">rank 3</text>
+    <text x="309" y="106" fill="var(--real)">real</text><text x="309" y="122" fill="var(--muted)">rank 4</text>
+    <text x="387" y="106" fill="var(--syn)">syn</text><text x="387" y="122" class="hi" fill="var(--syn)">rank 5</text>
+    <text x="465" y="106" fill="var(--syn)">syn</text><text x="465" y="122" class="hi" fill="var(--syn)">rank 6</text>
+  </g>
+  <line x1="40" y1="138" x2="520" y2="138" stroke="var(--line)"/>
+  <!-- formula substitution -->
+  <g class="mono" font-size="13">
+    <text x="40" y="164" fill="var(--ink)">&#931; ranks(synthetic) = 2 + 5 + 6 = <tspan class="hi" fill="var(--syn)">13</tspan></text>
+    <text x="40" y="192" fill="var(--ink)">AUC = ( <tspan fill="var(--syn)">13</tspan> &#8722; n_syn(n_syn+1)/2 ) / ( n_syn&#183;n_real ) = (13 &#8722; 6) / 9</text>
+    <text x="470" y="192" fill="var(--ink)">= <tspan class="hi" fill="var(--real)">0.78</tspan></text>
+  </g>
+</svg>
+</div>
+<figcaption>The AUC is the synthetic scores' summed rank, rescaled: add their ranks
+(2+5+6 = <b>13</b>), subtract the smallest possible sum (<b>n_syn(n_syn+1)/2 = 6</b>), and divide
+by the count of real&#215;synthetic pairs (<b>3&#215;3 = 9</b>) &#8594; <b>7/9 &#8776; 0.78</b>.
+Perfectly mixed ranks would give exactly 0.5.</figcaption>
+</figure>
+<p>Pooling <strong>all</strong> the out-of-fold scores this way — thousands of people, not just six — gives the single ROC-AUC for the repeat:</p>
+<figure class="viz">
+<div class="plot-wrap">
+<svg viewBox="0 0 250 224" role="img" aria-label="Pooled ROC curve hugging the diagonal at AUC about 0.52">
+  <text x="20" y="20" class="mono ax">POOLED ROC</text>
+  <line x1="30" y1="196" x2="30" y2="40" stroke="var(--line-strong)"/>
+  <line x1="30" y1="196" x2="210" y2="196" stroke="var(--line-strong)"/>
+  <line x1="30" y1="196" x2="210" y2="40" stroke="var(--line-strong)" stroke-dasharray="5 4"/>
+  <text x="150" y="130" transform="rotate(-45 150 130)" font-size="10.5" fill="var(--muted)">chance 0.5</text>
+  <polyline points="30,196 75,178 120,150 165,104 210,40" fill="none" stroke="var(--real)" stroke-width="2.5"/>
+  <circle cx="120" cy="150" r="3.5" fill="var(--real)"/>
+  <text x="210" y="214" text-anchor="end" font-size="11" fill="var(--muted)">FPR &#8594;</text>
+  <text x="32" y="36" font-size="11" fill="var(--muted)">TPR</text>
+  <text x="70" y="80" font-size="12" class="mono hi" fill="var(--real)">AUC &#8776; 0.52</text>
+</svg>
+</div>
+<figcaption>Pooling the out-of-fold scores gives one ROC curve. Here it hugs the diagonal
+(<b>AUC &#8776; 0.52</b>) — a random synthetic profile is barely more likely to be ranked
+"synthetic" than a random real one, the faithful-synthetic outcome.</figcaption>
+</figure>
+<h2>Step 4 — the permutation p-value</h2>
+<p>An AUC slightly above 0.5 could be noise. To test that, the labels are <strong>shuffled</strong> <code>n_permutations = 200</code> times; for each shuffle the whole CV-AUC is recomputed, and the test counts how many permuted AUCs reach or exceed the observed one. The p-value uses the standard <strong>add-one</strong> estimator:</p>
+<pre><code>p_value = (1 + #{ perm AUC ≥ observed AUC }) / (1 + n_permutations)</code></pre>
+<p>Adding 1 to numerator and denominator means the p-value is never exactly 0 and is bounded below by <code>1/201 ≈ 0.005</code>. A <strong>high p-value is good</strong>: it says an AUC above 0.5 is not distinguishable from chance.</p>
+<p><strong>Example.</strong> Across the 200 shuffles, suppose 79 produce a CV-AUC ≥ 0.52. Then <code>p = (1 + 79) / (1 + 200) = 80/201 ≈ 0.40</code> — the observed 0.52 sits comfortably inside the null, so we <strong>cannot reject "indistinguishable"</strong> (good). Had the AUC been 0.95, essentially no shuffle would reach it: <code>p = (1 + 0)/201 ≈ 0.005</code>.</p>
+<figure class="viz">
+<div class="plot-wrap">
+<svg viewBox="0 0 560 210" role="img" aria-label="Null distribution of permuted AUCs around 0.5 with the observed AUC marked">
+  <line x1="60" y1="170" x2="520" y2="170" stroke="var(--line-strong)"/>
+  <!-- null-distribution bars around 0.5 ; bars at/above observed 0.52 highlighted -->
+  <g>
+    <rect x="119" y="150" width="13" height="20"  fill="var(--real-soft)"/>
+    <rect x="132" y="135" width="13" height="35"  fill="var(--real-soft)"/>
+    <rect x="145" y="115" width="13" height="55"  fill="var(--real-soft)"/>
+    <rect x="159" y="90"  width="13" height="80"  fill="var(--real-soft)"/>
+    <rect x="172" y="70"  width="13" height="100" fill="var(--real-soft)"/>
+    <rect x="185" y="60"  width="13" height="110" fill="var(--real-soft)"/>
+    <!-- observed 0.52 and rightward = the ">= observed" tail -->
+    <rect x="198" y="70"  width="13" height="100" fill="var(--syn-soft)"/>
+    <rect x="211" y="90"  width="13" height="80"  fill="var(--syn-soft)"/>
+    <rect x="224" y="115" width="13" height="55"  fill="var(--syn-soft)"/>
+    <rect x="238" y="135" width="13" height="35"  fill="var(--syn-soft)"/>
+    <rect x="251" y="150" width="13" height="20"  fill="var(--syn-soft)"/>
+  </g>
+  <!-- observed marker at x(0.52)=204.6 -->
+  <line x1="205" y1="52" x2="205" y2="178" stroke="var(--good)" stroke-width="2"/>
+  <text x="205" y="46" text-anchor="middle" font-size="11" class="mono hi" fill="var(--good)">observed 0.52</text>
+  <text x="300" y="96" font-size="11.5" fill="var(--muted)">shaded area = perms &#8805; observed</text>
+  <text x="300" y="114" font-size="11.5" class="mono" fill="var(--ink)">p = (1+79)/201 &#8776; 0.40  &#10003; good</text>
+  <!-- 0.95 tail marker at x(0.95)=487 -->
+  <line x1="487" y1="70" x2="487" y2="178" stroke="var(--bad)" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="487" y="64" text-anchor="middle" font-size="11" class="mono" fill="var(--bad)">0.95</text>
+  <text x="487" y="196" text-anchor="middle" font-size="10.5" fill="var(--bad)">p&#8776;0.005</text>
+  <!-- axis ticks -->
+  <text x="191" y="188" text-anchor="middle" class="ax mono">0.5</text>
+  <text x="60"  y="188" class="ax mono">0.3</text>
+  <text x="520" y="188" text-anchor="end" class="ax mono">1.0</text>
+  <text x="290" y="208" text-anchor="middle" font-size="11" fill="var(--muted)">permuted AUC (null distribution)</text>
+</svg>
+</div>
+<figcaption>The observed AUC (green) sits inside the bulk of AUCs from shuffled labels, so a
+large fraction of permutations match or beat it &#8594; <b>high p</b> &#8594; indistinguishable.
+An AUC out in the tail (0.95, red) is beaten by almost no shuffle &#8594; tiny p.</figcaption>
+</figure>
+<h2>The two backends</h2>
+<p><code>method</code> resolves to the backend actually used, reported in the <code>method</code> field:</p>
+<div class="table-wrap"><table><thead><tr><th><code>method</code> config</th><th>Backend</th><th>What runs</th></tr></thead><tbody><tr><td><code>"sklearn"</code> / <code>"auto"</code></td><td><strong>sklearn</strong> if importable, else falls back to mmd</td><td>cross-validated <strong>logistic regression</strong> (<code>LogisticRegression(max_iter=1000)</code>, <code>predict_proba</code>)</td></tr><tr><td><code>"mmd"</code></td><td><strong>mmd</strong> (numpy/scipy only)</td><td>nearest-centroid / <strong>linear-MMD</strong> surrogate: direction <code>μ_syn − μ_real</code> from the training rows, each held-out row scored by its projection onto it</td></tr></tbody></table></div>
+<p>Any other value raises. The SCB scheme sets <code>method="sklearn"</code>, so with the <code>[analysis]</code> extra installed you get logistic-regression AUCs; without scikit-learn the module still runs via the MMD fallback. Config defaults when the <code>c2st</code> block is absent: <code>folds=5, method="auto", seed=0</code>; the primitive's own defaults <code>n_repeats=5, n_permutations=200</code> are used because the evaluator passes only method/folds/seed.</p>
+<h2>How to read the pair of numbers</h2>
+<ul><li><strong><code>auc</code> ≈ 0.5</strong> → indistinguishable (best); <code>auc → 1.0</code> → trivially separable (the joint profile is clearly wrong). This is the direction that matters — lower is better.</li><li><strong><code>p_value</code> high</strong> → cannot reject "indistinguishable" (good); low → the separability is real.</li><li><strong><code>balanced_n</code></strong> tells you how much data actually drove the test (the smaller population's size); a very small <code>balanced_n</code> means treat both numbers cautiously.</li><li>Because AUC is bounded below at 0.5 in interpretation but the raw statistic can dip slightly under 0.5 on noise, read "≈ 0.5" as the target, not "exactly 0.5."</li></ul>
+</main>
+</body>
+</html>

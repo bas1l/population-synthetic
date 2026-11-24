@@ -1,0 +1,152 @@
+{
+  "values": [
+    "1 person",
+    "2 persons",
+    "3 persons",
+    "4 persons",
+    "5 persons",
+    "6 persons",
+    "7+ persons"
+  ],
+  "priority": [
+    "1 person",
+    "2 persons",
+    "3 persons",
+    "4 persons",
+    "5 persons",
+    "6 persons",
+    "7+ persons"
+  ],
+  "real": {
+    "1 person": {
+      "equals": [
+        "1 person"
+      ]
+    },
+    "2 persons": {
+      "equals": [
+        "2 persons"
+      ]
+    },
+    "3 persons": {
+      "equals": [
+        "3 persons"
+      ]
+    },
+    "4 persons": {
+      "equals": [
+        "4 persons"
+      ]
+    },
+    "5 persons": {
+      "equals": [
+        "5 persons"
+      ]
+    },
+    "6 persons": {
+      "equals": [
+        "6 persons"
+      ]
+    },
+    "7+ persons": {
+      "equals": [
+        "7+ persons",
+        "7 persons or more"
+      ]
+    }
+  },
+  "synthetic": {
+    "1 person": {
+      "equals": [
+        "1 person",
+        "Alone",
+        "Living alone",
+        "Lives alone",
+        "Ensamstående",
+        "Ensamboende",
+        "Single-person household",
+        "Enpersonshushåll"
+      ],
+      "contains": [
+        "living alone",
+        "lives alone",
+        "live alone",
+        "alone",
+        "ensamstående",
+        "ensamboende",
+        "enpersonshushåll",
+        "single-person household",
+        "single person household"
+      ],
+      "int": [
+        1
+      ]
+    },
+    "2 persons": {
+      "all_of": [
+        [
+          "ensamstående",
+          "ensamboende",
+          "single parent",
+          "single mother",
+          "single father"
+        ],
+        [
+          "ett barn",
+          "1 barn",
+          "one child",
+          "(2)"
+        ]
+      ],
+      "equals": [
+        "2 persons"
+      ],
+      "contains": [
+        "2 personer"
+      ],
+      "int": [
+        2
+      ]
+    },
+    "3 persons": {
+      "int": [
+        3
+      ],
+      "equals": [
+        "With parents (2)"
+      ],
+      "contains": [
+        "with parents (2)",
+        "med föräldrar (2)",
+        "3 personer"
+      ]
+    },
+    "4 persons": {
+      "int": [
+        4
+      ],
+      "contains": [
+        "4 personer"
+      ]
+    },
+    "5 persons": {
+      "int": [
+        5
+      ],
+      "contains": [
+        "5 personer"
+      ]
+    },
+    "6 persons": {
+      "int": [
+        6
+      ],
+      "contains": [
+        "6 personer"
+      ]
+    },
+    "7+ persons": {
+      "int_gte": 7
+    }
+  }
+}

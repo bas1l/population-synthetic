@@ -1,4 +1,6 @@
 id: "all_generate_pick"
+family: "all_generate_pick"
+version: 1
 label: "All Generate Pick"
 description: "All fields use generate_pick method. LLM enumerates candidate values then picks one. 2 LLM calls per category (enumerate + select). Uses dependency DAG so prior resolved values are passed as context."
 categories:

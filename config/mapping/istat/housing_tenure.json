@@ -3,7 +3,11 @@
     "Owner-occupied",
     "Rental"
   ],
-  "database": {
+  "priority": [
+    "Owner-occupied",
+    "Rental"
+  ],
+  "real": {
     "Owner-occupied": {
       "equals": [
         "Owner-occupied"

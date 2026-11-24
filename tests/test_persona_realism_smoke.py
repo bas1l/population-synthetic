@@ -1,0 +1,1218 @@
+"""End-to-end smoke test for the persona-realism subpackage.
+
+Drives the *real* runner -> artifacts pipeline the CLI script drives, but with a
+**stubbed** judge client injected via ``run_combo_judgements(..., client_factory=)``
+-- no live ``claude`` CLI, no network. A tiny synthetic combination plus the tiny real
+competitor are judged, reduced, scored, and rendered on a ``tmp_path``; the test
+asserts the durable per-persona ``persona_XXXXX.{json,jsonl}`` cache at the combo
+root (no ``raw/`` subdir), the per-combo CSV/JSON, the per-persona tidy CSV and the
+figures are written, that the head metrics (impossibility rate, dispersion,
+reliability, cost) are well-formed, and that **no country-level aggregate** is
+produced -- cross-combination output belongs to ``realism_ranking``. A separate test
+drives the round-count-aware top-up (rounds=1 -> rounds=2 appends -> skip).
+
+Further tests pin the per-persona INCREMENTAL write contract: each persona writes
+its own ``persona_XXXXX.{json,jsonl}`` the moment its rounds finish (not in one
+batched end-of-run write), so a later persona sees earlier siblings already on
+disk, and a persona whose every round fails is left uncached while its siblings
+persist intact -- the interrupt-safety property.
+
+Matplotlib is forced onto the non-interactive ``Agg`` backend before any figure
+is built (mirrors the other analysis tests).
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import json
+import re
+from typing import Any
+
+import matplotlib
+import pytest
+
+matplotlib.use("Agg")
+
+from population_synthetic._paths import PROJECT_ROOT  # noqa: E402
+from population_synthetic.analysis.generation_metadata.pricing import PricingTable  # noqa: E402
+from population_synthetic.analysis.model_ranking.loader import scheme_attributes  # noqa: E402
+from population_synthetic.analysis.persona_realism import artifacts as A  # noqa: E402
+from population_synthetic.analysis.persona_realism.config import JudgeConfig  # noqa: E402
+from population_synthetic.analysis.persona_realism.runner import (  # noqa: E402
+    JUDGE_CONTEXT_ISOLATION,
+    RunnerSummary,
+    run_combo_judgements,
+)
+from population_synthetic.analysis.utils.realism_csv import (  # noqa: E402
+    read_realism_personas_csv,
+)
+
+_CONFIG_DIR = PROJECT_ROOT / "config" / "analysis" / "persona_realism"
+# Price every selectable judge dropdown model (mirrors model_pricing.yaml raw-string
+# rows) so cost lookups resolve whichever model the judge config defaults to.
+_PRICING = PricingTable(
+    rates={
+        "claude-sonnet-5": (3.0, 15.0),
+        "claude-opus-4-8": (5.0, 25.0),
+        "claude-haiku-4-5": (1.0, 5.0),
+        "claude-fable-5": (10.0, 50.0),
+    },
+    observed_date="2026-07-23", source="smoke-test", currency="USD",
+)
+_TYP_RE = re.compile(r"TYP(\d+)")
+#: Optional markers a *possible* persona may carry so a fixture can exercise the two
+#: non-fatal severity levels without touching the impossible verdict. A population that
+#: carries neither is judged exactly as before.
+_CLASH_MARKERS = {"S2_CLASH": "S2", "S1_CLASH": "S1"}
+
+
+# --------------------------------------------------------------------------- #
+# stub judge client                                                           #
+# --------------------------------------------------------------------------- #
+
+
+class _StubClient:
+    """Deterministic judge stub.
+
+    ``generate_content`` keys entirely off the rendered *user* prompt (the only
+    thing the judge layer passes it): a persona carrying the ``IMPOSSIBLE`` marker
+    returns a hard (S3) impossible verdict; otherwise it returns a possible verdict
+    whose typicality is read from the persona's ``TYP<n>`` marker. ``last_metadata``
+    supplies the token telemetry the cost chain aggregates.
+    """
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self._fail = fail
+        self.last_metadata: dict[str, object] = {}
+
+    def generate_content(self, user: str, *, model: str, system_instruction: str) -> str:
+        self.last_metadata = {
+            "provider": "stub", "model": model,
+            "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
+            "elapsed_ms": 1,
+            # The runner refuses to cache a verdict from a client that does not vouch
+            # for call independence; the stub, like the real client, does.
+            "context_isolation": JUDGE_CONTEXT_ISOLATION,
+        }
+        if self._fail:
+            raise RuntimeError("stub judge failure")
+        if "IMPOSSIBLE" in user:
+            return json.dumps({
+                "can_exist": False,
+                "typicality": None,
+                "issues": [{
+                    "attributes": ["age_group", "education_level"],
+                    "severity": "S3",
+                    "explanation": "hard contradiction",
+                }],
+                "reasoning": "impossible",
+            })
+        match = _TYP_RE.search(user)
+        typicality = int(match.group(1)) if match else 5
+        return json.dumps({
+            "can_exist": True,
+            "typicality": typicality,
+            "issues": [
+                {"attributes": ["age_group", "education_level"], "severity": severity,
+                 "explanation": f"{severity} marker clash"}
+                for marker, severity in _CLASH_MARKERS.items() if marker in user
+            ],
+            "reasoning": "possible",
+        })
+
+
+def _stub_factory(*, fail: bool = False):
+    return lambda: _StubClient(fail=fail)
+
+
+# --------------------------------------------------------------------------- #
+# fixtures                                                                     #
+# --------------------------------------------------------------------------- #
+
+
+def _cfg() -> JudgeConfig:
+    """The real judge config, trimmed for a fast headless run.
+
+    ``persona_rendering`` is emptied: these fixtures carry placeholder values
+    (``val_0`` ...) that are no canonical category, which the rendering refuses by
+    design. The rendering itself is covered in ``test_realism_persona_rendering.py``.
+    """
+    base = JudgeConfig.load(_CONFIG_DIR)
+    return dataclasses.replace(
+        base,
+        persona_rendering={},
+        n_rounds=2,
+        workers=2,
+        bootstrap={"iterations": 200, "seed": 20260723, "ci_level": 0.95},
+    )
+
+
+def _persona(attrs: list[str], marker_attr: str, marker: str, pid: Any = None) -> dict[str, Any]:
+    """Build a persona carrying every analyzed axis; the marker rides one axis.
+
+    ``pid`` becomes the record's ``id``, mirroring a real mapped individual: the
+    verdict cache is keyed on it (never on the list index), so a fixture without one
+    is not representative of anything the runner reads.
+    """
+    persona: dict[str, Any] = {attr: f"val_{i}" for i, attr in enumerate(attrs)}
+    persona[marker_attr] = marker
+    if pid is not None:
+        persona["id"] = pid
+    return persona
+
+
+def _synthetic_population(attrs: list[str]) -> list[dict[str, Any]]:
+    """Ids run 0..n-1 in list order, so index and id coincide -- the *uncapped* case."""
+    marker_attr = attrs[0]
+    return [
+        _persona(attrs, marker_attr, "TYP8", "persona_00000"),        # possible, high typicality
+        _persona(attrs, marker_attr, "TYP3", "persona_00001"),        # possible, low typicality
+        _persona(attrs, marker_attr, "IMPOSSIBLE", "persona_00002"),  # S3 hard contradiction
+        _persona(attrs, marker_attr, "TYP6", "persona_00003"),        # possible, mid typicality
+    ]
+
+
+def _real_population(attrs: list[str]) -> list[dict[str, Any]]:
+    """The real reference carries INTEGER ids (as SCB mapped records do)."""
+    marker_attr = attrs[0]
+    return [
+        _persona(attrs, marker_attr, "TYP5", 0),
+        _persona(attrs, marker_attr, "TYP5", 1),
+        _persona(attrs, marker_attr, "TYP4", 2),
+    ]
+
+
+# --------------------------------------------------------------------------- #
+# end-to-end smoke                                                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_persona_realism_end_to_end(tmp_path):
+    """One synthetic combination and the real competitor, each judged in isolation.
+
+    Neither call sees the other: the real population is an ordinary competitor here,
+    judged with its own cap and scored by the same code path, and no artifact of either
+    unit references the other.
+    """
+    cfg = _cfg()
+    attrs = scheme_attributes("swedish")
+    out_root = tmp_path / "persona_realism"
+    country_root = out_root / "swedish"          # nested one level per country
+    slug = "swedish_all_pick_claude_haiku"
+
+    # --- real competitor ------------------------------------------------------
+    real_dir = country_root / "real_swedish"
+    real_summary = run_combo_judgements(
+        _real_population(attrs), "real_swedish", attrs, real_dir, cfg,
+        client_factory=_stub_factory(),
+    )
+    assert real_summary.failed == 0
+    assert real_summary.written == 3
+    assert real_summary.selected_ids == ("persona_00000", "persona_00001", "persona_00002")
+    real_ca = A.write_combo_artifacts(
+        real_dir, "real_swedish", cfg=cfg, dpi=80, force=True,
+        country="swedish", is_real_reference=True,
+        expected_ids=list(real_summary.selected_ids),
+        hard_rules=(), pricing=_PRICING,
+    )
+
+    # --- synthetic combination (no reference threaded in) ---------------------
+    syn_dir = country_root / slug
+    syn_summary = run_combo_judgements(
+        _synthetic_population(attrs), slug, attrs, syn_dir, cfg,
+        client_factory=_stub_factory(),
+    )
+    assert syn_summary.failed == 0
+    assert syn_summary.written == 4
+    syn_ca = A.write_combo_artifacts(
+        syn_dir, slug, cfg=cfg, dpi=80, force=True,
+        country="swedish", model="claude_haiku", strategy="all_pick",
+        expected_ids=list(syn_summary.selected_ids),
+        hard_rules=(), pricing=_PRICING,
+    )
+
+    # --- per-persona verdict cache + telemetry (combo root, no raw/) ----------
+    for idx in range(4):
+        assert (syn_dir / f"persona_{idx:05d}.json").is_file()
+        assert (syn_dir / f"persona_{idx:05d}.jsonl").is_file()
+    assert not (syn_dir / "raw").exists()
+    assert not (syn_dir / "llm_interactions.jsonl").exists()
+
+    # --- per-combo artifacts --------------------------------------------------
+    for name in (f"{slug}.csv", f"{slug}.json", f"{slug}_personas.csv",
+                 "typicality.png", "typicality.svg",
+                 "clash_taxonomy.png", "clash_taxonomy.svg"):
+        assert (syn_dir / name).is_file(), name
+
+    # --- metrics well-formed --------------------------------------------------
+    assert syn_ca.stats.n_personas == 4
+    assert syn_ca.stats.n_failed == 0
+    assert syn_ca.stats.impossibility["rate"] == pytest.approx(0.25)   # 1 of 4 impossible
+    assert real_ca.stats.impossibility["rate"] == pytest.approx(0.0)
+    # Dispersion describes this combination alone -- no reference-dependent key.
+    assert "variance" in syn_ca.stats.dispersion
+    assert "distance_to_scb" not in syn_ca.stats.dispersion
+    # cost flowed from the stubbed telemetry (4 personas x 2 rounds x 150 tokens).
+    combo_report = json.loads((syn_dir / f"{slug}.json").read_text(encoding="utf-8"))
+    assert combo_report["cost"]["total_tokens"] == 4 * 2 * 150
+    assert combo_report["cost"]["usd"] is not None
+    assert combo_report["cost_coverage"]["status"] == "complete"
+
+    # --- the inter-task contract ---------------------------------------------
+    rows = read_realism_personas_csv(syn_dir / f"{slug}_personas.csv",
+                                     expected_rows=combo_report["n_personas"])
+    assert len(rows) == 4
+    assert {r.persona_id for r in rows} == {f"persona_{i:05d}" for i in range(4)}
+    assert all(r.slug == slug and r.country == "swedish" for r in rows)
+
+    # --- NO country-level aggregate is produced by this task ------------------
+    for orphan in ("headline_map.png", "headline_map.svg", "realism_summary.csv",
+                   "run_report.json"):
+        assert not (country_root / orphan).exists(), orphan
+    assert {p.name for p in country_root.iterdir()} == {"real_swedish", slug}
+
+
+def test_runner_resumes_without_force(tmp_path):
+    """A second run without ``force`` re-judges nothing (skip-if-exists cache)."""
+    cfg = _cfg()
+    attrs = scheme_attributes("swedish")
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = _synthetic_population(attrs)
+
+    first = run_combo_judgements(
+        population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+        client_factory=_stub_factory(),
+    )
+    assert first.written == 4 and first.skipped == 0
+
+    second = run_combo_judgements(
+        population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+        client_factory=_stub_factory(),
+    )
+    assert second.skipped == 4 and second.requested == 0
+
+
+def test_real_sample_size_override_selects_first_n_prefix(tmp_path):
+    """``sample_size_override`` caps the real combo to the first-N personas (deterministic
+    prefix, not the seeded draw), while a synthetic combo with ``sample_size=None`` judges
+    all. Guards the real-reference cap wiring: real population of 5, override=2 -> only
+    personas 00000, 00001 are judged (indices 0..N-1)."""
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    cfg = dataclasses.replace(_cfg(), sample_size=None)  # synthetic combos judge all
+
+    # --- real reference: population of 5, capped to first 2 by the override -----
+    real_pop = [_persona(attrs, marker_attr, f"TYP{i}", i) for i in range(5)]
+    real_dir = tmp_path / "swedish" / "real_swedish"
+    real_summary = run_combo_judgements(
+        real_pop, "real_swedish", attrs, real_dir, cfg,
+        client_factory=_stub_factory(), sample_size_override=2,
+    )
+    assert real_summary.n_selected == 2 and real_summary.written == 2
+    # First-N prefix: personas 00000 + 00001 judged; 00002..00004 are not.
+    assert (real_dir / "persona_00000.json").is_file()
+    assert (real_dir / "persona_00001.json").is_file()
+    for idx in (2, 3, 4):
+        assert not (real_dir / f"persona_{idx:05d}.json").exists()
+
+    # --- synthetic combo: no override, sample_size=None -> all 4 judged ---------
+    syn_dir = tmp_path / "swedish" / "swedish_all_pick_claude_haiku"
+    syn_summary = run_combo_judgements(
+        _synthetic_population(attrs), "swedish_all_pick_claude_haiku", attrs, syn_dir, cfg,
+        client_factory=_stub_factory(),
+    )
+    assert syn_summary.n_selected == 4 and syn_summary.written == 4
+
+
+def test_runner_tops_up_rounds_and_appends_telemetry(tmp_path):
+    """Re-running at a higher ``--rounds`` appends rounds (verdicts + telemetry).
+
+    rounds=1 -> each persona cached with 1 round + a 1-line telemetry file;
+    rounds=2 (no force) -> tops up each persona to 2 rounds and APPENDS the new
+    pass's calls to the same ``.jsonl`` (not truncated); a third rounds=2 run skips
+    everything (already at the target).
+    """
+    attrs = scheme_attributes("swedish")
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = _synthetic_population(attrs)
+    label = "swedish_all_pick_claude_haiku"
+    base = _cfg()
+    cfg1 = dataclasses.replace(base, n_rounds=1)
+    cfg2 = dataclasses.replace(base, n_rounds=2)
+
+    persona0 = combo_dir / "persona_00000.json"
+    jsonl0 = combo_dir / "persona_00000.jsonl"
+
+    # --- pass 1: rounds=1 -----------------------------------------------------
+    first = run_combo_judgements(population, label, attrs, combo_dir, cfg1,
+                                 client_factory=_stub_factory())
+    assert first.written == 4 and first.topped_up == 0 and first.skipped == 0
+    assert len(json.loads(persona0.read_text(encoding="utf-8"))["rounds"]) == 1
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 1
+
+    # --- pass 2: rounds=2 -> top-up (append, not truncate) --------------------
+    second = run_combo_judgements(population, label, attrs, combo_dir, cfg2,
+                                  client_factory=_stub_factory())
+    assert second.topped_up == 4 and second.written == 0 and second.skipped == 0
+    assert second.requested == 4
+    payload0 = json.loads(persona0.read_text(encoding="utf-8"))
+    assert len(payload0["rounds"]) == 2                 # appended, not overwritten
+    assert payload0["successful_rounds"] == 2 and payload0["status"] == "complete"
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 2  # both passes' calls
+
+    # --- pass 3: rounds=2 -> already at target, skip --------------------------
+    third = run_combo_judgements(population, label, attrs, combo_dir, cfg2,
+                                 client_factory=_stub_factory())
+    assert third.skipped == 4 and third.requested == 0 and third.topped_up == 0
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 2  # untouched
+
+
+def test_plan_only_makes_no_judge_call_even_when_rounds_would_top_up(tmp_path):
+    """``plan_only`` is zero-cost by construction, not by the operator's care.
+
+    The trap it closes: personas cached at 1 round under a config whose ``n_rounds`` is
+    3. A normal run correctly tops each of them up -- which is a full re-judge in all but
+    name. An artifact rewrite must never trigger that, so the flag stops the runner
+    before any call while still returning the roster the artifact layer needs.
+    """
+    attrs = scheme_attributes("swedish")
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    label = "swedish_all_pick_claude_haiku"
+    population = _synthetic_population(attrs)
+    cfg1 = dataclasses.replace(_cfg(), n_rounds=1)
+    cfg3 = dataclasses.replace(_cfg(), n_rounds=3)
+
+    run_combo_judgements(population, label, attrs, combo_dir, cfg1,
+                         client_factory=_stub_factory())
+    jsonl0 = combo_dir / "persona_00000.jsonl"
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 1
+
+    calls: list[str] = []
+
+    class _CountingClient(_StubClient):
+        def generate_content(self, user, *, model, system_instruction):
+            calls.append(user)
+            return super().generate_content(user, model=model, system_instruction=system_instruction)
+
+    summary = run_combo_judgements(
+        population, label, attrs, combo_dir, cfg3, plan_only=True,
+        client_factory=lambda: _CountingClient(),
+    )
+    assert calls == []                       # not one judge call
+    assert summary.requested == 0 and summary.written == 0 and summary.topped_up == 0
+    # ... while the roster the artifact layer needs is still resolved.
+    assert summary.selected_ids == tuple(f"persona_{i:05d}" for i in range(4))
+    # ... and nothing on disk moved.
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 1
+    assert len(json.loads((combo_dir / "persona_00000.json").read_text(encoding="utf-8"))["rounds"]) == 1
+
+
+def test_runner_force_rejudges_and_truncates_telemetry(tmp_path):
+    """``force`` re-judges from scratch: verdict overwritten, telemetry truncated."""
+    attrs = scheme_attributes("swedish")
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = _synthetic_population(attrs)
+    label = "swedish_all_pick_claude_haiku"
+    cfg2 = dataclasses.replace(_cfg(), n_rounds=2)
+    jsonl0 = combo_dir / "persona_00000.jsonl"
+
+    run_combo_judgements(population, label, attrs, combo_dir, cfg2, client_factory=_stub_factory())
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 2
+
+    forced = run_combo_judgements(population, label, attrs, combo_dir, cfg2, force=True,
+                                  client_factory=_stub_factory())
+    assert forced.written == 4 and forced.topped_up == 0 and forced.skipped == 0
+    # Truncated + re-judged from scratch: still exactly 2 lines (not 4).
+    assert len(jsonl0.read_text(encoding="utf-8").splitlines()) == 2
+    assert len(json.loads((combo_dir / "persona_00000.json").read_text(encoding="utf-8"))["rounds"]) == 2
+
+
+def _load_driver():
+    """Load the CLI driver script by file path (scripts/ is not an importable package).
+
+    The module is registered in ``sys.modules`` **before** it is executed: a dataclass
+    declared at module scope resolves its own module through ``sys.modules`` while it
+    is being processed, so an unregistered spec-loaded module raises on the class
+    definition rather than on any behaviour under test.
+    """
+    import importlib.util
+    import sys
+
+    path = PROJECT_ROOT / "scripts" / "analyze" / "analyze_persona_realism.py"
+    spec = importlib.util.spec_from_file_location("analyze_persona_realism", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _combo_of(driver, label: str, *, country: str = "swedish"):
+    """The driver's ``_Combo`` DTO for a synthetic unit (dispatch-test fixture)."""
+    return driver._Combo(
+        label=label, country=country, strategy="all_pick", model="claude_haiku",
+        is_real_reference=False, sample_size_override=None,
+    )
+
+
+def _summary(label: str, out_dir, *, written: int = 0, topped_up: int = 0, skipped: int = 0):
+    return RunnerSummary(
+        combo_label=label, n_selected=written + topped_up + skipped,
+        requested=written + topped_up, written=written, topped_up=topped_up,
+        skipped=skipped, failed=0, total_rounds=written + topped_up,
+        successful_rounds=written + topped_up, failed_rounds=0, passes=1, out_dir=out_dir,
+        selected_ids=tuple(f"persona_{i:05d}" for i in range(written + topped_up + skipped)),
+    )
+
+
+def test_cli_combo_dispatch_tops_up_even_when_report_exists(tmp_path, monkeypatch):
+    """The CLI ``_run_one_combo`` must ALWAYS invoke the runner (the per-persona gate
+    is the authority), even when the combo report already exists.
+
+    Regression guard for the combo-level ``combo_done`` short-circuit that skipped the
+    whole combo -- defeating a ``--rounds 1`` -> ``--rounds 2`` per-persona top-up. Also
+    checks the artifact-rewrite decision: a top-up (data changed, files exist) forces a
+    rewrite; a no-op leaves artifacts untouched.
+    """
+    driver = _load_driver()
+    # Stage 2 is exercised by its own test below; here only the stage-1 dispatch is under test.
+    cfg = dataclasses.replace(_cfg(), stage2_enabled=False)
+    attrs = scheme_attributes("swedish")
+    label = "swedish_all_pick_claude_haiku"
+    out_dir = tmp_path / label
+    out_dir.mkdir(parents=True)
+    (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")  # report already exists
+    (out_dir / "persona_00000.json").write_text("{}", encoding="utf-8")  # ... over a real cache
+
+    calls: dict[str, object] = {}
+
+    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False,
+                    plan_only=False, sample_size_override=None, logger=None):
+        calls["runner_called"] = True
+        calls["force"] = force
+        calls["plan_only"] = plan_only
+        return _summary(combo_label, o, topped_up=len(individuals))  # runner tops up
+
+    def _spy_artifacts(o, combo_label, *, cfg, dpi, force, country="", model="", strategy="",
+                       is_real_reference=False, expected_ids=None, hard_rules=None,
+                       pricing=None, raw_identity=None, logger=None):
+        calls["artifacts_force"] = force
+        return object()
+
+    monkeypatch.setattr(driver, "run_combo_judgements", _spy_runner)
+    monkeypatch.setattr(driver, "write_combo_artifacts", _spy_artifacts)
+
+    result = driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=[{"a": 1}, {"a": 2}], analyzed_attrs=attrs,
+        out_dir=out_dir, cfg=cfg, dpi=80, force=False,
+        hard_rules=(), pricing=_PRICING,
+    )
+    # Runner was called despite the pre-existing report (gate no longer short-circuits).
+    assert calls["runner_called"] is True
+    # Runner topped up personas -> artifacts must be force-rewritten (data changed).
+    assert calls["artifacts_force"] is True
+    assert result is not None
+
+
+def test_cli_combo_dispatch_skips_rewrite_when_nothing_changed(tmp_path, monkeypatch):
+    """When the report exists and the runner does no work, artifacts are NOT rewritten
+    (idempotent), but the runner is still consulted (cheap, no LLM)."""
+    driver = _load_driver()
+    # Stage 2 is exercised by its own test below; here only the stage-1 dispatch is under test.
+    cfg = dataclasses.replace(_cfg(), stage2_enabled=False)
+    attrs = scheme_attributes("swedish")
+    label = "swedish_all_pick_claude_haiku"
+    out_dir = tmp_path / label
+    out_dir.mkdir(parents=True)
+    (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")
+    (out_dir / "persona_00000.json").write_text("{}", encoding="utf-8")
+
+    calls: dict[str, object] = {}
+
+    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False,
+                    plan_only=False, sample_size_override=None, logger=None):
+        calls["runner_called"] = True
+        calls["force"] = force
+        calls["plan_only"] = plan_only
+        return _summary(combo_label, o, skipped=len(individuals))  # everything already cached
+
+    def _spy_artifacts(o, combo_label, *, cfg, dpi, force, country="", model="", strategy="",
+                       is_real_reference=False, expected_ids=None, hard_rules=None,
+                       pricing=None, raw_identity=None, logger=None):
+        calls["artifacts_force"] = force
+        return object()
+
+    monkeypatch.setattr(driver, "run_combo_judgements", _spy_runner)
+    monkeypatch.setattr(driver, "write_combo_artifacts", _spy_artifacts)
+
+    driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=[{"a": 1}], analyzed_attrs=attrs,
+        out_dir=out_dir, cfg=cfg, dpi=80, force=False,
+        hard_rules=(), pricing=_PRICING,
+    )
+    assert calls["runner_called"] is True
+    assert calls["artifacts_force"] is False  # nothing changed -> no forced rewrite
+
+    # --rewrite-artifacts rewrites the derived files WITHOUT asking the runner to
+    # re-judge: the supported zero-LLM-cost path after an output-schema change.
+    calls.clear()
+    driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=[{"a": 1}], analyzed_attrs=attrs,
+        out_dir=out_dir, cfg=cfg, dpi=80, force=False, rewrite_artifacts=True,
+        hard_rules=(), pricing=_PRICING,
+    )
+    assert calls["artifacts_force"] is True   # artifacts rewritten
+    assert calls["force"] is False            # ... but nothing was re-judged
+    assert calls["plan_only"] is True         # ... and the runner made no judge call at all
+
+
+def test_cli_combo_dispatch_runs_stage2_and_passes_the_raw_reader(tmp_path, monkeypatch):
+    """With stage 2 enabled the dispatch classifies the S3 rounds after stage 1, hands the
+    artifact writer the same raw-identity reader (from the population_cap mirror), and
+    rewrites the artifacts when stage 2 classified something; --rewrite-artifacts makes no
+    stage-2 call; the real reference gets no reader."""
+    driver = _load_driver()
+    cfg = dataclasses.replace(_cfg(), stage2_enabled=True)
+    attrs = scheme_attributes("swedish")
+    label = "swedish_all_pick_claude_haiku"
+    out_dir = tmp_path / "03_Analysis" / "persona_realism" / "swedish" / label
+    out_dir.mkdir(parents=True)
+    (out_dir / f"{label}.json").write_text("{}", encoding="utf-8")
+    mirror = tmp_path / "03_Analysis" / "population_cap" / label / "persona_00000"
+    mirror.mkdir(parents=True)
+    (mirror / "identity.json").write_text('{"employment_type": "former job"}', encoding="utf-8")
+    calls: dict[str, Any] = {}
+
+    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False,
+                    plan_only=False, sample_size_override=None, logger=None):
+        return _summary(combo_label, o, skipped=1)
+
+    def _spy_stage2(present, combo_label, analyzed_attrs, o, c, *, selected_ids, raw_identity,
+                    force=False, logger=None):
+        calls["stage2"] = calls.get("stage2", 0) + 1
+        calls["raw"] = raw_identity("persona_00000")
+        from population_synthetic.analysis.persona_realism.stage2 import Stage2Summary
+
+        return Stage2Summary(combo_label, 1, 1, 1, 0, 0, 0)
+
+    def _spy_artifacts(o, combo_label, *, cfg, dpi, force, country="", model="", strategy="",
+                       is_real_reference=False, expected_ids=None, hard_rules=None,
+                       pricing=None, raw_identity=None, logger=None):
+        calls["artifacts_force"] = force
+        calls["artifact_reader"] = raw_identity
+        return object()
+
+    monkeypatch.setattr(driver, "run_combo_judgements", _spy_runner)
+    monkeypatch.setattr(driver, "run_combo_stage2", _spy_stage2)
+    monkeypatch.setattr(driver, "write_combo_artifacts", _spy_artifacts)
+    monkeypatch.setattr(driver, "has_cached_verdicts", lambda _d, _ids=None: True)
+    monkeypatch.setattr(driver, "load_combo_verdicts", lambda _d, expected_ids=None: {})
+
+    driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=[{"a": 1}], analyzed_attrs=attrs,
+        out_dir=out_dir, cfg=cfg, dpi=80, force=False, hard_rules=(), pricing=_PRICING,
+        output_base=tmp_path,
+    )
+    assert calls["stage2"] == 1
+    assert calls["raw"] == {"employment_type": "former job"}
+    assert calls["artifacts_force"] is True          # stage 2 classified a round
+    assert calls["artifact_reader"]("persona_00000") == {"employment_type": "former job"}
+
+    driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=[{"a": 1}], analyzed_attrs=attrs,
+        out_dir=out_dir, cfg=cfg, dpi=80, force=False, rewrite_artifacts=True,
+        hard_rules=(), pricing=_PRICING, output_base=tmp_path,
+    )
+    assert calls["stage2"] == 1                      # no stage-2 call on the zero-cost path
+
+    real = driver._Combo(label="real_swedish", country="swedish", strategy="", model="",
+                         is_real_reference=True, sample_size_override=None)
+    assert driver._raw_identity_reader(real, tmp_path) is None
+
+
+def test_write_persona_file_derives_age_group_from_raw_age(tmp_path):
+    """A real mapped persona carries integer ``age`` (no ``age_group``): the verdict
+    file must store a derived ``age_group`` bracket string and NOT crash.
+
+    Reproduce-then-guard for the end-of-run ``_write_persona_file`` KeyError: the
+    analyzed axis includes ``age_group`` but the raw mapped record has only ``age``.
+    Resolution now goes through the canonical ``attr_value`` accessor (which bins
+    ``age``), mirroring ``prompt.render_persona_block``.
+    """
+    cfg = dataclasses.replace(_cfg(), n_rounds=1)
+    attrs = scheme_attributes("swedish")
+    assert attrs[0] == "age_group"  # the axis that has no raw column
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    label = "swedish_all_pick_claude_haiku"
+
+    # One persona with raw integer age (42 -> "35-44") and NO pre-binned age_group,
+    # every other analyzed axis present, and the stub's TYP marker on a non-age axis.
+    persona = {attr: f"val_{i}" for i, attr in enumerate(attrs)}
+    del persona["age_group"]
+    persona["age"] = 42
+    persona[attrs[1]] = "TYP7"
+    persona["id"] = "persona_00000"
+
+    summary = run_combo_judgements(
+        [persona], label, attrs, combo_dir, cfg, client_factory=_stub_factory(),
+    )
+    assert summary.written == 1 and summary.failed == 0  # did not raise
+
+    payload = json.loads((combo_dir / "persona_00000.json").read_text(encoding="utf-8"))
+    assert payload["attributes"]["age_group"] == "35-44"  # derived bracket, not raw 42
+    assert payload["attributes"][attrs[1]] == "TYP7"
+
+
+def test_failed_calls_are_distinct_from_possible(tmp_path):
+    """A stub that always errors yields failed (uncached) personas, not possible ones."""
+    cfg = _cfg()
+    attrs = scheme_attributes("swedish")
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+
+    summary = run_combo_judgements(
+        _synthetic_population(attrs), "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+        client_factory=_stub_factory(fail=True),
+    )
+    assert summary.written == 0
+    assert summary.failed == 4
+    # No persona cache OR telemetry written for a fully-failed persona (retryable later).
+    assert not list(combo_dir.glob("persona_[0-9]*.json"))
+    assert not list(combo_dir.glob("persona_[0-9]*.jsonl"))
+
+
+def test_runner_writes_incrementally_not_batched(tmp_path):
+    """Each persona writes its OWN files the instant its rounds finish (incremental),
+    not in one end-of-run batch. With ``workers=1`` personas judge in submission order,
+    so by the time persona K is judged every earlier persona's verdict file is already
+    on disk -- an observation impossible under the old batched end-of-run write.
+    """
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    cfg = dataclasses.replace(_cfg(), n_rounds=1, workers=1)
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    label = "swedish_all_pick_claude_haiku"
+
+    population = [_persona(attrs, marker_attr, f"TYP{i}", f"persona_{i - 1:05d}") for i in range(1, 5)]  # 4 personas
+    seen_before: list[int] = []
+
+    class _SnapshotClient(_StubClient):
+        """Records how many persona verdict files exist on disk when each call runs."""
+
+        def generate_content(self, user, *, model, system_instruction):
+            seen_before.append(len(list(combo_dir.glob("persona_[0-9]*.json"))))
+            return super().generate_content(user, model=model, system_instruction=system_instruction)
+
+    summary = run_combo_judgements(
+        population, label, attrs, combo_dir, cfg, client_factory=lambda: _SnapshotClient(),
+    )
+    assert summary.written == 4
+    # Persona 0 sees 0 files; each later persona sees its predecessors already written.
+    assert seen_before == [0, 1, 2, 3]
+    for idx in range(4):
+        assert (combo_dir / f"persona_{idx:05d}.json").is_file()
+        assert (combo_dir / f"persona_{idx:05d}.jsonl").is_file()
+
+
+def test_runner_failed_persona_leaves_siblings_intact(tmp_path):
+    """A persona whose every round fails is left uncached (no json, no jsonl) while its
+    siblings are written completely and independently -- per-persona writes mean one
+    persona's failure never loses another's work (the interrupt-safety property).
+    """
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    cfg = dataclasses.replace(_cfg(), n_rounds=2, workers=2)
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    label = "swedish_all_pick_claude_haiku"
+
+    # Persona 2 carries FAILME; the stub raises for it on every round.
+    population = [
+        _persona(attrs, marker_attr, "TYP8", "persona_00000"),
+        _persona(attrs, marker_attr, "TYP3", "persona_00001"),
+        _persona(attrs, marker_attr, "FAILME", "persona_00002"),
+        _persona(attrs, marker_attr, "TYP6", "persona_00003"),
+    ]
+
+    class _SelectiveFailClient(_StubClient):
+        def generate_content(self, user, *, model, system_instruction):
+            if "FAILME" in user:
+                raise RuntimeError("stub judge failure for FAILME")
+            return super().generate_content(user, model=model, system_instruction=system_instruction)
+
+    summary = run_combo_judgements(
+        population, label, attrs, combo_dir, cfg, client_factory=lambda: _SelectiveFailClient(),
+    )
+    assert summary.written == 3
+    assert summary.failed == 1
+    # Siblings written completely and independently.
+    for idx in (0, 1, 3):
+        assert (combo_dir / f"persona_{idx:05d}.json").is_file()
+        assert (combo_dir / f"persona_{idx:05d}.jsonl").is_file()
+        payload = json.loads((combo_dir / f"persona_{idx:05d}.json").read_text(encoding="utf-8"))
+        assert len(payload["rounds"]) == 2 and payload["status"] == "complete"
+    # The fully-failed persona: neither file (retryable on a later run).
+    assert not (combo_dir / "persona_00002.json").exists()
+    assert not (combo_dir / "persona_00002.jsonl").exists()
+
+
+# --------------------------------------------------------------------------- #
+# verdict-cache identity: keyed on the persona id, never on the list index     #
+# --------------------------------------------------------------------------- #
+
+
+def test_cache_is_keyed_on_persona_id_not_list_index(tmp_path):
+    """A capped population holds a SPARSE id set: files follow the ids, not 0..n-1.
+
+    ``population_cap`` seeded-draws n personas out of the clean pool, so the mapped
+    file the judge reads is a sparse subset (ids 3, 17, 42) whose list indices are
+    0, 1, 2. Keying the cache on the index would name persona_00042's verdicts
+    ``persona_00002.json`` -- and a later cap, drawing a different subset, would
+    silently hand those rounds to whoever landed at index 2 next.
+    """
+    cfg = dataclasses.replace(_cfg(), n_rounds=1)
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = [
+        _persona(attrs, marker_attr, "TYP8", "persona_00003"),
+        _persona(attrs, marker_attr, "TYP5", "persona_00017"),
+        _persona(attrs, marker_attr, "TYP6", "persona_00042"),
+    ]
+
+    summary = run_combo_judgements(
+        population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+        client_factory=_stub_factory(),
+    )
+    assert summary.written == 3 and summary.failed == 0
+
+    for pid in ("persona_00003", "persona_00017", "persona_00042"):
+        assert (combo_dir / f"{pid}.json").is_file()
+        assert (combo_dir / f"{pid}.jsonl").is_file()
+        assert json.loads((combo_dir / f"{pid}.json").read_text(encoding="utf-8"))["persona_id"] == pid
+    # The index-named files the old key would have produced must not exist.
+    for idx in range(len(population)):
+        assert not (combo_dir / f"persona_{idx:05d}.json").exists()
+
+
+def test_cached_verdicts_for_a_different_persona_raise(tmp_path):
+    """A cache file whose stored ``persona_id`` disagrees with the record raises.
+
+    The guard against a re-drawn cap: reusing those rounds would attribute one
+    persona's verdicts to another, and nothing downstream could detect it.
+    """
+    cfg = dataclasses.replace(_cfg(), n_rounds=1)
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    combo_dir.mkdir(parents=True)
+    population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
+
+    # A stale cache under the right NAME but holding another persona's verdicts.
+    (combo_dir / "persona_00007.json").write_text(
+        json.dumps({"persona_id": "persona_00312", "rounds": [{"can_exist": True}]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="persona_00312"):
+        run_combo_judgements(
+            population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+            client_factory=_stub_factory(),
+        )
+
+
+def test_cached_verdicts_for_a_remapped_persona_raise(tmp_path):
+    """Same persona id, one mapped value changed since judging: resume refuses the cache.
+
+    A re-mapping keeps the id but changes what the judge would read; topping up (or
+    reusing) the old rounds would attribute verdicts on the old values to the new ones.
+    """
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    judged = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
+    run_combo_judgements(
+        judged, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+        dataclasses.replace(_cfg(), n_rounds=1), client_factory=_stub_factory(),
+    )
+
+    changed_attr = attrs[1]
+    remapped = [{**judged[0], changed_attr: "val_remapped"}]
+    for n_rounds in (1, 2):  # a pure reuse and a top-up are both refused
+        with pytest.raises(ValueError, match=rf"persona_00007(?s:.*){changed_attr}(?s:.*)val_remapped(?s:.*)--force"):
+            run_combo_judgements(
+                remapped, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+                dataclasses.replace(_cfg(), n_rounds=n_rounds), client_factory=_stub_factory(),
+            )
+    # The plan-only (artifact-rewrite) path refuses it too: the rounds are mis-attributed
+    # whether or not anything is judged.
+    with pytest.raises(ValueError, match="other mapped values"):
+        run_combo_judgements(
+            remapped, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+            dataclasses.replace(_cfg(), n_rounds=1), plan_only=True,
+        )
+
+
+def test_cached_snapshot_with_a_missing_or_extra_attribute_raises(tmp_path):
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
+    cfg = dataclasses.replace(_cfg(), n_rounds=1)
+    run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+                         client_factory=_stub_factory())
+    path = combo_dir / "persona_00007.json"
+    original = json.loads(path.read_text(encoding="utf-8"))
+
+    dropped = {**original, "attributes": {a: v for a, v in original["attributes"].items() if a != attrs[1]}}
+    path.write_text(json.dumps(dropped), encoding="utf-8")
+    with pytest.raises(ValueError, match=rf"missing from the snapshot: \['{attrs[1]}'\]"):
+        run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+                             client_factory=_stub_factory())
+
+    padded = {**original, "attributes": {**original["attributes"], "not_an_axis": "x"}}
+    path.write_text(json.dumps(padded), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"not on the analyzed axis: \['not_an_axis'\]"):
+        run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+                             client_factory=_stub_factory())
+
+
+def test_cached_verdicts_from_another_judge_model_raise(tmp_path):
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
+    cfg = dataclasses.replace(_cfg(), n_rounds=1)
+    run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, cfg,
+                         client_factory=_stub_factory())
+
+    other = dataclasses.replace(cfg, judge_model="some-other-judge")
+    with pytest.raises(ValueError, match=r"judge_model=.*not the configured 'some-other-judge'(?s:.*)--force"):
+        run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, other,
+                             client_factory=_stub_factory())
+    # --force re-judges under the configured model.
+    summary = run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir, other,
+                                   force=True, client_factory=_stub_factory())
+    assert summary.written == 1
+    cache = json.loads((combo_dir / "persona_00007.json").read_text(encoding="utf-8"))
+    assert cache["judge_model"] == "some-other-judge"
+
+
+def test_unchanged_persona_resumes_and_tops_up(tmp_path):
+    """The validity checks pass a cache whose persona, judge and prompt are unchanged."""
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    population = [_persona(attrs, marker_attr, "TYP8", "persona_00007")]
+    run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+                         dataclasses.replace(_cfg(), n_rounds=1), client_factory=_stub_factory())
+
+    reuse = run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+                                 dataclasses.replace(_cfg(), n_rounds=1), client_factory=_stub_factory())
+    assert reuse.skipped == 1 and reuse.written == 0
+    top_up = run_combo_judgements(population, "swedish_all_pick_claude_haiku", attrs, combo_dir,
+                                  dataclasses.replace(_cfg(), n_rounds=2), client_factory=_stub_factory())
+    assert top_up.topped_up == 1
+    cache = json.loads((combo_dir / "persona_00007.json").read_text(encoding="utf-8"))
+    assert cache["successful_rounds"] == 2
+
+
+@pytest.mark.parametrize(
+    "bad_id, match",
+    [
+        (None, "carries no 'id'"),
+        ("", "carries no 'id'"),
+        ("p-312", "persona_<digits>"),
+        (True, "boolean 'id'"),
+    ],
+)
+def test_unusable_persona_id_raises(tmp_path, bad_id, match):
+    """No silent fallback to the index: an id the readers could not glob fails loudly."""
+    cfg = dataclasses.replace(_cfg(), n_rounds=1)
+    attrs = scheme_attributes("swedish")
+    marker_attr = attrs[0]
+    persona = _persona(attrs, marker_attr, "TYP8")
+    if bad_id is not None:
+        persona["id"] = bad_id
+
+    with pytest.raises(ValueError, match=match):
+        run_combo_judgements(
+            [persona], "swedish_all_pick_claude_haiku", attrs,
+            tmp_path / "swedish_all_pick_claude_haiku", cfg,
+            client_factory=_stub_factory(),
+        )
+
+
+def test_integer_ids_are_normalised_to_the_persona_glob_shape(tmp_path):
+    """The real reference carries integer ids; files must still match persona_[0-9]*."""
+    cfg = dataclasses.replace(_cfg(), n_rounds=1)
+    attrs = scheme_attributes("swedish")
+    real_dir = tmp_path / "real_swedish"
+
+    summary = run_combo_judgements(
+        _real_population(attrs), "real_swedish", attrs, real_dir, cfg,
+        client_factory=_stub_factory(),
+    )
+    assert summary.written == 3
+    for idx in range(3):
+        path = real_dir / f"persona_{idx:05d}.json"
+        assert path.is_file()
+        assert json.loads(path.read_text(encoding="utf-8"))["persona_id"] == f"persona_{idx:05d}"
+
+
+def _mapped_dir_with(tmp_path, entries, *, real_country: str | None = None):
+    """Build a capped ``population_cap/_mapped/`` dir whose ``_index.json`` is *entries*.
+
+    This is the read root every mapped-file consumer resolves through
+    ``analysis/utils/capped_source.resolve_mapped_dir``; ``persona_realism`` enumerates
+    its unit of work from exactly this index.
+    """
+    mapped = tmp_path / "03_Analysis" / "population_cap" / "_mapped"
+    mapped.mkdir(parents=True)
+    (mapped / "_index.json").write_text(json.dumps(entries), encoding="utf-8")
+    if real_country is not None:
+        (mapped / f"real_{real_country}.json").write_text(
+            json.dumps({"metadata": {}, "individuals": []}), encoding="utf-8",
+        )
+    return mapped
+
+
+_WITHDRAWN_REASON = (
+    "only 34 clean persona(s) pass both validity gates (raw_passed=150, mapped_passed=34), "
+    "fewer than the requested n=100"
+)
+
+
+def test_enumerate_combos_separates_a_withdrawn_combo_from_an_unusable_one(tmp_path):
+    """A combination ``population_cap`` withdrew under the full-N rule is reported as a
+    WITHDRAWAL, not as a selection that could not be honoured -- and only when it is
+    inside the current selection."""
+    driver = _load_driver()
+    mapped = _mapped_dir_with(
+        tmp_path,
+        [
+            {"slug": "swedish_all_pick_claude_haiku", "synthetic_file": None,
+             "skipped": True, "skip_reason": _WITHDRAWN_REASON},
+            {"slug": "swedish_all_pick_claude_sonnet",
+             "synthetic_file": "swedish_all_pick_claude_sonnet.json"},
+        ],
+        real_country="swedish",
+    )
+    axis_ids = (["swedish"], ["all_pick"], ["claude_haiku", "claude_sonnet"])
+
+    # GUI per_combo dispatch shape: the selection is exactly the withdrawn combination.
+    combos, skipped, withdrawn = driver._enumerate_combos(
+        mapped, countries=["swedish"], models=["claude_haiku"], strategies=["all_pick"],
+        slugs=None, axis_ids=axis_ids, real_sample_size=None, include_real=True,
+    )
+    assert combos == []                                      # nothing to judge ...
+    assert skipped == []                                     # ... and nothing went wrong
+    assert withdrawn == [("swedish_all_pick_claude_haiku", _WITHDRAWN_REASON)]
+
+    # The same withdrawal outside the selection is out of scope, not reported.
+    combos, skipped, withdrawn = driver._enumerate_combos(
+        mapped, countries=["swedish"], models=["claude_sonnet"], strategies=["all_pick"],
+        slugs=None, axis_ids=axis_ids, real_sample_size=None, include_real=True,
+    )
+    assert [c.label for c in combos] == ["real_swedish", "swedish_all_pick_claude_sonnet"]
+    assert (skipped, withdrawn) == ([], [])
+
+
+def test_cli_exits_zero_when_every_selected_combination_was_withdrawn(tmp_path, monkeypatch, capsys):
+    """A withdrawn-only selection is a no-op that exits 0.
+
+    The GUI runs this task one subprocess per combination and fails the whole task on the
+    first nonzero exit, so erroring on a combination the gate already excluded would take
+    every later combination -- and every dependent task -- down with it.
+    """
+    import sys as _sys
+
+    driver = _load_driver()
+    _mapped_dir_with(tmp_path, [
+        {"slug": "swedish_all_pick_claude_haiku", "synthetic_file": None,
+         "skipped": True, "skip_reason": _WITHDRAWN_REASON},
+    ])
+    monkeypatch.setattr(_sys, "argv", [
+        "analyze_persona_realism.py",
+        "--model-id", "claude_haiku", "--strategy-id", "all_pick", "--country-id", "swedish",
+        "--output-base", str(tmp_path),
+    ])
+    monkeypatch.setattr(driver, "_run_one_combo", _fail_if_called)
+
+    driver.main()  # must not raise SystemExit
+
+    out = capsys.readouterr().out
+    assert _WITHDRAWN_REASON in out          # the shortfall is announced, not swallowed
+    assert "Combinations judged: 0" in out
+
+
+def test_cli_still_errors_when_the_selection_matched_nothing(tmp_path, monkeypatch):
+    """Exit 1 stays for a selection nothing accounts for (typo / never mapped)."""
+    import sys as _sys
+
+    driver = _load_driver()
+    _mapped_dir_with(tmp_path, [
+        {"slug": "swedish_all_pick_claude_sonnet",
+         "synthetic_file": "swedish_all_pick_claude_sonnet.json"},
+    ])
+    monkeypatch.setattr(_sys, "argv", [
+        "analyze_persona_realism.py",
+        "--model-id", "claude_haiku", "--strategy-id", "all_pick", "--country-id", "swedish",
+        "--output-base", str(tmp_path),
+    ])
+    monkeypatch.setattr(driver, "_run_one_combo", _fail_if_called)
+
+    with pytest.raises(SystemExit) as exc:
+        driver.main()
+    assert exc.value.code == 1
+
+
+def _fail_if_called(*args, **kwargs):
+    raise AssertionError("no combination should have been judged")
+
+
+def test_an_empty_verdict_cache_publishes_no_artifacts(tmp_path, monkeypatch):
+    """A combination with no cached verdict must leave NO artifacts behind.
+
+    Regression guard for the zero-persona report: a plan-only (``--rewrite-artifacts``)
+    pass over a never-judged combination, or one whose every round failed, used to publish
+    a full artifact set with ``n_personas == 0``. Downstream that reads as a judged
+    competitor holding no data -- and ``realism_ranking`` under a round cap refuses it
+    outright, since a cap re-derives every competitor from the cache this combo lacks.
+    """
+    driver = _load_driver()
+    label = "swedish_all_pick_claude_haiku"
+    out_dir = tmp_path / label
+    out_dir.mkdir(parents=True)
+
+    def _spy_runner(individuals, combo_label, analyzed_attrs, o, c, *, force=False,
+                    plan_only=False, sample_size_override=None, logger=None):
+        return _summary(combo_label, o)  # judged nothing, cached nothing
+
+    monkeypatch.setattr(driver, "run_combo_judgements", _spy_runner)
+    monkeypatch.setattr(driver, "write_combo_artifacts", _fail_if_called)
+
+    result = driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=[{"a": 1}],
+        analyzed_attrs=scheme_attributes("swedish"), out_dir=out_dir, cfg=_cfg(),
+        dpi=80, force=False, rewrite_artifacts=True,
+        hard_rules=(), pricing=_PRICING,
+    )
+    assert result is None
+    assert list(out_dir.iterdir()) == []   # nothing published, not even an empty report
+
+
+def test_has_cached_verdicts_ignores_the_combo_report(tmp_path):
+    """The predicate keys on the verdict-cache glob, not on 'a .json is present'."""
+    from population_synthetic.analysis.persona_realism.reduce import has_cached_verdicts
+
+    combo_dir = tmp_path / "swedish_all_pick_claude_haiku"
+    combo_dir.mkdir()
+    assert has_cached_verdicts(tmp_path / "does_not_exist") is False
+    assert has_cached_verdicts(combo_dir) is False
+    (combo_dir / "swedish_all_pick_claude_haiku.json").write_text("{}", encoding="utf-8")
+    assert has_cached_verdicts(combo_dir) is False   # the report is not a cache file
+    (combo_dir / "persona_00000.json").write_text("{}", encoding="utf-8")
+    assert has_cached_verdicts(combo_dir) is True
+    # A cache of a persona outside the roster never makes the combination look judged.
+    assert has_cached_verdicts(combo_dir, ["persona_00001"]) is False
+    assert has_cached_verdicts(combo_dir, ["persona_00000"]) is True
+
+
+# --------------------------------------------------------------------------- #
+# leftover caches of personas outside the current capped selection             #
+# --------------------------------------------------------------------------- #
+
+
+class _Stage2Stub:
+    """Classifies the one S3 pair the stage-1 stub emits; counts the personas it was shown."""
+
+    def __init__(self, seen: list[str]) -> None:
+        self._seen = seen
+        self.last_metadata: dict[str, object] = {}
+
+    def generate_content(self, user: str, *, model: str, system_instruction: str) -> str:
+        self._seen.append(user)
+        self.last_metadata = {
+            "provider": "stub", "model": model, "prompt_tokens": 10, "completion_tokens": 5,
+            "total_tokens": 15, "elapsed_ms": 1, "context_isolation": JUDGE_CONTEXT_ISOLATION,
+        }
+        return json.dumps({
+            "issues": [{"attributes": ["age_group", "education_level"], "class": "label_clash",
+                        "reason": "stub", "raw_quotes": {}}],
+            "persona_class": "label_clash",
+        })
+
+
+def _judge_through_driver(driver, monkeypatch, base, label, population, cfg, seen, **kwargs):
+    """Run the CLI's ``_run_one_combo`` with both judge stages on stub clients."""
+    from population_synthetic.analysis.persona_realism import stage2 as stage2_mod
+
+    def _runner(*args, **kw):
+        return run_combo_judgements(*args, client_factory=_stub_factory(), **kw)
+
+    def _stage2(*args, **kw):
+        return stage2_mod.run_combo_stage2(*args, client_factory=lambda: _Stage2Stub(seen), **kw)
+
+    monkeypatch.setattr(driver, "run_combo_judgements", _runner)
+    monkeypatch.setattr(driver, "run_combo_stage2", _stage2)
+    for record in population:   # the population_cap mirror holds each capped persona's raw answers
+        persona_dir = base / "03_Analysis" / "population_cap" / label / record["id"]
+        persona_dir.mkdir(parents=True, exist_ok=True)
+        (persona_dir / "identity.json").write_text(json.dumps({"age": 17}), encoding="utf-8")
+    out_dir = base / "03_Analysis" / "persona_realism" / "swedish" / label
+    driver._run_one_combo(
+        combo=_combo_of(driver, label), individuals=population,
+        analyzed_attrs=scheme_attributes("swedish"), out_dir=out_dir, cfg=cfg, dpi=60,
+        hard_rules=(), pricing=_PRICING, output_base=base, **kwargs,
+    )
+    return out_dir
+
+
+def test_leftover_caches_outside_the_selection_reach_no_output(tmp_path, monkeypatch, caplog):
+    """A re-cap leaves the cache files of personas it no longer selects in the folder.
+
+    The leftover here is an *impossible* persona judged under an earlier cap (stage-1
+    cache + telemetry) whose S3 clash stage 2 never classified, plus a stage-2 cache
+    written under another stage-2 prompt. Read from the folder, it would be sent to
+    stage 2 (whose raw-answer read then fails: the mirror no longer holds it), counted
+    in the impossibility rate, billed in both costs, and refused as a mixed stage-2
+    prompt. Read from the roster, the combination's artifacts are byte-identical to a
+    run on a folder that never held it -- and the leftover is kept on disk.
+    """
+    driver = _load_driver()
+    cfg = dataclasses.replace(_cfg(), stage2_enabled=True)
+    attrs = scheme_attributes("swedish")
+    label = "swedish_all_pick_claude_haiku"
+    selection = _synthetic_population(attrs)
+    leftover = _persona(attrs, attrs[0], "IMPOSSIBLE", "persona_00099")
+
+    clean_seen: list[str] = []
+    clean_dir = _judge_through_driver(
+        driver, monkeypatch, tmp_path / "clean", label, selection, cfg, clean_seen, force=False,
+    )
+
+    # The earlier cap judged the leftover (stage 1 only); the re-cap dropped it.
+    left_base = tmp_path / "left"
+    left_dir = left_base / "03_Analysis" / "persona_realism" / "swedish" / label
+    run_combo_judgements([leftover], label, attrs, left_dir, cfg, client_factory=_stub_factory())
+    (left_dir / "stage2").mkdir()
+    (left_dir / "stage2" / "persona_00099.json").write_text(
+        json.dumps({"persona_id": "persona_00099", "stage2_prompt_sha256": "an older prompt", "rounds": []}),
+        encoding="utf-8",
+    )
+    planted = {path: path.read_bytes() for path in left_dir.rglob("persona_00099*")}
+    assert len(planted) == 3   # verdict cache, its telemetry, a stage-2 cache
+
+    left_seen: list[str] = []
+    with caplog.at_level("INFO"):
+        _judge_through_driver(driver, monkeypatch, left_base, label, selection, cfg, left_seen, force=False)
+
+    # Stage 2 classified exactly the selected S3 rounds, no more.
+    assert len(left_seen) == len(clean_seen) == cfg.n_rounds
+    assert "ignoring 3 leftover cache file(s) of 1 persona(s) outside the 4 selected" in caplog.text
+    # The selected personas' artifacts are unchanged by the leftover's presence.
+    for name in (f"{label}.json", f"{label}.csv", f"{label}_personas.csv", f"{label}_clashes.csv",
+                 f"{label}_clash_explanations.csv", f"{label}_stage2.csv", f"{label}_stage2_personas.csv"):
+        produced = (left_dir / name).read_text(encoding="utf-8")
+        assert produced == (clean_dir / name).read_text(encoding="utf-8"), name
+        assert "persona_00099" not in produced, name
+    # ... and the leftover itself was neither rewritten nor deleted.
+    assert {path: path.read_bytes() for path in left_dir.rglob("persona_00099*")} == planted

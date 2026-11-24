@@ -1,8 +1,8 @@
 """Numeric tests for the median / percentile / entropy primitives.
 
 These pin the **nearest-rank** percentile convention chosen for the project.
-The import is repointed to ``analysis._stats`` in Phase 2; the asserted values
-do not change because the convention is preserved.
+The primitives live in the cross-process ``analysis/utils`` layer; the asserted
+values do not change because the convention is preserved.
 """
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ import math
 
 import pytest
 
-from population_synthetic.analysis.llm_metrics.shared._stats import median as _median
-from population_synthetic.analysis.llm_metrics.shared._stats import percentile as _percentile
-from population_synthetic.analysis.llm_metrics.shared._stats import shannon_entropy as _shannon_entropy
+from population_synthetic.analysis.utils._stats import median as _median
+from population_synthetic.analysis.utils._stats import percentile as _percentile
+from population_synthetic.analysis.utils._stats import shannon_entropy as _shannon_entropy
 
 
 def test_median_odd_even_empty():
