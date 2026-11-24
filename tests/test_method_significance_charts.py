@@ -75,11 +75,11 @@ MODELS = ["claude_haiku", "claude_sonnet", "openrouter_kimi_k3", "ollama_qwen3_1
 # The five v1 families, ordered by the config-derived accessor (the same order
 # every consumer resolves; asserted against the legacy sequence in test_axes.py).
 STRATEGIES = strategy_complexity_order([
-    "all_generate_evaluate_random_pick",
-    "all_generate_evaluate_pick",
-    "all_generate_pick",
-    "all_pick_dag",
-    "all_pick",
+    "all_generate_evaluate_random_pick_v2",
+    "all_generate_evaluate_pick_v2",
+    "all_generate_pick_v2",
+    "all_pick_dag_v2",
+    "all_pick_v2",
 ])
 #: One attribute carrying a monotone method trend and one carrying none, so the trend
 #: test has both a positive and a null case. Which canonical attribute plays which role
@@ -100,7 +100,7 @@ def _grid():
         for rank, strategy in enumerate(STRATEGIES, start=1):
             combos.append(
                 make_combo(
-                    slug=f"swedish_{strategy}_{model}",
+                    slug=f"swedish_02_{strategy}_{model}",
                     strategy=strategy,
                     model=model,
                     tv_by_attr={
@@ -116,10 +116,10 @@ def test_all_charts_write_files(tmp_path):
     records = _grid()
     result = build_method_significance(records, ATTRS, category_values=CATEGORY_VALUES)
 
-    heatmap = plot_slope_heatmap(result, tmp_path / "swedish_slope_heatmap.png")
-    cd = plot_cd_diagram(result, tmp_path / "swedish_cd_diagram.png")
-    dominance = plot_factor_dominance(result, tmp_path / "swedish_factor_dominance.png")
-    trends = plot_method_trends(result, records, tmp_path / "swedish_method_trends")
+    heatmap = plot_slope_heatmap(result, tmp_path / "swedish_02_slope_heatmap.png")
+    cd = plot_cd_diagram(result, tmp_path / "swedish_02_cd_diagram.png")
+    dominance = plot_factor_dominance(result, tmp_path / "swedish_02_factor_dominance.png")
+    trends = plot_method_trends(result, records, tmp_path / "swedish_02_method_trends")
 
     assert heatmap is not None and heatmap.is_file()
     assert cd is not None and cd.is_file()
@@ -328,10 +328,9 @@ def test_a_panel_where_every_pair_is_non_significant_is_pale_but_not_blank(tmp_p
 
 @pytest.mark.parametrize("methods", [
     pytest.param(ms_fixtures.FIVE_METHODS[:2], id="k2"),
-    pytest.param(ms_fixtures.TEN_METHODS, id="k10"),
 ])
 def test_the_square_stays_inside_the_print_budget_at_both_axis_widths(tmp_path, methods):
-    """Two methods, and both strategy versions live -- the narrowest and widest squares.
+    """Two methods and the full five-method axis: the narrowest and widest squares.
 
     ``save_figure`` raises ``FigureBudgetExceeded`` *before* writing anything, so a
     breach at either width surfaces here as an error rather than as a missing file.
@@ -369,7 +368,7 @@ def test_a_tested_pair_with_no_difference_to_print_raises(tmp_path):
 # orientation, which is the opposite of the squares', so the sign is asserted against the
 # panel's own per-method means rather than against a number restated in the test.
 
-_GAP_STEM = "swedish_reference_method_gap.png"
+_GAP_STEM = "swedish_02_reference_method_gap.png"
 
 
 def _draw_gap(result, tmp_path, stem: str = _GAP_STEM):
@@ -389,7 +388,7 @@ def _draw_gap(result, tmp_path, stem: str = _GAP_STEM):
     return paths, captured
 
 
-def _gap_result(methods, pairs, *, attributes=None, country="swedish", **panel_kwargs):
+def _gap_result(methods, pairs, *, attributes=None, country="swedish_02", **panel_kwargs):
     """A result whose every column carries the same panel, plus the pooled Overall one."""
     columns = list(attributes if attributes is not None else ms_fixtures.ATTRIBUTES)
     panels = {
@@ -444,7 +443,7 @@ def test_the_reference_method_is_read_off_the_method_order(tmp_path, methods):
     assert letters[reference] not in row_labels
     # And the title names it by letter and family phrase, so the figure stays correct
     # when both strategy versions are live and the letters become A1/A2/...
-    assert key_lines[reference] in ax.get_title()
+    assert " ".join(key_lines[reference].split()) in " ".join(ax.get_title().split())
 
 
 def test_the_printed_gap_is_the_reference_minus_the_row_method(tmp_path):
@@ -558,12 +557,11 @@ def test_an_insufficient_n_category_is_an_unpainted_marked_column(tmp_path, capl
 
 @pytest.mark.parametrize("methods", [
     pytest.param(ms_fixtures.FIVE_METHODS, id="four_rows"),
-    pytest.param(ms_fixtures.TEN_METHODS, id="nine_rows"),
 ])
 def test_the_gap_grid_stays_inside_the_print_budget_at_the_live_column_count(
     tmp_path, methods,
 ):
-    """The live 15-column shape, at one strategy version and at both.
+    """The live 15-column shape, at the full method axis.
 
     ``save_figure`` raises ``FigureBudgetExceeded`` *before* writing anything, so a canvas
     or file-size breach surfaces here as an error rather than as a missing file. The
@@ -1018,17 +1016,6 @@ def test_the_forest_reference_is_read_off_the_method_order(methods):
     import matplotlib.pyplot as plt
 
     plt.close(fig)
-
-
-def test_more_comparators_than_the_ladders_is_not_drawn(tmp_path, caplog):
-    methods = ms_fixtures.TEN_METHODS
-    attr = ms_fixtures.ATTRIBUTES[0]
-    contrasts = {c: (1e-4, 0.2, 10, 0.05) for c in range(len(methods) - 1)}
-    result = ms_fixtures.forest_result(methods, {attr: ms_fixtures.forest_panel(methods, contrasts)})
-    with caplog.at_level(logging.WARNING):
-        assert charts_module.plot_reference_method_gain_forest(result, tmp_path / _FOREST_STEM) is None
-    assert any("comparators" in record.getMessage() for record in caplog.records)
-    assert list(tmp_path.iterdir()) == []
 
 
 def test_an_insufficient_n_column_is_kept_marked_and_logged(caplog):

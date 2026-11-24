@@ -26,7 +26,7 @@ def load_real_population(path: Path) -> dict[str, Any]:
 
 def map_population(
     raw_pop: dict[str, Any],
-    country: str = "swedish",
+    country: str = "swedish_02",
     mappings_path: Path | None = None,
 ) -> dict[str, Any]:
     """Map a raw real population to the canonical schema for *country*.

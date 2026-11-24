@@ -11,7 +11,7 @@ those are exempt from the sentinel check, matching ``validate_raw``'s required-k
 
 Usage:
     python scripts/analyze/validate_mapped_personas.py \
-        --model-id claude_haiku --strategy-id all_pick --country-id swedish
+        --model-id claude_haiku --strategy-id all_pick --country-id swedish_02
     python scripts/analyze/validate_mapped_personas.py ... --output-base /path/to/02_Data --force
 
 --model-id/--strategy-id/--country-id  Axis IDs identifying the combo. Required.
@@ -55,7 +55,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--model-id", required=True, help="Axis model ID (e.g., 'claude_haiku').")
     parser.add_argument("--strategy-id", required=True, help="Axis strategy ID (e.g., 'all_pick').")
-    parser.add_argument("--country-id", required=True, help="Axis country ID (e.g., 'swedish').")
+    parser.add_argument("--country-id", required=True, help="Axis country ID (e.g., 'swedish_02').")
     parser.add_argument(
         "--output-base",
         default=None,

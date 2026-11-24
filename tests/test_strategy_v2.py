@@ -1,11 +1,8 @@
-"""The v2 strategy arms: category set, birth chain, discoverability, and the country guard.
+"""The strategy configs: category set, birth chain, discoverability, and the country guard.
 
-A v2 strategy is its v1 sibling minus three categories (``birth_location``,
-``ethnicity_broad_global_approx``, ``current_environment_type``) with
-``birth_country_detail`` rewired onto ``age`` + ``biological_sex``. Everything else --
-the per-category ``method``, the ``context`` mode, the remaining edges -- must be
-byte-equivalent to v1, or the v1<->v2 contrast stops being a single-factor comparison.
-These tests pin that derivation rather than restating the files.
+Every strategy carries the 14 categories of the Swedish schema, with ``birth_country_detail``
+depending on ``age`` and ``biological_sex``. The tests pin that set rather than restating
+the files.
 
 The compatibility guard is exercised at the orchestration edge, where it lives: the
 required raw keys are an analysis-layer fact (the country's mapping index minus its
@@ -23,7 +20,6 @@ import pytest
 import yaml
 
 from population_synthetic._paths import PROJECT_ROOT
-from population_synthetic.analysis.utils.axes import strategy_complexity_order
 from population_synthetic.generators.synthetic.identity_generator_configurable import (
     resolve_category_order,
 )
@@ -60,7 +56,7 @@ V2_CATEGORIES = {
 
 DROPPED_IN_V2 = {"birth_location", "ethnicity_broad_global_approx", "current_environment_type"}
 
-# (v2 id, its v1 sibling / family id)
+# (strategy id, family id)
 V2_FAMILIES = [
     ("all_pick_v2", "all_pick"),
     ("all_pick_dag_v2", "all_pick_dag"),
@@ -126,23 +122,6 @@ def test_v2_categories_exist_in_the_country_schema(v2_id: str) -> None:
     assert set(_read(v2_id)["categories"]) <= set(schema["categories"])
 
 
-@pytest.mark.parametrize("v2_id,v1_id", V2_FAMILIES)
-def test_v2_mirrors_its_v1_sibling(v2_id: str, v1_id: str) -> None:
-    """v2 differs from v1 only by the three drops and the birth-chain rewire."""
-    v1, v2 = _read(v1_id), _read(v2_id)
-    assert v1.get("context", "cumulative") == v2.get("context", "cumulative")
-
-    for name, cfg in v2["categories"].items():
-        assert cfg["method"] == v1["categories"][name]["method"], name
-
-    for name, cfg in v2["categories"].items():
-        if name == "birth_country_detail":
-            continue  # rewired; asserted separately
-        # Every surviving edge is its v1 edge minus references to dropped categories.
-        expected = [d for d in v1["categories"][name]["depends_on"] if d not in DROPPED_IN_V2]
-        assert cfg["depends_on"] == expected, name
-
-
 def test_v2_birth_chain_is_rewired_onto_age_and_sex() -> None:
     for v2_id, _ in V2_FAMILIES:
         if v2_id == "all_pick_v2":
@@ -172,15 +151,8 @@ def test_v2_ids_are_discoverable_axis_values() -> None:
     assert not [i for i in ids if i.startswith("_")]
 
 
-def test_each_v2_sorts_immediately_after_its_v1_sibling() -> None:
-    ids = [d["id"] for d in discover_axis_values("strategies")]
-    ordered = strategy_complexity_order(ids)
-    for v2_id, v1_id in V2_FAMILIES:
-        assert ordered[ordered.index(v1_id) + 1] == v2_id
-
-
 @pytest.mark.parametrize("v2_id", V2_IDS)
-@pytest.mark.parametrize("country_id", ["swedish", "swedish_02"])
+@pytest.mark.parametrize("country_id", ["swedish_02"])
 def test_guard_accepts_v2_on_sweden(v2_id: str, country_id: str) -> None:
     # Sweden deprecates birth_location, so its 14 required keys are exactly the v2 set.
     _load_driver()._assert_strategy_covers_country(
@@ -200,11 +172,3 @@ def test_guard_rejects_v2_on_italy(v2_id: str) -> None:
     assert "birth_location" in message
     assert v2_id in message
     assert "italian" in message
-
-
-@pytest.mark.parametrize("v1_id", [v1 for _, v1 in V2_FAMILIES])
-@pytest.mark.parametrize("country_id", ["swedish", "swedish_02", "italian"])
-def test_guard_leaves_v1_combos_untouched(v1_id: str, country_id: str) -> None:
-    _load_driver()._assert_strategy_covers_country(
-        _STRATEGY_DIR / f"{v1_id}.yaml", v1_id, country_id
-    )

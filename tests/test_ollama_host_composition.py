@@ -64,7 +64,7 @@ EXPECTED_WORKERS: dict[str, dict[str, int | None]] = {
 }
 
 # Axis co-ordinates that are irrelevant to host resolution but required to compose.
-STRATEGY_ID = "all_pick"
+STRATEGY_ID = "all_pick_v2"
 COUNTRY_ID = "swedish_02"
 
 MODELS_DIR = PROJECT_ROOT / "config" / "synthetic" / "axes" / "models"

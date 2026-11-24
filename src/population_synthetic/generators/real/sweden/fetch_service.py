@@ -21,7 +21,6 @@ from .constants import (
     EDUCATION_TABLE,
     EMPLOYMENT_ATTACHMENT_TABLE,
     EMPLOYMENT_BY_EDUCATION_TABLE,
-    EMPLOYMENT_STATUS_EDU_TABLE,
     EMPLOYMENT_TYPE_AGE_PROXIES,
     FAMILY_TABLE,
     FOREIGN_BORN_TABLE,
@@ -36,11 +35,7 @@ from .constants import (
 )
 from .parsers import (
     EMPLOYMENT_STATUS_AGE_BANDS,
-    EMPLOYMENT_STATUS_BASELINE_AGE,
     EMPLOYMENT_STATUS_CONTENTS_CODES,
-    EMPLOYMENT_STATUS_EDU_AGE,
-    EMPLOYMENT_STATUS_EDU_CODES,
-    EMPLOYMENT_STATUS_EDU_STATUS_CODES,
     HOUSING_BOENDEFORM_CODES,
     INDUSTRY_AGE_BANDS,
     INDUSTRY_SNI2007_CODES,
@@ -50,7 +45,6 @@ from .parsers import (
     parse_civil_status_by_age_sex,
     parse_education_by_age,
     parse_employment_by_sex_education,
-    parse_employment_status_combined,
     parse_employment_type_combined,
     parse_household_size,
     parse_housing_tenure,
@@ -133,65 +127,6 @@ class FetchService:
         raw = client.fetch_table(EMPLOYMENT_BY_EDUCATION_TABLE, query)
         result = parse_employment_by_sex_education(raw)
         return result, EMPLOYMENT_BY_EDUCATION_TABLE
-
-    @staticmethod
-    def fetch_employment_status(
-        client: SCBPxWebClient,
-    ) -> tuple[dict, str, str]:
-        # Phase 6 opt-in MERGE (all-register). Fetches BOTH register tables and
-        # derives P(status | age, education, sex) via the documented
-        # odds-multiplication (see parse_employment_status_combined and the merge
-        # spec). Called ONLY when the merge flag is on; when off, the generator
-        # uses the single-table fetch_employment_by_sex_education path unchanged.
-        #
-        # ASSUMPTION (surfaced here and at the Step 3 call site): no status x age x
-        # education interaction -- the two real 2-way register margins are combined
-        # into the maximum-entropy joint consistent with them. Both legs use the
-        # register "employed" definition; the AKU survey table is never mixed in.
-
-        # Age leg P(S|A,s) over the 5-year bands PLUS the 15-74 all-ages aggregate,
-        # which supplies the baseline P(S|s) (same table, same definition).
-        status_ages = list(EMPLOYMENT_STATUS_AGE_BANDS) + [EMPLOYMENT_STATUS_BASELINE_AGE]
-        query_status = {
-            "query": [
-                {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
-                {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
-                {"code": "Alder", "selection": {"filter": "item", "values": status_ages}},
-                {"code": "Fodelseregion", "selection": {"filter": "item", "values": ["tot"]}},
-                {
-                    "code": "ContentsCode",
-                    "selection": {"filter": "item", "values": list(EMPLOYMENT_STATUS_CONTENTS_CODES)},
-                },
-                {"code": "Tid", "selection": {"filter": "item", "values": ["2024"]}},
-            ],
-            "response": {"format": "json-stat2"},
-        }
-        raw_status = client.fetch_table(EMPLOYMENT_BY_EDUCATION_TABLE, query_status)
-
-        # Education leg P(S|E,s): status x education x sex, working-age 20-64 total.
-        # Monthly preliminary table -- use a recent full month for the shape.
-        query_edu = {
-            "query": [
-                {"code": "Region", "selection": {"filter": "item", "values": ["00"]}},
-                {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
-                {"code": "Alder", "selection": {"filter": "item", "values": [EMPLOYMENT_STATUS_EDU_AGE]}},
-                {
-                    "code": "UtbildningsNiva",
-                    "selection": {"filter": "item", "values": list(EMPLOYMENT_STATUS_EDU_CODES)},
-                },
-                {"code": "Fodelseregion", "selection": {"filter": "item", "values": ["tot"]}},
-                {
-                    "code": "ContentsCode",
-                    "selection": {"filter": "item", "values": list(EMPLOYMENT_STATUS_EDU_STATUS_CODES)},
-                },
-                {"code": "Tid", "selection": {"filter": "item", "values": ["2024M12"]}},
-            ],
-            "response": {"format": "json-stat2"},
-        }
-        raw_edu = client.fetch_table(EMPLOYMENT_STATUS_EDU_TABLE, query_edu)
-
-        result = parse_employment_status_combined(raw_status, raw_edu, age_group_map={})
-        return result, EMPLOYMENT_BY_EDUCATION_TABLE, EMPLOYMENT_STATUS_EDU_TABLE
 
     @staticmethod
     def fetch_birth_location(client: SCBPxWebClient) -> tuple[dict, str]:
@@ -456,18 +391,7 @@ class FetchService:
         return result, BIRTH_COUNTRY_DETAIL_TABLE
 
     @staticmethod
-    def load_all(
-        client: SCBPxWebClient,
-        merge_status_education: bool = True,
-    ) -> PopulationDistributions:
-        # merge_status_education (default ON): when True the all-register two-table
-        # MERGE additionally derives P(status | age, education, sex) (see
-        # fetch_employment_status), and ArbStatusUtbM is fetched. The single-table
-        # age x sex field is still populated so Step 3 can fall back to it. When
-        # False, employment_status is the single-table age x sex register path
-        # (Phase 4), byte for byte -- ArbStatusUtbM is NOT fetched. Assumption: no
-        # status x age x education interaction (documented at the call site and in
-        # provenance).
+    def load_all(client: SCBPxWebClient) -> PopulationDistributions:
         age_sex, tag_age_sex = FetchService.fetch_age_sex(client)
         education_by_age, tag_education = FetchService.fetch_education_by_age(client)
         employment_by_sex_education, tag_employment = FetchService.fetch_employment_by_sex_education(client)
@@ -482,14 +406,6 @@ class FetchService:
         household_size, tag_household = FetchService.fetch_household_size(client)
         income_source_by_employment_age, tag_income_source = FetchService.fetch_income_source_by_employment_age(client)
         birth_country_detail, tag_birth_country = FetchService.fetch_birth_country_detail(client)
-
-        employment_status_by_edu: dict | None = None
-        merge_tags: tuple[str, ...] = ()
-        if merge_status_education:
-            employment_status_by_edu, _tag_status, tag_status_edu = FetchService.fetch_employment_status(client)
-            # ArRegArbStatus (_tag_status) is already listed via tag_employment;
-            # add only the second, merge-specific table for provenance.
-            merge_tags = (tag_status_edu,)
 
         tables_used = (
             tag_age_sex,
@@ -507,7 +423,7 @@ class FetchService:
             tag_household,
             tag_income_source,
             tag_birth_country,
-        ) + merge_tags
+        )
 
         return PopulationDistributions(
             age_sex=age_sex,
@@ -527,5 +443,4 @@ class FetchService:
             birth_country_detail=birth_country_detail,
             ethnicity_map={},
             tables_used=tables_used,
-            employment_status_by_edu=employment_status_by_edu,
         )

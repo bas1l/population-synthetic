@@ -12,7 +12,7 @@ reading the incremental logs that survive a crash.
 Run output does **not** live in the repo `data/` folder -- it lives under the `output_base`
 defined in `config/synthetic/experiment_defaults.yaml` (currently
 `<project-data>/02_Data`). When asked to debug a run described by
-model + country + strategy (e.g. "the lucie 7b, swedish, all pick" run), reconstruct the path from
+model + country + strategy (e.g. "the lucie 7b, swedish_02, all pick" run), reconstruct the path from
 the axis config files instead of searching `data/`:
 
 - **Axis-composed runs** (`--model-id` / `--strategy-id` / `--country-id`): the slug is
@@ -20,10 +20,8 @@ the axis config files instead of searching `data/`:
   (comparison output at `{output_base}/03_Analysis/{slug}`). See `compose_manifest` in
   `src/population_synthetic/generators/synthetic/manifest_loader.py`. The axis IDs are the YAML filenames (without
   extension) under `config/synthetic/axes/models/`, `config/synthetic/axes/strategies/`, and
-  `config/synthetic/axes/countries/` -- e.g. model `ollama_lucie_7b` + strategy `all_pick` +
-  country `swedish` resolves to `{output_base}/01_Raw/swedish_all_pick_ollama_lucie_7b/`.
-- **Manifest runs** (`--manifest`): the run dir is `parameters.parallel.output_dir` declared in the
-  manifest YAML.
+  `config/synthetic/axes/countries/` -- e.g. model `ollama_lucie_7b` + strategy `all_pick_v2` +
+  country `swedish_02` resolves to `{output_base}/01_Raw/swedish_02_all_pick_v2_ollama_lucie_7b/`.
 
 Confirm you have the right run by reading `manifest_snapshot.yaml` and `run_metadata.json` in the
 run dir -- both record the exact model, config, and strategy.

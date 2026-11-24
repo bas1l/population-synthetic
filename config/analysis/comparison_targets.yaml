@@ -3,18 +3,12 @@
 # This is the explicit list of synthetic populations we consider "complete" and want
 # mapped for comparison. The map stage (map_populations.py) processes ONLY these
 # targets; it does not scan disk for runs. Each mapped output lands under
-# {output_base}/03_Analysis/mapping/ (folder name owned by the analysis registry;
-# legacy on-disk mapped/ is still read as a fallback).
+# {output_base}/03_Analysis/mapping/ (folder name owned by the analysis registry).
 #
-# Each entry under `targets:` is EITHER:
-#   - a plain string: a manifest path relative to the repo root. The country is
-#     inferred from the manifest's simulation-config filename (infer_country).
-#   - a mapping {manifest: <path>, country: <id>}: overrides country inference with
-#     an explicit country id (must be a known id, e.g. swedish / italian).
+# Each entry under `targets:` is a mapping {model_id, strategy_id, country_id}; every id
+# must be a known axis id.
 
 targets:
-  - config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
-
-  # Mapping form with explicit country override (example -- uncomment/adapt as needed):
-  # - manifest: config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
-  #   country: swedish
+  - model_id: claude_sonnet
+    strategy_id: all_pick_v2
+    country_id: swedish_02

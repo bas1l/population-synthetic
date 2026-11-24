@@ -198,7 +198,7 @@ def test_invalid_config_raises_at_construction():
 def test_swedish_norway_born_is_outside_the_eu():
     # FolkmFodlandHVD splits Sweden / other EU / outside the EU, so a Norway-born
     # persona is "Born outside the EU" and a Germany-born one "Born in another EU country".
-    mapper = get_synthetic_mapper("swedish")
+    mapper = get_synthetic_mapper("swedish_02")
     out = mapper.map_individual(_swedish_identity(birth_country_detail="Norway"), "p")
     assert out["birth_location"] == "Born outside the EU"
     out = mapper.map_individual(_swedish_identity(birth_country_detail="Germany"), "p")
@@ -206,7 +206,7 @@ def test_swedish_norway_born_is_outside_the_eu():
 
 
 def test_swedish_domestic_maps_to_sweden():
-    mapper = get_synthetic_mapper("swedish")
+    mapper = get_synthetic_mapper("swedish_02")
     out = mapper.map_individual(_swedish_identity(birth_location="Stockholm"), "p")
     assert out["birth_location"] == "Sweden"
 
@@ -236,7 +236,7 @@ def test_swedish_employment_status_student_and_retired_matchers(raw_status, expe
     # employment.json gained Student/Retired synthetic blocks (previously latent None);
     # "Full-time student" must route to Student, not Employed (Employed's "full time"
     # space-token cannot substring-match the hyphenated "full-time").
-    mapper = get_synthetic_mapper("swedish")
+    mapper = get_synthetic_mapper("swedish_02")
     out = mapper.map_individual(_swedish_identity(employment_status=raw_status), "p")
     assert out["employment_status"] == expected
 
@@ -244,7 +244,7 @@ def test_swedish_employment_status_student_and_retired_matchers(raw_status, expe
 def test_swedish_natural_parents_mother_and_father_phrasing():
     # parental_structure.json Natural Parents gained "mother and father" so the common
     # LLM phrasing "Mother and father (married)" no longer resolves to None.
-    mapper = get_synthetic_mapper("swedish")
+    mapper = get_synthetic_mapper("swedish_02")
     out = mapper.map_individual(
         _swedish_identity(parental_structure="Mother and father (married)"), "p")
     assert out["parental_structure"] == "Natural Parents"
@@ -286,6 +286,6 @@ def _swedish_identity(**overrides) -> dict:
     ("employment_type", "Tillsvidareanställning, 40 timmar/vecka", "Permanent Full-time"),
 ])
 def test_swedish_scb_native_matching_rules(attr, raw, expected):
-    mapper = get_synthetic_mapper("swedish")
+    mapper = get_synthetic_mapper("swedish_02")
     out = mapper.map_individual(_swedish_identity(**{attr: raw}), "p")
     assert out[attr] == expected

@@ -288,7 +288,7 @@ def test_aggregate_combo_per_metric_n_and_std():
     )
     personas = [("persona_0001", p1, 0.0008), ("persona_0002", p2, None)]
 
-    summary = aggregate_combo("swedish", "claude_haiku", "all_pick", personas)
+    summary = aggregate_combo("swedish_02", "claude_haiku", "all_pick_v2", personas)
 
     assert summary.n_personas == 2
     assert summary.has_token_data is True
@@ -311,7 +311,7 @@ def test_aggregate_combo_single_persona_std_none_and_skips():
         n_calls=1, retry_rate=0.0, error_rate=0.0,
     )
     summary = aggregate_combo(
-        "swedish", "claude_opus", "all_pick",
+        "swedish_02", "claude_opus", "all_pick_v2",
         [("persona_0001", p1, None)],
         prior_skipped=[{"slug": "s", "persona": "persona_0002", "reason": "no interaction file"}],
     )
@@ -352,8 +352,8 @@ def test_real_pricing_config_loads():
 # (e) integration: summarize over a tiny 01_Raw fixture
 # --------------------------------------------------------------------------- #
 
-_TOKENED_SLUG = "swedish_all_pick_claude_haiku"
-_TOKENLESS_SLUG = "swedish_all_pick_claude_opus"
+_TOKENED_SLUG = "swedish_02_all_pick_v2_claude_haiku"
+_TOKENLESS_SLUG = "swedish_02_all_pick_v2_claude_opus"
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -428,11 +428,11 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
 def test_summarize_writes_csv_json_and_charts(tmp_path: Path):
     _build_raw_fixture(tmp_path)
     _cap_raw_fixture(tmp_path)
-    written = summarize(output_base=tmp_path, countries=["swedish"], charts=True)
+    written = summarize(output_base=tmp_path, countries=["swedish_02"], charts=True)
 
-    assert "swedish" in written
-    csv_path = written["swedish"]["csv"]
-    json_path = written["swedish"]["json"]
+    assert "swedish_02" in written
+    csv_path = written["swedish_02"]["csv"]
+    json_path = written["swedish_02"]["json"]
     assert csv_path.is_file()
     assert json_path.is_file()
 
@@ -478,7 +478,7 @@ def test_summarize_writes_csv_json_and_charts(tmp_path: Path):
     # --- JSON pricing provenance + structure ---
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     assert payload["process"] == "generation_metadata"
-    assert payload["country"] == "swedish"
+    assert payload["country"] == "swedish_02"
     assert set(payload["pricing"]) >= {"observed_date", "source", "currency"}
     assert payload["metrics"] == list(METRIC_NAMES)
     assert payload["scalar_metrics"] == list(SCALAR_METRIC_NAMES)
@@ -510,16 +510,16 @@ def test_summarize_force_vs_skip(tmp_path: Path):
     _build_raw_fixture(tmp_path)
     _cap_raw_fixture(tmp_path)
 
-    first = summarize(output_base=tmp_path, countries=["swedish"], charts=False)
-    csv_path = first["swedish"]["csv"]
+    first = summarize(output_base=tmp_path, countries=["swedish_02"], charts=False)
+    csv_path = first["swedish_02"]["csv"]
     mtime_before = csv_path.stat().st_mtime_ns
 
     # Without force: existing output is skipped (nothing rewritten).
-    second = summarize(output_base=tmp_path, countries=["swedish"], charts=False)
-    assert "swedish" not in second
+    second = summarize(output_base=tmp_path, countries=["swedish_02"], charts=False)
+    assert "swedish_02" not in second
     assert csv_path.stat().st_mtime_ns == mtime_before
 
     # With force: recomputed and rewritten.
-    third = summarize(output_base=tmp_path, countries=["swedish"], charts=False, force=True)
-    assert "swedish" in third
+    third = summarize(output_base=tmp_path, countries=["swedish_02"], charts=False, force=True)
+    assert "swedish_02" in third
     assert csv_path.stat().st_mtime_ns >= mtime_before

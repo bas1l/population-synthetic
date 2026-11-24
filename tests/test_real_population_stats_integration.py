@@ -2,12 +2,12 @@
 
 Exercises the real CLI edge (``scripts/analyze/analyze_real_population_stats.py``)
 end-to-end via subprocess against a tiny, in-memory real-population fixture written
-to a ``tmp_path`` ``03_Analysis/mapping/real_swedish.json`` layout -- the same shape
+to a ``tmp_path`` ``03_Analysis/mapping/real_swedish_02.json`` layout -- the same shape
 ``map_populations.py`` produces. Covers the full artifact set, the idempotent skip,
 ``--force`` overwrite, and the fail-fast message on a missing mapped file.
 
 The fixture individuals are deliberately tiny and country-agnostic in construction:
-built generically from ``load_scheme("swedish").attributes`` (never a hardcoded
+built generically from ``load_scheme("swedish_02").attributes`` (never a hardcoded
 attribute list), so every analyzed attribute has a non-null value and none of the 14
 axes come out all-null (which would otherwise legitimately skip that attribute's
 artifacts per the Phase 1 contract).
@@ -24,11 +24,11 @@ from population_synthetic._paths import PROJECT_ROOT
 from population_synthetic.analysis.fidelity.scheme import load_scheme
 
 SCRIPT = PROJECT_ROOT / "scripts" / "analyze" / "analyze_real_population_stats.py"
-COUNTRY = "swedish"
+COUNTRY = "swedish_02"
 
 
 def _build_individuals(n: int = 5) -> list[dict]:
-    """A handful of synthetic individuals covering every analyzed swedish attribute.
+    """A handful of synthetic individuals covering every analyzed swedish_02 attribute.
 
     ``age_group`` is derived on the fly from a raw ``age`` int (attr_value's
     contract); every other analyzed attribute gets an arbitrary but non-null string

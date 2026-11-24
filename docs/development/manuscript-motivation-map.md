@@ -12,9 +12,9 @@ planned deliberately.
   (OneDrive, outside the code repo). `main.pdf` is the deliverable; edits go in `.tex`.
 - **Line numbers** below refer to those `.tex` section files as of 2026-07-20.
 - **Verified data** (Pillar 7) came from the analysis outputs:
-  `…/02_Data/03_Analysis/model_ranking/swedish_performance.csv` (39 runs),
-  `…/03_Analysis/method_significance/swedish_method_comparison.csv`,
-  `…/03_Analysis/mapped/real_swedish.json` (N=10,000 reference).
+  `…/02_Data/03_Analysis/model_ranking/swedish_02_performance.csv` (39 runs),
+  `…/03_Analysis/method_significance/swedish_02_method_comparison.csv`,
+  `…/03_Analysis/mapped/real_swedish_02.json` (N=10,000 reference).
 - **SCB table catalog** (Pillar 8): `docs/reference/scb-pxweb-catalog/` (in this repo).
 
 ## One-line diagnosis
@@ -347,5 +347,5 @@ used; the richness-vs-boxes *reason* for the constraint is nowhere.
 
 | Date | Change |
 |------|--------|
-| 2026-07-20 | Created. Consolidated nine motivation pillars (report-only) from the dictation session; Pillar 7 data verified against `swedish_performance.csv` / `swedish_method_comparison.csv`. No manuscript edits made. |
+| 2026-07-20 | Created. Consolidated nine motivation pillars (report-only) from the dictation session; Pillar 7 data verified against `swedish_02_performance.csv` / `swedish_02_method_comparison.csv`. No manuscript edits made. |
 | 2026-07-28 | Pillar 6: recorded the strategy **v2** arm (5 families × 2 versions, 14 vs 17 generated categories, birth chain under age + sex), the never-pool rule, the 14-scored-axis comparability boundary, and the v1-reproducibility consequence of the `_build_dag` determinism fix. No manuscript edits made. |

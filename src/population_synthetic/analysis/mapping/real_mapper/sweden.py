@@ -13,7 +13,7 @@ class SwedishRealMapper(BaseRealMapper):
     Country divergence is entirely the mapping directory: every label, including the
     domestic-birth collapse, lives in ``config/mapping/scb_native/`` (the native
     high-fidelity tier). This ``MAPPINGS_SUBDIR`` must stay in sync with the
-    ``parameters.mappings`` path in ``config/synthetic/axes/countries/swedish.yaml``
+    ``parameters.mappings`` path in ``config/synthetic/axes/countries/swedish_02.yaml``
     (the single source of truth); ``country_config.assert_mapping_dir_consistency``
     fails loud at scheme-load time if they drift apart.
     """

@@ -74,9 +74,9 @@ from population_synthetic.generators.synthetic.manifest_loader import axis_slug
 # genuinely-priced model in the real pricing config, so generation_metadata can compute
 # cost over the capped fixture. The slug is derived through the project's own formatter
 # rather than spelled out, so the fixture cannot drift from the on-disk format.
-_COUNTRY = "swedish"
+_COUNTRY = "swedish_02"
 _MODEL_ID = "claude_haiku"
-_STRATEGY_ID = "all_pick"
+_STRATEGY_ID = "all_pick_v2"
 _SLUG = axis_slug(_MODEL_ID, _STRATEGY_ID, _COUNTRY)
 
 _CAP_SCRIPT = PROJECT_ROOT / "scripts" / "analyze" / "cap_populations.py"
@@ -765,10 +765,10 @@ def test_cap_then_summarize_aggregates_over_n_not_m(tmp_path: Path):
     raw = _make_raw_combo(tmp_path, _SLUG, m=6)
     _cap(tmp_path, raw, 4, 0, _cap_stage(tmp_path) / _SLUG)
 
-    written = summarize(output_base=tmp_path, countries=["swedish"], charts=False)
-    assert "swedish" in written
+    written = summarize(output_base=tmp_path, countries=["swedish_02"], charts=False)
+    assert "swedish_02" in written
 
-    payload = json.loads(written["swedish"]["json"].read_text(encoding="utf-8"))
+    payload = json.loads(written["swedish_02"]["json"].read_text(encoding="utf-8"))
     combo = next(c for c in payload["combos"] if c["model"] == "claude_haiku")
     # Per-persona aggregates must cover the 4 capped personas, never the original 6.
     assert combo["n_personas"] == 4
@@ -778,7 +778,7 @@ def test_summarize_fail_fast_when_mirror_absent(tmp_path: Path):
     # Raw exists but population_cap was never run: summarize must raise, not read 01_Raw.
     _make_raw_combo(tmp_path, _SLUG, m=6)
     with pytest.raises(FileNotFoundError):
-        summarize(output_base=tmp_path, countries=["swedish"], charts=False)
+        summarize(output_base=tmp_path, countries=["swedish_02"], charts=False)
 
 
 def test_mapping_seam_fail_fast_when_mirror_absent(tmp_path: Path):

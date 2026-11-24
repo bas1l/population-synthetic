@@ -31,8 +31,8 @@ value). `n_expected_keys` carries that requirement alongside every rate, in the 
 mutates nothing.
 
 **Stage 1 (map)** -- `scripts/analyze/map_populations.py` reads the explicit completeness list
-`config/analysis/comparison_targets.yaml` (entries are plain manifest-path strings or
-`{manifest, country}` mappings), maps each target's synthetic population from the **full `01_Raw`
+`config/analysis/comparison_targets.yaml` (entries are `{model_id, strategy_id, country_id}`
+mappings), maps each target's synthetic population from the **full `01_Raw`
 pool** (not a capped subset) via `load_synthetic_population` -> `map_population` and its real
 population once per country (`load_real_population` -> `map_population`), and writes to
 `{output_base}/03_Analysis/mapping/` (folder name owned by the analysis registry; legacy on-disk
@@ -90,7 +90,7 @@ depends on `population_cap` (reading the capped `_mapped/` files) and is fully a
 `mappings_for_country`, `known_country_ids`, `infer_country(config_path)` -- reading
 `parameters.reference` (the YAML key itself is unrenamed pending a follow-up config-layer rename;
 internally it is exposed as `real`) / `parameters.mappings` from the **country axis YAMLs**
-(`config/synthetic/axes/countries/{swedish,italian}.yaml`), so real-population paths/mappings are
+(`config/synthetic/axes/countries/{swedish_02,italian}.yaml`), so real-population paths/mappings are
 config-driven, not hardcoded, and adding a country needs only a new YAML.
 
 ## Mapping tiers: native (within-country) vs global (cross-country)
@@ -112,7 +112,7 @@ YAML's `parameters.mappings` (the single source of truth):
   will get its own native tier by the same pattern.
 
 **Dir-selection mechanism.** `parameters.mappings` in
-`config/synthetic/axes/countries/{swedish,italian}.yaml` is authoritative. It is mirrored by
+`config/synthetic/axes/countries/{swedish_02,italian}.yaml` is authoritative. It is mirrored by
 the `MAPPINGS_SUBDIR` class default on both the real and synthetic Swedish mapper (which also
 seeds the factory fallback and the fidelity scheme's default directory). A fail-loud guard
 `country_config.assert_mapping_dir_consistency(country)` raises if the YAML and either mapper
@@ -231,7 +231,7 @@ it is refreshed only on the re-map branch -- so a stale `{slug}.json` implies a 
 
 **The scored axis set is invariant across strategy versions.** The v2 strategy arm
 ([Axis composition](axis-composition.md)) generates 14 categories instead of 17, but it changed no
-mapping config: `load_scheme("swedish").attributes` still returns the same **14** attributes it did
+mapping config: `load_scheme("swedish_02").attributes` still returns the same **14** attributes it did
 before (Italy likewise 14, `birth_location` included). That invariance is precisely what makes v1↔v2
 fidelity comparison valid -- both arms are scored on the identical axis list, with identical
 `values`, `joint_pairs` and coherence configs. What is *not* comparable across versions is anything

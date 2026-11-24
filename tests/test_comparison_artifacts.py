@@ -60,10 +60,10 @@ def test_write_comparison_artifacts_emits_full_set(tmp_path):
     synthetic_pop = _pop(10, "pipeline")
     report = StatisticalEvaluator(real_pop, synthetic_pop, scheme=scheme).generate_report()
 
-    output_path = tmp_path / "swedish_all_pick_x" / "swedish_all_pick_x.json"
+    output_path = tmp_path / "swedish_02_all_pick_v2_x" / "swedish_02_all_pick_v2_x.json"
     write_comparison_artifacts(
         report, real_pop, synthetic_pop, output_path, scheme,
-        slug="swedish_all_pick_x", real_label="real_swedish",
+        slug="swedish_02_all_pick_v2_x", real_label="real_swedish_02",
     )
 
     base = output_path.parent

@@ -699,7 +699,7 @@ def _gm_summary(model: str, strategy: str, scale: float):
     )
 
     return ComboSummary(
-        country="swedish",
+        country="swedish_02",
         model=model,
         strategy=strategy,
         n_personas=100,
@@ -754,10 +754,10 @@ def _variant_pairs():
         from tests.test_model_ranking_charts import REQUESTED_N, _cap, _result
 
         cells = [
-            ("claude_haiku", "all_pick", 0.90, REQUESTED_N),
-            ("claude_haiku", "all_generate_pick", 0.80, REQUESTED_N),
-            ("openrouter_kimi_k3", "all_pick", 0.85, REQUESTED_N),
-            ("openrouter_kimi_k3", "all_generate_pick", 0.95, REQUESTED_N),
+            ("claude_haiku", "all_pick_v2", 0.90, REQUESTED_N),
+            ("claude_haiku", "all_generate_pick_v2", 0.80, REQUESTED_N),
+            ("openrouter_kimi_k3", "all_pick_v2", 0.85, REQUESTED_N),
+            ("openrouter_kimi_k3", "all_generate_pick_v2", 0.95, REQUESTED_N),
         ]
         result, cap = _result(cells), _cap(cells)
         drawn = {
@@ -807,11 +807,11 @@ def _variant_pairs():
         import population_synthetic.analysis.generation_metadata.charts as gm_mod
 
         summaries = [
-            _gm_summary("claude_haiku", "all_pick", 1.0),
-            _gm_summary("openrouter_kimi_k3", "all_generate_pick", 2.0),
+            _gm_summary("claude_haiku", "all_pick_v2", 1.0),
+            _gm_summary("openrouter_kimi_k3", "all_generate_pick_v2", 2.0),
         ]
         gm_figures = _capture_saved(
-            gm_mod, lambda: gm_mod.render_metric_heatmaps("swedish", summaries, "unused"),
+            gm_mod, lambda: gm_mod.render_metric_heatmaps("swedish_02", summaries, "unused"),
         )
         # One figure per metric per variant, emitted in the variant map's own order.
         names = list(gm_mod.GRID_VARIANTS)

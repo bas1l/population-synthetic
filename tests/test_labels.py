@@ -205,7 +205,7 @@ def test_empty_strategy_label_raises(tmp_path: Path) -> None:
 
 
 def test_underscored_label_raises(tmp_path: Path) -> None:
-    (tmp_path / "s.yaml").write_text('id: "s"\nlabel: "all_pick"\n', encoding="utf-8")
+    (tmp_path / "s.yaml").write_text('id: "s"\nlabel: "all_pick_v2"\n', encoding="utf-8")
     with pytest.raises(ValueError, match="underscore"):
         strategy_label("s", strategies_dir=tmp_path)
 
@@ -317,8 +317,8 @@ def test_empty_family_label_raises(tmp_path: Path) -> None:
 
 
 def test_the_live_method_axis_is_a_to_e() -> None:
-    live = ["all_pick", "all_pick_dag", "all_generate_pick", "all_generate_evaluate_pick",
-            "all_generate_evaluate_random_pick"]
+    live = ["all_pick_v2", "all_pick_dag_v2", "all_generate_pick_v2", "all_generate_evaluate_pick_v2",
+            "all_generate_evaluate_random_pick_v2"]
     assert list(method_letters(live).values()) == list(METHOD_LETTERS[:5])
 
 
@@ -341,7 +341,7 @@ def test_run_slug_resolves_to_its_model_and_method_phrase() -> None:
     """The slug is decomposed against declared ids, not split on the underscore."""
     from population_synthetic.generators.synthetic.manifest_loader import axis_slug
 
-    model, strategy, country = "claude_haiku", "all_pick", _selectable(COUNTRIES_DIR)[0]
+    model, strategy, country = "claude_haiku", "all_pick_v2", _selectable(COUNTRIES_DIR)[0]
     resolved = population_label(axis_slug(model, strategy, country))
     assert resolved == f"{model_label(model)} / {strategy_label(strategy)}"
 
@@ -453,7 +453,7 @@ def test_live_figure_terms_resolve() -> None:
 
 def test_live_reference_source() -> None:
     assert reference_source("swedish_02") == "SCB"
-    assert reference_source("swedish") == "SCB"
+    assert reference_source("swedish_02") == "SCB"
     assert reference_source("italian") == "ISTAT"
 
 

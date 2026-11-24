@@ -36,11 +36,11 @@ MODELS = ["model_a", "model_b", "model_c", "model_d", "model_e"]
 # The five v1 families, ordered by the config-derived accessor (the same order
 # every consumer resolves; asserted against the legacy sequence in test_axes.py).
 STRATEGIES = strategy_complexity_order([
-    "all_generate_evaluate_random_pick",
-    "all_generate_evaluate_pick",
-    "all_generate_pick",
-    "all_pick_dag",
-    "all_pick",
+    "all_generate_evaluate_random_pick_v2",
+    "all_generate_evaluate_pick_v2",
+    "all_generate_pick_v2",
+    "all_pick_dag_v2",
+    "all_pick_v2",
 ])
 ATTRS = ["trend_attr", "shift_attr"]
 # Config-sourced category levels per attribute (drives the panel level counts).
@@ -76,7 +76,7 @@ def _full_grid(*, drop=None, nan_cell=None):
             tv_by_attr = {"trend_attr": _trend_tv(m_idx, rank), "shift_attr": _shift_tv(m_idx, rank)}
             if nan_cell is not None and (model, strategy) == nan_cell[:2]:
                 tv_by_attr[nan_cell[2]] = float("nan")
-            combos.append(make_combo(slug=f"swedish_{strategy}_{model}", strategy=strategy,
+            combos.append(make_combo(slug=f"swedish_02_{strategy}_{model}", strategy=strategy,
                                      model=model, tv_by_attr=tv_by_attr))
     return combos
 
@@ -301,7 +301,7 @@ def test_complete_case_drops_incomplete_model():
 def test_nan_cell_drops_model_from_that_panel_only():
     by_ms, models, methods = _by_ms(_full_grid(nan_cell=("model_a", STRATEGIES[0], "shift_attr")))
     block = _method_comparison(by_ms, models, ATTRS, methods, _CMP_CONFIG, CATEGORY_VALUES)
-    # trend_attr unaffected; shift_attr drops model_a (its all_pick cell is NaN).
+    # trend_attr unaffected; shift_attr drops model_a (its all_pick_v2 cell is NaN).
     assert block["panels"]["trend_attr"]["n_models"] == len(MODELS)
     shift = block["panels"]["shift_attr"]
     assert "model_a" in shift["dropped_models"]
@@ -366,7 +366,7 @@ def test_insufficient_n_flagged_and_recorded():
     combos = []
     for m_idx, model in enumerate(["solo_a", "solo_b"]):
         for rank, strategy in enumerate(STRATEGIES, start=1):
-            combos.append(make_combo(slug=f"swedish_{strategy}_{model}", strategy=strategy,
+            combos.append(make_combo(slug=f"swedish_02_{strategy}_{model}", strategy=strategy,
                                      model=model,
                                      tv_by_attr={"trend_attr": _trend_tv(m_idx, rank),
                                                  "shift_attr": _shift_tv(m_idx, rank)}))
@@ -462,7 +462,7 @@ def test_untested_pair_is_none_not_zero():
 def test_degenerate_panel_still_emits_an_all_none_pair_matrix():
     # One model -> no paired blocks; the key must still be present and shaped.
     combos = [
-        make_combo(slug=f"swedish_{strategy}_solo", strategy=strategy, model="solo",
+        make_combo(slug=f"swedish_02_{strategy}_solo", strategy=strategy, model="solo",
                    tv_by_attr={"trend_attr": _trend_tv(0, rank),
                                "shift_attr": _shift_tv(0, rank)})
         for rank, strategy in enumerate(STRATEGIES, start=1)

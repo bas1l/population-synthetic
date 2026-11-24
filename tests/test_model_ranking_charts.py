@@ -49,10 +49,10 @@ from tests._performance_fixtures import ATTRIBUTES, build_workspace, make_combo,
 # The cap every fixture combination was drawn against. Deliberately not 100.
 REQUESTED_N = 40
 
-COUNTRY = "swedish"
+COUNTRY = "swedish_02"
 
 # Two real strategy ids in the config-derived complexity order the columns must follow.
-STRATEGIES = strategy_complexity_order(["all_pick", "all_generate_pick"])
+STRATEGIES = strategy_complexity_order(["all_pick_v2", "all_generate_pick_v2"])
 S1, S2 = STRATEGIES
 
 _FIXTURE_INDEX = Path("fixture") / INDEX_FILENAME
@@ -684,7 +684,7 @@ SCRIPT = PROJECT_ROOT / "scripts" / "analyze" / "rank_models.py"
 # Two real model ids and two real strategy ids, so the script's slug decomposition
 # against the live axis registries succeeds.
 _CLI_MODELS = ("claude_haiku", "gemini_flash")
-_CLI_STRATEGIES = ("all_pick", "all_generate_pick")
+_CLI_STRATEGIES = ("all_pick_v2", "all_generate_pick_v2")
 
 
 def _build_cli_workspace(tmp_path: Path) -> Path:

@@ -76,7 +76,7 @@ Two-stage — the judge reads the **mapped** populations, so map first:
 
 ```bash
 python scripts/analyze/map_populations.py
-python scripts/analyze/analyze_persona_realism.py --country swedish
+python scripts/analyze/analyze_persona_realism.py --country swedish_02
 ```
 
 CLI flags (`--help` is authoritative):

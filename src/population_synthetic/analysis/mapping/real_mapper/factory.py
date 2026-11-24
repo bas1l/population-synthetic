@@ -13,8 +13,7 @@ from population_synthetic.analysis.mapping.real_mapper.sweden import SwedishReal
 _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 
 _REAL_MAPPERS: dict[str, type[AbstractRealMapper]] = {
-    "swedish": SwedishRealMapper,
-    "swedish_02": SwedishRealMapper,  # guided-prompt A/B arm (simulation config 006)
+    "swedish_02": SwedishRealMapper,
     "italian": ItalianRealMapper,
 }
 
@@ -31,8 +30,8 @@ def build_real_mapper(country: str, mappings: dict) -> AbstractRealMapper:
     return _mapper_class(country)(mappings)
 
 
-def get_real_mapper(country: str = "swedish", mappings_path: Path | None = None) -> AbstractRealMapper:
-    """Return the real mapper for *country* (``"swedish"`` or ``"italian"``).
+def get_real_mapper(country: str = "swedish_02", mappings_path: Path | None = None) -> AbstractRealMapper:
+    """Return the real mapper for *country* (``"swedish_02"`` or ``"italian"``).
 
     The mapper loads its category mappings from *mappings_path* if given,
     otherwise from the country's default ``config/mapping/{subdir}`` directory.

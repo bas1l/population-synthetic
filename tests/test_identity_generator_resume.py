@@ -35,8 +35,8 @@ from population_synthetic.generators.synthetic.resolution_context import Resolut
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STRATEGY_DIR = _REPO_ROOT / "config" / "synthetic" / "axes" / "strategies"
-_CUMULATIVE = _STRATEGY_DIR / "all_pick_dag.yaml"   # context: cumulative
-_CONTEXT_FREE = _STRATEGY_DIR / "all_pick.yaml"     # context: none
+_CUMULATIVE = _STRATEGY_DIR / "all_pick_dag_v2.yaml"   # context: cumulative
+_CONTEXT_FREE = _STRATEGY_DIR / "all_pick_v2.yaml"     # context: none
 
 _VALUE_MARKER = "__VAL"
 
@@ -305,7 +305,7 @@ def test_validate_raw_passes_on_a_resumed_persona(tmp_path):
     """
     schema_file = _write_schema(tmp_path, _CUMULATIVE)
     order = resolve_category_order(str(_CUMULATIVE))
-    required = expected_raw_keys("swedish")
+    required = expected_raw_keys("swedish_02")
     assert set(required) <= set(order), "fixture strategy no longer covers the country"
 
     combo = tmp_path / "combo"

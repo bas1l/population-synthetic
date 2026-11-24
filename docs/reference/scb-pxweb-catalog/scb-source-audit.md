@@ -1,6 +1,6 @@
 # SCB source audit — best PxWeb table per population attribute
 
-Outcome of the [attribute source-audit plan](../../development/plans/pending/scb-population-attribute-source-audit.md):
+Outcome of the attribute source audit:
 a verified pass over the SCB PxWeb source of **every one of the 15 population attributes** the
 Swedish generator samples. For each, we found the best public table, and **confirmed it with a live
 query** — not just metadata presence (see the ["present ≠ cross-tabulable" trap](./scb-pxweb-data-model.md#5-the-critical-trap-present-in-metadata--cross-tabulable)).
@@ -18,13 +18,11 @@ query** — not just metadata presence (see the ["present ≠ cross-tabulable" t
 **6 of 15 attributes have an actionable improvement; 9 are already on the best available source.**
 
 > **Implementation status (2026-07-15).** All 6 improvements are now **implemented** on
-> `feature/scb-source-improvements` (Phases 1–4 of the
-> [implementation plan](../../development/plans/active/scb-source-improvements-implementation.md)):
+> (Phases 1–4):
 > education_level + socioeconomic_class (Phase 1), birth_location (Phase 2), industry_sector +
 > housing_tenure (Phase 3), employment_status (Phase 4). Each switched source has a parser unit test
-> over a recorded json-stat2 fixture (`tests/test_sweden_parsers.py`, Phase 5.2). The optional
-> two-table employment_status↔education merge ([Phase 6](./employment-status-merge-derivation.md))
-> remains deferred/opt-in.
+> over a recorded json-stat2 fixture (`tests/test_sweden_parsers.py`, Phase 5.2). The generator
+> does not combine tables for employment_status: it uses the single register table.
 
 | Verdict | Count | Attributes |
 |---------|------:|------------|
@@ -69,10 +67,8 @@ The originating investigation: **no SCB table gives status × education × age**
 > **Optional enhancement — recover the education cross by merging two register tables.** The lost
 > status↔education link can be restored *without* a 3-way table, by combining `ArRegArbStatus`
 > (status×age×sex) with the register `ArbStatusUtbM` (status×education×sex) via a documented
-> per-persona odds-multiplication ("no 3-way interaction") derivation. This is the **only** attribute
-> that would combine multiple tables, so it has its own dedicated spec:
-> **[`employment-status-merge-derivation.md`](./employment-status-merge-derivation.md)**. Ship the
-> single-table switch first; treat the merge as an explicitly-documented, all-register follow-up.
+> per-persona odds-multiplication ("no 3-way interaction") derivation. The generator does not do
+> this: it uses the single-table switch.
 
 ### 10 · industry_sector → switch to `AM/AM0210/AM0210F/ArRegSNI2007Riket`
 Current AKU table collapses `Alder` to `tot15-74` (a working-age total — the trap) and combines sex. The register table restores **industry × real age bands × sex** (verified: 12 non-collapsed cells, full-count, to 2024). Caveats: 2-digit NACE (~52 codes) must be **aggregated up** to the canonical 12-sector schema (summing real cells — legitimate); values are person counts (not thousands); register "employed" ≠ AKU/ILO definition. *Also:* the current code's `Kon=1+2` collapse is a choice — sex could be restored on the existing table for free even without switching.
@@ -107,8 +103,7 @@ Current `BO0104T04` is **dwelling-level** — tenure has no person age/sex. `Hus
 > stay on their separate marginals (both conditioned on shared age/sex, sampled independently). Coupling
 > them would require either (a) deliberately adopting `TabVXDispI4C` and accepting its coarser,
 > differently-defined axes, or (b) a documented max-entropy odds-merge of the two 2-way margins
-> (age×sex×tenure ⊗ age×socioeconomic) — the same "no 3-way interaction" derivation already specced for
-> [employment_status](./employment-status-merge-derivation.md). Neither is a pure API pull; both are
+> (age×sex×tenure ⊗ age×socioeconomic), a "no 3-way interaction" derivation. Neither is a pure API pull; both are
 > explicit modelling choices for a future maintainer.
 > Related non-tenure tables in the same folder, for reference: `TabVXDispI69` (economic standard ×
 > employment × background × age) and `TabVX13InkStruktN` (income structure × age × occupation — the
@@ -153,5 +148,4 @@ public-API sourcing model. Not pursued.
 ## See also
 - [`scb-pxweb-data-model.md`](./scb-pxweb-data-model.md) — why SCB data is shaped this way
 - [`scb-am-uf-catalog.html`](./scb-am-uf-catalog.html) — searchable table inventory (AM+UF)
-- Plan: [`scb-population-attribute-source-audit.md`](../../development/plans/pending/scb-population-attribute-source-audit.md)
 - Wiring today: `src/population_synthetic/generators/real/sweden/{fetch_service.py,constants.py}`

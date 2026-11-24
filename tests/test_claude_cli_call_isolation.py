@@ -232,7 +232,7 @@ def _strip_tag(combo_dir: Path) -> None:
 
 
 def test_runner_stamps_the_isolation_tag_into_every_cache(tmp_path):
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     combo_dir = tmp_path / "combo"
     run_combo_judgements(_synthetic_population(attrs), "combo", attrs, combo_dir, _cfg(),
                          client_factory=_stub_factory())
@@ -241,7 +241,7 @@ def test_runner_stamps_the_isolation_tag_into_every_cache(tmp_path):
 
 
 def test_runner_refuses_to_reuse_or_top_up_an_untagged_cache(tmp_path):
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     population = _synthetic_population(attrs)
     combo_dir = tmp_path / "combo"
     cfg1 = dataclasses.replace(_cfg(), n_rounds=1)
@@ -276,7 +276,7 @@ def test_runner_refuses_a_client_that_does_not_vouch_for_isolation(tmp_path):
             self.last_metadata.pop("context_isolation")
             return out
 
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     with pytest.raises(RuntimeError, match="independent conversation"):
         run_combo_judgements(_synthetic_population(attrs), "combo", attrs, tmp_path / "combo",
                              _cfg(), client_factory=lambda: _LeakyClient())
@@ -304,7 +304,7 @@ def test_judge_config_refuses_a_temperature_the_cli_cannot_apply(tmp_path):
 
 
 def test_artifacts_stamp_the_cache_regime_and_refuse_a_mixed_combo(tmp_path):
-    attrs = scheme_attributes("swedish")
+    attrs = scheme_attributes("swedish_02")
     combo_dir = tmp_path / "combo"
     cfg = _cfg()
     run_combo_judgements(_synthetic_population(attrs), "combo", attrs, combo_dir, cfg,

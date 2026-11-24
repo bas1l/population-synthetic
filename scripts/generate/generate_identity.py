@@ -2,27 +2,23 @@
 generate_identity.py -- Standalone CLI entry point for generating a single persona identity.
 
 Usage:
-    # Via manifest (recommended):
-    python scripts/generate/generate_identity.py \\
-        --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml
-
     # Via axis IDs (composable experiment config):
     python scripts/generate/generate_identity.py \\
         --model-id claude_haiku \\
-        --strategy-id all_pick \\
-        --country-id swedish
+        --strategy-id all_pick_v2 \\
+        --country-id swedish_02
 
     # Via explicit CLI args:
     python scripts/generate/generate_identity.py \\
         --mode configurable \\
-        --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json \\
+        --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json \\
         --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml \\
         [--output identity.json]
 
     python scripts/generate/generate_identity.py \\
         --provider claude \\
         --mode configurable \\
-        --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json \\
+        --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json \\
         --strategy config/synthetic/axes/strategies/_compared_only_generate_evaluate_random_pick.yaml
 
 Modes:
@@ -50,7 +46,6 @@ from population_synthetic.generators.synthetic.factory_identity_generator import
 from population_synthetic.generators.synthetic.identity_generator_configurable import resolve_category_order
 from population_synthetic.generators.synthetic.manifest_loader import (
     compose_manifest,
-    load_manifest,
     serialize_manifest,
 )
 from population_synthetic.generators.synthetic.persona_writer import PersonaWriter
@@ -68,17 +63,12 @@ def main() -> None:
         epilog=(
             "Examples:\n"
             "  python scripts/generate/generate_identity.py --mode configurable \\\n"
-            "      --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json\n"
+            "      --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json\n"
         ),
     )
-    parser.add_argument(
-        "--manifest",
-        default=None,
-        help="Path to a YAML manifest file (replaces all other arguments)",
-    )
-    parser.add_argument("--model-id", default=None, help="Axis model ID (e.g., 'claude_haiku') — mutually exclusive with --manifest")
-    parser.add_argument("--strategy-id", default=None, help="Axis strategy ID (e.g., 'all_pick') — mutually exclusive with --manifest")
-    parser.add_argument("--country-id", default=None, help="Axis country ID (e.g., 'swedish') — mutually exclusive with --manifest")
+    parser.add_argument("--model-id", default=None, help="Axis model ID (e.g., 'claude_haiku')")
+    parser.add_argument("--strategy-id", default=None, help="Axis strategy ID (e.g., 'all_pick_v2')")
+    parser.add_argument("--country-id", default=None, help="Axis country ID (e.g., 'swedish_02')")
     parser.add_argument(
         "--mode",
         default=None,
@@ -104,7 +94,7 @@ def main() -> None:
     parser.add_argument(
         "--base-url",
         default=None,
-        help="Base URL for Ollama or OpenAI-compatible provider (overrides manifest and --ollama-host)",
+        help="Base URL for Ollama or OpenAI-compatible provider (overrides --ollama-host)",
     )
     parser.add_argument(
         "--ollama-host",
@@ -161,37 +151,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    axis_ids = [args.model_id, args.strategy_id, args.country_id]
-    if args.manifest and any(x is not None for x in axis_ids):
-        parser.error("--manifest is mutually exclusive with --model-id, --strategy-id, and --country-id")
-
     m = None
     _composed_manifest = None
 
-    if args.manifest:
-        m = load_manifest(args.manifest)
-        logger.info("Loaded manifest: %s", m.name)
-        if args.provider is None:
-            args.provider = m.provider
-        if args.model is None:
-            args.model = m.model
-        if args.mode is None:
-            args.mode = m.mode
-        if args.config is None:
-            args.config = str(m.config_path)
-        if args.strategy is None and m.strategy_path:
-            args.strategy = str(m.strategy_path)
-        if args.log_llm is None:
-            args.log_llm = m.log_llm
-        if args.output is None:
-            args.output = m.output
-        if args.base_url is None and m.base_url is not None:
-            args.base_url = m.base_url
-        if args.api_key_env is None and m.api_key_env_var is not None:
-            args.api_key_env = m.api_key_env_var
-        if args.structured_output is None:
-            args.structured_output = m.structured_output
-    elif args.model_id is not None:
+    if args.model_id is not None:
         if args.strategy_id is None or args.country_id is None:
             parser.error("--model-id, --strategy-id, and --country-id must all be provided together")
         m = compose_manifest(args.model_id, args.strategy_id, args.country_id, args.ollama_host)
@@ -235,7 +198,7 @@ def main() -> None:
     # Ollama endpoint resolution happens here, in the orchestration layer -- the
     # client is configuration-free and never picks a machine on its own. The axis
     # path already resolved the same host inside compose_manifest; this also covers
-    # the --manifest and explicit-CLI paths, where nothing else supplies an endpoint.
+    # the explicit-CLI path, where nothing else supplies an endpoint.
     ollama_host = None
     if args.provider == "ollama":
         _resolved_host = ollama_hosts.resolve_host(args.ollama_host)
@@ -261,7 +224,7 @@ def main() -> None:
             )
 
     if not args.mode or not args.config:
-        parser.error("Either --manifest or both --mode and --config are required")
+        parser.error("Both --mode and --config (or the axis ids) are required")
 
     config_path = Path(args.config)
     if not config_path.exists():
@@ -383,8 +346,7 @@ def main() -> None:
 
     run_metadata = {
         "name": m.name if m is not None else None,
-        "manifest": args.manifest,
-        "model_config": {
+                "model_config": {
             "provider": args.provider,
             "model": client.get_current_configuration()["model"],
             "base_url": getattr(client, "base_url", None),

@@ -46,7 +46,7 @@ DEFAULT_SOURCE = (
     PROJECT_ROOT
     / "data"
     / "scb_api"
-    / "scb_population_n10000_seed42_merge-status-edu_2026-07-16.json"
+    / "scb_population_n10000_seed42_ref-v3.json"
 )
 DEFAULT_OUT_DIR = (
     PROJECT_ROOT / "data" / "scb_api" / "realism_audit_n10000_seed42_2026-07-16"

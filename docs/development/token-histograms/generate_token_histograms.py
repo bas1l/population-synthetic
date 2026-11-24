@@ -3,7 +3,7 @@
 Goal: characterise the *distribution* of per-call input/output tokens (the doc only
 has per-strategy sums) so we can read off the maximum context size each model saw.
 
-Token source per model (mirrors swedish-token-usage-by-model.md):
+Token source per model (mirrors swedish_02-token-usage-by-model.md):
   - Ollama models  -> REAL per-call prompt_tokens/completion_tokens from logs/run_*.log
   - Claude models  -> tiktoken cl100k_base proxy over each call's prompt / raw_response
 """

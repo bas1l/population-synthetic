@@ -50,21 +50,21 @@ EXPECTED_DIGESTS = {
         "46d665ad50bf11cbbde950579ab299b032d19f7754c2259f34b944c515ab695e",
     "_debug_minimal.yaml":
         "0e616b7ae1bde62a0dafb6d794d09f9714973baf7d059f40e076bb0720150d1e",
-    "all_generate_evaluate_pick.yaml":
+    "all_generate_evaluate_pick_v2.yaml":
         "6e6123e1b6f042258677cb4d69ad1c5fb2da94aabdfa257641346da9d7889ae2",
     "all_generate_evaluate_pick_v2.yaml":
         "ab03f9861884fec8a0ba26e561d6a504a17664b1865f3b117ca02d8540e818c4",
-    "all_generate_evaluate_random_pick.yaml":
+    "all_generate_evaluate_random_pick_v2.yaml":
         "cac39068137df54a70c61ff10c549f134d4f6d8ce7d23dc09640368f619a24be",
     "all_generate_evaluate_random_pick_v2.yaml":
         "252eaaec1c4d09ffdfacbb693a63c5b3be304c28a83ed97a967e875f1b38dd19",
-    "all_generate_pick.yaml":
+    "all_generate_pick_v2.yaml":
         "c735cb88f52cd99cdf44dff631593baf8c9b810254f4ab9eb8ee47ecdb901e14",
     "all_generate_pick_v2.yaml":
         "75125d269b515d36840afa9483c4b11c9f0955eac0fb5f2213e0fbf59dd6e496",
-    "all_pick.yaml":
+    "all_pick_v2.yaml":
         "67e171461b259d5ec75c5f71c49678022c9250cfc674390fb615d6f16773083f",
-    "all_pick_dag.yaml":
+    "all_pick_dag_v2.yaml":
         "3b2304cf471274bf1e81997efc344626cbba7b611e3169d7aee43b8326753b5f",
     "all_pick_dag_v2.yaml":
         "ca2871e96c2888f89b82a5610750ea684903f259056fe998d770de16dcdd18d7",

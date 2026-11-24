@@ -13,7 +13,7 @@ its ``config`` entry. Adding a new country therefore needs only a new YAML, no
 code change here.
 
 Both the map stage and any comparison consumer share this single source so the
-country axis ids (``swedish``/``italian``), real-population paths, and mappings
+country axis ids (``swedish_02``/``italian``), real-population paths, and mappings
 directories stay consistent across the pipeline.
 """
 
@@ -171,7 +171,7 @@ def infer_country(config_path: str | Path) -> str:
     """Infer the country id from a simulation-config path.
 
     Manifests carry no explicit country; it is implicit in the simulation-config
-    filename (e.g. ``simulation_config_004_swedish_generative.json`` -> ``swedish``,
+    filename (e.g. ``simulation_config_006_swedish_generative_guided.json`` -> ``swedish_02``,
     ``simulation_config_005_italian_generative.json`` -> ``italian``). This matches
     the known country ids (derived from the country axis YAMLs) against the config
     stem.

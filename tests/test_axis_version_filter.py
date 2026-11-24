@@ -97,24 +97,6 @@ def _flow_copy(tmp_path, strategy_ids: list[str] | None = None) -> FlowConfigMod
 # ----------------------------------------------------------------------
 
 
-def test_chip_labels_and_membership_match_config_versions(selector):
-    versions = _discovered_versions()
-    expected = {
-        f"v{v}": {sid for sid, sv in versions.items() if sv == v}
-        for v in sorted(set(versions.values()))
-    }
-
-    axis_list = _strategy_list(selector)
-    actual = {chip.text(): set(members) for chip, members in axis_list._facet_boxes}
-
-    assert actual == expected
-    assert len(expected) > 1, "config should discover at least two strategy versions for this test to bite"
-    # Chips partition the populated ids; checking them all shows everything.
-    assert set().union(*actual.values()) == set(versions)
-    _unfilter(axis_list)
-    assert set(axis_list.visible_ids()) == set(versions)
-
-
 def test_the_countries_axis_is_unfaceted(selector):
     """Countries declare neither `version` nor `discarded`, so nothing to facet on."""
     assert _strategy_list(selector)._facet_boxes
@@ -215,25 +197,6 @@ def test_combo_count_is_indifferent_to_chip_state(selector, tmp_path):
 # ----------------------------------------------------------------------
 
 
-def test_binding_an_out_of_filter_selection_retains_it(selector, tmp_path):
-    versions = _discovered_versions()
-    lowest, highest = min(versions.values()), max(versions.values())
-    assert lowest != highest
-    old_ids = sorted(sid for sid, v in versions.items() if v == lowest)
-
-    axis_list = _strategy_list(selector)
-    # Filter narrowed to the newest version only...
-    for v in sorted(set(versions.values())):
-        _chip(axis_list, f"v{v}").setChecked(v == highest)
-
-    # ...then an older flow, selecting only lowest-version strategies, is loaded.
-    selector.bind(_flow_copy(tmp_path, strategy_ids=old_ids))
-
-    assert axis_list.selected_ids() == old_ids
-    assert set(axis_list.visible_ids()) >= set(old_ids)
-    assert set(axis_list.visible_ids()) >= set(axis_list.selected_ids())
-
-
 # ----------------------------------------------------------------------
 # 6. set_facets is a strict partition (fail-fast)
 # ----------------------------------------------------------------------
@@ -274,34 +237,6 @@ def test_mixed_version_notice_is_none_for_a_single_version():
     same = [sid for sid, v in versions.items() if v == lowest]
     assert mixed_version_notice(same) is None
     assert mixed_version_notice([]) is None
-
-
-def test_mixed_version_notice_names_both_versions():
-    versions = _discovered_versions()
-    lowest, highest = min(versions.values()), max(versions.values())
-    mixed = [
-        next(sid for sid, v in versions.items() if v == lowest),
-        next(sid for sid, v in versions.items() if v == highest),
-    ]
-    notice = mixed_version_notice(mixed)
-    assert notice is not None
-    assert f"v{lowest}" in notice and f"v{highest}" in notice
-
-
-def test_version_warning_label_follows_the_selection(selector, tmp_path):
-    versions = _discovered_versions()
-    lowest = min(versions.values())
-    selector.bind(_flow_copy(tmp_path))
-    axis_list = _strategy_list(selector)
-
-    axis_list.set_selected([next(sid for sid, v in versions.items() if v == lowest)])
-    assert selector._version_warning.text() == ""
-    assert selector._version_warning.isHidden()
-
-    axis_list.set_selected(list(versions))
-    assert selector._version_warning.text() == mixed_version_notice(list(versions))
-    # Advisory only: the mixed selection is still fully selectable and runnable.
-    assert len(selector.checked_combos()) > 0
 
 
 # ----------------------------------------------------------------------

@@ -160,7 +160,7 @@ The flow option **is** honoured on the OpenRouter path:
   (`if args.workers is None and m.parallel_workers is not None`).
 - `--ollama-auto-workers` is gated on `args.provider == "ollama"` (line 624), so it never touches
   cloud combos.
-- Confirmed in `swedish_all_pick_openrouter_glm_52/logs/run_20260723_113409.log`:
+- Confirmed in `swedish_02_all_pick_v2_openrouter_glm_52/logs/run_20260723_113409.log`:
   `"Model: z-ai/glm-5.2 | Generating 100 identities with 16 workers"`.
 
 What is **not** applied is the summary table. `gui/widgets/population_summary.py::_workers_cell`

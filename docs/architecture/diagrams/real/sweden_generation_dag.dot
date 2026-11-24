@@ -8,7 +8,7 @@ digraph generation {
 
   agesex [label="(age, sex)\n(joint draw - age_sex)", fillcolor="#1f3a5f", fontcolor="white"];
   education [label="education_level\n(| age_group, sex)", fillcolor="#2e6f95", fontcolor="white"];
-  employment [label="employment_status\n(| age, education, sex (merge))", fillcolor="#2e6f95", fontcolor="white"];
+  employment [label="employment_status\n(| age, sex)", fillcolor="#2e6f95", fontcolor="white"];
   industry [label="industry_sector\n(if employed)", fillcolor="#2e6f95", fontcolor="white"];
   emptype [label="employment_type\n(if employed | age,sex)", fillcolor="#2e6f95", fontcolor="white"];
   income_source [label="income_source\n(| employment, age)", fillcolor="#2e6f95", fontcolor="white"];

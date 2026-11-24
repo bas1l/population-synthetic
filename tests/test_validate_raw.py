@@ -25,7 +25,7 @@ from population_synthetic.analysis.utils.validity_csv import read_passed_ids
 from population_synthetic.analysis.validate_raw import expected_raw_keys, validate_raw_combo
 from population_synthetic.analysis.validate_raw import validate as validate_module
 
-_SLUG = "swedish_all_pick_claude_haiku"
+_SLUG = "swedish_02_all_pick_v2_claude_haiku"
 _EXPECTED_KEYS = ["age", "biological_sex", "education_level"]
 
 
@@ -167,10 +167,10 @@ def test_expected_raw_keys_live_config_is_country_specific():
     This asymmetry is the point of the deprecation subtraction -- the requirement is a
     property of the country's mapping index, not a list in code.
     """
-    swedish = expected_raw_keys("swedish")
+    swedish_02 = expected_raw_keys("swedish_02")
     italian = expected_raw_keys("italian")
-    assert "birth_location" not in swedish
+    assert "birth_location" not in swedish_02
     assert "birth_location" in italian
-    assert "age" in swedish and "age_group" not in swedish  # alias applied
-    assert len(swedish) == 14
+    assert "age" in swedish_02 and "age_group" not in swedish_02  # alias applied
+    assert len(swedish_02) == 14
     assert len(italian) == 14

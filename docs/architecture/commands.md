@@ -18,7 +18,7 @@ pip install -e ".[dev]"
 pip install -e ".[gui]"
 
 # Generate Swedish population from live SCB data
-python scripts/generate/generate_scb_population.py --n 1000 --seed 42 --output scb_pop.json
+python scripts/generate/generate_scb_population.py   # defaults: n = 10000, seed 42 = the reference population
 
 # Generate Norwegian population from live SSB data
 python scripts/generate/generate_ssb_population.py --n 1000 --seed 42 --output ssb_pop.json
@@ -26,26 +26,26 @@ python scripts/generate/generate_ssb_population.py --n 1000 --seed 42 --output s
 # Generate Italian population from live ISTAT/Eurostat data
 python scripts/generate/generate_istat_population.py --n 1000 --seed 42 --output istat_pop.json
 
-# Generate a persona identity via manifest (recommended)
-python scripts/generate/generate_identity.py --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml
+# Generate a persona identity via axis ids
+python scripts/generate/generate_identity.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02
 
-# Generate N identities in parallel via manifest
-python scripts/generate/generate_identities_parallel.py --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml
+# Generate N identities in parallel via axis ids
+python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02
 
-# Generate N identities via manifest with CLI overrides
-python scripts/generate/generate_identities_parallel.py --manifest config/synthetic/manifests/identity_manifest_014_claude_haiku.yaml --n 10 --workers 4
+# Generate N identities via axis ids with CLI overrides
+python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02 --n 10 --workers 4
 
 # Generate a persona identity via explicit CLI args (Gemini, requires GEMINI_API_KEY)
 python scripts/generate/generate_identity.py --provider gemini --mode configurable \
-    --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json
+    --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json
 
 # Generate a persona identity via explicit CLI args (Claude CLI, requires claude on PATH)
 python scripts/generate/generate_identity.py --provider claude --model sonnet --mode configurable \
-    --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json
+    --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json
 
 # Generate a persona identity via explicit CLI args (OpenRouter, requires OPENROUTER_API_KEY)
 python scripts/generate/generate_identity.py --provider openrouter --model openai/gpt-4o --mode configurable \
-    --config config/synthetic/simulation_configs/simulation_config_004_swedish_generative.json
+    --config config/synthetic/simulation_configs/simulation_config_006_swedish_generative_guided.json
 
 # Compare two population files
 python scripts/analyze/score_fidelity.py pop_a.json pop_b.json
@@ -56,8 +56,8 @@ python scripts/analyze/score_fidelity.py pop_a.json pop_b.json
 # mirror instead of 01_Raw and fail loudly if it is absent (no 01_Raw fallback), so run this FIRST.
 # --n is required (raises if missing); --sample-seed defaults to 0 (0 is a valid seed); --force
 # overwrites an existing mirror; --output-base defaults to experiment_defaults.yaml.
-python scripts/analyze/cap_populations.py --model-id claude_haiku --strategy-id all_pick --country-id swedish --n 100
-python scripts/analyze/cap_populations.py --model-id claude_haiku --strategy-id all_pick --country-id swedish \
+python scripts/analyze/cap_populations.py --model-id claude_haiku --strategy-id all_pick_v2 --country-id swedish_02 --n 100
+python scripts/analyze/cap_populations.py --model-id claude_haiku --strategy-id all_pick_v2 --country-id swedish_02 \
     --n 100 --sample-seed 7 --force --output-base {output_base}
 
 # Map stage: map the targeted synthetic populations + their real populations to the canonical schema
@@ -68,23 +68,23 @@ python scripts/analyze/cap_populations.py --model-id claude_haiku --strategy-id 
 python scripts/analyze/map_populations.py
 python scripts/analyze/map_populations.py --targets config/analysis/comparison_targets.yaml
 
-# Compare pipeline output against the SCB real population (consumes pre-mapped files; via manifest)
-python scripts/analyze/score_fidelity_sweden.py --manifest config/synthetic/manifests/identity_manifest_022_claude_sonnet.yaml
+# Compare pipeline output against the SCB real population (consumes pre-mapped files; via axis ids)
+python scripts/analyze/score_fidelity_sweden.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02
 
 # Compare pipeline output against the SCB real population (explicit mapped-file paths)
 python scripts/analyze/score_fidelity_sweden.py \
     --mapped-synthetic {output_base}/03_Analysis/mapping/<slug>.json \
-    --mapped-real {output_base}/03_Analysis/mapping/real_swedish.json
+    --mapped-real {output_base}/03_Analysis/mapping/real_swedish_02.json
 
 # Compare pipeline output against the ISTAT real population (Italy; consumes pre-mapped files)
-python scripts/analyze/score_fidelity_italy.py --model-id claude_haiku --strategy-id all_pick --country-id italian
+python scripts/analyze/score_fidelity_italy.py --model-id claude_haiku --strategy-id all_pick_v2 --country-id italian
 
 # Compare every mapped target against country real populations (batch; iterates mapping/_index.json)
-python scripts/analyze/score_fidelity_all.py --country swedish --country italian
+python scripts/analyze/score_fidelity_all.py --country swedish_02 --country italian
 
 # ... with every synthetic population capped to an equivalent size (seeded without-replacement draw;
 # blank/omitted --n-synthetic = no cap; undersize populations run in full with a loud warning)
-python scripts/analyze/score_fidelity_all.py --country swedish --n-synthetic 100 --sample-seed 0
+python scripts/analyze/score_fidelity_all.py --country swedish_02 --n-synthetic 100 --sample-seed 0
 
 # Cross-model performance comparison: rank model x strategy combos per country against the real
 # baseline (consumes the comparison reports; run score_fidelity_all.py first). Emits, under
@@ -92,7 +92,7 @@ python scripts/analyze/score_fidelity_all.py --country swedish --n-synthetic 100
 # c2st charts, and two manuscript heatmap-tables (PNG + SVG each): {country}_models_table
 # (models at the global-best strategy, hosted/local hue) and {country}_methods_table (strategies,
 # mean-over-models TV-similarity).
-python scripts/analyze/rank_models.py --country swedish --per-attribute-charts
+python scripts/analyze/rank_models.py --country swedish_02 --per-attribute-charts
 
 # Per-category method/model significance: which factor (generation method vs model) drives
 # per-attribute TV fidelity (Page's L + Friedman/Nemenyi CD + mixed-model interaction; consumes the
@@ -116,23 +116,23 @@ python scripts/analyze/rank_models.py --country swedish --per-attribute-charts
 # title, key or caveat in the graphic; the run prints the identical-method caveat lines for its
 # caption. JSON written before the confidence intervals existed lacks the keys it reads -- rerun
 # with --force.
-python scripts/analyze/analyze_method_significance.py --country swedish
+python scripts/analyze/analyze_method_significance.py --country swedish_02
 
 # Extract demographic profiles from a pipeline output tree into a single population file
 python scripts/generate/extract_population_from_pipeline.py --seed-root path/to/pipeline_output/ \
     --output pipeline_population.json
 
 # Generate identities via axis composition (model × strategy × country)
-python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id swedish
+python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id swedish_02
 
 # Generate Italian identities via axis composition
-python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick --country-id italian
+python scripts/generate/generate_identities_parallel.py --model-id claude_sonnet --strategy-id all_pick_v2 --country-id italian
 
 # Real-population reference statistics: publication-ready per-category bar figures
 # (PNG + SVG) + proportion CSVs for the real (API-sourced) reference population only
 # (no synthetic comparison), plus a combined overview panel; one run per country.
-python scripts/analyze/analyze_real_population_stats.py --country-id swedish
-python scripts/analyze/analyze_real_population_stats.py --country-id swedish --country-id italian --force
+python scripts/analyze/analyze_real_population_stats.py --country-id swedish_02
+python scripts/analyze/analyze_real_population_stats.py --country-id swedish_02 --country-id italian --force
 
 # Generation metadata: the single LLM-metrics task. Per country × model × method(strategy),
 # the mean/spread(median/q1/q3)/n of the per-persona generation cost (wall-clock time,
@@ -142,10 +142,10 @@ python scripts/analyze/analyze_real_population_stats.py --country-id swedish --c
 # method factors). Reads the LLM-call telemetry from the capped mirror (03_Analysis/population_cap/,
 # produced by cap_populations.py -- fail-fast if absent, no 01_Raw fallback); emits ONE per-country
 # CSV + JSON + charts.
-python scripts/analyze/summarize_generation_metadata.py --country swedish
+python scripts/analyze/summarize_generation_metadata.py --country swedish_02
 python scripts/analyze/summarize_generation_metadata.py --model claude_haiku --no-charts --force
 # --verbose prints per-combo deep diagnostics; --metrics limits the comparison to a metric subset
-python scripts/analyze/summarize_generation_metadata.py --country swedish --verbose --metrics time cost
+python scripts/analyze/summarize_generation_metadata.py --country swedish_02 --verbose --metrics time cost
 
 # Validation attrition: what the gate discarded. Per combination, the five-stage funnel
 # (generated -> raw-valid -> mapped-valid -> clean -> selected) re-read out of
@@ -183,11 +183,11 @@ python scripts/analyze/analyze_cost_efficiency.py --country swedish_02 --no-char
 # config/analysis/persona_realism/; cost priced via config/analysis/model_pricing.yaml. Filters are
 # repeatable; run once with broad filters (CLI batch) to put every combo on one headline map -- the
 # GUI per_combo dispatch judges ONE combo per node run.
-python scripts/analyze/analyze_persona_realism.py --country swedish
-python scripts/analyze/analyze_persona_realism.py --slug swedish_all_pick_claude_sonnet --sample 200 --force
+python scripts/analyze/analyze_persona_realism.py --country swedish_02
+python scripts/analyze/analyze_persona_realism.py --slug swedish_02_all_pick_v2_claude_sonnet --sample 200 --force
 # --rounds overrides the judge rounds per persona (default 3); --judge-model picks a model_options
 # entry; --workers sets the fan-out width; --output-base/--dpi as usual
-python scripts/analyze/analyze_persona_realism.py --country swedish --rounds 5 --judge-model claude-sonnet-5 --workers 8
+python scripts/analyze/analyze_persona_realism.py --country swedish_02 --rounds 5 --judge-model claude-sonnet-5 --workers 8
 
 # Launch the GUI: the config-driven Flow Runner (requires pip install -e ".[gui]")
 python -m population_synthetic.gui.main

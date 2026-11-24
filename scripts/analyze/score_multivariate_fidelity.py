@@ -11,9 +11,9 @@ fidelity or model-ranking outputs. This script performs NO mapping -- run map_po
 
 Usage:
     python scripts/analyze/score_multivariate_fidelity.py
-    python scripts/analyze/score_multivariate_fidelity.py --country swedish
-    python scripts/analyze/score_multivariate_fidelity.py --slug swedish_all_pick_claude_sonnet
-    python scripts/analyze/score_multivariate_fidelity.py --slug swedish_all_pick_claude_sonnet --no-charts
+    python scripts/analyze/score_multivariate_fidelity.py --country swedish_02
+    python scripts/analyze/score_multivariate_fidelity.py --slug swedish_02_all_pick_v2_claude_sonnet
+    python scripts/analyze/score_multivariate_fidelity.py --slug swedish_02_all_pick_v2_claude_sonnet --no-charts
     python scripts/analyze/score_multivariate_fidelity.py --n-synthetic 100 --sample-seed 0
     python scripts/analyze/score_multivariate_fidelity.py --force
 

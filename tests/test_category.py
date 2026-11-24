@@ -311,7 +311,7 @@ def test_generation_spends_no_call_before_an_unknown_method_is_caught(tmp_path):
     strategy = tmp_path / "typo.yaml"
     strategy.write_text(
         yaml.safe_dump({
-            "family": "all_pick",
+            "family": "all_pick_v2",
             "version": 1,
             "categories": {
                 "age": {"method": "pick", "depends_on": []},

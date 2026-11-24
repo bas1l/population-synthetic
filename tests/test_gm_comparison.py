@@ -47,7 +47,7 @@ def _combo(
     strategy: str,
     samples: dict[str, list[float]],
     *,
-    country: str = "swedish",
+    country: str = "swedish_02",
     has_token_data: bool = True,
 ) -> ComboSummary:
     """A minimal ComboSummary carrying only the fields the comparison path reads."""
@@ -80,10 +80,10 @@ def test_summary_specs_cover_metric_names_in_order():
 def test_factor_pooling_concatenates_across_the_other_factor():
     # 2 models x 2 methods; "calls" is not token-gated so all four combos count.
     combos = [
-        _combo("m1", "all_pick", {"calls": [1.0, 2.0]}),
-        _combo("m1", "all_generate_pick", {"calls": [3.0]}),
-        _combo("m2", "all_pick", {"calls": [4.0, 5.0]}),
-        _combo("m2", "all_generate_pick", {"calls": [6.0, 7.0]}),
+        _combo("m1", "all_pick_v2", {"calls": [1.0, 2.0]}),
+        _combo("m1", "all_generate_pick_v2", {"calls": [3.0]}),
+        _combo("m2", "all_pick_v2", {"calls": [4.0, 5.0]}),
+        _combo("m2", "all_generate_pick_v2", {"calls": [6.0, 7.0]}),
     ]
     result = build_summary_comparison(combos)
     calls = result["metrics"]["calls"]
@@ -95,19 +95,19 @@ def test_factor_pooling_concatenates_across_the_other_factor():
 
     # method factor: each method pools across both models.
     by_method = calls["by_method"]["groups"]
-    assert sorted(by_method["all_pick"]) == [1.0, 2.0, 4.0, 5.0]
-    assert sorted(by_method["all_generate_pick"]) == [3.0, 6.0, 7.0]
+    assert sorted(by_method["all_pick_v2"]) == [1.0, 2.0, 4.0, 5.0]
+    assert sorted(by_method["all_generate_pick_v2"]) == [3.0, 6.0, 7.0]
 
     # model x method matrix carries per-cell aggregates for every populated cell.
     matrix = calls["matrix"]
     assert matrix["models"] == ["m1", "m2"]
-    assert matrix["methods"] == ["all_generate_pick", "all_pick"]
+    assert matrix["methods"] == ["all_generate_pick_v2", "all_pick_v2"]
 
 
 def test_token_gated_metric_skipped_without_telemetry():
     combos = [
-        _combo("m1", "all_pick", {"calls": [1.0, 2.0]}, has_token_data=False),
-        _combo("m2", "all_pick", {"calls": [3.0, 4.0]}, has_token_data=False),
+        _combo("m1", "all_pick_v2", {"calls": [1.0, 2.0]}, has_token_data=False),
+        _combo("m2", "all_pick_v2", {"calls": [3.0, 4.0]}, has_token_data=False),
     ]
     result = build_summary_comparison(combos)
     # non-token metric still built; token metric (cost) skipped for lack of tokens.
@@ -126,9 +126,9 @@ def test_significance_kruskal_known_answer_and_df():
     # Three models, one method: by_model has 3 groups A/B/C = [1,2,3]/[4,5,6]/[7,8,9].
     # No ties -> hand-computed Kruskal-Wallis H = 7.2, df = k-1 = 2.
     combos = [
-        _combo("mA", "all_pick", {"calls": [1.0, 2.0, 3.0]}),
-        _combo("mB", "all_pick", {"calls": [4.0, 5.0, 6.0]}),
-        _combo("mC", "all_pick", {"calls": [7.0, 8.0, 9.0]}),
+        _combo("mA", "all_pick_v2", {"calls": [1.0, 2.0, 3.0]}),
+        _combo("mB", "all_pick_v2", {"calls": [4.0, 5.0, 6.0]}),
+        _combo("mC", "all_pick_v2", {"calls": [7.0, 8.0, 9.0]}),
     ]
     sig = significance_from_comparison(build_summary_comparison(combos))
     model_block = sig["metrics"]["calls"]["by_model"]
@@ -144,7 +144,7 @@ def test_significance_kruskal_known_answer_and_df():
 
 
 def test_significance_skips_fewer_than_two_groups():
-    combos = [_combo("only", "all_pick", {"calls": [1.0, 2.0, 3.0]})]
+    combos = [_combo("only", "all_pick_v2", {"calls": [1.0, 2.0, 3.0]})]
     sig = significance_from_comparison(build_summary_comparison(combos))
     assert "need >=2 groups" in sig["metrics"]["calls"]["by_model"]["skipped"]
 
@@ -152,8 +152,8 @@ def test_significance_skips_fewer_than_two_groups():
 def test_significance_skips_group_with_n_lt_2():
     # m2 pools to a single value -> dispersion undefined -> whole factor skipped.
     combos = [
-        _combo("m1", "all_pick", {"calls": [1.0, 2.0, 3.0]}),
-        _combo("m2", "all_pick", {"calls": [9.0]}),
+        _combo("m1", "all_pick_v2", {"calls": [1.0, 2.0, 3.0]}),
+        _combo("m2", "all_pick_v2", {"calls": [9.0]}),
     ]
     sig = significance_from_comparison(build_summary_comparison(combos))
     skip = sig["metrics"]["calls"]["by_model"]["skipped"]
@@ -163,8 +163,8 @@ def test_significance_skips_group_with_n_lt_2():
 
 def test_significance_metric_subset_restricts_metrics():
     combos = [
-        _combo("mA", "all_pick", {"calls": [1.0, 2.0], "time": [1.0, 2.0]}),
-        _combo("mB", "all_pick", {"calls": [3.0, 4.0], "time": [3.0, 4.0]}),
+        _combo("mA", "all_pick_v2", {"calls": [1.0, 2.0], "time": [1.0, 2.0]}),
+        _combo("mB", "all_pick_v2", {"calls": [3.0, 4.0], "time": [3.0, 4.0]}),
     ]
     result = build_summary_comparison(combos, metric_keys=["calls"])
     assert set(result["metrics"]) == {"calls"}
@@ -209,15 +209,15 @@ def test_cld_straddling_middle_group_carries_both_letters():
 
 def test_group_label_lookup_and_empty_on_skip():
     combos = [
-        _combo("mA", "all_pick", {"calls": [1.0, 2.0, 3.0]}),
-        _combo("mB", "all_pick", {"calls": [7.0, 8.0, 9.0]}),
+        _combo("mA", "all_pick_v2", {"calls": [1.0, 2.0, 3.0]}),
+        _combo("mB", "all_pick_v2", {"calls": [7.0, 8.0, 9.0]}),
     ]
     sig = significance_from_comparison(build_summary_comparison(combos))
     la = group_label(sig, "calls", "by_model", "mA")
     lb = group_label(sig, "calls", "by_model", "mB")
     assert la and lb
     # method factor skipped -> label is empty; unknown metric -> empty; no sig -> empty.
-    assert group_label(sig, "calls", "by_method", "all_pick") == ""
+    assert group_label(sig, "calls", "by_method", "all_pick_v2") == ""
     assert group_label(sig, "nonexistent", "by_model", "mA") == ""
     assert group_label(None, "calls", "by_model", "mA") == ""
 
@@ -227,7 +227,7 @@ def test_group_label_lookup_and_empty_on_skip():
 # --------------------------------------------------------------------------- #
 
 _MODELS = ("claude_haiku", "claude_opus")
-_METHODS = ("all_pick", "all_generate_pick")
+_METHODS = ("all_pick_v2", "all_generate_pick_v2")
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -266,7 +266,7 @@ def _build_2x2_fixture(output_base: Path) -> None:
     magnitudes = {"claude_haiku": 100, "claude_opus": 400}
     for model in _MODELS:
         for method in _METHODS:
-            slug = f"swedish_{method}_{model}"
+            slug = f"swedish_02_{method}_{model}"
             # Three personas per combo so pooled model/method groups have n>=2.
             for i in range(1, 4):
                 _write_jsonl(
@@ -290,10 +290,10 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
 
 def test_summarize_emits_group_columns_and_significance_block(tmp_path: Path):
     _build_2x2_fixture(tmp_path)
-    written = summarize(output_base=tmp_path, countries=["swedish"], charts=False)
-    assert "swedish" in written
+    written = summarize(output_base=tmp_path, countries=["swedish_02"], charts=False)
+    assert "swedish_02" in written
 
-    rows = _read_csv(written["swedish"]["csv"])
+    rows = _read_csv(written["swedish_02"]["csv"])
     header = set(rows[0].keys())
     # Group columns present for every comparison metric and both factors.
     for metric in METRIC_NAMES:
@@ -308,7 +308,7 @@ def test_summarize_emits_group_columns_and_significance_block(tmp_path: Path):
     # every row carries a non-empty model-group letter for it.
     assert all(r["total_tokens_model_group"] for r in rows)
 
-    payload = json.loads(written["swedish"]["json"].read_text(encoding="utf-8"))
+    payload = json.loads(written["swedish_02"]["json"].read_text(encoding="utf-8"))
     assert "significance" in payload
     sig = payload["significance"]
     assert sig["metadata"]["alpha"] == pytest.approx(0.05)

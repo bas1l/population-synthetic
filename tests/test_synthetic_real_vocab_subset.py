@@ -35,7 +35,7 @@ from population_synthetic.analysis.mapping.real_mapper.mappings import load_inde
 
 _MAPPINGS_ROOT = PROJECT_ROOT / "config" / "mapping"
 
-_COUNTRY_DIRS = {"swedish": "scb", "italian": "istat"}
+_COUNTRY_DIRS = {"swedish_02": "scb", "italian": "istat"}
 
 
 def _country_attribute_files(subdir: str):

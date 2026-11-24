@@ -67,14 +67,14 @@ _SWEDEN_LABELS: set[str] = {
 
 # Declared fallback for income_source cells the SCB table (TabVX13InkStruktN) does not
 # deliver. The table has no "students" cell for the 65-79 and 80- bands, but the
-# single-table (merge OFF) employment_status distribution still gives students aged 65
+# register employment_status distribution still gives students aged 65
 # and over a small non-zero share (about 0.1% of those ages, i.e. about 10 of 10,000
 # individuals). Without a rule the sampler would raise for them. Rule, applied ONLY for
 # the (income employment category, pipeline age group) pairs listed here: use the same
 # category's mix for the nearest lower pipeline age group that has a cell, here the 55-64
 # group (income band 50-64). It is an assumption, not an SCB figure; it is explicit so the
 # choice stays visible and testable. Every other missing cell still raises (fail-fast).
-# The unemployed 75-85 cell (band 80-) is also absent from the table, but the single-table
+# The unemployed 75-85 cell (band 80-) is also absent from the table, but the register
 # employment distribution gives unemployed individuals aged 65 and over probability exactly
 # 0, so it is never drawn and needs no entry.
 _INCOME_SOURCE_AGE_FALLBACK: dict[tuple[str, str], str] = {
@@ -105,7 +105,6 @@ class SampleService:
         distributions: PopulationDistributions,
         rng: Generator,
         individual_id: int,
-        merge_status_education: bool = True,
     ) -> dict:
         # Step 1: joint (age, biological_sex)
         age_sex_keys = list(distributions.age_sex.keys())
@@ -122,24 +121,9 @@ class SampleService:
         education_level = sample_from(rng, edu_dist)
 
         # Step 3: employment_status -- register labour status over the full
-        #         spectrum (employed/unemployed/students/retirees/sick/others).
-        #
-        # Default (merge OFF): conditioned on (age_group, sex) only -- the Phase-4
-        # single-table path. When the opt-in all-register MERGE is on, it is
-        # conditioned on (age_group, education, sex): the status<->education link is
-        # recovered from a SECOND register table (ArbStatusUtbM) via the documented
-        # odds-multiplication derivation. ASSUMPTION (merge only): no status x age x
-        # education interaction -- a documented derivation over real register
-        # margins, NOT a synthetic distribution (see the merge spec and
-        # parse_employment_status_combined). When a given (age, education, sex)
-        # cell is unavailable the person's OWN (age_group, sex) register cell is
-        # used -- the documented merge design, never another sex's cell.
-        emp_dist = None
-        if merge_status_education and distributions.employment_status_by_edu is not None:
-            edu_key = education_level.casefold()
-            emp_dist = distributions.employment_status_by_edu.get((age_group, edu_key, sex_label))
-        if emp_dist is None:
-            emp_dist = _require_cell(distributions.employment_by_sex_education, cell, "employment_status")
+        #         spectrum (employed/unemployed/students/retirees/sick/others),
+        #         conditioned on (age_group, sex) from the single register table.
+        emp_dist = _require_cell(distributions.employment_by_sex_education, cell, "employment_status")
         employment_status_label = sample_from(rng, emp_dist)
         is_employed = employment_status_label in _EMPLOYED_STATUSES
 
@@ -252,9 +236,8 @@ class SampleService:
         distributions: PopulationDistributions,
         rng: Generator,
         n: int,
-        merge_status_education: bool = True,
     ) -> list[dict]:
         return [
-            SampleService.sample_one(distributions, rng, i, merge_status_education)
+            SampleService.sample_one(distributions, rng, i)
             for i in range(n)
         ]

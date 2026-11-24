@@ -33,8 +33,7 @@
 
 sets:
 
-  # The journal-article roster, transcribed from the staged selection folder
-  # (Manuscripts/40_llm-population-fidelity-benchmark/figures_selection/SOURCES.md).
+  # The journal-article roster, transcribed from the staged selection folder.
   # It lists only the pipeline-backed figures: the hand-drawn ones (the sampling
   # chain, the dependency graph, the strategy explainer) have no source in the
   # analysis stage and are not copyable, and the two manual halves of the radar grid
