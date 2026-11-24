@@ -34,6 +34,7 @@ Outputs, per country, under the analysis-stage method_significance folder:
                                             as blocks): per category + overall omnibus & pairwise p
     {country}_method_comparison.csv         one row per (category|overall, method-pair): omnibus
                                             stat/p/p_bh/W + pairwise p + significance stars
+                                            + Greenhouse-Geisser epsilon and corrected p
     {country}_method_comparison.png/.svg/.eps    bars + model points + significance brackets/stars,
                                             one panel per category + overall (grid)
     {country}_method_comparison_overall.png/.svg/.eps  the single Overall headline panel
@@ -227,6 +228,9 @@ def _write_method_comparison_csv(result: dict, out_path: Path) -> Path:
     carrying the panel-level omnibus (statistic, raw & BH p, Kendall's W) alongside
     that pair's Nemenyi p and its significance stars. A panel with no comparable
     pair (fewer than two methods) still emits one row so its omnibus is not lost.
+    The two trailing columns carry the Greenhouse-Geisser epsilon and corrected
+    omnibus p from the panel's ``assumptions`` block (appended, so every earlier
+    column keeps its position).
     The star mapping reuses the renderer's config-driven ``_p_to_stars`` -- no
     threshold logic is duplicated here.
     """
@@ -248,6 +252,7 @@ def _write_method_comparison_csv(result: dict, out_path: Path) -> Path:
             "category", "n_models",
             "omnibus_statistic", "omnibus_p", "omnibus_p_bh", "kendall_w",
             "method_a", "method_b", "pairwise_p", "stars",
+            "omnibus_gg_epsilon", "omnibus_p_gg",
         ])
         for name in panel_order:
             panel = panels[name]
@@ -258,13 +263,18 @@ def _write_method_comparison_csv(result: dict, out_path: Path) -> Path:
                 omnibus.get("statistic"), omnibus.get("p"),
                 omnibus.get("p_bh"), omnibus.get("kendall_w"),
             ]
+            # Greenhouse-Geisser-corrected omnibus, read verbatim from the panel's
+            # assumptions block (emitted on every panel; None where undefined).
+            sphericity = panel["assumptions"]["sphericity"] or {}
+            gg = (sphericity.get("corrected") or {}).get("greenhouse_geisser") or {}
+            trailing = [gg.get("epsilon"), gg.get("p")]
             pairs = list(combinations(methods, 2))
             if not pairs:
-                writer.writerow(common + [None, None, None, None])
+                writer.writerow(common + [None, None, None, None] + trailing)
                 continue
             for a, b in pairs:
                 p = pairwise_p.get(f"{a}|{b}")
-                writer.writerow(common + [a, b, p, _p_to_stars(p, thresholds, ns_symbol)])
+                writer.writerow(common + [a, b, p, _p_to_stars(p, thresholds, ns_symbol)] + trailing)
     return out_path
 
 

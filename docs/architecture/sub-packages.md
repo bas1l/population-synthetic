@@ -171,8 +171,19 @@ consumers + `generation_metadata` + `validation_attrition`, closed at the far en
   (a slope heatmap) -- no p-value is claimed at that grain. It also emits a **`method_comparison`**
   block (`builder.py::_method_comparison`, config `config/analysis/method_significance/comparison.json`):
   a head-to-head comparison of the methods on **TV-similarity** with the *models as blocks* -- per
-  category (+ a pooled Overall panel) a Friedman omnibus + Nemenyi pairwise post-hoc over the
-  complete-case models, BH-FDR corrected across categories. `charts.py::plot_method_comparison` renders
+  category (+ a pooled Overall panel) a one-way repeated-measures ANOVA omnibus (`omnibus`) +
+  Holm-corrected paired t-tests over every method pair (`pairwise_detail`), with the rank-based
+  Friedman + Nemenyi pair kept alongside (`omnibus_friedman`, `pairwise_p_nemenyi`), over the
+  complete-case models, the category omnibus BH-FDR corrected across categories. Every panel also
+  carries an **`assumptions`** block (`utils/stats_tests.py::rm_anova_assumptions`, reported and never
+  acted on): residual normality (Shapiro-Wilk + Lilliefors on the additive-model residuals, per-method
+  Shapiro-Wilk and the worst method), per-pair difference normality (Shapiro-Wilk, Holm across pairs)
+  and difference variance, sphericity (Mauchly's W/χ²/df/p; Greenhouse-Geisser, Huynh-Feldt 1976
+  uncapped and capped, and lower-bound ε with their corrected df and omnibus p; `k = 2` stated as
+  trivially spherical) and a per-pair Wilcoxon signed-rank cross-check (Holm across pairs) whose
+  `verdict_differs_from_t` flag is judged at the config's loosest star cutoff
+  (`significance_cutoff(star_thresholds)`). Undefined statistics are `None` with a `note`; the
+  method-comparison CSV appends `omnibus_gg_epsilon` and `omnibus_p_gg`. `charts.py::plot_method_comparison` renders
   it as the publication **significance-bracket figure** (bars = per-method mean TV-similarity + model
   points + paired lines, pairwise brackets/stars over the configured pairs, in-figure star key; a
   per-category grid and a standalone Overall panel, PNG + SVG). The pairs that figure's `pairs_mode`

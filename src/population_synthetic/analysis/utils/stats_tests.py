@@ -1078,6 +1078,12 @@ def variance_equality_test(
             "center": center, "n": n_total}
 
 
+# A sum of squares at or below this is the zero it represents: floating-point
+# subtraction leaves an exactly-additive residual at ~1e-17, not at 0.0. Shared by
+# the RM ANOVA and its assumption checks so both call the same grid degenerate.
+_ZERO_SS_TOL = 1e-12
+
+
 def rm_anova_within(blocks: Sequence[Sequence[float]]) -> dict[str, Any]:
     """One-way repeated-measures ANOVA across treatments with matched blocks.
 
@@ -1094,12 +1100,12 @@ def rm_anova_within(blocks: Sequence[Sequence[float]]) -> dict[str, Any]:
     ``F(k-1, (k-1)(n-1))``.  Effect size is partial eta-squared
     ``SS_treat / (SS_treat + SS_err)``.
 
-    **Sphericity is assumed and not tested.**  With ``k = 2`` sphericity is
+    **Sphericity is assumed here, not tested here.**  With ``k = 2`` sphericity is
     automatic (there is a single difference score) and the result is then exactly
     the paired t-test, ``F = t**2``.  For ``k > 2`` a violation inflates the
-    Type I error, so a caller reporting more than two treatments should treat the
-    omnibus p as approximate and lean on the pairwise contrasts, which do not
-    depend on sphericity.
+    Type I error; :func:`rm_anova_assumptions` reports Mauchly's test and the
+    epsilon-corrected p-values beside this uncorrected one, and the pairwise
+    contrasts do not depend on sphericity.
 
     Returns ``{"test","F","p","df1","df2","k","n","partial_eta_sq"}``.  Degenerate
     inputs (``<2`` treatments, ``<2`` blocks, or zero residual variation) return
@@ -1122,8 +1128,8 @@ def rm_anova_within(blocks: Sequence[Sequence[float]]) -> dict[str, Any]:
     df1, df2 = k - 1, (k - 1) * (n - 1)
     # Floating-point subtraction can drive an exactly-additive residual slightly
     # negative; treat that as the zero it is rather than propagating a nonsense F.
-    if ss_err <= 1e-12:
-        if ss_treat <= 1e-12:
+    if ss_err <= _ZERO_SS_TOL:
+        if ss_treat <= _ZERO_SS_TOL:
             # No treatment signal and no residual: every cell is the same value.
             base["note"] = "no treatment or residual variation; F is undefined"
             return base
@@ -1492,3 +1498,293 @@ def bootstrap_cliffs_delta_ci(
             "iterations": int(iterations), "n_a": int(x.size), "n_b": int(y.size),
             "method": "percentile"}
 
+
+# --------------------------------------------------------------------------- #
+# Repeated-measures ANOVA assumption checks                                    #
+# --------------------------------------------------------------------------- #
+
+# The Huynh-Feldt epsilon variant this module reports, named so the output says
+# which one it is: Huynh & Feldt (1976), ``(n p eps_GG - 2) / (p (n - 1 - p eps_GG))``
+# with ``p = k - 1``. Lecoutre's (1991) correction replaces the leading ``n`` by
+# ``n + 1`` and is *not* what is computed here.
+HUYNH_FELDT_FORMULA = "huynh_feldt_1976"
+
+
+def _import_lilliefors() -> Any:
+    try:
+        from statsmodels.stats.diagnostic import lilliefors
+    except ImportError as exc:  # pragma: no cover - exercised only without the extra
+        raise ImportError(f"statsmodels is not installed. {_ANALYSIS_EXTRA_HINT}") from exc
+    return lilliefors
+
+
+def _shapiro(values: np.ndarray) -> dict[str, Any]:
+    """Shapiro-Wilk ``{"W","p"}``, or ``None``s plus a ``"note"`` when undefined.
+
+    Guarded explicitly because ``scipy`` does not fail on the degenerate inputs:
+    a zero-range sample returns ``W = p = 1.0`` with only a warning, which would
+    read downstream as a perfect normal fit.
+    """
+    x = np.asarray(values, dtype=float)
+    if x.size < 3:
+        return {"W": None, "p": None, "note": f"Shapiro-Wilk needs >=3 values, got {x.size}"}
+    if float(((x - x.mean()) ** 2).sum()) <= _ZERO_SS_TOL:
+        return {"W": None, "p": None, "note": "zero spread; Shapiro-Wilk is undefined"}
+    w, p = stats.shapiro(x)
+    return {"W": float(w), "p": float(p)}
+
+
+def _helmert_contrasts(k: int) -> np.ndarray:
+    """Orthonormal Helmert contrasts, ``(k-1) x k``; each row sums to 0 with unit norm."""
+    contrasts = np.zeros((k - 1, k))
+    for row in range(k - 1):
+        contrasts[row, : row + 1] = 1.0
+        contrasts[row, row + 1] = -float(row + 1)
+        contrasts[row] /= np.linalg.norm(contrasts[row])
+    return contrasts
+
+
+def _residual_normality(arr: np.ndarray, labels: Sequence[str]) -> dict[str, Any]:
+    """Normality of the two-way additive-model residuals, pooled and per treatment."""
+    residuals = arr - arr.mean(axis=1, keepdims=True) - arr.mean(axis=0, keepdims=True) + arr.mean()
+    pooled = residuals.ravel()
+    out: dict[str, Any] = {
+        "residual_definition": "y_ij - block_mean_i - treatment_mean_j + grand_mean",
+        "n_residuals": int(pooled.size),
+        "shapiro_wilk": _shapiro(pooled),
+        "lilliefors": {"D": None, "p": None, "pvalmethod": "table"},
+        "per_method_shapiro_wilk": {},
+        "worst_method": None,
+    }
+    if pooled.size < 4:
+        out["lilliefors"]["note"] = f"Lilliefors needs >=4 residuals, got {pooled.size}"
+    elif float((pooled ** 2).sum()) <= _ZERO_SS_TOL:
+        out["lilliefors"]["note"] = "zero residual variation; Lilliefors is undefined"
+    else:
+        d_stat, p_val = _import_lilliefors()(pooled, dist="norm", pvalmethod="table")
+        out["lilliefors"]["D"] = float(d_stat)
+        out["lilliefors"]["p"] = float(p_val)
+
+    worst: dict[str, Any] | None = None
+    for j, label in enumerate(labels):
+        rec = _shapiro(residuals[:, j])
+        out["per_method_shapiro_wilk"][label] = rec
+        if rec["p"] is not None and (worst is None or rec["p"] < worst["p"]):
+            worst = {"method": label, "W": rec["W"], "p": rec["p"]}
+    out["worst_method"] = worst
+    return out
+
+
+def _corrected_f(f_stat: float | None, df1: int, df2: int, epsilon: float | None) -> dict[str, Any]:
+    """The omnibus F re-referred to ``F(eps*df1, eps*df2)``; ``None`` where undefined."""
+    rec: dict[str, Any] = {"epsilon": epsilon, "df1": None, "df2": None, "p": None}
+    if epsilon is None:
+        return rec
+    rec["df1"] = epsilon * df1
+    rec["df2"] = epsilon * df2
+    if f_stat is None:
+        return rec
+    # A diverging F (perfectly additive blocks) stays p = 0.0 under any correction,
+    # matching rm_anova_within's own statement of that case.
+    rec["p"] = 0.0 if math.isinf(f_stat) else float(stats.f.sf(f_stat, rec["df1"], rec["df2"]))
+    return rec
+
+
+def _sphericity(arr: np.ndarray, anova: dict[str, Any]) -> dict[str, Any]:
+    """Mauchly's test and the GG / HF / lower-bound epsilon corrections of *anova*."""
+    n, k = arr.shape
+    p_dim = k - 1
+    df1, df2 = int(anova["df1"]), int(anova["df2"])
+    f_stat = anova.get("F")
+    lower = 1.0 / p_dim
+    mauchly: dict[str, Any] = {"W": None, "chi2": None, "df": p_dim * (p_dim + 1) // 2 - 1, "p": None}
+    out: dict[str, Any] = {"mauchly": mauchly, "huynh_feldt_formula": HUYNH_FELDT_FORMULA}
+    notes: list[str] = []
+
+    gg: float | None
+    hf: float | None
+    if k == 2:
+        # A single difference score has a 1x1 covariance: sphericity cannot fail and
+        # every epsilon is exactly 1 (the lower bound 1/(k-1) is 1 as well).
+        mauchly["W"] = 1.0
+        mauchly["note"] = "k = 2: a single difference score, sphericity holds trivially; not tested"
+        gg = hf = 1.0
+    else:
+        contrasts = _helmert_contrasts(k)
+        cov = contrasts @ np.cov(arr, rowvar=False, ddof=1) @ contrasts.T
+        trace = float(np.trace(cov))
+        trace_sq = float(np.trace(cov @ cov))
+        if trace <= _ZERO_SS_TOL or trace_sq <= 0.0:
+            gg = hf = None
+            mauchly["note"] = "zero variance in every treatment difference; sphericity is undefined"
+            notes.append("epsilon undefined: zero variance in every treatment difference")
+        else:
+            gg = trace ** 2 / (p_dim * trace_sq)
+            hf_denominator = p_dim * (n - 1 - p_dim * gg)
+            if hf_denominator <= 0.0:
+                hf = None
+                notes.append(
+                    f"Huynh-Feldt epsilon undefined: n - 1 - (k - 1) * eps_GG <= 0 (n = {n}, k = {k})"
+                )
+            else:
+                hf = (n * p_dim * gg - 2.0) / hf_denominator
+            _mauchly(mauchly, cov, trace, n, p_dim)
+
+    hf_capped = None if hf is None else min(hf, 1.0)
+    out["epsilon"] = {
+        "greenhouse_geisser": gg,
+        "huynh_feldt": hf,
+        "huynh_feldt_capped": hf_capped,
+        "lower_bound": lower,
+    }
+    out["corrected"] = {
+        "greenhouse_geisser": _corrected_f(f_stat, df1, df2, gg),
+        "huynh_feldt_capped": _corrected_f(f_stat, df1, df2, hf_capped),
+        "lower_bound": _corrected_f(f_stat, df1, df2, lower),
+    }
+    if notes:
+        out["note"] = "; ".join(notes)
+    return out
+
+
+def _mauchly(rec: dict[str, Any], cov: np.ndarray, trace: float, n: int, p_dim: int) -> None:
+    """Fill Mauchly's ``W``/``chi2``/``p`` into *rec* in place, or a ``note`` when undefined."""
+    if n - 1 < p_dim:
+        rec["note"] = (
+            f"n - 1 = {n - 1} < k - 1 = {p_dim}: the contrast covariance is singular; "
+            "Mauchly's test is undefined"
+        )
+        return
+    w_stat = float(np.linalg.det(cov)) / (trace / p_dim) ** p_dim
+    if w_stat <= 0.0:
+        rec["note"] = "the contrast covariance is numerically singular; Mauchly's test is undefined"
+        return
+    rec["W"] = w_stat
+    factor = (n - 1) - (2 * p_dim ** 2 + p_dim + 2) / (6 * p_dim)
+    if factor <= 0.0:
+        rec["note"] = f"too few blocks (n = {n}) for the chi-squared approximation; Mauchly's p is undefined"
+        return
+    chi2 = -factor * math.log(w_stat)
+    rec["chi2"] = chi2
+    rec["p"] = float(stats.chi2.sf(chi2, rec["df"]))
+
+
+def _pairwise_assumptions(arr: np.ndarray, labels: Sequence[str], alpha: float) -> dict[str, Any]:
+    """Per treatment pair: difference variance + normality, and the Wilcoxon cross-check."""
+    k = arr.shape[1]
+    # Only mean_diff and the Holm p are read below; neither depends on the interval
+    # level, so the (required) level is a fixed placeholder whose interval is discarded.
+    paired = paired_t_pairwise(arr, labels=labels, confidence_level=0.95)["pairs"]
+    records: dict[str, dict[str, Any]] = {}
+    sw_keys: list[str] = []
+    sw_ps: list[float] = []
+    wx_keys: list[str] = []
+    wx_ps: list[float] = []
+    for i in range(k):
+        for j in range(i + 1, k):
+            key = f"{labels[i]}|{labels[j]}"
+            # Second minus first, the orientation paired_t_pairwise uses for the same key.
+            diff = arr[:, j] - arr[:, i]
+            sw = _shapiro(diff)
+            rec: dict[str, Any] = {
+                "diff_variance": float(diff.var(ddof=1)),
+                "diff_shapiro_wilk": {"W": sw["W"], "p": sw["p"], "p_holm": None},
+                "wilcoxon": {"statistic": None, "p": None, "p_holm": None},
+                "t_p_holm": paired[key]["p_holm"],
+                "verdict_differs_from_t": None,
+            }
+            if "note" in sw:
+                rec["diff_shapiro_wilk"]["note"] = sw["note"]
+            else:
+                sw_keys.append(key)
+                sw_ps.append(sw["p"])
+            if bool(np.all(diff == 0.0)):
+                # scipy returns p = 1.0 here instead of failing; the test has no data.
+                rec["wilcoxon"]["note"] = "all paired differences are zero; Wilcoxon is undefined"
+            else:
+                w_stat, w_p = stats.wilcoxon(arr[:, j], arr[:, i], method="auto")
+                rec["wilcoxon"]["statistic"] = float(w_stat)
+                rec["wilcoxon"]["p"] = float(w_p)
+                wx_keys.append(key)
+                wx_ps.append(float(w_p))
+            records[key] = rec
+
+    for key, p_adj in zip(sw_keys, _holm_adjust(sw_ps)):
+        records[key]["diff_shapiro_wilk"]["p_holm"] = p_adj
+    for key, p_adj in zip(wx_keys, _holm_adjust(wx_ps)):
+        records[key]["wilcoxon"]["p_holm"] = p_adj
+    for rec in records.values():
+        w_holm, t_holm = rec["wilcoxon"]["p_holm"], rec["t_p_holm"]
+        if w_holm is not None and t_holm is not None:
+            rec["verdict_differs_from_t"] = (w_holm <= alpha) != (t_holm <= alpha)
+    return records
+
+
+def rm_anova_assumptions(
+    blocks: Sequence[Sequence[float]],
+    *,
+    labels: Sequence[str],
+    alpha: float,
+) -> dict[str, Any]:
+    """Assumption diagnostics for :func:`rm_anova_within` and :func:`paired_t_pairwise`.
+
+    Input matches both (row = block, column = treatment); *labels* names the
+    columns. *alpha* is the significance cutoff the ``verdict_differs_from_t``
+    flags are judged at; it has no default -- the caller sources it from config.
+    Every p-value is reported and none is acted on: nothing here switches the
+    headline test.
+
+    ``residual_normality``
+        The additive-model residuals ``e_ij = y_ij - row mean - column mean +
+        grand mean`` (the error term the F uses): Shapiro-Wilk on all of them,
+        the Lilliefors-corrected Kolmogorov-Smirnov (``statsmodels``, table
+        p-values; the plain KS with estimated parameters is anti-conservative
+        and is not reported), Shapiro-Wilk per treatment column, and the
+        ``worst_method`` (smallest per-column p).
+    ``sphericity``
+        Mauchly's ``W`` / ``chi2`` / ``df`` / ``p`` on orthonormal Helmert
+        contrasts; ``epsilon`` for Greenhouse-Geisser, Huynh-Feldt
+        (:data:`HUYNH_FELDT_FORMULA`, uncapped and capped at 1) and the lower
+        bound ``1/(k-1)``; ``corrected`` re-refers the F to ``F(eps*df1,
+        eps*df2)`` for GG, capped HF and the lower bound. ``k = 2`` is stated
+        explicitly: sphericity holds trivially, every epsilon is 1, Mauchly is
+        not run.
+    ``pairs``
+        Per ``"a|b"`` (the key :func:`paired_t_pairwise` uses): the ddof-1
+        variance of the ``b - a`` differences; their Shapiro-Wilk ``W``/``p``
+        with Holm across pairs; the Wilcoxon signed-rank ``statistic``/``p``
+        (``scipy``'s ``method="auto"``: the exact distribution for small n
+        without zero differences, the normal approximation otherwise) with Holm
+        across pairs; the paired t ``t_p_holm``; and ``verdict_differs_from_t``,
+        true when exactly one of the two Holm p-values is ``<= alpha``.
+
+    Degenerate input never yields a NaN: fewer than 2 treatments or blocks
+    returns the skeleton with ``None`` sub-blocks and a ``"note"``; an undefined
+    individual statistic (too few values, zero spread, singular covariance) is
+    ``None`` with its own ``"note"``. Malformed input raises: NaN cells (via the
+    block-matrix guard), a *labels* length that does not match the columns, or an
+    *alpha* outside ``(0, 1)``.
+    """
+    arr = _as_block_matrix(blocks)
+    n, k = arr.shape
+    if len(labels) != k:
+        raise ValueError(f"labels has {len(labels)} entries but the matrix has {k} columns")
+    if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not 0.0 < float(alpha) < 1.0:
+        raise ValueError(f"alpha must be a number in (0, 1), got {alpha!r}")
+    out: dict[str, Any] = {
+        "n": n,
+        "k": k,
+        "alpha": float(alpha),
+        "residual_normality": None,
+        "sphericity": None,
+        "pairs": {},
+        "correction": {"method": "holm", "scope": "all-pairs"},
+    }
+    if k < 2 or n < 2:
+        out["note"] = f"need >=2 treatments and >=2 blocks, got {k} treatments / {n} blocks"
+        return out
+    anova = rm_anova_within(arr)
+    out["residual_normality"] = _residual_normality(arr, labels)
+    out["sphericity"] = _sphericity(arr, anova)
+    out["pairs"] = _pairwise_assumptions(arr, labels, float(alpha))
+    return out

@@ -432,7 +432,23 @@ estimable because the categories supply the replication. Every significance anno
 is drawn from the **BH-corrected** p-values, never the raw ones. Outputs land under
 `03_Analysis/method_significance/` (`{country}_method_significance.json` / `.csv` + a slope heatmap,
 CD diagram, factor-dominance bar, and per-attribute trend facets). This process needs the optional
-`[analysis]` extra (statsmodels + scikit-posthocs). Design detail lives in the plan
+`[analysis]` extra (statsmodels + scikit-posthocs).
+
+**Method-comparison assumption checks.** The `method_comparison` panels (models as blocks, methods
+compared on TV-similarity) headline a one-way repeated-measures ANOVA and Holm-corrected paired
+t-tests. Each panel's `assumptions` block reports, without acting on them, the diagnostics those two
+tests rest on:
+
+| Key | Content |
+|-----|---------|
+| `residual_normality` | Residuals `y_ij − row mean − column mean + grand mean`: Shapiro-Wilk (`W`, `p`), Lilliefors-corrected KS (`D`, `p`, table p-values), per-method Shapiro-Wilk, `worst_method` |
+| `sphericity` | Mauchly (`W`, `chi2`, `df`, `p`); `epsilon` Greenhouse-Geisser / Huynh-Feldt (`huynh_feldt_1976`, uncapped + capped at 1) / lower bound `1/(k−1)`; `corrected` df1/df2/p for GG, capped HF and lower bound. `k = 2`: ε = 1, Mauchly not run |
+| `pairs["a|b"]` | `diff_variance` (ddof 1, `b − a`); `diff_shapiro_wilk` (`W`, `p`, `p_holm`); `wilcoxon` (`statistic`, `p`, `p_holm`; scipy `method="auto"`); `t_p_holm`; `verdict_differs_from_t` |
+| `alpha` | The cutoff the verdict flag uses: `significance_cutoff(star_thresholds)` from `comparison.json` |
+
+Undefined statistics (too few values, zero spread, singular contrast covariance) are `None` with a
+`note`; a panel with fewer than 2 models or methods gets the skeleton plus a `note`. No outlier rule
+is applied: there is no config home for one. Design detail lives in the plan
 `docs/development/plans/…/per-category-method-model-significance.md` and the thread recap
 `docs/development/model-method-significance-recap.md`.
 
