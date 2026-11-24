@@ -730,7 +730,7 @@ ground moves it with everything else.
 | Matplotlib's EPS backend mishandles transparency or hatching | Med | Med | The withdrawn-cell hatch is the known case; verify in 6.1 and fall back to an opaque equivalent |
 | Rebase collision with `uniform-analysis-output-naming` | Med | Low | Land that plan first — it is smaller and fully scoped; the overlap is `rank_models.py` filenames versus rendering calls, mechanical rather than semantic |
 | Adding `display:` to 28 model YAMLs drifts from `label:` | Med | Med | `display:` carries only what `label:` cannot express; a test asserts every model axis has both and that they agree on the model name |
-| Regenerating figures changes a manuscript figure unnoticed | Med | High | Task 6.1 diffs the full set; the deck's `figures selection/` F01–F26 pairs are the review checklist |
+| Regenerating figures changes a manuscript figure unnoticed | Med | High | Task 6.1 diffs the full set; the deck's `figures_selection/` F01–F26 pairs are the review checklist |
 | Scope creep into the colormap decision | Med | Med | Out of Scope is explicit; a diverging ramp requires its own ADR superseding `2026-08-12` |
 
 ---

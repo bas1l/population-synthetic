@@ -14,7 +14,7 @@
 `03_Analysis` currently holds ~2,100 figures across 13 process folders, in six different
 path shapes. A manuscript cites about a dozen of them and a deck uses a different two
 dozen; today that selection is made by hand and staged outside the repo
-(`Manuscripts/40_llm-population-fidelity-benchmark/figures selection/`), so the roster
+(`Manuscripts/40_llm-population-fidelity-benchmark/figures_selection/`), so the roster
 lives nowhere version-controlled and nothing records which run produced a given image.
 
 This plan adds `figure_selection`, the **terminal node of the analysis DAG**: a task that
